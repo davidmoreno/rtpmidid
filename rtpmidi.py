@@ -5,6 +5,7 @@ import time
 import socket
 import struct
 import random
+import select
 
 
 SSRC = 0x17026324  # random ID
@@ -15,27 +16,60 @@ remote_hosts = {}
 
 
 def main():
-
     hostport = sys.argv[1].split(':')
     control = (hostport[0], int(hostport[1]))
     midi = (hostport[0], int(hostport[1])+1)
+    epoll = select.epoll()
 
     print("RTP/MIDI v.0")
     alsaseq.client("Network", 1, 1, False)
     (control, _) = connect_to(PORT, control)
     (midi, _) = connect_to(PORT + 1, midi)
 
+    alsa_fd = alsaseq.fd()
+    control_fd = control.fileno()
+    midi_fd = midi.fileno()
+
+    epoll.register(alsa_fd, select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR)
+    epoll.register(control_fd, select.EPOLLIN)
+    epoll.register(midi_fd, select.EPOLLIN)
+
     print(remote_hosts)
 
+    print("Loop")
+    n = 0
     while True:
-        for (source, event) in recv_midi(midi):
-            print("Message from %s (%d): " % (remote_hosts.get(source), source), end="")
-            print_hex(event)
+        print("Ready %s" % n, end="\r")
+        for (fd, event) in epoll.poll():
+            if fd == alsa_fd:
+                process_alsa()
+            elif fd == control_fd:
+                process_control(control)
+            elif fd == midi_fd:
+                process_midi(midi)
+        n += 1
 
-    while True:
-        alsaseq.inputpending()
-        ev = alsaseq.input()
-        print(ev_to_dict(ev))
+
+def process_alsa():
+    alsaseq.inputpending()
+    ev = alsaseq.input()
+    print("ALSA: ", ev_to_dict(ev))
+
+
+def process_midi(midi):
+    for (source, ev) in recv_midi(midi):
+        # print("Message from %s (%d): " % (remote_hosts.get(source), source), end="")
+        if ev:
+            print("Network MIDI: ", ev_to_dict(ev))
+            alsaseq.output(ev)
+        else:
+            print("Unknown")
+
+
+def process_control(control):
+    (msg, from_) = control.recvfrom(1500)
+    print("Got control from %s" % from_, end=": ")
+    print_hex(msg)
 
 
 def connect_to(from_port, hostport):
@@ -78,13 +112,8 @@ def recv_midi(sock):
     source = rtp[4]
     # rtp_midi = rtp_midi_decode(msg[12])
 
-    event = bytearray([msg[13]])
-    for b in msg[14:]:
-        if b & 0x80:   # high byte marks new command in MIDI
-            yield (source, event)
-            event = bytearray()
-        event.append(b)
-    yield (source, event)
+    for event in midi_to_alsaevents(msg[13:]):
+        yield (source, event)
 
 
 def rtp_decode(msg):
@@ -94,9 +123,11 @@ def rtp_decode(msg):
 
 
 def print_hex(msg):
-    for m in msg:
-        print(hex(m), " ", end="")
-    print()
+    print(to_hex_str(msg))
+
+
+def to_hex_str(msg):
+    return " ".join(hex(x) for x in msg)
 
 
 def ev_to_dict(ev):
@@ -116,4 +147,81 @@ def ev_to_dict(ev):
     }
 
 
-main()
+def midi_to_alsaevents(source):
+    current = 0
+    data = []
+    evlen = 2
+    for c in source:
+        if c & 0x080:
+            current = c
+            data = [current]
+            if current in [0xC0, 0xD0]:
+                evlen = 1
+            else:
+                evlen = 2
+        elif current != 0xF0 and len(data) == evlen:
+            data.append(c)
+            yield midi_to_alsaevent(data)
+            data = [current]
+        elif current == 0xF0 and c == 0x7F:
+            yield midi_to_alsaevent(data)
+            data = ""
+        else:
+            data.append(c)
+
+
+MIDI_TO_EV = {
+    0x80: 0x7,  # note off
+    0x90: 0x6,  # note on
+    # 0xA0: XX,  # Poly key pressure
+    # 0xB0: XX,  # CC
+    # 0xC0: X,   # Program change
+    # 0xD0: X,   # Channel key pres
+    0xE0: 0xd,  # pitch bend
+}
+
+
+def midi_to_alsaevent(event):
+    type = MIDI_TO_EV.get(event[0] & 0x0F0)
+    if not type:
+        print("Unknown MIDI Event %s" % to_hex_str(event))
+        return None
+
+    if type == 0xd:
+        _, lsb, msb = event
+        return (
+            type,
+            0,
+            0,
+            253,
+            (0, 0),
+            (0, 0),
+            (0, 0),
+
+            (0, 0, 0, 0, 0, (msb << 7) + lsb)
+        )
+
+    if len(event) == 3:
+        _, param1, param2 = event
+        return (
+            type,
+            0,
+            0,
+            253,
+            (0, 0),
+            (0, 0),
+            (0, 0),
+            (0, param1, param2, 0, 0)
+        )
+    return None
+
+
+def test():
+    events = list(midi_to_alsaevents([0x90, 10, 10, 0x80, 10, 0]))
+    print(events)
+
+
+if len(sys.argv) == 2 and sys.argv[1] == "test":
+    test()
+else:
+    main()
