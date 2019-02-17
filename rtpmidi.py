@@ -170,14 +170,15 @@ def midi_to_alsaevents(source):
             data.append(c)
 
 
+# check names at https://github.com/Distrotech/alsa-lib/blob/distrotech-alsa-lib/include/seq_event.h
 MIDI_TO_EV = {
-    0x80: 0x7,  # note off
-    0x90: 0x6,  # note on
-    # 0xA0: XX,  # Poly key pressure
-    # 0xB0: XX,  # CC
-    # 0xC0: X,   # Program change
-    # 0xD0: X,   # Channel key pres
-    0xE0: 0xd,  # pitch bend
+    0x80: alsaseq.SND_SEQ_EVENT_NOTEOFF,  # note off
+    0x90: alsaseq.SND_SEQ_EVENT_NOTEON,  # note on
+    # 0xA0: alsaseq.SND_SEQ_EVENT_KEYPRESS,  # Poly key pressure / After touch
+    # 0xB0: alsaseq.SND_SEQ_EVENT_CONTROLLER,  # CC
+    # 0xC0: alsaseq.SND_SEQ_EVENT_PGMCHANGE,   # Program change
+    # 0xD0: alsaseq.SND_SEQ_EVENT_CHANPRESS,   # Channel key pres
+    0xE0: alsaseq.SND_SEQ_EVENT_PITCHBEND,  # pitch bend
 }
 
 
@@ -187,7 +188,7 @@ def midi_to_alsaevent(event):
         print("Unknown MIDI Event %s" % to_hex_str(event))
         return None
 
-    if type == 0xd:
+    if type == alsaseq.SND_SEQ_EVENT_PITCHBEND:
         _, lsb, msb = event
         return (
             type,
