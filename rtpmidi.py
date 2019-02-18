@@ -6,7 +6,10 @@ import socket
 import struct
 import random
 import select
-
+import zeroconf
+import queue
+import traceback
+import os
 
 SSRC = random.randint(0, 0xffffffff)  # Not sure if should be fixed by client type  0x17026324  # random ID
 NAME = '%s - ALSA SEQ' % (socket.gethostname())
@@ -14,6 +17,9 @@ PORT = 10008
 DEBUG = False
 
 remote_hosts = {}
+task_queue = queue.Queue()
+task_ready_fds = os.pipe2(os.O_NONBLOCK)
+task_ready_fds = [os.fdopen(task_ready_fds[0], 'rb'), os.fdopen(task_ready_fds[1], 'wb')]
 
 
 def main():
@@ -26,20 +32,25 @@ def main():
     rtp_conn = RTPMidiClient(PORT, hostport[0], int(hostport[1]))
     alsa_fd = alsaseq.fd()
     (control_fd, midi_fd) = rtp_conn.filenos()
+    task_ready_fd = task_ready_fds[0].fileno()
 
     epoll.register(alsa_fd, select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR)
     epoll.register(control_fd, select.EPOLLIN)
     epoll.register(midi_fd, select.EPOLLIN)
+    epoll.register(task_ready_fd, select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR)
 
     print("Loop")
     n = 0
     while True:
         print("Event count: %s" % n, end="\r")
         for (fd, event) in epoll.poll():
+            print(fd, task_ready_fd)
             if fd == alsa_fd:
                 process_alsa()
             elif fd in rtp_conn.filenos():
                 rtp_conn.data_ready(fd)
+            elif fd == task_ready_fd:
+                process_tasks(task_ready_fds[0])
         n += 1
 
 
@@ -48,6 +59,46 @@ def process_alsa():
     ev = alsaseq.input()
     if DEBUG:
         print("ALSA: ", ev_to_dict(ev))
+
+
+def add_task(fn, **kwargs):
+    task_queue.put((fn, kwargs))
+    task_ready_fds[1].write(b"1")
+    task_ready_fds[1].flush()
+    print("Add task to queue")
+
+
+def process_tasks(fd):
+    print("Something ready to process")
+    msg = fd.read(1024)
+    print(msg)
+    while task_queue:
+        (fn, kwargs) = task_queue.get()
+        try:
+            fn(**kwargs)
+        except Exception as e:
+            print("Error executing task", e)
+            traceback.print_exc()
+
+
+class AppleMidiListener:
+    def remove_service(self, zeroconf, type, name):
+        info = zeroconf.get_service_info(type, name)
+        print("Service %s removed", repr(info.get_name()), [x for x in info.address], info.port)
+
+    def add_service(self, zeroconf, type, name):
+        info = zeroconf.get_service_info(type, name)
+        print("Service %s added", repr(info.get_name()), [x for x in info.address], info.port)
+        add_task(add_applemidi, address=info.address, port=info.port)
+
+
+zeroconfp = zeroconf.Zeroconf()
+apple_midi_listener = AppleMidiListener()
+browser = zeroconf.ServiceBrowser(zeroconfp, "_apple-midi._udp.local.", apple_midi_listener)
+
+
+def add_applemidi(address, port):
+    print("Add a applemidi", repr(address), port)
 
 
 class RTPMidiClient:
