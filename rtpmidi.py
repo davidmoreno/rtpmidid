@@ -29,7 +29,7 @@ rtp_midi = None
 def main():
     global rtp_midi
     logger.info("RTP/MIDI v.0.1")
-    epoll = select.epoll()
+    event_dispatcher = EventDispatcher()
     rtp_midi = RTPMidi()
 
     # zero conf setup
@@ -43,30 +43,44 @@ def main():
         hostport = arg.split(':')
         rtp_midi.connect_to(*hostport)
 
-    alsa_fd = alsaseq.fd()
-    (control_fd, midi_fd) = rtp_midi.filenos()
-    task_ready_fd = task_ready_fds[0].fileno()
-
-    epoll.register(alsa_fd, select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR)
-    epoll.register(control_fd, select.EPOLLIN)
-    epoll.register(midi_fd, select.EPOLLIN)
-    epoll.register(task_ready_fd, select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR)
+    event_dispatcher.add(alsaseq.fd(), process_alsa)
+    event_dispatcher.add(rtp_midi.filenos(), rtp_midi.data_ready)
+    event_dispatcher.add(task_ready_fds[0].fileno(), process_tasks, task_ready_fds[0])
 
     logger.debug("Loop")
     n = 0
     while True:
         print("Event count: %s" % n, end="\r")
-        for (fd, event) in epoll.poll():
-            # print(fd, task_ready_fd)
-            if fd == alsa_fd:
-                process_alsa()
-            elif fd in rtp_midi.filenos():
-                rtp_midi.data_ready(fd)
-            elif fd == task_ready_fd:
-                process_tasks(task_ready_fds[0])
-            else:
-                raise Exception("Got fd for not listened fd.")
+        event_dispatcher.wait_and_dispatch_one()
         n += 1
+
+
+class EventDispatcher:
+    def __init__(self):
+        self.epoll = select.epoll()
+        self.fdmap = {}
+
+    def add(self, fdlike, func, *args, **kwargs):
+        for fd in maybe_wrap(fdlike):
+            self.fdmap[fd] = (func, args, kwargs)
+            self.epoll.register(fd, select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR)
+
+    def wait_and_dispatch_one(self):
+        for (fd, event) in self.epoll.poll():
+            # logger.debug("Data ready fd: %d. avail: %s", fd, self.fdmap)
+            f_tuple = self.fdmap.get(fd)
+            if not f_tuple:
+                logger.error("Got data for an unmanaged fd")
+                continue
+
+            f, args, kwargs = f_tuple
+            if not args and not kwargs:
+                args = (fd,)
+            try:
+                f(*args, **kwargs)
+            except Exception:
+                logger.error("Error executing: %s", f.__name__)
+                traceback.print_exc()
 
 
 def process_alsa():
@@ -85,7 +99,7 @@ def add_task(fn, **kwargs):
 
 def process_tasks(fd):
     fd.read(1024)  # clear queue
-    while task_queue:
+    while not task_queue.empty():
         (fn, kwargs) = task_queue.get()
         try:
             fn(**kwargs)
@@ -114,8 +128,7 @@ class RTPMidi:
         """
         Opens an RTP connection to that port.
         """
-        self.control_peers = {}
-        self.midi_peers = {}
+        self.peers = {}
         self.control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.control_sock.bind(('0.0.0.0', local_port))
         self.midi_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -125,6 +138,10 @@ class RTPMidi:
         return (self.control_sock.fileno(), self.midi_sock.fileno())
 
     def data_ready(self, fd):
+        # logger.debug(
+        #     "Data ready fd: %d, midi: %d, control: %d",
+        #     fd, self.midi_sock.fileno(), self.control_sock.fileno()
+        # )
         if fd == self.midi_sock.fileno():
             self.process_midi()
         elif fd == self.control_sock.fileno():
@@ -137,38 +154,40 @@ class RTPMidi:
 
     def connect_to(self, hostname, port):
         port = int(port)
-        logger.info("Try connect to %s:%d" % (hostname, port))
-        control = RTPConnection(self, self.control_sock, hostname, port, is_control=True)
-        midi = RTPConnection(self, self.midi_sock, hostname, port+1)
-        self.control_peers[control.id] = control
-        self.midi_peers[midi.id] = midi
+        id = random.randint(0, 0xFFFFFFFF)
+        control = RTPConnection(self, self.control_sock, hostname, port, id=id, is_control=True)
+        # midi = RTPConnection(self, self.midi_sock, hostname, port+1, id=id)
+        midi = control
+        self.peers[id] = control
 
-    def add_remote_ssrc(self, id, remote_ssrc):
+    def initiator_is_peer(self, initiator, peer):
         """
         We know control and midi from an internal random id, but receive some
         messages from the remote SSRC. Do the mapping.
 
         Both at the same mapping, expecting no collissions.
         """
-        self.control_peers[remote_ssrc] = self.control_peers.get(id)
-        self.midi_peers[remote_ssrc] = self.midi_peers.get(id)
+        logger.debug("Old initiator: %X is now peer: %X", initiator, peer)
+
+        self.peers[peer] = self.peers[initiator]
+        del self.peers[initiator]
 
     def process_midi(self):
         (source, msg) = self.remote_data_read(self.midi_sock)
         for ev in midi_to_alsaevents(msg):
-            peer = self.midi_peers.get(source)
-            logger.debug("Message from %s (%d): ", peer.name, source)
+            peer = self.peers.get(source)
             if peer:
+                logger.debug("Message from %s (%X): ", peer, source)
                 if ev:
                     if DEBUG:
                         logger.debug("Network MIDI: %s", ev_to_dict(ev))
                     alsaseq.output(ev)
             else:
-                logger.warn("Unknown source, ignoring.")
+                logger.warn("Unknown source, ignoring. TODO: Send disconnect.")
 
     def process_control(self):
         (source, msg) = self.remote_data_read(self.control_sock)
-        logger.debug("Got control from %s: %s" % source, to_hex_str(msg))
+        logger.debug("Got control from %s: %s", source, to_hex_str(msg))
 
     def rtp_decode(self, msg):
         (flags, type, sequence_nr, timestamp, source) = struct.unpack("!BBHLL", msg)
@@ -179,18 +198,23 @@ class RTPMidi:
         (msg, from_) = sock.recvfrom(1500)
 
         is_command = struct.unpack("!H", msg[:2])[0] == 0xFFFF
+        # logger.debug("Got data at sock: %s, is_command: %s", sock, is_command)
         if is_command:
             command = struct.unpack("!H", msg[2:4])[0]
             if command == RTPConnection.Commands.OK:
-                initiator = struct.unpack("!L", msg[8:12])
-                peer = self.control_peers.get(initiator)
+                initiator = struct.unpack("!L", msg[8:12])[0]
+                peer = self.peers.get(initiator)
                 if peer:
                     return peer.accepted_connection(msg)
+                else:
+                    logger.error("Unknown initiator: %X", initiator)
             elif command == RTPConnection.Commands.CK:
-                initiator = struct.unpack("!L", msg[4:8])
-                peer = self.control_peers.get(initiator)
+                initiator = struct.unpack("!L", msg[4:8])[0]
+                peer = self.peers.get(initiator)
                 if peer:
-                    return peer.sync(msg)
+                    return peer.recv_sync(msg)
+                else:
+                    logger.error("Unknown initiator: %X", initiator)
             else:
                 logger.error(
                     "Unimplemented command %X. Maybe RTP message (reuse of connection). Maybe MIDI command.",
@@ -217,7 +241,7 @@ class RTPConnection:
         BY = 0x4259
         CK = 0x434b
 
-    def __init__(self, rtpmidi, sock, remote_host, remote_port, is_control=False, id=None):
+    def __init__(self, rtpmidi, sock, remote_host, remote_port, id, is_control=False):
         self.remote_host = remote_host
         self.remote_port = remote_port
         self.state = RTPConnection.State.NOT_CONNECTED
@@ -226,24 +250,26 @@ class RTPConnection:
         self.sock = sock
         self.rtpmidi = rtpmidi
         self.is_control = is_control
-        self.connect()
+        self.connect(self.remote_port)
+        self.connect(self.remote_port+1)
 
     def fileno(self):
         return self.sock and self.sock.fileno()
 
-    def connect(self):
+    def connect(self, port):
         signature = 0xFFFF
         command = RTPConnection.Commands.IN
         protocol = 2
         sender = SSRC
 
-        # print("initiator id", initiator)
+        logger.info("[%X] Connect to %s:%d", self.id, self.remote_host, port)
         msg = struct.pack("!HHLLL", signature, command, protocol, self.id, sender) + NAME.encode('utf8') + b'\0'
-        self.sock.sendto(msg, (self.remote_host, self.remote_port))
+        self.sock.sendto(msg, (self.remote_host, port))
         self.state = RTPConnection.State.SENT_REQUEST
 
     def sync(self):
         self.state = RTPConnection.State.SYNC
+        logger.debug("[%X] Sync", self.id)
 
         t1 = int(time.time() * 10000)  # current time or something in 100us units
         msg = struct.pack(
@@ -266,6 +292,7 @@ class RTPConnection:
         return (None, b'')
 
     def sync1(self, sender, t1):
+        logger.debug("[%X] Sync1", self.id)
         t2 = int(time.time() * 10000)  # current time or something in 100us units
         msg = struct.pack(
             "!HHLbbHQQQ",
@@ -275,9 +302,10 @@ class RTPConnection:
         self.sock.sendto(msg, (self.remote_host, self.remote_port))
 
     def sync2(self, sender, t1, t2):
+        logger.debug("[%X] Sync2", self.id)
         t3 = int(time.time() * 10000)  # current time or something in 100us units
         self.offset = ((t1 + t3) / 2) - t2
-        print("Offset is now: %d for: %d " % (self.offset, sender))
+        logger.info("[%X] Offset is now: %d for: %d ", self.id, self.offset, sender)
         msg = struct.pack(
             "!HHLbbHQQQ",
             0xFFFF, RTPConnection.Commands.CK, self.id, 2, 0, 0,
@@ -286,8 +314,9 @@ class RTPConnection:
         self.sock.sendto(msg, (self.remote_host, self.remote_port))
 
     def sync3(self, sender, t1, t2, t3):
+        logger.debug("[%X] Sync3", self.id)
         self.offset = ((t1 + t3) / 2) - t2
-        print("Offset is now: %d for: %d " % (self.offset, sender))
+        logger.info("[%X] Offset is now: %d for: %d ", self.id, self.offset, sender)
 
     def accepted_connection(self, msg):
         (protocol, rtp_id, sender) = struct.unpack("!LLL", msg[4:16])
@@ -297,14 +326,20 @@ class RTPConnection:
                 break
             name += chr(m)
         assert self.id == rtp_id, "Got wrong message: " + to_hex_str(msg)
-        print("Connected ", self.local_port, " to ", self.remote_port, " name ", repr(name), " remote id ", sender)
+        logger.info(
+            "[%X] Connected local_port host: %s:%d, name: %s, remote_id: %X",
+            self.id, self.remote_host, self.remote_port, repr(name), sender
+        )
         self.name = name
         self.state = RTPConnection.State.CONNECTED
         if self.is_control:
             self.sync()
-        self.rtpmidi.add_remote_ssrc(self.id, sender)
+        self.rtpmidi.initiator_is_peer(self.id, sender)
+        self.id = sender
         return (None, [])
 
+    def __str__(self):
+        return "[%X] %s" % (self.id, self.name)
 
 def to_hex_str(msg):
     return " ".join(hex(x) for x in msg)
@@ -409,6 +444,18 @@ def midi_to_alsaevent(event):
         )
     print("Unimplemented MIDI event", event[0], type)
     return None
+
+
+def maybe_wrap(maybelist):
+    """
+    Always returns an iterable. If None an empty one, if one element, a tuple with
+    one element. If a list or tuple itself.
+    """
+    if maybelist is None:
+        return ()
+    if isinstance(maybelist, (list, tuple)):
+        return maybelist
+    return (maybelist,)
 
 
 def test():
