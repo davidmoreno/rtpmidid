@@ -10,8 +10,12 @@ import zeroconf
 import queue
 import traceback
 import os
+import logging
 
-SSRC = random.randint(0, 0xffffffff)  # Not sure if should be fixed by client type  0x17026324  # random ID
+logging.basicConfig(format='%(levelname)-8s | %(message)s', level=logging.DEBUG)
+
+logger = logging.getLogger(__name__)
+SSRC = random.randint(0, 0xffffffff)
 NAME = '%s - ALSA SEQ' % (socket.gethostname())
 PORT = 10008
 DEBUG = False
@@ -24,7 +28,7 @@ rtp_midi = None
 
 def main():
     global rtp_midi
-    print("RTP/MIDI v.0")
+    logger.info("RTP/MIDI v.0.1")
     epoll = select.epoll()
     rtp_midi = RTPMidi()
 
@@ -48,7 +52,7 @@ def main():
     epoll.register(midi_fd, select.EPOLLIN)
     epoll.register(task_ready_fd, select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR)
 
-    print("Loop")
+    logger.debug("Loop")
     n = 0
     while True:
         print("Event count: %s" % n, end="\r")
@@ -69,14 +73,14 @@ def process_alsa():
     alsaseq.inputpending()
     ev = alsaseq.input()
     if DEBUG:
-        print("ALSA: ", ev_to_dict(ev))
+        logger.debug("ALSA: %s", ev_to_dict(ev))
 
 
 def add_task(fn, **kwargs):
     task_queue.put((fn, kwargs))
     task_ready_fds[1].write(b"1")
     task_ready_fds[1].flush()
-    print("Add task to queue")
+    logger.debug("Add task to queue")
 
 
 def process_tasks(fd):
@@ -86,18 +90,18 @@ def process_tasks(fd):
         try:
             fn(**kwargs)
         except Exception as e:
-            print("Error executing task", e)
+            logger.error("Error executing task: %s", e)
             traceback.print_exc()
 
 
 class AppleMidiListener:
     def remove_service(self, zeroconf, type, name):
         info = zeroconf.get_service_info(type, name)
-        print("Service removed", repr(info.get_name()), [x for x in info.address], info.port)
+        logger.info("Service removed: %s, %s, %s", repr(info.get_name()), [x for x in info.address], info.port)
 
     def add_service(self, zeroconf, type, name):
         info = zeroconf.get_service_info(type, name)
-        print("Service added", repr(info.get_name()), [x for x in info.address], info.port)
+        logger.info("Service added: %s, %s, %s", repr(info.get_name()), [x for x in info.address], info.port)
         add_task(add_applemidi, address=info.address, port=info.port)
 
 
@@ -126,11 +130,14 @@ class RTPMidi:
         elif fd == self.control_sock.fileno():
             self.process_control()
         else:
-            print("Dont know who to", fd, self.midi_sock.fileno(), self.control_sock.fileno())
+            logger.error(
+                "Dont know who to send data fd: %d, midi: %d, control: %d",
+                fd, self.midi_sock.fileno(), self.control_sock.fileno()
+            )
 
     def connect_to(self, hostname, port):
         port = int(port)
-        print("Try connect to %s:%d" % (hostname, port))
+        logger.info("Try connect to %s:%d" % (hostname, port))
         control = RTPConnection(self, self.control_sock, hostname, port, is_control=True)
         midi = RTPConnection(self, self.midi_sock, hostname, port+1)
         self.control_peers[control.id] = control
@@ -150,18 +157,18 @@ class RTPMidi:
         (source, msg) = self.remote_data_read(self.midi_sock)
         for ev in midi_to_alsaevents(msg):
             peer = self.midi_peers.get(source)
-            print("Message from %s (%d): " % (peer.name, source), end="")
+            logger.debug("Message from %s (%d): ", peer.name, source)
             if peer:
                 if ev:
                     if DEBUG:
-                        print("Network MIDI: ", ev_to_dict(ev))
+                        logger.debug("Network MIDI: %s", ev_to_dict(ev))
                     alsaseq.output(ev)
             else:
-                print("Unknown source, ignoring.")
+                logger.warn("Unknown source, ignoring.")
 
     def process_control(self):
         (source, msg) = self.remote_data_read(self.control_sock)
-        print("Got control from %s" % source, to_hex_str(msg))
+        logger.debug("Got control from %s: %s" % source, to_hex_str(msg))
 
     def rtp_decode(self, msg):
         (flags, type, sequence_nr, timestamp, source) = struct.unpack("!BBHLL", msg)
@@ -185,8 +192,9 @@ class RTPMidi:
                 if peer:
                     return peer.sync(msg)
             else:
-                print(
-                    "Unimplemented command %X. Maybe RTP message (reuse of connection). Maybe MIDI command." % command
+                logger.error(
+                    "Unimplemented command %X. Maybe RTP message (reuse of connection). Maybe MIDI command.",
+                    command
                 )
             return (None, b'')
 
