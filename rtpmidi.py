@@ -155,10 +155,9 @@ class RTPMidi:
     def connect_to(self, hostname, port):
         port = int(port)
         id = random.randint(0, 0xFFFFFFFF)
-        control = RTPConnection(self, self.control_sock, hostname, port, id=id, is_control=True)
+        peer = RTPConnection(self, self.control_sock, hostname, port, id=id, is_control=True)
         # midi = RTPConnection(self, self.midi_sock, hostname, port+1, id=id)
-        midi = control
-        self.peers[id] = control
+        self.peers[id] = peer
 
     def initiator_is_peer(self, initiator, peer):
         """
@@ -176,18 +175,15 @@ class RTPMidi:
         (source, msg) = self.remote_data_read(self.midi_sock)
         for ev in midi_to_alsaevents(msg):
             peer = self.peers.get(source)
-            if peer:
-                logger.debug("Message from %s (%X): ", peer, source)
-                if ev:
-                    if DEBUG:
-                        logger.debug("Network MIDI: %s", ev_to_dict(ev))
+            if peer and ev:
+                    logger.debug("Network MIDI from: %s event: %s", peer.name, ev_to_dict(ev))
                     alsaseq.output(ev)
-            else:
+            elif not peer:
                 logger.warn("Unknown source, ignoring. TODO: Send disconnect.")
 
     def process_control(self):
         (source, msg) = self.remote_data_read(self.control_sock)
-        logger.debug("Got control from %s: %s", source, to_hex_str(msg))
+        logger.debug("Got control from %s: %s", source and hex(source), to_hex_str(msg))
 
     def rtp_decode(self, msg):
         (flags, type, sequence_nr, timestamp, source) = struct.unpack("!BBHLL", msg)
@@ -341,6 +337,7 @@ class RTPConnection:
     def __str__(self):
         return "[%X] %s" % (self.id, self.name)
 
+
 def to_hex_str(msg):
     return " ".join(hex(x) for x in msg)
 
@@ -383,6 +380,9 @@ def midi_to_alsaevents(source):
             data = ""
         else:
             data.append(c)
+
+    if len(data) == 2:
+        yield midi_to_alsaevent(data)
 
 
 # check names at https://github.com/Distrotech/alsa-lib/blob/distrotech-alsa-lib/include/seq_event.h
