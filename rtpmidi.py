@@ -119,6 +119,8 @@ class AppleMidiListener:
 
     def add_service(self, zeroconf, type, name):
         info = zeroconf.get_service_info(type, name)
+        if not info:
+            logger.error("Got service from zeroconf, but no info. name: %s", name)
         logger.info("Service added: %s, %s, %s", repr(info.get_name()), [x for x in info.address], info.port)
         add_task(add_applemidi, address=info.address, port=info.port)
 
@@ -207,14 +209,14 @@ class RTPMidi:
                 if peer:
                     return peer.accepted_connection(msg)
                 else:
-                    logger.error("Unknown initiator: %X", initiator)
+                    logger.error("Unknown initiator (OK): %X", initiator)
             elif command == RTPConnection.Commands.CK:
                 initiator = struct.unpack("!L", msg[4:8])[0]
                 peer = self.peers.get(initiator)
                 if peer:
                     return peer.recv_sync(msg)
                 else:
-                    logger.error("Unknown initiator: %X", initiator)
+                    logger.error("Unknown initiator (CK): %X", initiator)
             else:
                 logger.error(
                     "Unimplemented command %X. Maybe RTP message (reuse of connection). Maybe MIDI command.",
@@ -283,9 +285,7 @@ class RTPConnection:
         self.rtpmidi.control_sock.sendto(msg, (self.remote_host, self.remote_port))
 
     def recv_sync(self, msg):
-        print("Sync: ", to_hex_str(msg))
         (sender, count, _, _, t1, t2, t3) = struct.unpack("!LbbHQQQ", msg[4:])
-        print(sender, count, t1, t2, t3)
         if count == 0:
             self.sync1(sender, t1)
         if count == 1:
