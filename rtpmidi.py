@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 SSRC = random.randint(0, 0xffffffff)
 NAME = '%s - ALSA SEQ' % (socket.gethostname())
 PORT = 10008
-DEBUG = False
+DEBUG = True
 
 task_queue = queue.Queue()
 task_ready_fds = os.pipe2(os.O_NONBLOCK)
@@ -83,11 +83,15 @@ class EventDispatcher:
                 traceback.print_exc()
 
 
-def process_alsa():
+def process_alsa(fd):
     alsaseq.inputpending()
     ev = alsaseq.input()
     if DEBUG:
         logger.debug("ALSA: %s", ev_to_dict(ev))
+        midi = ev_to_midi(ev)
+        if midi:
+            logger.debug("ALSA to MIDI: %s", [hex(x) for x in midi])
+            rtp_midi.send(midi)
 
 
 def add_task(fn, **kwargs):
@@ -155,7 +159,7 @@ class RTPMidi:
     def connect_to(self, hostname, port):
         port = int(port)
         id = random.randint(0, 0xFFFFFFFF)
-        peer = RTPConnection(self, self.control_sock, hostname, port, id=id, is_control=True)
+        peer = RTPConnection(self, hostname, port, id=id, is_control=True)
         # midi = RTPConnection(self, self.midi_sock, hostname, port+1, id=id)
         self.peers[id] = peer
 
@@ -173,7 +177,7 @@ class RTPMidi:
 
     def process_midi(self):
         (source, msg) = self.remote_data_read(self.midi_sock)
-        for ev in midi_to_alsaevents(msg):
+        for ev in midi_to_evs(msg):
             peer = self.peers.get(source)
             if peer and ev:
                     logger.debug("Network MIDI from: %s event: %s", peer.name, ev_to_dict(ev))
@@ -222,6 +226,10 @@ class RTPMidi:
         source = rtp[4]
         return (source, msg[13:])
 
+    def send(self, msg):
+        for peer in self.peers.values():
+            peer.send_midi(msg)
+
 
 class RTPConnection:
     class State:
@@ -237,22 +245,21 @@ class RTPConnection:
         BY = 0x4259
         CK = 0x434b
 
-    def __init__(self, rtpmidi, sock, remote_host, remote_port, id, is_control=False):
+    def __init__(self, rtpmidi, remote_host, remote_port, id, is_control=False):
         self.remote_host = remote_host
         self.remote_port = remote_port
         self.state = RTPConnection.State.NOT_CONNECTED
         self.name = None
         self.id = id or random.randint(0, 0xffffffff)
-        self.sock = sock
         self.rtpmidi = rtpmidi
         self.is_control = is_control
-        self.connect(self.remote_port)
-        self.connect(self.remote_port+1)
+        self.conn_start = None
+        self.seq1 = random.randint(0, 0xFFFF)
+        self.seq2 = random.randint(0, 0xFFFF)
+        self.connect(rtpmidi.control_sock, self.remote_port)
+        self.connect(rtpmidi.midi_sock, self.remote_port+1)
 
-    def fileno(self):
-        return self.sock and self.sock.fileno()
-
-    def connect(self, port):
+    def connect(self, sock, port):
         signature = 0xFFFF
         command = RTPConnection.Commands.IN
         protocol = 2
@@ -260,7 +267,7 @@ class RTPConnection:
 
         logger.info("[%X] Connect to %s:%d", self.id, self.remote_host, port)
         msg = struct.pack("!HHLLL", signature, command, protocol, self.id, sender) + NAME.encode('utf8') + b'\0'
-        self.sock.sendto(msg, (self.remote_host, port))
+        sock.sendto(msg, (self.remote_host, port))
         self.state = RTPConnection.State.SENT_REQUEST
 
     def sync(self):
@@ -273,7 +280,7 @@ class RTPConnection:
             0xFFFF, RTPConnection.Commands.CK, self.id, 0, 0, 0,
             t1, 0, 0
         )
-        self.sock.sendto(msg, (self.remote_host, self.remote_port))
+        self.rtpmidi.control_sock.sendto(msg, (self.remote_host, self.remote_port))
 
     def recv_sync(self, msg):
         print("Sync: ", to_hex_str(msg))
@@ -289,17 +296,17 @@ class RTPConnection:
 
     def sync1(self, sender, t1):
         logger.debug("[%X] Sync1", self.id)
-        t2 = int(time.time() * 10000)  # current time or something in 100us units
+        t2 = int(self.time() * 10000)  # current time or something in 100us units
         msg = struct.pack(
             "!HHLbbHQQQ",
             0xFFFF, RTPConnection.Commands.CK, self.id, 1, 0, 0,
             t1, t2, 0
         )
-        self.sock.sendto(msg, (self.remote_host, self.remote_port))
+        self.rtpmidi.control_sock.sendto(msg, (self.remote_host, self.remote_port))
 
     def sync2(self, sender, t1, t2):
         logger.debug("[%X] Sync2", self.id)
-        t3 = int(time.time() * 10000)  # current time or something in 100us units
+        t3 = int(self.time() * 10000)  # current time or something in 100us units
         self.offset = ((t1 + t3) / 2) - t2
         logger.info("[%X] Offset is now: %d for: %d ", self.id, self.offset, sender)
         msg = struct.pack(
@@ -307,7 +314,7 @@ class RTPConnection:
             0xFFFF, RTPConnection.Commands.CK, self.id, 2, 0, 0,
             t1, t2, t3
         )
-        self.sock.sendto(msg, (self.remote_host, self.remote_port))
+        self.rtpmidi.control_sock.sendto(msg, (self.remote_host, self.remote_port))
 
     def sync3(self, sender, t1, t2, t3):
         logger.debug("[%X] Sync3", self.id)
@@ -326,6 +333,7 @@ class RTPConnection:
             "[%X] Connected local_port host: %s:%d, name: %s, remote_id: %X",
             self.id, self.remote_host, self.remote_port, repr(name), sender
         )
+        self.conn_start = time.time()
         self.name = name
         self.state = RTPConnection.State.CONNECTED
         if self.is_control:
@@ -334,12 +342,44 @@ class RTPConnection:
         self.id = sender
         return (None, [])
 
+    def time(self):
+        return time.time() - self.conn_start
+
+    def send_midi(self, msg):
+        if not self.conn_start:
+            # Not yet connected
+            return
+        if len(msg) > 16:
+            raise Exception("Current implementation max event size is 16 bytes")
+        # Short header, no fourname, no deltatime, status in first byte, 4 * length. So just length.
+        rtpmidi_header = [len(msg)]
+        timestamp = int(self.time() * 1000)
+        self.seq1 += 1
+        self.seq2 += 1
+
+        rtpheader = [
+            0x80, 0x61,
+            byten(self.seq1, 1), byten(self.seq1, 0),
+            # byten(self.seq2, 1), byten(self.seq2, 0),  # sequence nr
+            byten(timestamp, 3), byten(timestamp, 2), byten(timestamp, 1), byten(timestamp, 0),
+            byten(self.id, 3), byten(self.id, 2), byten(self.id, 1), byten(self.id, 0),  # sequence nr
+        ]
+        msg = bytes(rtpheader) + bytes(rtpmidi_header) + bytes(msg)
+
+        self.rtpmidi.midi_sock.sendto(msg, (self.remote_host, self.remote_port + 1))
+
+        print(self.name, ' '.join(["%2X" % x for x in msg]))
+
     def __str__(self):
         return "[%X] %s" % (self.id, self.name)
 
 
 def to_hex_str(msg):
     return " ".join(hex(x) for x in msg)
+
+
+def byten(nr, n):
+    return (nr >> (8*n)) & 0x0FF
 
 
 def ev_to_dict(ev):
@@ -359,7 +399,7 @@ def ev_to_dict(ev):
     }
 
 
-def midi_to_alsaevents(source):
+def midi_to_evs(source):
     current = 0
     data = []
     evlen = 2
@@ -373,16 +413,16 @@ def midi_to_alsaevents(source):
                 evlen = 2
         elif current != 0xF0 and len(data) == evlen:
             data.append(c)
-            yield midi_to_alsaevent(data)
+            yield midi_to_ev(data)
             data = [current]
         elif current == 0xF0 and c == 0x7F:
-            yield midi_to_alsaevent(data)
+            yield midi_to_ev(data)
             data = ""
         else:
             data.append(c)
 
     if len(data) == 2:
-        yield midi_to_alsaevent(data)
+        yield midi_to_ev(data)
 
 
 # check names at https://github.com/Distrotech/alsa-lib/blob/distrotech-alsa-lib/include/seq_event.h
@@ -395,9 +435,10 @@ MIDI_TO_EV = {
     # 0xD0: alsaseq.SND_SEQ_EVENT_CHANPRESS,   # Channel key pres / 1b
     0xE0: alsaseq.SND_SEQ_EVENT_PITCHBEND,  # pitch bend
 }
+EV_TO_MIDI = dict({v: k for k, v in MIDI_TO_EV.items()})  # just the revers
 
 
-def midi_to_alsaevent(event):
+def midi_to_ev(event):
     type = MIDI_TO_EV.get(event[0] & 0x0F0)
     if not type:
         print("Unknown MIDI Event %s" % to_hex_str(event))
@@ -442,7 +483,22 @@ def midi_to_alsaevent(event):
             (0, 0),
             (0, 0, 0, 0, param1, param2)
         )
-    print("Unimplemented MIDI event", event[0], type)
+    logger.warn("Unimplemented MIDI event: %s, type: %s", event[0], type)
+    return None
+
+
+def ev_to_midi(ev):
+    if ev[0] in (alsaseq.SND_SEQ_EVENT_NOTEON, alsaseq.SND_SEQ_EVENT_NOTEOFF):
+        return (EV_TO_MIDI[ev[0]], ev[7][1], ev[7][2])
+    if ev[0] == alsaseq.SND_SEQ_EVENT_CONTROLLER:
+        return (EV_TO_MIDI[ev[0]], ev[7][4], ev[7][5])
+    if ev[0] == alsaseq.SND_SEQ_EVENT_PITCHBEND:
+        n = ev[7][5]
+        return (EV_TO_MIDI[ev[0]], (n >> 7) & 0x07F, n & 0x07F)
+    if ev[0] == 66:
+        logger.info("New connection.")
+        return None
+    logger.warn("Unimplemented ALSA event: %d" % ev[0])
     return None
 
 
@@ -459,7 +515,7 @@ def maybe_wrap(maybelist):
 
 
 def test():
-    events = list(midi_to_alsaevents([0x90, 10, 10, 0x80, 10, 0]))
+    events = list(midi_to_evs([0x90, 10, 10, 0x80, 10, 0]))
     print(events)
 
 
