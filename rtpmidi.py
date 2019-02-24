@@ -115,7 +115,10 @@ def process_tasks(fd):
 class AppleMidiListener:
     def remove_service(self, zeroconf, type, name):
         info = zeroconf.get_service_info(type, name)
-        logger.info("Service removed: %s, %s, %s", repr(info.get_name()), [x for x in info.address], info.port)
+        if info:
+            logger.info("Service removed: %s, %s, %s", repr(info.get_name()), [x for x in info.address], info.port)
+        else:
+            logger.info("Service removed: %s, %s, %s, %s" % (self, zeroconf, type, name))
 
     def add_service(self, zeroconf, type, name):
         info = zeroconf.get_service_info(type, name)
@@ -135,6 +138,7 @@ class RTPMidi:
         Opens an RTP connection to that port.
         """
         self.peers = {}
+        self.initiator = {}
         self.control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.control_sock.bind(('0.0.0.0', local_port))
         self.midi_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -160,10 +164,9 @@ class RTPMidi:
 
     def connect_to(self, hostname, port):
         port = int(port)
-        id = random.randint(0, 0xFFFFFFFF)
-        peer = RTPConnection(self, hostname, port, id=id, is_control=True)
-        # midi = RTPConnection(self, self.midi_sock, hostname, port+1, id=id)
-        self.peers[id] = peer
+        initiator_id = random.randint(0, 0xFFFFFFFF)
+        peer = RTPConnection(self, hostname, port, initiator_id=initiator_id)
+        self.initiator[initiator_id] = peer
 
     def initiator_is_peer(self, initiator, peer):
         """
@@ -172,10 +175,9 @@ class RTPMidi:
 
         Both at the same mapping, expecting no collissions.
         """
-        logger.debug("Old initiator: %X is now peer: %X", initiator, peer)
+        logger.debug("Initiator: %X is peer: %X", initiator, peer)
 
-        self.peers[peer] = self.peers[initiator]
-        del self.peers[initiator]
+        self.peers[peer] = self.initiator[initiator]
 
     def process_midi(self):
         (source, msg) = self.remote_data_read(self.midi_sock)
@@ -189,7 +191,7 @@ class RTPMidi:
 
     def process_control(self):
         (source, msg) = self.remote_data_read(self.control_sock)
-        logger.debug("Got control from %s: %s", source and hex(source), to_hex_str(msg))
+        logger.debug("Done with control from %s: %s", source and hex(source), to_hex_str(msg))
 
     def rtp_decode(self, msg):
         (flags, type, sequence_nr, timestamp, source) = struct.unpack("!BBHLL", msg)
@@ -200,29 +202,25 @@ class RTPMidi:
         (msg, from_) = sock.recvfrom(1500)
 
         is_command = struct.unpack("!H", msg[:2])[0] == 0xFFFF
-        # logger.debug("Got data at sock: %s, is_command: %s", sock, is_command)
+        logger.debug("Got data at sock: %s, is_command: %s, from: %s", sock, is_command, from_)
         if is_command:
             command = struct.unpack("!H", msg[2:4])[0]
+            initiator = struct.unpack("!L", msg[8:12])[0]
+            peer = self.initiator.get(initiator)
+            if not peer:
+                logger.error("Got command message from unknown source.")
+            logger.debug("Initiator is %X: %s", initiator, peer.name)
+
             if command == RTPConnection.Commands.OK:
-                initiator = struct.unpack("!L", msg[8:12])[0]
-                peer = self.peers.get(initiator)
-                if peer:
-                    return peer.accepted_connection(msg)
-                else:
-                    logger.error("Unknown initiator (OK): %X", initiator)
+                return peer.accepted_connection(msg)
             elif command == RTPConnection.Commands.CK:
-                initiator = struct.unpack("!L", msg[4:8])[0]
-                peer = self.peers.get(initiator)
-                if peer:
-                    return peer.recv_sync(msg)
-                else:
-                    logger.error("Unknown initiator (CK): %X", initiator)
+                return peer.recv_sync(msg)
             else:
                 logger.error(
                     "Unimplemented command %X. Maybe RTP message (reuse of connection). Maybe MIDI command.",
                     command
                 )
-            return (None, b'')
+            return (peer.initiator_id, b'')
 
         rtp = self.rtp_decode(msg[:12])
         source = rtp[4]
@@ -247,15 +245,15 @@ class RTPConnection:
         BY = 0x4259
         CK = 0x434b
 
-    def __init__(self, rtpmidi, remote_host, remote_port, id, is_control=False):
+    def __init__(self, rtpmidi, remote_host, remote_port, initiator_id):
         self.remote_host = remote_host
         self.remote_port = remote_port
         self.state = RTPConnection.State.NOT_CONNECTED
         self.name = None
-        self.id = id or random.randint(0, 0xffffffff)
+        self.initiator_id = initiator_id
         self.rtpmidi = rtpmidi
-        self.is_control = is_control
         self.conn_start = None
+        self.remote_id = None
         self.seq1 = random.randint(0, 0xFFFF)
         self.seq2 = random.randint(0, 0xFFFF)
         self.connect(rtpmidi.control_sock, self.remote_port)
@@ -267,19 +265,21 @@ class RTPConnection:
         protocol = 2
         sender = SSRC
 
-        logger.info("[%X] Connect to %s:%d", self.id, self.remote_host, port)
-        msg = struct.pack("!HHLLL", signature, command, protocol, self.id, sender) + NAME.encode('utf8') + b'\0'
+        logger.info("[%X] Connect to %s:%d", self.initiator_id, self.remote_host, port)
+        msg = (struct.pack("!HHLLL", signature, command, protocol, self.initiator_id, sender)
+               + NAME.encode('utf8')
+               + b'\0')
         sock.sendto(msg, (self.remote_host, port))
         self.state = RTPConnection.State.SENT_REQUEST
 
     def sync(self):
         self.state = RTPConnection.State.SYNC
-        logger.debug("[%X] Sync", self.id)
+        logger.debug("[%X] Sync", self.initiator_id)
 
-        t1 = int(time.time() * 10000)  # current time or something in 100us units
+        t1 = int(self.time() * 10000)  # current time or something in 100us units
         msg = struct.pack(
             "!HHLbbHQQQ",
-            0xFFFF, RTPConnection.Commands.CK, self.id, 0, 0, 0,
+            0xFFFF, RTPConnection.Commands.CK, self.initiator_id, 0, 0, 0,
             t1, 0, 0
         )
         self.rtpmidi.control_sock.sendto(msg, (self.remote_host, self.remote_port))
@@ -295,51 +295,49 @@ class RTPConnection:
         return (None, b'')
 
     def sync1(self, sender, t1):
-        logger.debug("[%X] Sync1", self.id)
+        logger.debug("[%X] Sync1", self.initiator_id)
         t2 = int(self.time() * 10000)  # current time or something in 100us units
         msg = struct.pack(
             "!HHLbbHQQQ",
-            0xFFFF, RTPConnection.Commands.CK, self.id, 1, 0, 0,
+            0xFFFF, RTPConnection.Commands.CK, self.initiator_id, 1, 0, 0,
             t1, t2, 0
         )
         self.rtpmidi.control_sock.sendto(msg, (self.remote_host, self.remote_port))
 
     def sync2(self, sender, t1, t2):
-        logger.debug("[%X] Sync2", self.id)
+        logger.debug("[%X] Sync2", self.initiator_id)
         t3 = int(self.time() * 10000)  # current time or something in 100us units
         self.offset = ((t1 + t3) / 2) - t2
-        logger.info("[%X] Offset is now: %d for: %d ", self.id, self.offset, sender)
+        logger.info("[%X] Offset is now: %d for: %d ", self.initiator_id, self.offset, sender)
         msg = struct.pack(
             "!HHLbbHQQQ",
-            0xFFFF, RTPConnection.Commands.CK, self.id, 2, 0, 0,
+            0xFFFF, RTPConnection.Commands.CK, self.initiator_id, 2, 0, 0,
             t1, t2, t3
         )
         self.rtpmidi.control_sock.sendto(msg, (self.remote_host, self.remote_port))
 
     def sync3(self, sender, t1, t2, t3):
-        logger.debug("[%X] Sync3", self.id)
+        logger.debug("[%X] Sync3", self.initiator_id)
         self.offset = ((t1 + t3) / 2) - t2
-        logger.info("[%X] Offset is now: %d for: %d ", self.id, self.offset, sender)
+        logger.info("[%X] Offset is now: %d for: %d ", self.initiator_id, self.offset, sender)
 
     def accepted_connection(self, msg):
-        (protocol, rtp_id, sender) = struct.unpack("!LLL", msg[4:16])
+        (protocol, initiator_id, sender) = struct.unpack("!LLL", msg[4:16])
         name = ""
         for m in msg[16:]:
             if m == b'\0':
                 break
             name += chr(m)
-        assert self.id == rtp_id, "Got wrong message: " + to_hex_str(msg)
+        assert self.initiator_id == initiator_id, "Got wrong message: " + to_hex_str(msg)
         logger.info(
             "[%X] Connected local_port host: %s:%d, name: %s, remote_id: %X",
-            self.id, self.remote_host, self.remote_port, repr(name), sender
+            self.initiator_id, self.remote_host, self.remote_port, repr(name), sender
         )
         self.conn_start = time.time()
         self.name = name
         self.state = RTPConnection.State.CONNECTED
-        if self.is_control:
-            self.sync()
-        self.rtpmidi.initiator_is_peer(self.id, sender)
-        self.id = sender
+        self.rtpmidi.initiator_is_peer(self.initiator_id, sender)
+        self.remote_id = sender
         return (None, [])
 
     def time(self):
@@ -362,7 +360,8 @@ class RTPConnection:
             byten(self.seq1, 1), byten(self.seq1, 0),
             # byten(self.seq2, 1), byten(self.seq2, 0),  # sequence nr
             byten(timestamp, 3), byten(timestamp, 2), byten(timestamp, 1), byten(timestamp, 0),
-            byten(self.id, 3), byten(self.id, 2), byten(self.id, 1), byten(self.id, 0),  # sequence nr
+            byten(self.initiator_id, 3), byten(self.initiator_id, 2),
+            byten(self.initiator_id, 1), byten(self.initiator_id, 0),  # sequence nr
         ]
         msg = bytes(rtpheader) + bytes(rtpmidi_header) + bytes(msg)
 
@@ -371,11 +370,18 @@ class RTPConnection:
         print(self.name, ' '.join(["%2X" % x for x in msg]))
 
     def __str__(self):
-        return "[%X] %s" % (self.id, self.name)
+        return "[%X] %s" % (self.initiator_id, self.name)
 
 
 def to_hex_str(msg):
-    return " ".join(hex(x) for x in msg)
+    s = ""
+    for n, x in enumerate(msg):
+        s += '{0:02X}'.format(x)
+        if (n % 4) == 3:
+            s += "  "
+        else:
+            s += " "
+    return s
 
 
 def byten(nr, n):
