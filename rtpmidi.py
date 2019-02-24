@@ -87,10 +87,10 @@ def process_alsa(fd):
     alsaseq.inputpending()
     ev = alsaseq.input()
     if DEBUG:
-        logger.debug("ALSA: %s", ev_to_dict(ev))
+        # logger.debug("ALSA: %s", ev_to_dict(ev))
         midi = ev_to_midi(ev)
         if midi:
-            logger.debug("ALSA to MIDI: %s", [hex(x) for x in midi])
+            # logger.debug("ALSA to MIDI: %s", [hex(x) for x in midi])
             rtp_midi.send(midi)
 
 
@@ -125,8 +125,8 @@ class AppleMidiListener:
         if not info:
             logger.error("Got service from zeroconf, but no info. name: %s", name)
         logger.info("Service added: %s, %s, %s", repr(info.get_name()), [x for x in info.address], info.port)
-        logger.debug("No autoconnect.")
-        # add_task(add_applemidi, address=info.address, port=info.port)
+        # logger.debug("No autoconnect.")
+        add_task(add_applemidi, address=info.address, port=info.port)
 
 
 def add_applemidi(address, port):
@@ -218,7 +218,7 @@ class RTPMidi:
 
     def remote_data_read(self, sock):
         (msg, from_) = sock.recvfrom(1500)
-        logger.debug("Got data at from: %s, msg: %s", from_, to_hex_str(msg))
+        # logger.debug("Got data at from: %s, msg: %s", from_, to_hex_str(msg))
 
         is_command = struct.unpack("!H", msg[:2])[0] == 0xFFFF
         if is_command:
@@ -388,7 +388,7 @@ class RTPConnection:
         return (sender, b'')
 
     def sync1(self, sender, t1):
-        logger.debug("[%X] Sync1", sender)
+        # logger.debug("[%X] Sync1", sender)
         t2 = int(self.time() * 10000)  # current time or something in 100us units
         msg = struct.pack(
             "!HHLbbHQQQ",
@@ -398,11 +398,11 @@ class RTPConnection:
         self.rtpmidi.midi_sock.sendto(msg, (self.remote_host, self.remote_port + 1))
 
     def sync2(self, sender, t1, t2):
-        logger.debug("[%X] Sync2", sender)
-        t3 = int(self.time() * 10000)  # current time or something in 100us units
+        # logger.debug("[%X] Sync2", sender)
+        t3 = int(self.time() * 10000)  # current time or something in 100us units (10ths of ms)
         self.offset = ((t1 + t3) / 2) - t2
         logger.info(
-            "[%X] Offset is now: %d for: %X (%s). latency: %.2fms",
+            "[%X] Sync2 offset is now: %d for: %X (%s). latency: %.2fms",
             self.initiator_id, self.offset, sender, self.name,
             (t3-t1) / 20.0
         )
@@ -414,10 +414,10 @@ class RTPConnection:
         self.rtpmidi.midi_sock.sendto(msg, (self.remote_host, self.remote_port + 1))
 
     def sync3(self, sender, t1, t2, t3):
-        logger.debug("[%X] Sync3", sender)
+        # logger.debug("[%X] Sync3", sender)
         self.offset = ((t1 + t3) / 2) - t2
         logger.info(
-            "[%X] Offset is now: %d for: %X (%s). latency: %.2fms",
+            "[%X] Sync3 offset is now: %d for: %X (%s). latency: %.2fms",
             self.initiator_id, self.offset, sender, self.name,
             (t3-t1) / 20.0
         )
@@ -467,7 +467,7 @@ class RTPConnection:
 
         self.rtpmidi.midi_sock.sendto(msg, (self.remote_host, self.remote_port + 1))
 
-        print(self.name, ' '.join(["%2X" % x for x in msg]))
+        # logger.debug(self.name, ' '.join(["%2X" % x for x in msg]))
 
     def __str__(self):
         return "[%X] %s" % (self.initiator_id, self.name)
