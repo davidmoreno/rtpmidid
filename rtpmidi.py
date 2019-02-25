@@ -42,6 +42,12 @@ def main():
     for arg in sys.argv[1:]:
         hostport = arg.split(':')
         rtp_midi.connect_to(*hostport)
+    for line in open('rtpmidid.conf').readlines():
+        line = line.split('#')[0].strip()
+        if not line:
+            continue
+        hostport = line.split(':')
+        rtp_midi.connect_to(*hostport)
 
     event_dispatcher.add(alsaseq.fd(), process_alsa)
     event_dispatcher.add(rtp_midi.filenos(), rtp_midi.data_ready)
