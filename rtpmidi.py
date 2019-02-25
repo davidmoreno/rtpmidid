@@ -12,14 +12,15 @@ import traceback
 import os
 import logging
 import hashlib
+import yaml
 
 logging.basicConfig(format='%(levelname)-8s | %(message)s', level=logging.DEBUG)
 
 logger = logging.getLogger(__name__)
-NAME = '%s - ALSA SEQ' % (socket.gethostname())
+NAME = None
 # By default las 4 bytes of sha1 of the name
-SSRC = struct.unpack("<L", hashlib.sha1(NAME.encode('utf8')).digest()[-4:])[0]
-PORT = 10008
+SSRC = None
+PORT = None
 DEBUG = True
 
 task_queue = queue.Queue()
@@ -30,36 +31,23 @@ event_dispatcher = None
 
 
 def main():
-    global rtp_midi, event_dispatcher, SSRC, PORT
+    global rtp_midi, event_dispatcher
     logger.info("RTP/MIDI v.0.2. (c) 2019 Coralbits SL, David Moreno. Licensed under GPLv3.")
     event_dispatcher = EventDispatcher()
-    rtp_midi = RTPMidi()
+
+    # Real setup
+    setup_args_and_config()
+    logger.info("My SSID is %X. Listening at port %d / %d", SSRC, PORT, PORT + 1)
+
+    rtp_midi = RTPMidi(PORT)
 
     # zero conf setup
     zeroconfp = zeroconf.Zeroconf()
     apple_midi_listener = AppleMidiListener()
     zeroconf.ServiceBrowser(zeroconfp, "_apple-midi._udp.local.", apple_midi_listener)
-
     alsaseq.client("Network", 1, 1, False)
 
-    for arg in sys.argv[1:]:
-        hostport = arg.split(':')
-        rtp_midi.connect_to(*hostport)
-    for line in open('rtpmidid.conf').readlines():
-        line = line.split('#')[0].strip().lower()
-        if not line:
-            continue
-        print(line)
-        if line.startswith('id=') or line.startswith('id ='):
-            SSRC = int(line.split('=')[1].strip(), 16)
-        elif line.startswith('port=') or line.startswith('port ='):
-            PORT = int(line.split('=')[1].strip(), 10)
-        else:
-            hostport = line.split(':')
-            rtp_midi.connect_to(*hostport)
-
-    logger.info("My SSID is %X. Listening at port %d / %d", SSRC, PORT, PORT + 1)
-
+    # get ready fd polling
     event_dispatcher.add(alsaseq.fd(), process_alsa)
     event_dispatcher.add(rtp_midi.filenos(), rtp_midi.data_ready)
     event_dispatcher.add(task_ready_fds[0].fileno(), process_tasks, task_ready_fds[0])
@@ -73,6 +61,45 @@ def main():
             n += 1
     except KeyboardInterrupt:
         rtp_midi.close_all()
+
+
+def setup_args_and_config():
+    global SSRC, PORT, NAME
+    for arg in sys.argv[1:]:
+        if arg.startswith('--port='):
+            PORT = int(arg[7:])
+        elif arg.startswith('--id='):
+            SSRC = int(arg[5:], 16)
+        elif arg.startswith('--name='):
+            NAME = arg[7:]
+        else:
+            hostport = arg.split(':')
+            # need lambda, as rtp_midi is None now
+            event_dispatcher.call_later(0, lambda: rtp_midi.connect_to(*hostport))
+
+    config = yaml.load(open('rtpmidid.yaml').read())
+    if 'port' in config:
+        PORT = int(config['port'])
+    if 'id' in config:
+        SSRC = int(config['id'], 16)
+        if SSRC > 0x0FFFFFFFF or SSRC <= 0:
+            logger.error("Node id must be >0 and <0xFFFF FFFF. It is %X", SSRC)
+            sys.exit(1)
+    if 'name' in config:
+        NAME = int(config['name'])
+    if 'connect' in config:
+        connect_to = maybe_wrap(config['connect'])
+        for hostportl in connect_to:
+            hostport = hostportl.split(':')
+            # need lambda, as rtp_midi is None now
+            event_dispatcher.call_later(0, lambda: rtp_midi.connect_to(*hostport))
+
+    if not NAME:
+        NAME = '%s - ALSA SEQ' % (socket.gethostname())
+    if not PORT:
+        PORT = 5004
+    if not SSRC:
+        SSRC = struct.unpack("<L", hashlib.sha1(NAME.encode('utf8')).digest()[-4:])[0]
 
 
 class EventDispatcher:
@@ -192,7 +219,7 @@ def add_applemidi(address, port):
 
 
 class RTPMidi:
-    def __init__(self, local_port=PORT):
+    def __init__(self, local_port):
         """
         Opens an RTP connection to that port.
         """

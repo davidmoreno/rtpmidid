@@ -1,2 +1,3 @@
 alsaseq
 zeroconf
+PyYAML
