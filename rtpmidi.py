@@ -37,7 +37,10 @@ def main():
 
     # Real setup
     setup_args_and_config()
-    logger.info("My SSID is %X. Listening at port %d / %d", SSRC, PORT, PORT + 1)
+    logger.info(
+        "%s listening at ports: %d and: %d with ssid: %X",
+        repr(NAME), PORT, PORT + 1, SSRC
+    )
 
     rtp_midi = RTPMidi(PORT)
 
@@ -462,7 +465,7 @@ class RTPConnection:
         (protocol, initiator_id, sender) = struct.unpack("!LLL", msg[4:16])
         name = ""
         for m in msg[16:]:
-            if m == b'\0':
+            if not m:
                 break
             name += chr(m)
         assert self.initiator_id == initiator_id, "Got wrong message: " + to_hex_str(msg)
