@@ -65,6 +65,7 @@ def main():
 
 def setup_args_and_config():
     global SSRC, PORT, NAME
+    configfile = 'rtpmidid.yaml'
     for arg in sys.argv[1:]:
         if arg.startswith('--port='):
             PORT = int(arg[7:])
@@ -72,27 +73,31 @@ def setup_args_and_config():
             SSRC = int(arg[5:], 16)
         elif arg.startswith('--name='):
             NAME = arg[7:]
+        elif arg.startswith('--config='):
+            configfile = arg[9:]
         else:
             hostport = arg.split(':')
             # need lambda, as rtp_midi is None now
-            event_dispatcher.call_later(0, lambda: rtp_midi.connect_to(*hostport))
+            event_dispatcher.call_later(0, lambda x: rtp_midi.connect_to(*x), hostport)
 
-    config = yaml.load(open('rtpmidid.yaml').read())
+    if configfile:
+        config = yaml.load(open(configfile).read())
+    else:
+        config = {}
+
     if 'port' in config:
-        PORT = int(config['port'])
+        PORT = PORT or int(config['port'])
     if 'id' in config:
-        SSRC = int(config['id'], 16)
+        SSRC = SSRC or int(config['id'], 16)
         if SSRC > 0x0FFFFFFFF or SSRC <= 0:
             logger.error("Node id must be >0 and <0xFFFF FFFF. It is %X", SSRC)
             sys.exit(1)
     if 'name' in config:
         NAME = int(config['name'])
-    if 'connect' in config:
-        connect_to = maybe_wrap(config['connect'])
-        for hostportl in connect_to:
-            hostport = hostportl.split(':')
-            # need lambda, as rtp_midi is None now
-            event_dispatcher.call_later(0, lambda: rtp_midi.connect_to(*hostport))
+    for hostportl in maybe_wrap(config.get('connect', [])):
+        hostport = hostportl.split(':')
+        # need lambda, as rtp_midi is None now
+        event_dispatcher.call_later(0, lambda x: rtp_midi.connect_to(*x), hostport)
 
     if not NAME:
         NAME = '%s - ALSA SEQ' % (socket.gethostname())
@@ -396,6 +401,12 @@ class RTPMidi:
 
 
 class RTPConnection:
+    """
+    The pair of connection to the RTP side.
+
+    TODO: Just now it try to connect to both ports at the same time, or receives
+    the connection. Explore use a more classic state machine.
+    """
     class State:
         NOT_CONNECTED = 0
         SENT_REQUEST = 1
