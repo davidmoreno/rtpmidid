@@ -11,12 +11,14 @@ import queue
 import traceback
 import os
 import logging
+import hashlib
 
 logging.basicConfig(format='%(levelname)-8s | %(message)s', level=logging.DEBUG)
 
 logger = logging.getLogger(__name__)
-SSRC = random.randint(0, 0xffffffff)
 NAME = '%s - ALSA SEQ' % (socket.gethostname())
+# By default las 4 bytes of sha1 of the name
+SSRC = struct.unpack("<L", hashlib.sha1(NAME.encode('utf8')).digest()[-4:])[0]
 PORT = 10008
 DEBUG = True
 
@@ -28,7 +30,7 @@ event_dispatcher = None
 
 
 def main():
-    global rtp_midi, event_dispatcher
+    global rtp_midi, event_dispatcher, SSRC, PORT
     logger.info("RTP/MIDI v.0.2. (c) 2019 Coralbits SL, David Moreno. Licensed under GPLv3.")
     event_dispatcher = EventDispatcher()
     rtp_midi = RTPMidi()
@@ -44,22 +46,33 @@ def main():
         hostport = arg.split(':')
         rtp_midi.connect_to(*hostport)
     for line in open('rtpmidid.conf').readlines():
-        line = line.split('#')[0].strip()
+        line = line.split('#')[0].strip().lower()
         if not line:
             continue
-        hostport = line.split(':')
-        rtp_midi.connect_to(*hostport)
+        print(line)
+        if line.startswith('id=') or line.startswith('id ='):
+            SSRC = int(line.split('=')[1].strip(), 16)
+        elif line.startswith('port=') or line.startswith('port ='):
+            PORT = int(line.split('=')[1].strip(), 10)
+        else:
+            hostport = line.split(':')
+            rtp_midi.connect_to(*hostport)
+
+    logger.info("My SSID is %X. Listening at port %d / %d", SSRC, PORT, PORT + 1)
 
     event_dispatcher.add(alsaseq.fd(), process_alsa)
     event_dispatcher.add(rtp_midi.filenos(), rtp_midi.data_ready)
     event_dispatcher.add(task_ready_fds[0].fileno(), process_tasks, task_ready_fds[0])
 
     logger.debug("Loop")
-    n = 0
-    while True:
-        print("Event count: %s" % n, end="\r")
-        event_dispatcher.wait_and_dispatch_one()
-        n += 1
+    try:
+        n = 0
+        while True:
+            print("Event count: %s" % n, end="\r")
+            event_dispatcher.wait_and_dispatch_one()
+            n += 1
+    except KeyboardInterrupt:
+        rtp_midi.close_all()
 
 
 class EventDispatcher:
@@ -350,6 +363,10 @@ class RTPMidi:
         for peer in self.peers.values():
             peer.send_midi(msg)
 
+    def close_all(self):
+        for p in self.peers.values():
+            p.close()
+
 
 class RTPConnection:
     class State:
@@ -357,6 +374,7 @@ class RTPConnection:
         SENT_REQUEST = 1
         CONNECTED = 2
         SYNC = 3
+        CLOSED = 4
 
     class Commands:
         IN = 0x494e  # Just the chars
@@ -398,7 +416,7 @@ class RTPConnection:
         logger.info("[%X] Connect to %s:%d: %s", self.initiator_id, self.remote_host, port, to_hex_str(msg))
         self.state = RTPConnection.State.SENT_REQUEST
         self.connect_timeout[port] = event_dispatcher.call_later(
-            5, self.connect, sock, port
+            30, self.connect, sock, port
         )
 
     def accepted_connection(self, from_, msg):
@@ -436,6 +454,20 @@ class RTPConnection:
         sock.sendto(msg, (self.remote_host, port))
         logger.info("[%X] Accept connect to %s:%d: %s", self.initiator_id, self.remote_host, port, to_hex_str(msg))
         self.state = RTPConnection.State.SENT_REQUEST
+
+    def close(self):
+        signature = 0xFFFF
+        command = RTPConnection.Commands.BY
+        protocol = 2
+        sender = SSRC
+
+        msg = struct.pack("!HHLLL", signature, command, protocol, self.initiator_id, sender)
+        self.rtpmidi.control_sock.sendto(msg, (self.remote_host, self.remote_port))
+        self.rtpmidi.midi_sock.sendto(msg, (self.remote_host, self.remote_port+1))
+        logger.info(
+            "[%X] Close connection %s:%d: %s", self.initiator_id, self.remote_host, self.remote_port, to_hex_str(msg)
+        )
+        self.state = RTPConnection.State.CLOSED
 
     def sync(self):
         self.state = RTPConnection.State.SYNC
