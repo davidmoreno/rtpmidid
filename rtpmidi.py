@@ -24,10 +24,11 @@ task_queue = queue.Queue()
 task_ready_fds = os.pipe2(os.O_NONBLOCK)
 task_ready_fds = [os.fdopen(task_ready_fds[0], 'rb'), os.fdopen(task_ready_fds[1], 'wb')]
 rtp_midi = None
+event_dispatcher = None
 
 
 def main():
-    global rtp_midi
+    global rtp_midi, event_dispatcher
     logger.info("RTP/MIDI v.0.2. (c) 2019 Coralbits SL, David Moreno. Licensed under GPLv3.")
     event_dispatcher = EventDispatcher()
     rtp_midi = RTPMidi()
@@ -65,6 +66,8 @@ class EventDispatcher:
     def __init__(self):
         self.epoll = select.epoll()
         self.fdmap = {}
+        self.timeouts = []
+        self.tout_id = 1
 
     def add(self, fdlike, func, *args, **kwargs):
         for fd in maybe_wrap(fdlike):
@@ -72,7 +75,24 @@ class EventDispatcher:
             self.epoll.register(fd, select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR)
 
     def wait_and_dispatch_one(self):
-        for (fd, event) in self.epoll.poll():
+        tout = None
+        timeout = None
+        if self.timeouts:
+            tout = self.timeouts[0]
+            timeout = tout[0] - time.time()
+            # logger.debug("Next timeout in %.2f secs", timeout)
+            if timeout <= 0:
+                tout[2](*tout[3], **tout[4])
+                self.remove_call_later(tout[1])
+                return
+
+        ready = self.epoll.poll(timeout=timeout)
+        if not ready and tout:
+            if time.time() >= tout[0]:
+                tout[2](*tout[3], **tout[4])
+                self.remove_call_later(tout[1])
+
+        for (fd, event) in ready:
             # logger.debug("Data ready fd: %d. avail: %s", fd, self.fdmap)
             f_tuple = self.fdmap.get(fd)
             if not f_tuple:
@@ -87,6 +107,25 @@ class EventDispatcher:
             except Exception:
                 logger.error("Error executing: %s", f.__name__)
                 traceback.print_exc()
+
+    def call_later(self, t, func, *args, **kwargs):
+        """
+        Prepare a function to be called later in some seconds.
+        """
+        tout = time.time() + t
+        id = self.tout_id
+        self.tout_id += 1
+        self.timeouts.append((tout, id, func, args, kwargs))
+        self.timeouts.sort()
+        return id
+
+    def remove_call_later(self, id):
+        idx = None
+        for n, x in enumerate(self.timeouts):
+            if x[1] == id:
+                idx = n
+        if idx is not None:
+            self.timeouts = self.timeouts[1:]
 
 
 def process_alsa(fd):
@@ -104,7 +143,7 @@ def add_task(fn, **kwargs):
     task_queue.put((fn, kwargs))
     task_ready_fds[1].write(b"1")
     task_ready_fds[1].flush()
-    logger.debug("Add task to queue")
+    # logger.debug("Add task to queue")
 
 
 def process_tasks(fd):
@@ -249,7 +288,7 @@ class RTPMidi:
                         to_hex_str(msg)
                     )
                     return (initiator, b'')
-                return peer.accepted_connection(msg)
+                return peer.accepted_connection(from_, msg)
 
             elif command == RTPConnection.Commands.CK:
                 remote_id = struct.unpack("!L", msg[4:8])[0]
@@ -337,6 +376,7 @@ class RTPConnection:
         self.remote_id = remote_id
         self.seq1 = random.randint(0, 0xFFFF)
         self.seq2 = random.randint(0, 0xFFFF)
+        self.connect_timeout = {}
         if client:
             self.state = RTPConnection.State.NOT_CONNECTED
             self.connect(rtpmidi.control_sock, self.remote_port)
@@ -357,6 +397,32 @@ class RTPConnection:
         sock.sendto(msg, (self.remote_host, port))
         logger.info("[%X] Connect to %s:%d: %s", self.initiator_id, self.remote_host, port, to_hex_str(msg))
         self.state = RTPConnection.State.SENT_REQUEST
+        self.connect_timeout[port] = event_dispatcher.call_later(
+            5, self.connect, sock, port
+        )
+
+    def accepted_connection(self, from_, msg):
+        (protocol, initiator_id, sender) = struct.unpack("!LLL", msg[4:16])
+        name = ""
+        for m in msg[16:]:
+            if m == b'\0':
+                break
+            name += chr(m)
+        assert self.initiator_id == initiator_id, "Got wrong message: " + to_hex_str(msg)
+        logger.info(
+            "[%X] Connected local_port host: %s:%d, name: %s, remote_id: %X",
+            self.initiator_id, self.remote_host, self.remote_port, repr(name), sender
+        )
+        self.name = name
+        self.state = RTPConnection.State.CONNECTED
+        self.rtpmidi.initiator_is_peer(self.initiator_id, sender)
+        self.remote_id = sender
+
+        (_addr, port) = from_
+        event_dispatcher.remove_call_later(self.connect_timeout[port])
+        del self.connect_timeout[port]
+
+        return (None, [])
 
     def accept_connect(self, sock, port):
         signature = 0xFFFF
@@ -427,24 +493,6 @@ class RTPConnection:
             self.initiator_id, self.offset, sender, self.name,
             (t3-t1) / 20.0
         )
-
-    def accepted_connection(self, msg):
-        (protocol, initiator_id, sender) = struct.unpack("!LLL", msg[4:16])
-        name = ""
-        for m in msg[16:]:
-            if m == b'\0':
-                break
-            name += chr(m)
-        assert self.initiator_id == initiator_id, "Got wrong message: " + to_hex_str(msg)
-        logger.info(
-            "[%X] Connected local_port host: %s:%d, name: %s, remote_id: %X",
-            self.initiator_id, self.remote_host, self.remote_port, repr(name), sender
-        )
-        self.name = name
-        self.state = RTPConnection.State.CONNECTED
-        self.rtpmidi.initiator_is_peer(self.initiator_id, sender)
-        self.remote_id = sender
-        return (None, [])
 
     def time(self):
         return time.time() - self.conn_start
