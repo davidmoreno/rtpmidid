@@ -349,21 +349,21 @@ class RTPMidi:
                 return peer.recv_sync(msg)
 
             elif command == RTPConnection.Commands.BY:
-                initiator = struct.unpack("!L", msg[8:12])[0]
-                peer = self.initiators.get(initiator)
+                (_initiator, peer_id) = struct.unpack("!LL", msg[8:16])
+                peer = self.peers.get(peer_id)
                 if not peer:
                     logger.error(
-                        "Bad BY by initiator: %X. msg: %s",
-                        initiator,
+                        "Bad BY by peer: %X. msg: %s",
+                        peer_id,
                         to_hex_str(msg)
                     )
-                    return (initiator, b'')
+                    return (peer_id, b'')
 
-                logger.info("Closed connection with remote: %X, initiator: %X" % (peer.remote_id, initiator))
+                logger.info("Closed connection with remote: %X, initiator: %X" % (peer.remote_id, peer.initiator_id))
                 if peer.remote_id:
                     del self.peers[peer.remote_id]
-                del self.initiators[initiator]
-                return (initiator, b'')
+                del self.initiators[peer.initiator_id]
+                return (peer_id, b'')
 
             elif command == RTPConnection.Commands.RS:
                 (peer_id, timestamp) = struct.unpack("!LL", msg[4:12])
@@ -433,6 +433,7 @@ class RTPConnection:
         self.seq1 = random.randint(0, 0xFFFF)
         self.seq2 = random.randint(0, 0xFFFF)
         self.connect_timeout = {}
+        self.sync_timeout = None
         if client:
             self.state = RTPConnection.State.NOT_CONNECTED
             self.connect(rtpmidi.control_sock, self.remote_port)
@@ -484,9 +485,8 @@ class RTPConnection:
         signature = 0xFFFF
         command = RTPConnection.Commands.OK
         protocol = 2
-        sender = SSRC
 
-        msg = (struct.pack("!HHLLL", signature, command, protocol, self.initiator_id, sender)
+        msg = (struct.pack("!HHLLL", signature, command, protocol, self.initiator_id, SSRC)
                + NAME.encode('utf8')
                + b'\0')
         sock.sendto(msg, (self.remote_host, port))
@@ -497,27 +497,29 @@ class RTPConnection:
         signature = 0xFFFF
         command = RTPConnection.Commands.BY
         protocol = 2
-        sender = SSRC
 
-        msg = struct.pack("!HHLLL", signature, command, protocol, self.initiator_id, sender)
+        msg = struct.pack("!HHLLL", signature, command, protocol, self.initiator_id, SSRC)
         self.rtpmidi.control_sock.sendto(msg, (self.remote_host, self.remote_port))
         self.rtpmidi.midi_sock.sendto(msg, (self.remote_host, self.remote_port+1))
         logger.info(
             "[%X] Close connection %s:%d: %s", self.initiator_id, self.remote_host, self.remote_port, to_hex_str(msg)
         )
         self.state = RTPConnection.State.CLOSED
+        if self.sync_timeout:
+            event_dispatcher.remove_call_later(self.sync_timeout)
 
     def sync(self):
         self.state = RTPConnection.State.SYNC
-        logger.debug("[%X] Sync", self.initiator_id)
+        logger.debug("[%X] Sync", self.remote_id)
 
         t1 = int(self.time() * 10000)  # current time or something in 100us units
         msg = struct.pack(
             "!HHLbbHQQQ",
-            0xFFFF, RTPConnection.Commands.CK, self.initiator_id, 0, 0, 0,
+            0xFFFF, RTPConnection.Commands.CK, SSRC, 0, 0, 0,
             t1, 0, 0
         )
         self.rtpmidi.midi_sock.sendto(msg, (self.remote_host, self.remote_port))
+        self.sync_timeout = event_dispatcher.call_later(5, self.close)
 
     def recv_sync(self, msg):
         (sender, count, _, _, t1, t2, t3) = struct.unpack("!LbbHQQQ", msg[4:])
@@ -554,6 +556,11 @@ class RTPConnection:
             t1, t2, t3
         )
         self.rtpmidi.midi_sock.sendto(msg, (self.remote_host, self.remote_port + 1))
+
+        # first cancel the disconnect
+        event_dispatcher.remove_call_later(self.sync_timeout)
+        # now call later another sync
+        self.sync_timeout = event_dispatcher.call_later(60, self.sync)
 
     def sync3(self, sender, t1, t2, t3):
         # logger.debug("[%X] Sync3", sender)
