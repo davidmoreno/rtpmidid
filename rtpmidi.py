@@ -28,7 +28,7 @@ rtp_midi = None
 
 def main():
     global rtp_midi
-    logger.info("RTP/MIDI v.0.1")
+    logger.info("RTP/MIDI v.0.2. (c) 2019 Coralbits SL, David Moreno. Licensed under GPLv3.")
     event_dispatcher = EventDispatcher()
     rtp_midi = RTPMidi()
 
