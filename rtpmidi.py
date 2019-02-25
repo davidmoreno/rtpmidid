@@ -543,6 +543,9 @@ class RTPConnection:
             t1, t2, 0
         )
         self.rtpmidi.midi_sock.sendto(msg, (self.remote_host, self.remote_port + 1))
+        # If you ask me, I ignore my requests
+        if self.sync_timeout:
+            event_dispatcher.remove_call_later(self.sync_timeout)
 
     def sync2(self, sender, t1, t2):
         # logger.debug("[%X] Sync2", sender)
@@ -573,6 +576,9 @@ class RTPConnection:
             self.initiator_id, self.offset, sender, self.name,
             (t3-t1) / 20.0
         )
+        # If you ask me, I ignore my requests
+        if self.sync_timeout:
+            event_dispatcher.remove_call_later(self.sync_timeout)
 
     def time(self):
         return time.time() - self.conn_start
