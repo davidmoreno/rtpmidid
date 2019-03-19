@@ -17,19 +17,31 @@
  */
 
 #pragma once
-#include <string>
-
+#include <map>
+#include <functional>
 
 namespace rtpmidid {
-  class rtpport {
-    int control_socket;
-    int midi_socket;
-    std::string name;
+  /**
+   * Simplified fd poller
+   *
+   * Internally uses epoll, it is level triggered, so data must be read or
+   * will retrigger.
+   */
+  class poller_t{
+    int epollfd;
+    std::map<int, std::function<void(int)>> events;
   public:
-    rtpport(std::string _name, int startport);
-    ~rtpport();
+    poller_t();
+    ~poller_t();
 
-    void control_ready();
-    void midi_ready();
+    void add_fd_in(int fd, std::function<void(int)> event_f);
+    void add_fd_out(int fd, std::function<void(int)> event_f);
+    void add_fd_inout(int fd, std::function<void(int)> event_f);
+    void remove_fd(int fd);
+
+    void wait(int timeout_ms=-1);
   };
+
+  // Singleton for all events on the system.
+  extern poller_t poller;
 }

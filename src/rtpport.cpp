@@ -24,6 +24,7 @@
 #include "./logger.hpp"
 #include "./rtpport.hpp"
 #include "./exceptions.hpp"
+#include "./poller.hpp"
 
 using namespace rtpmidid;
 
@@ -37,22 +38,47 @@ rtpport::rtpport(std::string _name, int startport) : name(std::move(_name)) {
   memset(&servaddr, 0, sizeof(servaddr));
   servaddr.sin_family = AF_INET;
   servaddr.sin_addr.s_addr = INADDR_ANY;
-  servaddr.sin_port = startport;
+  servaddr.sin_port = htons(startport);
   if (bind(control_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
     throw rtpmidid::exception("Can not open control socket. Maybe addres is in use?");
   }
 
   midi_socket = socket(AF_INET, SOCK_DGRAM, 0);
-  if (control_socket < 0){
+  if (midi_socket < 0){
     throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
   }
   memset(&servaddr, 0, sizeof(servaddr));
   servaddr.sin_family = AF_INET;
   servaddr.sin_addr.s_addr = INADDR_ANY;
-  servaddr.sin_port = startport + 1;
+  servaddr.sin_port = htons(startport + 1);
   if (bind(midi_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
     throw rtpmidid::exception("Can not open MIDI socket. Maybe addres is in use?");
   }
 
-  DEBUG("RTP MIDI ports at 0.0.0.0:{} / 0.0.0.0:{}, with name: {}", startport, startport + 1, name);
+  poller.add_fd_in(control_socket, [this](int){ this->control_ready(); });
+  poller.add_fd_in(midi_socket, [this](int){ this->midi_ready(); });
+
+  DEBUG("RTP MIDI ports at 0.0.0.0:{} / 0.0.0.0:{}, with name: {} ({}, {})",
+    startport, startport + 1, name, control_socket, midi_socket);
+}
+
+rtpport::~rtpport(){
+  poller.remove_fd(control_socket);
+  poller.remove_fd(midi_socket);
+}
+
+void rtpport::control_ready(){
+  char buffer[1500];
+  struct sockaddr_in cliaddr;
+  unsigned int len = 0;
+  auto n = recvfrom(control_socket, buffer, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
+  DEBUG("Got some data from control: {}", n);
+}
+
+void rtpport::midi_ready(){
+  char buffer[1500];
+  struct sockaddr_in cliaddr;
+  unsigned int len = 0;
+  auto n = recvfrom(midi_socket, buffer, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
+  DEBUG("Got some data from midi: {}", len);
 }

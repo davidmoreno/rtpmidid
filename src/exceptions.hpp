@@ -18,12 +18,15 @@
 #pragma once
 #include <exception>
 #include <string>
+#include <fmt/format.h>
 
 namespace rtpmidid{
   class exception : public std::exception {
     std::string msg;
   public:
-    exception(std::string &&str) : msg(str) {
+    template<typename... Args>
+    exception(Args... args) {
+      msg = fmt::format(args...);
     }
     virtual const char *what() const noexcept{
       return msg.c_str();

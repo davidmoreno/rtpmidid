@@ -21,13 +21,14 @@
 #include "./aseq.hpp"
 #include "./rtpport.hpp"
 #include "./stringpp.hpp"
+#include "./poller.hpp"
 
 using namespace std;
 
 
 int main(int argc, char **argv){
     INFO("Real Time Protocol Music Industry Digital Interface Daemon - v0.1");
-    INFO("(C) 2019 David Moreno Montero <dmoreno@coralbits.com> -- I'm a freelancer and accept contract jobs.");
+    INFO("(C) 2019 David Moreno Montero <dmoreno@coralbits.com>");
 
     try{
       auto seq = rtpmidid::aseq("rtpmidid");
@@ -36,9 +37,13 @@ int main(int argc, char **argv){
 
       DEBUG("ALSA seq ports: {}", std::to_string(outputs));
 
+      for(;;){
+        rtpmidid::poller.wait();
+      }
     } catch (const std::exception &e){
       ERROR("{}", e.what());
       return 1;
     }
+    DEBUG("FIN");
     return 0;
 }
