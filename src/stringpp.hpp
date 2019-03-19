@@ -16,28 +16,30 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <iostream>
-#include "./logger.hpp"
-#include "./aseq.hpp"
-#include "./stringpp.hpp"
+#pragma once
+#include <vector>
+#include <string>
+#include <sstream>
 
-using namespace std;
-rtpmidid::aseq::aseq *seq = nullptr;
-
-
-int main(int argc, char **argv){
-    INFO("Real Time Protocol Music Industry Digital Interface Daemon - v0.1");
-    INFO("(C) 2019 David Moreno Montero <dmoreno@coralbits.com> -- I'm a freelancer and accept contract jobs.");
-
-    try{
-      seq = new rtpmidid::aseq::aseq("rtpmidid");
-      auto outputs = rtpmidid::aseq::get_outputs(seq);
-
-      DEBUG("Outputs: {}", std::to_string(outputs));
-
-    } catch (const std::exception &e){
-      ERROR("{}", e.what());
-      return 1;
+// Some functions to allow to_stirng to almost everything
+namespace std{
+  template<typename T>
+  std::string to_string(const std::vector<T> &list){
+    std::stringstream ss;
+    bool first = true;
+    ss<<"[";
+    for(auto &item: list){
+      if (!first)
+        ss<<", ";
+      else
+        first = false;
+      ss<<to_string(item);
     }
-    return 0;
+    ss<<"]";
+    return ss.str();
+  }
+
+  std::string to_string(const std::string &str){
+    return str;
+  }
 }
