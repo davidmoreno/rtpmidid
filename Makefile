@@ -1,9 +1,9 @@
 all: compile
 
 
-compile: build/rtpmidid
+compile: build/bin/rtpmidid
 
-build/rtpmidid: src/* CMakeLists.txt conanfile.txt
+build/bin/rtpmidid: src/* CMakeLists.txt conanfile.txt
 	mkdir -p build
 	cd build &&	conan install ..
 	cd build &&	cmake ..
@@ -12,6 +12,10 @@ build/rtpmidid: src/* CMakeLists.txt conanfile.txt
 
 clean:
 	rm -rf target
+
+runcpp: build/bin/rtpmidid
+	timeout 10 build/bin/rtpmidid
+
 
 ## OLD Python daemon
 

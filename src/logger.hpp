@@ -46,7 +46,14 @@ namespace logger{
   };
 
   template<typename... Args>
-  inline void log(const char *filename, int lineno, LogLevel loglevel, Args... args){
+  inline void log(const char *fullpath, int lineno, LogLevel loglevel, Args... args){
+
+    // Get ony the file name part, not full path. Assumes a / and ends in 0.
+    const char *filename = fullpath;
+    while (*filename) ++filename;
+    while (*filename!='/') --filename;
+    ++filename;
+
     auto str = fmt::format(args...);
     __logger.log(filename, lineno, loglevel, str);
   }
