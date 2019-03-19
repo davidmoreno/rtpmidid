@@ -18,18 +18,15 @@
 
 #pragma once
 #include <string>
-#include <vector>
-#include <alsa/asoundlib.h>
+
 
 namespace rtpmidid {
-  class aseq {
-  public:
+  class rtpport {
+    int control_socket;
+    int midi_socket;
     std::string name;
-    snd_seq_t *seq;
+  public:
+    rtpport(std::string _name, int startport);
 
-    aseq(std::string name);
-    ~aseq();
   };
-
-  std::vector<std::string> get_ports(aseq *);
 }

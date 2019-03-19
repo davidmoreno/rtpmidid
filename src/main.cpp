@@ -19,10 +19,10 @@
 #include <iostream>
 #include "./logger.hpp"
 #include "./aseq.hpp"
+#include "./rtpport.hpp"
 #include "./stringpp.hpp"
 
 using namespace std;
-rtpmidid::aseq::aseq *seq = nullptr;
 
 
 int main(int argc, char **argv){
@@ -30,10 +30,11 @@ int main(int argc, char **argv){
     INFO("(C) 2019 David Moreno Montero <dmoreno@coralbits.com> -- I'm a freelancer and accept contract jobs.");
 
     try{
-      seq = new rtpmidid::aseq::aseq("rtpmidid");
-      auto outputs = rtpmidid::aseq::get_outputs(seq);
+      auto seq = rtpmidid::aseq("rtpmidid");
+      auto rtpport = rtpmidid::rtpport("rtpmidid", 5004);
+      auto outputs = rtpmidid::get_ports(&seq);
 
-      DEBUG("Outputs: {}", std::to_string(outputs));
+      DEBUG("ALSA seq ports: {}", std::to_string(outputs));
 
     } catch (const std::exception &e){
       ERROR("{}", e.what());

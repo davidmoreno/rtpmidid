@@ -21,7 +21,7 @@
 #include <fmt/format.h>
 #include <stdio.h>
 
-namespace rtpmidid::aseq{
+namespace rtpmidid{
   void error_handler(const char *file, int line, const char *function, int err, const char *fmt, ...){
     va_list arg;
     std::string msg;
@@ -43,7 +43,7 @@ namespace rtpmidid::aseq{
     logger::__logger.log(filename.c_str(), line, ::logger::LogLevel::ERROR, msg);
   }
 
-  aseq::aseq(const std::string &name){
+  aseq::aseq(std::string _name) : name(std::move(_name)){
     snd_lib_error_set_handler(error_handler);
     if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0){
       throw rtpmidid::exception("Can't open sequencer. Maybe user has no permissions.");
@@ -54,7 +54,7 @@ namespace rtpmidid::aseq{
   }
 
 
-  std::vector<std::string> get_outputs(aseq *seq){
+  std::vector<std::string> get_ports(aseq *seq){
       std::vector<std::string> ret;
 
       snd_seq_client_info_t *cinfo;
