@@ -1,11 +1,14 @@
 all: compile
 
 
-compile: target/rtpmidid
+compile: build/rtpmidid
 
-target/rtpmidid: src/*.cpp
-	mkdir -p target
-	g++ -o target/rtpmidid src/*.cpp -O3 -std=c++17
+build/rtpmidid: src/* CMakeLists.txt conanfile.txt
+	mkdir -p build
+	cd build &&	conan install ..
+	cd build &&	cmake ..
+	cd build && make
+
 
 clean:
 	rm -rf target

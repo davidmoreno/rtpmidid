@@ -15,13 +15,23 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+#include "logger.hpp"
+#include <stdio.h>
 
-#include <iostream>
-#include "./logger.hpp"
+namespace logger{
+  logger __logger;
 
-using namespace std;
+  logger::logger(){
 
-int main(int argc, char **argv){
-    INFO("Real Time Protocol Music Indistry Digital Interface Daemon - v0.1");
-    INFO("(C) 2019 David Moreno Montero <dmoreno@coralbits.com> -- I accept contract jobs.");
+  }
+  logger::~logger(){
+
+  }
+  void logger::log(const char *filename, int lineno, LogLevel loglevel, const std::string &msg){
+    char *filename2 = strdupa(filename);
+    fprintf(::stderr, "%s:%d %s", basename(filename2), lineno, (msg + "\n").c_str());
+  }
+  void logger::flush(){
+    ::fflush(::stderr);
+  }
 }

@@ -1,0 +1,7 @@
+[generators]
+cmake
+
+[requires]
+fmt/5.2.0@bincrafters/stable
+
+[options]
