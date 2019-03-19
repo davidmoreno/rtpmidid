@@ -1,4 +1,16 @@
-all:
+all: compile
+
+
+compile: target/rtpmidid
+
+target/rtpmidid: src/*.cpp
+	mkdir -p target
+	g++ -o target/rtpmidid src/*.cpp -O3 -std=c++17
+
+clean:
+	rm -rf target
+
+## OLD Python daemon
 
 .PHONY: setup
 setup: requirements.txt
