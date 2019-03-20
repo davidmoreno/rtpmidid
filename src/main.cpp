@@ -33,9 +33,13 @@ int main(int argc, char **argv){
 
     try{
       auto seq = rtpmidid::aseq("rtpmidid");
-      auto rtpport = rtpmidid::rtpport("rtpmidid", 5004);
+      auto rtpport = rtpmidid::rtpport("rtpmidid", 15004);
       auto outputs = rtpmidid::get_ports(&seq);
       auto mdns = rtpmidid::mdns();
+
+      mdns.on_discovery("_apple-midi._udp.local", [](const rtpmidid::mdns::service &service){
+        INFO("Found apple midi response {}!", std::to_string(service));
+      });
 
       DEBUG("ALSA seq ports: {}", std::to_string(outputs));
 

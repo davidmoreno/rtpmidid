@@ -18,22 +18,41 @@
 #pragma once
 #include <string>
 #include <functional>
+#include <map>
+#include <fmt/format.h>
+#include <arpa/inet.h>
 
 
 namespace rtpmidid {
   class mdns {
-    int socketfd;
   public:
     struct service{
       std::string service;
       std::string hostname;
-      std::string port;
+      uint16_t port;
     };
+    enum query_type_e{
+      PTR=12,
+      SRV=33,
+      A=1,
+      AAAA=28,
+    };
+  private:
+    int socketfd;
+    struct sockaddr_in multicast_addr;
+    std::map<std::string, std::vector<std::function<void(const mdns::service &)>>> discovery_map;
+  public:
     mdns();
     ~mdns();
 
-    void on_discovery(const std::string &service, std::function<void(const mdns::service &)> &);
+    void on_discovery(const std::string &service, std::function<void(const mdns::service &)> f);
     void announce(const std::string &servicename);
+    void query(const std::string &name, query_type_e type);
+    void detected_service(const std::string_view &service, const std::string_view &hostname, uint16_t port);
     void mdns_ready();
   };
+}
+
+namespace std{
+  std::string to_string(const rtpmidid::mdns::service &s);
 }

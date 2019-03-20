@@ -19,7 +19,15 @@
 #pragma once
 #include <fmt/format.h>
 
-#define DEBUG(...) logger::log(__FILE__, __LINE__, logger::DEBUG, __VA_ARGS__)
+#ifndef DEBUG_ENABLED
+# define DEBUG_ENABLED true
+#endif
+
+#if DEBUG_ENABLED
+# define DEBUG(...) logger::log(__FILE__, __LINE__, logger::DEBUG, __VA_ARGS__)
+#else
+# define DEBUG(...) false
+#endif
 #define WARNING(...) logger::log(__FILE__, __LINE__, logger::WARNING, __VA_ARGS__)
 #define ERROR(...) logger::log(__FILE__, __LINE__, logger::ERROR, __VA_ARGS__)
 #define INFO(...) logger::log(__FILE__, __LINE__, logger::INFO, __VA_ARGS__)

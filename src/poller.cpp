@@ -88,6 +88,10 @@ void poller_t::wait(int wait_ms){
   auto nfds = epoll_wait(epollfd, events, MAX_EVENTS, wait_ms);
   for(auto n=0; n<nfds; n++){
     auto fd = events[n].data.fd;
-    this->events[fd](fd);
+    try{
+      this->events[fd](fd);
+    } catch (const std::exception &e){
+      ERROR("Catched exception at poller: %e", e.what());
+    }
   }
 }
