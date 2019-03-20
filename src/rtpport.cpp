@@ -42,6 +42,7 @@ rtpport::rtpport(std::string _name, int startport) : name(std::move(_name)) {
   if (bind(control_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
     throw rtpmidid::exception("Can not open control socket. Maybe addres is in use?");
   }
+  poller.add_fd_in(control_socket, [this](int){ this->control_ready(); });
 
   midi_socket = socket(AF_INET, SOCK_DGRAM, 0);
   if (midi_socket < 0){
@@ -54,8 +55,6 @@ rtpport::rtpport(std::string _name, int startport) : name(std::move(_name)) {
   if (bind(midi_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
     throw rtpmidid::exception("Can not open MIDI socket. Maybe addres is in use?");
   }
-
-  poller.add_fd_in(control_socket, [this](int){ this->control_ready(); });
   poller.add_fd_in(midi_socket, [this](int){ this->midi_ready(); });
 
   DEBUG("RTP MIDI ports at 0.0.0.0:{} / 0.0.0.0:{}, with name: {} ({}, {})",

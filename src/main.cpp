@@ -22,6 +22,7 @@
 #include "./rtpport.hpp"
 #include "./stringpp.hpp"
 #include "./poller.hpp"
+#include "./mdns.hpp"
 
 using namespace std;
 
@@ -34,6 +35,7 @@ int main(int argc, char **argv){
       auto seq = rtpmidid::aseq("rtpmidid");
       auto rtpport = rtpmidid::rtpport("rtpmidid", 5004);
       auto outputs = rtpmidid::get_ports(&seq);
+      auto mdns = rtpmidid::mdns();
 
       DEBUG("ALSA seq ports: {}", std::to_string(outputs));
 
