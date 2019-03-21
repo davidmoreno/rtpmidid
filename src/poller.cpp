@@ -42,6 +42,7 @@ poller_t::~poller_t(){
 void poller_t::add_fd_inout(int fd, std::function<void(int)> f){
   events[fd] = f;
   struct epoll_event ev;
+  memset(&ev, 0, sizeof(ev));
 
   ev.events = EPOLLIN | EPOLLOUT;
   ev.data.fd= fd;
@@ -53,6 +54,7 @@ void poller_t::add_fd_inout(int fd, std::function<void(int)> f){
 void poller_t::add_fd_in(int fd, std::function<void(int)> f){
   events[fd] = f;
   struct epoll_event ev;
+  memset(&ev, 0, sizeof(ev));
 
   ev.events = EPOLLIN;
   ev.data.fd= fd;
@@ -64,6 +66,7 @@ void poller_t::add_fd_in(int fd, std::function<void(int)> f){
 void poller_t::add_fd_out(int fd, std::function<void(int)> f){
   events[fd] = f;
   struct epoll_event ev;
+  memset(&ev, 0, sizeof(ev));
 
   ev.events = EPOLLOUT;
   ev.data.fd= fd;
