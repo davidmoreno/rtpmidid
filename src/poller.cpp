@@ -91,7 +91,7 @@ void poller_t::wait(int wait_ms){
     try{
       this->events[fd](fd);
     } catch (const std::exception &e){
-      ERROR("Catched exception at poller: %e", e.what());
+      ERROR("Catched exception at poller: {}", e.what());
     }
   }
 }
