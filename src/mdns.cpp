@@ -172,7 +172,12 @@ uint8_t *read_answer(mdns *server, uint8_t *buffer, uint8_t *end, uint8_t *data)
     len = read_label(data, end, buffer, answer, answer + sizeof(answer));
     DEBUG("PTR Answer about: {} {} {} -> <{}>", label, type_, class_, answer);
     DEBUG("Asking now about {} SRV", answer);
-    server->query(answer, mdns::SRV);
+    mdns::service_srv service = {
+      label,
+      mdns::PTR,
+      answer,
+    };
+    server->detected_service(&service);
   }
   else if (type_ == mdns::SRV){ // PTR
     // auto priority = parse_uint16(data);
@@ -185,8 +190,13 @@ uint8_t *read_answer(mdns *server, uint8_t *buffer, uint8_t *end, uint8_t *data)
     char target[128];
     len = read_label(data, end, buffer, target, target + sizeof(target));
 
-    DEBUG("Found {} at {}:{}", label, target, port);
-    server->detected_service(label, target, port);
+    mdns::service_srv service = {
+      label,
+      mdns::SRV,
+      target,
+      port
+    };
+    server->detected_service(&service);
 
     // char answer[128];
     // len = read_label(data, end, buffer, answer, answer + sizeof(answer));
@@ -194,21 +204,40 @@ uint8_t *read_answer(mdns *server, uint8_t *buffer, uint8_t *end, uint8_t *data)
     // DEBUG("Asking now about {} SRV", answer);
     // server->query(answer, mdns::SRV);
   }
-  else{
-    DEBUG("I dont know how to manage DNS record type type {}.", type_);
+  else if (type_ == mdns::A){
+    mdns::service_a service = {
+      label,
+      mdns::A,
+    };
+    service.ip[0] = data[0];
+    service.ip[1] = data[1];
+    service.ip[2] = data[2];
+    service.ip[3] = data[3];
+
+    server->detected_service(&service);
+
   }
   data += data_length;
 
   return data;
 }
 
-void mdns::on_discovery(const std::string &service, std::function<void(const mdns::service &)> f){
+void mdns::on_discovery(const std::string &service, mdns::query_type_e qt, std::function<void(const mdns::service *)> f){
   if (service.length() > 100){
     throw exception("Service name too long. I only know how to search for smaller names.");
   }
-  discovery_map[service].push_back(f);
+  discovery_map[std::make_pair(qt, service)].push_back(f);
 
-  query(service, PTR);
+  query(service, qt);
+}
+
+void mdns::query(const std::string &service, mdns::query_type_e qt, std::function<void(const mdns::service *)> f){
+  if (service.length() > 100){
+    throw exception("Service name too long. I only know how to search for smaller names.");
+  }
+  query_map[std::make_pair(qt, service)].push_back(f);
+
+  query(service, qt);
 }
 
 void mdns::query(const std::string &name, mdns::query_type_e type){
@@ -322,20 +351,27 @@ bool endswith(std::string_view const &full, std::string_view const &ending){
     }
 }
 
-void mdns::detected_service(const std::string_view &service, const std::string_view &hostname, uint16_t port){
-  for(auto &kv: discovery_map){
-    if (endswith(service, kv.first)){
-      auto service_s = mdns::service{
-        std::string(service), std::string(hostname), port
-      };
-      for (auto &f: kv.second){
-        f(service_s);
-      }
-    }
+void mdns::detected_service(const mdns::service *service){
+  auto type_label = std::make_pair(service->type, service->label);
+
+  for(auto &f: discovery_map[type_label]){
+    f(service);
   }
+  for(auto &f: query_map[type_label]){
+    f(service);
+  }
+
+  // remove them from query map, as fulfilled
+  query_map.erase(type_label);
 }
 
 
-std::string std::to_string(const rtpmidid::mdns::service &s){
-  return fmt::format("service: {}, hostname: {}, port: {}", s.service, s.hostname, s.port);
+std::string std::to_string(const rtpmidid::mdns::service_ptr &s){
+  return fmt::format("PTR record. label: {}, pointer: {}", s.label, s.servicename);
+}
+std::string std::to_string(const rtpmidid::mdns::service_a &s){
+  return fmt::format("A record. label: {}, ip: {}.{}.{}.{}", s.label, uint8_t(s.ip[0]), uint8_t(s.ip[1]), uint8_t(s.ip[2]), uint8_t(s.ip[3]));
+}
+std::string std::to_string(const rtpmidid::mdns::service_srv &s){
+  return fmt::format("SRV record. label: {}, hostname: {}, port: {}", s.label, s.hostname, s.port);
 }

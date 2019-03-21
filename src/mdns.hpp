@@ -26,33 +26,54 @@
 namespace rtpmidid {
   class mdns {
   public:
-    struct service{
-      std::string service;
-      std::string hostname;
-      uint16_t port;
-    };
     enum query_type_e{
       PTR=12,
       SRV=33,
       A=1,
       AAAA=28,
     };
+
+    struct service{
+      std::string label;
+      query_type_e type;
+    };
+    struct service_a : public service {
+      uint8_t ip[4];
+    };
+    struct service_srv : public service {
+      std::string hostname;
+      uint16_t port;
+    };
+    struct service_ptr : public service {
+      std::string servicename;
+    };
+
   private:
     int socketfd;
     struct sockaddr_in multicast_addr;
-    std::map<std::string, std::vector<std::function<void(const mdns::service &)>>> discovery_map;
+    // queries are called once
+    std::map<std::pair<query_type_e, std::string>, std::vector<std::function<void(const service *)>>> query_map;
+    // discovery are called always there is a discovery
+    std::map<std::pair<query_type_e, std::string>, std::vector<std::function<void(const service *)>>> discovery_map;
   public:
     mdns();
     ~mdns();
 
-    void on_discovery(const std::string &service, std::function<void(const mdns::service &)> f);
-    void announce(const std::string &servicename);
     void query(const std::string &name, query_type_e type);
-    void detected_service(const std::string_view &service, const std::string_view &hostname, uint16_t port);
+    // Calls once the service function with the service
+    void query(const std::string &name, query_type_e type, std::function<void(const service *)>);
+    // Calls everytime we get a service with the given parameters
+    void on_discovery(const std::string &service, query_type_e type, std::function<void(const mdns::service *)> f);
+    // A service is detected, call query and discovery services
+    void detected_service(const service *res);
+
+    void announce(const std::string &servicename);
     void mdns_ready();
   };
 }
 
 namespace std{
-  std::string to_string(const rtpmidid::mdns::service &s);
+  std::string to_string(const rtpmidid::mdns::service_a &s);
+  std::string to_string(const rtpmidid::mdns::service_ptr &s);
+  std::string to_string(const rtpmidid::mdns::service_srv &s);
 }

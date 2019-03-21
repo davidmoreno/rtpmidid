@@ -11,7 +11,7 @@ build/bin/rtpmidid: src/* CMakeLists.txt conanfile.txt
 
 
 clean:
-	rm -rf target
+	rm -rf build
 
 runcpp: build/bin/rtpmidid
 	timeout 10 build/bin/rtpmidid

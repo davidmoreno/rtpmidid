@@ -37,8 +37,19 @@ int main(int argc, char **argv){
       auto outputs = rtpmidid::get_ports(&seq);
       auto mdns = rtpmidid::mdns();
 
-      mdns.on_discovery("_apple-midi._udp.local", [](const rtpmidid::mdns::service &service){
-        INFO("Found apple midi response {}!", std::to_string(service));
+      mdns.on_discovery("_apple-midi._udp.local", rtpmidid::mdns::PTR, [&mdns](const rtpmidid::mdns::service *service){
+        const rtpmidid::mdns::service_ptr *ptr = static_cast<const rtpmidid::mdns::service_ptr*>(service);
+        INFO("Found apple midi response {}!", std::to_string(*ptr));
+        mdns.on_discovery(ptr->servicename, rtpmidid::mdns::SRV, [&mdns](const rtpmidid::mdns::service *service){
+          auto *srv = static_cast<const rtpmidid::mdns::service_srv*>(service);
+          INFO("Found apple midi response {}!", std::to_string(*srv));
+          int16_t port = srv->port;
+          mdns.query(srv->hostname, rtpmidid::mdns::A, [port](const rtpmidid::mdns::service *service){
+            auto *ip = static_cast<const rtpmidid::mdns::service_a*>(service);
+            auto ip4 = ip->ip;
+            INFO("APPLE MIDI at {}.{}.{}.{}:{}", uint8_t(ip4[0]), uint8_t(ip4[1]), uint8_t(ip4[2]), uint8_t(ip4[3]), port);
+          });
+        });
       });
 
       DEBUG("ALSA seq ports: {}", std::to_string(outputs));
