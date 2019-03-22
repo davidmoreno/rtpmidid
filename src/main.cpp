@@ -44,13 +44,36 @@ int main(int argc, char **argv){
           auto *srv = static_cast<const rtpmidid::mdns::service_srv*>(service);
           INFO("Found apple midi response {}!", std::to_string(*srv));
           int16_t port = srv->port;
-          mdns.query(srv->hostname, rtpmidid::mdns::A, [port](const rtpmidid::mdns::service *service){
+          std::string name = srv->label.substr(0, srv->label.find('.'));
+          mdns.query(srv->hostname, rtpmidid::mdns::A, [name, port](const rtpmidid::mdns::service *service){
             auto *ip = static_cast<const rtpmidid::mdns::service_a*>(service);
             auto ip4 = ip->ip;
-            INFO("APPLE MIDI at {}.{}.{}.{}:{}", uint8_t(ip4[0]), uint8_t(ip4[1]), uint8_t(ip4[2]), uint8_t(ip4[3]), port);
+            INFO("APPLE MIDI: {}, at {}.{}.{}.{}:{}", name, uint8_t(ip4[0]), uint8_t(ip4[1]), uint8_t(ip4[2]), uint8_t(ip4[3]), port);
           });
         });
       });
+
+      auto ptr = std::make_unique<rtpmidid::mdns::service_ptr>();
+      ptr->label = "_apple-midi._udp.local";
+      ptr->type = rtpmidid::mdns::PTR;
+      ptr->servicename = "rtpmidid._apple-midi._udp.local";
+      mdns.announce(std::move(ptr));
+
+      auto srv = std::make_unique<rtpmidid::mdns::service_srv>();
+      srv->label = "rtpmidid._apple-midi._udp.local";
+      srv->type = rtpmidid::mdns::SRV;
+      srv->hostname = "ucube.local";
+      srv->port = 15004;
+      mdns.announce(std::move(srv));
+
+      // auto a = std::make_unique<rtpmidid::mdns::service_a>();
+      // a->label = "ucube.local";
+      // a->type = rtpmidid::mdns::SRV;
+      // a->ip[0] = 192;
+      // a->ip[1] = 168;
+      // a->ip[2] = 1;
+      // a->ip[3] = 131;
+      // mdns.announce(std::move(a));
 
       DEBUG("ALSA seq ports: {}", std::to_string(outputs));
 

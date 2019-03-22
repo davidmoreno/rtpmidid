@@ -55,6 +55,8 @@ namespace rtpmidid {
     std::map<std::pair<query_type_e, std::string>, std::vector<std::function<void(const service *)>>> query_map;
     // discovery are called always there is a discovery
     std::map<std::pair<query_type_e, std::string>, std::vector<std::function<void(const service *)>>> discovery_map;
+    // I know about all this entries, just in case somebody asks
+    std::map<std::pair<query_type_e, std::string>,  std::vector<std::unique_ptr<service>>> announcements;
   public:
     mdns();
     ~mdns();
@@ -67,7 +69,9 @@ namespace rtpmidid {
     // A service is detected, call query and discovery services
     void detected_service(const service *res);
 
-    void announce(const std::string &servicename);
+    void announce(std::unique_ptr<service>, bool broadcast=false);
+    bool answer_if_known(mdns::query_type_e type_, const std::string &label);
+    void send_response(const service &);
     void mdns_ready();
   };
 }

@@ -130,10 +130,48 @@ int read_label(uint8_t *start, uint8_t *end, uint8_t *base, char *str, char *str
       *str++ = *data++;
     }
   }
-  throw exception("Invalid package. Label out of bounds.");
+  print_hex(base, end-base);
+  throw exception("Invalid package. Label out of bounds at {}.", data - base);
 }
 
-uint8_t *read_question(uint8_t *buffer, uint8_t *end, uint8_t *data){
+// Not prepared for pointers yet. Lazy, but should work ok,
+uint8_t *write_label(uint8_t *data, const std::string_view &name){
+  auto strI = name.begin();
+  auto endI = name.end();
+  for(auto I=strI; I < endI; ++I){
+    if (*I == '.'){
+      *data++ = I - strI;
+      for( ; strI<I ; ++strI ){
+        *data++ = *strI;
+      }
+      strI++;
+    }
+  }
+  *data++ = endI - strI;
+  for( ; strI<endI ; ++strI ){
+    *data++ = *strI;
+  }
+  // end of labels
+  *data++ = 0;
+
+  return data;
+}
+
+uint8_t *write_uint16(uint8_t *data, uint16_t n){
+  *data++ = (n>>8) & 0x0FF;
+  *data++ = (n & 0x0FF);
+  return data;
+}
+
+uint8_t *write_uint32(uint8_t *data, uint32_t n){
+  *data++ = (n>>24) & 0x0FF;
+  *data++ = (n>>16) & 0x0FF;
+  *data++ = (n>>8) & 0x0FF;
+  *data++ = (n & 0x0FF);
+  return data;
+}
+
+uint8_t *read_question(mdns *server, uint8_t *buffer, uint8_t *end, uint8_t *data){
   char label[128];
 
   auto len = read_label(data, end, buffer, label, label + sizeof(label));
@@ -143,8 +181,10 @@ uint8_t *read_question(uint8_t *buffer, uint8_t *end, uint8_t *data){
   }
   int type_ = parse_uint16(data);
   int class_ = parse_uint16(data+2);
-  DEBUG("Question about: {} {} {}. I dont answer yet.", label, type_, class_);
+  DEBUG("Question about: {} {} {}.", label, type_, class_);
   data += 4;
+
+  server->answer_if_known(mdns::query_type_e(type_), label);
 
   return data;
 }
@@ -240,6 +280,88 @@ void mdns::query(const std::string &service, mdns::query_type_e qt, std::functio
   query(service, qt);
 }
 
+
+void mdns::announce(std::unique_ptr<service> service, bool broadcast){
+  if (service->label.length()>100){
+    throw exception("Cant announce a service this long. Max size is 100 chars.");
+  }
+  auto idx = std::make_pair(service->type, service->label);
+
+  // preemptively tell everybody
+  if (broadcast){
+    send_response(*service);
+    DEBUG("Announce service: {}", service->label);
+  }
+
+  // And store. This order to use service before storing.
+  announcements[idx].push_back(std::move(service));
+}
+
+void mdns::send_response(const service &service){
+  uint8_t packet[1500];
+  memset(packet, 0, sizeof(packet));
+  // Response and authoritative
+  packet[2] = 0x84;
+
+  // One answer
+  write_uint16(packet + 6, 1);
+
+  // The query
+  uint8_t *data = packet + 12;
+  data = write_label(data, service.label);
+
+  // type
+  data = write_uint16(data, service.type);
+  // class IN
+  data = write_uint16(data, 1);
+  // ttl
+  data = write_uint32(data, 600); // FIXME should not be fixed.
+  // data_length. I prepare the spot
+  auto length_data_pos = data;
+  data+=2;
+  switch(service.type){
+    case mdns::A:{
+      auto a = static_cast<const mdns::service_a*>(&service);
+      *data++ = a->ip[0];
+      *data++ = a->ip[1];
+      *data++ = a->ip[2];
+      *data++ = a->ip[3];
+    }
+    break;
+    case mdns::PTR:{
+      auto ptr = static_cast<const mdns::service_ptr*>(&service);
+      data = write_label(data, ptr->servicename);
+    }
+    break;
+    case mdns::SRV:{
+      auto srv = static_cast<const mdns::service_srv*>(&service);
+      data = write_uint16(data, 0); // priority
+      data = write_uint16(data, 0); // weight
+      data = write_uint16(data, srv->port);
+      data = write_label(data, srv->hostname);
+    }
+    break;
+    default:
+      throw exception("I dont know how to announce this mDNS answer type: {}", service.type);
+  }
+
+  DEBUG("Send RR type: {} size: {}", service.type, int(data - length_data_pos - 2));
+  write_uint16(length_data_pos, data - length_data_pos - 2);
+  sendto(socketfd, packet, data - packet, MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
+}
+
+
+bool mdns::answer_if_known(mdns::query_type_e type_, const std::string &label){
+  auto found = announcements.find(std::make_pair(type_, label));
+  if (found != announcements.end()){
+    for(auto &response: found->second){
+      send_response(*response);
+    }
+    return true;
+  }
+  return false;
+}
+
 void mdns::query(const std::string &name, mdns::query_type_e type){
   // Now I will ask for it
   // I will prepare the package here
@@ -251,23 +373,7 @@ void mdns::query(const std::string &name, mdns::query_type_e type){
   packet[5] = 1;
   // Now the query itself
   uint8_t *data = packet + 12;
-  auto strI = name.begin();
-  auto endI = name.end();
-  for(auto I=strI; I < endI; ++I){
-    if (*I == '.'){
-      *data++ = I - strI;
-      for( ; strI<I ; ++strI ){
-        *data++ = *strI;
-      }
-      strI++;
-    }
-  }
-  *data++ = endI - strI;
-  for( ; strI<endI ; ++strI ){
-    *data++ = *strI;
-  }
-  // end of labels
-  *data++ = 0;
+  data = write_label(data, name);
   // type ptr
   *data++ = ( type >> 8 ) & 0x0FF;
   *data++ = type & 0x0FF;
@@ -283,11 +389,6 @@ void mdns::query(const std::string &name, mdns::query_type_e type){
 
   sendto(socketfd, packet, data - packet, MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
 }
-
-void mdns::announce(const std::string &servicename){
-
-}
-
 
 void mdns::mdns_ready(){
   uint8_t buffer[1501];
@@ -328,7 +429,7 @@ void mdns::mdns_ready(){
   uint8_t *buffer_end = buffer + read_length;
   uint8_t *data = buffer+12;
   for ( i=0 ; i <nquestions ; i++ ){
-      data = read_question(buffer, buffer_end, data);
+      data = read_question(this, buffer, buffer_end, data);
       if (!data){
         WARNING("Ignoring mDNS packet!");
         return;
