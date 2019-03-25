@@ -107,7 +107,7 @@ void read_label(parse_buffer_t &buffer, parse_buffer_t &label){
       *str++ = *data++;
     }
   }
-  print_hex(buffer);
+  buffer.print_hex();
   throw exception("Invalid package. Label out of bounds at {}.", data - base);
 }
 
@@ -137,8 +137,8 @@ bool read_question(mdns *server, parse_buffer_t &buffer){
   parse_buffer_t parse_label = {label, label+sizeof(label), label};
 
   read_label(buffer, parse_label);
-  int type_ = parse_uint16(buffer);
-  int class_ = parse_uint16(buffer);
+  int type_ = buffer.parse_uint16();
+  int class_ = buffer.parse_uint16();
   DEBUG("Question about: {} {} {}.", label, type_, class_);
 
   return server->answer_if_known(mdns::query_type_e(type_), (char*)label);
@@ -153,13 +153,13 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
   };
 
   read_label(buffer, buffer_label);
-  auto type_ = parse_uint16(buffer);
-  auto class_ = parse_uint16(buffer);
+  auto type_ = buffer.parse_uint16();
+  auto class_ = buffer.parse_uint16();
 
   // auto ttl = parse_uint32(data);
   buffer.position += 4;
 
-  auto data_length = parse_uint16(buffer);
+  auto data_length = buffer.parse_uint16();
   auto *pos = buffer.position;
 
   if (type_ == mdns::PTR){ // PTR
@@ -185,7 +185,7 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
     // auto weight = parse_uint16(data);
     buffer.position += 2;
     buffer.assert_valid_position();
-    auto port = parse_uint16(buffer);
+    auto port = buffer.parse_uint16();
 
     uint8_t target[128];
     parse_buffer_t buffer_target = {
@@ -273,18 +273,18 @@ void mdns::send_response(const service &service){
 
   buffer.position += 6;
   // One answer
-  write_uint16(buffer, 1);
+  buffer.write_uint16(1);
 
   // The query
   buffer.position = buffer.start + 12;
   write_label(buffer, service.label);
 
   // type
-  write_uint16(buffer, service.type);
+  buffer.write_uint16(service.type);
   // class IN
-  write_uint16(buffer, 1);
+  buffer.write_uint16(1);
   // ttl
-  write_uint32(buffer, 600); // FIXME should not be fixed.
+  buffer.write_uint32(600); // FIXME should not be fixed.
   // data_length. I prepare the spot
   auto length_data_pos = buffer.position;
   buffer.position += 2;
@@ -304,9 +304,9 @@ void mdns::send_response(const service &service){
     break;
     case mdns::SRV:{
       auto srv = static_cast<const mdns::service_srv*>(&service);
-      write_uint16(buffer, 0); // priority
-      write_uint16(buffer, 0); // weight
-      write_uint16(buffer, srv->port);
+      buffer.write_uint16(0); // priority
+      buffer.write_uint16(0); // weight
+      buffer.write_uint16(srv->port);
       write_label(buffer, srv->hostname);
     }
     break;
@@ -358,7 +358,7 @@ void mdns::query(const std::string &name, mdns::query_type_e type){
   /// DONE
   if (DEBUG0){
     DEBUG("Packet ready! {} bytes", data - packet);
-    print_hex(buffer);
+    buffer.print_hex();
   }
 
   sendto(socketfd, packet, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
@@ -373,8 +373,7 @@ void mdns::mdns_ready(){
 
   if (DEBUG0){
     DEBUG("Got some data from mDNS: {}", read_length);
-    auto tmp = parse_buffer_t(buffer, buffer+read_length, buffer);
-    print_hex(tmp, true);
+    parse_buffer_t(buffer, buffer+read_length, buffer+read_length).print_hex();
   }
   if (read_length > 1500){
     ERROR("This mDNS implementation is not prepared for packages longer than 1500 bytes. Please fill a bug report. Ignoring package.");
@@ -393,14 +392,14 @@ void mdns::mdns_ready(){
   };
 
 
-  int tid = parse_uint16(parse_buffer);
+  int tid = parse_buffer.parse_uint16();
   bool is_query = !(*parse_buffer & 8);
   int opcode = (*parse_buffer >> 3) & 0x0F;
   parse_buffer.position++;
-  auto nquestions = parse_uint16(parse_buffer);
-  auto nanswers = parse_uint16(parse_buffer);
-  auto nauthority = parse_uint16(parse_buffer);
-  auto nadditional = parse_uint16(parse_buffer);
+  auto nquestions = parse_buffer.parse_uint16();
+  auto nanswers = parse_buffer.parse_uint16();
+  auto nauthority = parse_buffer.parse_uint16();
+  auto nadditional = parse_buffer.parse_uint16();
 
   if (DEBUG0){
     DEBUG(

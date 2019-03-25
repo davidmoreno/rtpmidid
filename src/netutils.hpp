@@ -60,15 +60,68 @@ namespace rtpmidid{
     uint32_t length(){
       return position - start;
     }
+
+    uint32_t parse_uint32(){
+      check_enought(4);
+      auto data = position;
+      return ((uint32_t)data[0]<<24) + ((uint32_t)data[1]<<16) + ((uint32_t)data[2]<< 8) + ((uint32_t)data[3]);
+      position += 4;
+    }
+
+    uint16_t parse_uint16(){
+      check_enought(2);
+      auto data = position;
+      return ((uint16_t)data[0]<< 8) + ((uint16_t)data[1]);
+      position += 2;
+    }
+
+    void print_hex() const{
+      auto data = start;
+      auto n = position - data;
+      for( int i=0 ; i<n ; i++ ){
+        printf("%02X ", data[i] & 0x0FF);
+        if (i % 4 == 3)
+          printf(" ");
+        if (i % 16 == 15)
+          printf("\n");
+      }
+      printf("\n");
+      for( int i=0 ; i<n ; i++ ){
+        if (isprint(data[i])){
+          printf("%c", data[i]);
+        }
+        else{
+          printf(".");
+        }
+        if (i % 4 == 3)
+          printf(" ");
+        if (i % 16 == 15)
+          printf("\n");
+      }
+      printf("\n");
+    }
+
+    void write_uint16(uint16_t n){
+      check_enought(2);
+      *position++ = (n>>8) & 0x0FF;
+      *position++ = (n & 0x0FF);
+    }
+
+    void write_uint32(uint32_t n){
+      check_enought(4);
+      *position++ = (n>>24) & 0x0FF;
+      *position++ = (n>>16) & 0x0FF;
+      *position++ = (n>>8) & 0x0FF;
+      *position++ = (n & 0x0FF);
+    }
+
+    void write_str0(const std::string_view &view){
+      for (auto c: view){
+        *position++ = c;
+      }
+      *position++ = '\0';
+    }
   };
 
-  uint32_t parse_uint32(parse_buffer_t &buffer);
-  uint16_t parse_uint16(parse_buffer_t &buffer);
-
-  void raw_write_uint16(uint8_t *data, uint16_t n);
-  void write_uint16(parse_buffer_t &data, uint16_t n);
-  void write_uint32(parse_buffer_t &data, uint32_t n);
-  void write_str0(parse_buffer_t &data, const std::string_view &str);
-
-  void print_hex(parse_buffer_t &, bool to_pos=true);
+  uint8_t *raw_write_uint16(uint8_t *data, uint16_t n);
 }

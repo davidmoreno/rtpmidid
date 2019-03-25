@@ -68,15 +68,15 @@ bool rtpclient::connect_to(int socketfd, int16_t port){
   auto protocol = 2;
   auto sender = SSRC;
 
-  write_uint16(buffer, signature);
-  write_uint16(buffer, command);
-  write_uint32(buffer, protocol);
-  write_uint32(buffer, initiator_id);
-  write_uint32(buffer, sender);
-  write_str0(buffer, name);
+  buffer.write_uint16(signature);
+  buffer.write_uint16(command);
+  buffer.write_uint32(protocol);
+  buffer.write_uint32(initiator_id);
+  buffer.write_uint32(sender);
+  buffer.write_str0(name);
 
   DEBUG("Send packet:");
-  print_hex(buffer);
+  buffer.print_hex();
 
   sendto(socketfd, packet, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
 
