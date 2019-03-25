@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <string_view>
 #include "./exceptions.hpp"
+#include "./logger.hpp"
 
 namespace rtpmidid{
   struct parse_buffer_t {
@@ -47,16 +48,6 @@ namespace rtpmidid{
         throw exception("Invalid buffer position");
     }
 
-    uint8_t &operator*(){
-      return *position;
-    }
-    parse_buffer_t &operator++(int _postincr_dummy){
-      position++;
-      if (position >= end)
-        throw exception("Try to access end of buffer");
-
-      return *this;
-    }
     uint32_t length(){
       return position - start;
     }
@@ -64,20 +55,27 @@ namespace rtpmidid{
     uint32_t parse_uint32(){
       check_enought(4);
       auto data = position;
-      return ((uint32_t)data[0]<<24) + ((uint32_t)data[1]<<16) + ((uint32_t)data[2]<< 8) + ((uint32_t)data[3]);
       position += 4;
+      return ((uint32_t)data[0]<<24) + ((uint32_t)data[1]<<16) + ((uint32_t)data[2]<< 8) + ((uint32_t)data[3]);
     }
 
     uint16_t parse_uint16(){
       check_enought(2);
       auto data = position;
-      return ((uint16_t)data[0]<< 8) + ((uint16_t)data[1]);
       position += 2;
+      return ((uint16_t)data[0]<< 8) + ((uint16_t)data[1]);
     }
 
-    void print_hex() const{
+    uint8_t parse_uint8(){
+      check_enought(1);
+      auto data = position;
+      position += 1;
+      return data[0];
+    }
+
+    void print_hex(bool to_end=false) const{
       auto data = start;
-      auto n = position - data;
+      auto n = (to_end ? end : position) - data;
       for( int i=0 ; i<n ; i++ ){
         printf("%02X ", data[i] & 0x0FF);
         if (i % 4 == 3)
@@ -101,6 +99,10 @@ namespace rtpmidid{
       printf("\n");
     }
 
+    void write_uint8(uint16_t n){
+      check_enought(1);
+      *position++ = (n & 0x0FF);
+    }
     void write_uint16(uint16_t n){
       check_enought(2);
       *position++ = (n>>8) & 0x0FF;

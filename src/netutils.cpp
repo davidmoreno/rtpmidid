@@ -79,9 +79,11 @@ void read_label(parse_buffer_t &buffer, parse_buffer_t &label){
 }
 
 // Not prepared for pointers yet. Lazy, but should work ok,
-void write_label(parse_buffer_t &data, const std::string_view &name){
+void write_label(parse_buffer_t &buffer, const std::string_view &name){
   auto strI = name.begin();
   auto endI = name.end();
+  buffer.check_enought(name.length() + 1); // I will change the . for lengths, so same length + 1
+  uint8_t *data = buffer.position;
   for(auto I=strI; I < endI; ++I){
     if (*I == '.'){
       *data++ = I - strI;
@@ -97,6 +99,7 @@ void write_label(parse_buffer_t &data, const std::string_view &name){
   }
   // end of labels
   *data++ = 0;
+  buffer.position = data;
 }
 
 }

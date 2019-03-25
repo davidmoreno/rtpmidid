@@ -26,7 +26,7 @@
 #include "./logger.hpp"
 #include "./netutils.hpp"
 
-const auto DEBUG0 = false;
+const auto DEBUG0 = true;
 
 
 using namespace rtpmidid;
@@ -143,10 +143,10 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
       (char*)label,
       mdns::A,
     };
-    service.ip[0] = *buffer++;
-    service.ip[1] = *buffer++;
-    service.ip[2] = *buffer++;
-    service.ip[3] = *buffer++;
+    service.ip[0] = buffer.parse_uint8();
+    service.ip[1] = buffer.parse_uint8();
+    service.ip[2] = buffer.parse_uint8();
+    service.ip[3] = buffer.parse_uint8();
 
     server->detected_service(&service);
 
@@ -220,10 +220,10 @@ void mdns::send_response(const service &service){
   switch(service.type){
     case mdns::A:{
       auto a = static_cast<const mdns::service_a*>(&service);
-      *buffer++ = a->ip[0];
-      *buffer++ = a->ip[2];
-      *buffer++ = a->ip[3];
-      *buffer++ = a->ip[1];
+      buffer.write_uint8(a->ip[0]);
+      buffer.write_uint8(a->ip[1]);
+      buffer.write_uint8(a->ip[2]);
+      buffer.write_uint8(a->ip[3]);
     }
     break;
     case mdns::PTR:{
@@ -271,60 +271,29 @@ void mdns::query(const std::string &name, mdns::query_type_e type){
   // transaction id. always 0 for mDNS
   memset(packet, 0, sizeof(packet));
   // I will only set what I need.
-  packet[4] = 0;
   packet[5] = 1;
   // Now the query itself
-  uint8_t *data = packet + 12;
   parse_buffer_t buffer = {packet, packet + 120, packet + 12};
   write_label(buffer, name);
   // type ptr
-  *buffer++ = ( type >> 8 ) & 0x0FF;
-  *buffer++ = type & 0x0FF;
+  buffer.write_uint16(type);
   // query
-  *buffer++ = 0;
-  *buffer++ = 0x01;
+  buffer.write_uint16(1);
 
   /// DONE
   if (DEBUG0){
-    DEBUG("Packet ready! {} bytes", data - packet);
+    DEBUG("Packet ready! {} bytes", buffer.length());
     buffer.print_hex();
   }
 
   sendto(socketfd, packet, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
 }
 
-void mdns::mdns_ready(){
-  uint8_t buffer[1501];
-  memset(buffer, 0, sizeof(buffer));
-  struct sockaddr_in cliaddr;
-  unsigned int len = 0;
-  auto read_length = recvfrom(socketfd, buffer, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
-
-  if (DEBUG0){
-    DEBUG("Got some data from mDNS: {}", read_length);
-    parse_buffer_t(buffer, buffer+read_length, buffer+read_length).print_hex();
-  }
-  if (read_length > 1500){
-    ERROR("This mDNS implementation is not prepared for packages longer than 1500 bytes. Please fill a bug report. Ignoring package.");
-    return;
-  }
-
-  if (read_length < 16){
-    ERROR("Invalid mDNS packet. Minimum size is 16 bytes. Ignoring.");
-    return;
-  }
-
-  parse_buffer_t parse_buffer{
-    buffer,
-    buffer + read_length,
-    buffer,
-  };
-
-
+void parse_packet(mdns *mdns, parse_buffer_t &parse_buffer){
   int tid = parse_buffer.parse_uint16();
-  bool is_query = !(*parse_buffer & 8);
-  int opcode = (*parse_buffer >> 3) & 0x0F;
-  parse_buffer.position++;
+  int8_t flags = parse_buffer.parse_uint16();
+  bool is_query = !(flags & 0x8000);
+  int opcode = (flags >> 11) & 0x0007;
   auto nquestions = parse_buffer.parse_uint16();
   auto nanswers = parse_buffer.parse_uint16();
   auto nauthority = parse_buffer.parse_uint16();
@@ -338,19 +307,49 @@ void mdns::mdns_ready(){
   }
   uint32_t i;
   for ( i=0 ; i <nquestions ; i++ ){
-      auto ok = read_question(this, parse_buffer);
+      auto ok = read_question(mdns, parse_buffer);
       if (!ok){
         WARNING("Ignoring mDNS packet!");
         return;
       }
   }
   for ( i=0 ; i <nanswers ; i++ ){
-      auto ok = read_answer(this, parse_buffer);
+      auto ok = read_answer(mdns, parse_buffer);
       if (!ok){
         WARNING("Ignoring mDNS packet!");
         return;
       }
   }
+}
+
+void mdns::mdns_ready(){
+  uint8_t buffer[1501];
+  memset(buffer, 0, sizeof(buffer));
+  struct sockaddr_in cliaddr;
+  unsigned int len = 0;
+  auto read_length = recvfrom(socketfd, buffer, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
+
+  if (read_length < 16){
+    ERROR("Invalid mDNS packet. Minimum size is 16 bytes. Ignoring.");
+    return;
+  }
+
+  parse_buffer_t parse_buffer{
+    buffer,
+    buffer + read_length,
+    buffer,
+  };
+
+  if (DEBUG0){
+    DEBUG("Got some data from mDNS: {}", read_length);
+    parse_buffer.print_hex(true);
+  }
+  if (read_length > 1500){
+    ERROR("This mDNS implementation is not prepared for packages longer than 1500 bytes. Please fill a bug report. Ignoring package. Actually we never read more. FILL A BUG REPORT.");
+    return;
+  }
+
+  parse_packet(this, parse_buffer);
 }
 
 bool endswith(std::string_view const &full, std::string_view const &ending){
