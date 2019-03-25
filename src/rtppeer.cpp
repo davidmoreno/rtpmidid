@@ -22,13 +22,13 @@
 #include <netinet/in.h>
 
 #include "./logger.hpp"
-#include "./rtpport.hpp"
+#include "./rtppeer.hpp"
 #include "./exceptions.hpp"
 #include "./poller.hpp"
 
 using namespace rtpmidid;
 
-rtpport::rtpport(std::string _name, int startport) : name(std::move(_name)) {
+rtppeer::rtppeer(std::string _name, int startport) : name(std::move(_name)) {
   struct sockaddr_in servaddr;
 
   control_socket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -61,12 +61,12 @@ rtpport::rtpport(std::string _name, int startport) : name(std::move(_name)) {
     startport, startport + 1, name, control_socket, midi_socket);
 }
 
-rtpport::~rtpport(){
+rtppeer::~rtppeer(){
   poller.remove_fd(control_socket);
   poller.remove_fd(midi_socket);
 }
 
-void rtpport::control_ready(){
+void rtppeer::control_ready(){
   char buffer[1500];
   struct sockaddr_in cliaddr;
   unsigned int len = 0;
@@ -74,7 +74,7 @@ void rtpport::control_ready(){
   DEBUG("Got some data from control: {}", n);
 }
 
-void rtpport::midi_ready(){
+void rtppeer::midi_ready(){
   char buffer[1500];
   struct sockaddr_in cliaddr;
   unsigned int len = 0;

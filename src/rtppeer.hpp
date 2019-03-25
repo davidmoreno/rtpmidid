@@ -19,15 +19,14 @@
 #pragma once
 #include <string>
 
-
 namespace rtpmidid {
-  class rtpport {
+  class rtppeer {
     int control_socket;
     int midi_socket;
     std::string name;
   public:
-    rtpport(std::string _name, int startport);
-    ~rtpport();
+    rtppeer(std::string _name, int startport);
+    ~rtppeer();
 
     void control_ready();
     void midi_ready();

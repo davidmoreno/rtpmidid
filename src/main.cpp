@@ -19,7 +19,7 @@
 #include <iostream>
 #include "./logger.hpp"
 #include "./aseq.hpp"
-#include "./rtpport.hpp"
+#include "./rtpserver.hpp"
 #include "./stringpp.hpp"
 #include "./poller.hpp"
 #include "./mdns.hpp"
@@ -33,7 +33,7 @@ int main(int argc, char **argv){
 
     try{
       auto seq = rtpmidid::aseq("rtpmidid");
-      auto rtpport = rtpmidid::rtpport("rtpmidid", 15004);
+      auto rtpserver = rtpmidid::rtpserver("rtpmidid", 15004);
       auto outputs = rtpmidid::get_ports(&seq);
       auto mdns = rtpmidid::mdns();
 
