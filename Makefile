@@ -14,7 +14,7 @@ clean:
 	rm -rf build
 
 runcpp: build/bin/rtpmidid
-	timeout 10 build/bin/rtpmidid
+	timeout 10 valgrind build/bin/rtpmidid
 
 test: compile
 	cd build; make test

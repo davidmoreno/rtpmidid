@@ -60,7 +60,7 @@ bool rtpclient::connect_to(int socketfd, int16_t port){
   peer_addr.sin_port = htons(port);
 
   uint8_t packet[1500];
-  auto *data = packet;
+  auto buffer = parse_buffer_t(packet, 1500);
 
 
   auto signature = 0xFFFF;
@@ -68,17 +68,17 @@ bool rtpclient::connect_to(int socketfd, int16_t port){
   auto protocol = 2;
   auto sender = SSRC;
 
-  data = write_uint16(data, signature);
-  data = write_uint16(data, command);
-  data = write_uint32(data, protocol);
-  data = write_uint32(data, initiator_id);
-  data = write_uint32(data, sender);
-  data = write_str0(data, name);
+  write_uint16(buffer, signature);
+  write_uint16(buffer, command);
+  write_uint32(buffer, protocol);
+  write_uint32(buffer, initiator_id);
+  write_uint32(buffer, sender);
+  write_str0(buffer, name);
 
   DEBUG("Send packet:");
-  print_hex(packet, data - packet);
+  print_hex(buffer);
 
-  sendto(socketfd, packet, data - packet, MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
+  sendto(socketfd, packet, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
 
   return true;
 }

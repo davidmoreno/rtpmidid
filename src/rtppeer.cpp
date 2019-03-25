@@ -68,7 +68,8 @@ void rtppeer::control_data_ready(){
   unsigned int len = 0;
   auto n = recvfrom(control_socket, buffer, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
   DEBUG("Got some data from control: {}", n);
-  print_hex(buffer, n);
+  auto tmp = parse_buffer_t(buffer, buffer + n, buffer);
+  print_hex(tmp);
 }
 
 void rtppeer::midi_data_ready(){
@@ -77,5 +78,6 @@ void rtppeer::midi_data_ready(){
   unsigned int len = 0;
   auto n = recvfrom(midi_socket, buffer, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
   DEBUG("Got some data from midi: {}", len);
-  print_hex(buffer, n);
+  auto tmp = parse_buffer_t(buffer, buffer + n, buffer);
+  print_hex(tmp);
 }

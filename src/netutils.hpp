@@ -19,14 +19,56 @@
 #pragma once
 #include <cstdint>
 #include <string_view>
+#include "./exceptions.hpp"
 
 namespace rtpmidid{
-  uint32_t parse_uint32(const uint8_t *buffer);
-  uint16_t parse_uint16(const uint8_t *buffer);
+  struct parse_buffer_t {
+    uint8_t *start;
+    uint8_t *end;
+    uint8_t *position;
 
-  uint8_t *write_uint16(uint8_t *data, uint16_t n);
-  uint8_t *write_uint32(uint8_t *data, uint32_t n);
-  uint8_t *write_str0(uint8_t *data, const std::string_view &str);
+    parse_buffer_t(uint8_t *start, uint8_t *end, uint8_t *position){
+      this->start = start;
+      this->end = end;
+      this->position = position;
+    }
+    parse_buffer_t(uint8_t *start, uint32_t size){
+      this->start = start;
+      this->end = start + size;
+      this->position = start;
+    }
 
-  void print_hex(const uint8_t *data, int n);
+    void check_enought(int nbytes){
+      if (position + nbytes >= end)
+        throw exception("Try to access end of buffer");
+    }
+    void assert_valid_position(){
+      if (position >= end)
+        throw exception("Invalid buffer position");
+    }
+
+    uint8_t &operator*(){
+      return *position;
+    }
+    parse_buffer_t &operator++(int _postincr_dummy){
+      position++;
+      if (position >= end)
+        throw exception("Try to access end of buffer");
+
+      return *this;
+    }
+    uint32_t length(){
+      return position - start;
+    }
+  };
+
+  uint32_t parse_uint32(parse_buffer_t &buffer);
+  uint16_t parse_uint16(parse_buffer_t &buffer);
+
+  void raw_write_uint16(uint8_t *data, uint16_t n);
+  void write_uint16(parse_buffer_t &data, uint16_t n);
+  void write_uint32(parse_buffer_t &data, uint32_t n);
+  void write_str0(parse_buffer_t &data, const std::string_view &str);
+
+  void print_hex(parse_buffer_t &, bool to_pos=true);
 }

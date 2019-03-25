@@ -61,13 +61,20 @@ mdns::~mdns(){
 
 }
 
-// Due on how labels are in mem, jsut change the separators into '.' until two 0 are found.
-int read_label(uint8_t *start, uint8_t *end, uint8_t *base, char *str, char *str_end){
+// Reads a label from the origin parse buffer and stores on the label parse buffer
+void read_label(parse_buffer_t &buffer, parse_buffer_t &label){
   // DEBUG(
   //   "Read label start: {:p}, end: {:p}, base: {:p}, str: {:p}, str_end: {:p}",
   //   start, end, base, str, str_end
   // );
-  uint8_t *data = start;
+  uint8_t *data = buffer.position;
+  uint8_t *end = buffer.end;
+  uint8_t *base = buffer.start;
+  uint8_t *start = buffer.position;
+
+  uint8_t *str = label.position;
+  uint8_t *str_end = label.end;
+
   bool first = true;
   while(data < end && str < str_end){
     uint8_t nchars = *data;
@@ -81,15 +88,16 @@ int read_label(uint8_t *start, uint8_t *end, uint8_t *base, char *str, char *str
       else
         *str++ = '.';
       *str = 0;
-      auto nbytes = (data - start);
       // DEBUG("Label is compressed, refers to {}. So far read: {} bytes, <{}>", *data, nbytes, str - nbytes);
-      read_label(base + *data, end, base, str, str_end);
-      return nbytes + 2;
+      buffer.position = data;
+      label.position = str;
+      read_label(buffer, label);
+      return;
     }
     data++;
     if (nchars == 0){
       *str = 0;
-      return data - start;
+      return;
     }
     if (first)
       first = false;
@@ -99,12 +107,12 @@ int read_label(uint8_t *start, uint8_t *end, uint8_t *base, char *str, char *str
       *str++ = *data++;
     }
   }
-  print_hex(base, end-base);
+  print_hex(buffer);
   throw exception("Invalid package. Label out of bounds at {}.", data - base);
 }
 
 // Not prepared for pointers yet. Lazy, but should work ok,
-uint8_t *write_label(uint8_t *data, const std::string_view &name){
+void write_label(parse_buffer_t &data, const std::string_view &name){
   auto strI = name.begin();
   auto endI = name.end();
   for(auto I=strI; I < endI; ++I){
@@ -122,73 +130,75 @@ uint8_t *write_label(uint8_t *data, const std::string_view &name){
   }
   // end of labels
   *data++ = 0;
-
-  return data;
 }
 
-uint8_t *read_question(mdns *server, uint8_t *buffer, uint8_t *end, uint8_t *data){
-  char label[128];
+bool read_question(mdns *server, parse_buffer_t &buffer){
+  uint8_t label[128];
+  parse_buffer_t parse_label = {label, label+sizeof(label), label};
 
-  auto len = read_label(data, end, buffer, label, label + sizeof(label));
-  data += len;
-  if (data + 4 > end){
-    throw exception("Invalid package");
-  }
-  int type_ = parse_uint16(data);
-  int class_ = parse_uint16(data+2);
+  read_label(buffer, parse_label);
+  int type_ = parse_uint16(buffer);
+  int class_ = parse_uint16(buffer);
   DEBUG("Question about: {} {} {}.", label, type_, class_);
-  data += 4;
 
-  server->answer_if_known(mdns::query_type_e(type_), label);
-
-  return data;
+  return server->answer_if_known(mdns::query_type_e(type_), (char*)label);
 }
 
-uint8_t *read_answer(mdns *server, uint8_t *buffer, uint8_t *end, uint8_t *data){
-  char label[128];
+bool read_answer(mdns *server, parse_buffer_t &buffer){
+  uint8_t label[128];
+  parse_buffer_t buffer_label = {
+    label,
+    label + 128,
+    label
+  };
 
-  auto len = read_label(data, end, buffer, label, label + sizeof(label));
-  data += len;
-  if (data + 4 > end){
-    throw exception("Invalid package");
-  }
-  auto type_ = parse_uint16(data);
-  auto class_ = parse_uint16(data+2);
-  data += 4;
+  read_label(buffer, buffer_label);
+  auto type_ = parse_uint16(buffer);
+  auto class_ = parse_uint16(buffer);
 
   // auto ttl = parse_uint32(data);
-  data += 4;
+  buffer.position += 4;
 
-  auto data_length = parse_uint16(data);
-  data += 2;
+  auto data_length = parse_uint16(buffer);
+  auto *pos = buffer.position;
 
   if (type_ == mdns::PTR){ // PTR
-    char answer[128];
-    len = read_label(data, end, buffer, answer, answer + sizeof(answer));
+    uint8_t answer[128];
+    parse_buffer_t buffer_answer = {
+      answer,
+      answer+128,
+      answer
+    };
+    read_label(buffer, buffer_answer);
     DEBUG("PTR Answer about: {} {} {} -> <{}>", label, type_, class_, answer);
     DEBUG("Asking now about {} SRV", answer);
     mdns::service_srv service = {
-      label,
+      (char*)label,
       mdns::PTR,
-      answer,
+      (char*)answer,
     };
     server->detected_service(&service);
   }
   else if (type_ == mdns::SRV){ // PTR
     // auto priority = parse_uint16(data);
-    data += 2;
+    buffer.position += 2;
     // auto weight = parse_uint16(data);
-    data += 2;
-    auto port = parse_uint16(data);
-    data += 2;
+    buffer.position += 2;
+    buffer.assert_valid_position();
+    auto port = parse_uint16(buffer);
 
-    char target[128];
-    len = read_label(data, end, buffer, target, target + sizeof(target));
+    uint8_t target[128];
+    parse_buffer_t buffer_target = {
+      target,
+      target+128,
+      target
+    };
+    read_label(buffer, buffer_target);
 
     mdns::service_srv service = {
-      label,
+      (char*)label,
       mdns::SRV,
-      target,
+      (char*)target,
       port
     };
     server->detected_service(&service);
@@ -201,20 +211,21 @@ uint8_t *read_answer(mdns *server, uint8_t *buffer, uint8_t *end, uint8_t *data)
   }
   else if (type_ == mdns::A){
     mdns::service_a service = {
-      label,
+      (char*)label,
       mdns::A,
     };
-    service.ip[0] = data[0];
-    service.ip[1] = data[1];
-    service.ip[2] = data[2];
-    service.ip[3] = data[3];
+    service.ip[0] = *buffer++;
+    service.ip[1] = *buffer++;
+    service.ip[2] = *buffer++;
+    service.ip[3] = *buffer++;
 
     server->detected_service(&service);
 
   }
-  data += data_length;
+  buffer.position = pos + data_length;
+  buffer.assert_valid_position();
 
-  return data;
+  return true;
 }
 
 void mdns::on_discovery(const std::string &service, mdns::query_type_e qt, std::function<void(const mdns::service *)> f){
@@ -255,54 +266,61 @@ void mdns::announce(std::unique_ptr<service> service, bool broadcast){
 void mdns::send_response(const service &service){
   uint8_t packet[1500];
   memset(packet, 0, sizeof(packet));
-  // Response and authoritative
-  packet[2] = 0x84;
+  parse_buffer_t buffer = { packet, packet + 1500, packet };
 
+  // Response and authoritative
+  buffer.position[2] = 0x84;
+
+  buffer.position += 6;
   // One answer
-  write_uint16(packet + 6, 1);
+  write_uint16(buffer, 1);
 
   // The query
-  uint8_t *data = packet + 12;
-  data = write_label(data, service.label);
+  buffer.position = buffer.start + 12;
+  write_label(buffer, service.label);
 
   // type
-  data = write_uint16(data, service.type);
+  write_uint16(buffer, service.type);
   // class IN
-  data = write_uint16(data, 1);
+  write_uint16(buffer, 1);
   // ttl
-  data = write_uint32(data, 600); // FIXME should not be fixed.
+  write_uint32(buffer, 600); // FIXME should not be fixed.
   // data_length. I prepare the spot
-  auto length_data_pos = data;
-  data+=2;
+  auto length_data_pos = buffer.position;
+  buffer.position += 2;
   switch(service.type){
     case mdns::A:{
       auto a = static_cast<const mdns::service_a*>(&service);
-      *data++ = a->ip[0];
-      *data++ = a->ip[1];
-      *data++ = a->ip[2];
-      *data++ = a->ip[3];
+      *buffer++ = a->ip[0];
+      *buffer++ = a->ip[2];
+      *buffer++ = a->ip[3];
+      *buffer++ = a->ip[1];
     }
     break;
     case mdns::PTR:{
       auto ptr = static_cast<const mdns::service_ptr*>(&service);
-      data = write_label(data, ptr->servicename);
+      write_label(buffer, ptr->servicename);
     }
     break;
     case mdns::SRV:{
       auto srv = static_cast<const mdns::service_srv*>(&service);
-      data = write_uint16(data, 0); // priority
-      data = write_uint16(data, 0); // weight
-      data = write_uint16(data, srv->port);
-      data = write_label(data, srv->hostname);
+      write_uint16(buffer, 0); // priority
+      write_uint16(buffer, 0); // weight
+      write_uint16(buffer, srv->port);
+      write_label(buffer, srv->hostname);
     }
     break;
     default:
       throw exception("I dont know how to announce this mDNS answer type: {}", service.type);
   }
 
-  DEBUG("Send RR type: {} size: {}", service.type, int(data - length_data_pos - 2));
-  write_uint16(length_data_pos, data - length_data_pos - 2);
-  sendto(socketfd, packet, data - packet, MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
+  uint16_t nbytes = buffer.position - length_data_pos - 2;
+  DEBUG("Send RR type: {} size: {}", service.type, nbytes);
+
+  // A little go and back
+  raw_write_uint16(length_data_pos, nbytes);
+
+  sendto(socketfd, packet, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
 }
 
 
@@ -328,21 +346,22 @@ void mdns::query(const std::string &name, mdns::query_type_e type){
   packet[5] = 1;
   // Now the query itself
   uint8_t *data = packet + 12;
-  data = write_label(data, name);
+  parse_buffer_t buffer = {packet, packet + 120, packet + 12};
+  write_label(buffer, name);
   // type ptr
-  *data++ = ( type >> 8 ) & 0x0FF;
-  *data++ = type & 0x0FF;
+  *buffer++ = ( type >> 8 ) & 0x0FF;
+  *buffer++ = type & 0x0FF;
   // query
-  *data++ = 0;
-  *data++ = 0x01;
+  *buffer++ = 0;
+  *buffer++ = 0x01;
 
   /// DONE
   if (DEBUG0){
     DEBUG("Packet ready! {} bytes", data - packet);
-    print_hex(packet, data - packet);
+    print_hex(buffer);
   }
 
-  sendto(socketfd, packet, data - packet, MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
+  sendto(socketfd, packet, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
 }
 
 void mdns::mdns_ready(){
@@ -354,7 +373,8 @@ void mdns::mdns_ready(){
 
   if (DEBUG0){
     DEBUG("Got some data from mDNS: {}", read_length);
-    print_hex(buffer, read_length);
+    auto tmp = parse_buffer_t(buffer, buffer+read_length, buffer);
+    print_hex(tmp, true);
   }
   if (read_length > 1500){
     ERROR("This mDNS implementation is not prepared for packages longer than 1500 bytes. Please fill a bug report. Ignoring package.");
@@ -366,13 +386,21 @@ void mdns::mdns_ready(){
     return;
   }
 
-  int tid = parse_uint16(buffer);
-  bool is_query = !(buffer[2] & 8);
-  int opcode = (buffer[2] >> 3) & 0x0F;
-  auto nquestions = parse_uint16(buffer+4);
-  auto nanswers = parse_uint16(buffer+6);
-  auto nauthority = parse_uint16(buffer+8);
-  auto nadditional = parse_uint16(buffer+10);
+  parse_buffer_t parse_buffer{
+    buffer,
+    buffer + read_length,
+    buffer,
+  };
+
+
+  int tid = parse_uint16(parse_buffer);
+  bool is_query = !(*parse_buffer & 8);
+  int opcode = (*parse_buffer >> 3) & 0x0F;
+  parse_buffer.position++;
+  auto nquestions = parse_uint16(parse_buffer);
+  auto nanswers = parse_uint16(parse_buffer);
+  auto nauthority = parse_uint16(parse_buffer);
+  auto nadditional = parse_uint16(parse_buffer);
 
   if (DEBUG0){
     DEBUG(
@@ -381,18 +409,16 @@ void mdns::mdns_ready(){
     );
   }
   uint32_t i;
-  uint8_t *buffer_end = buffer + read_length;
-  uint8_t *data = buffer+12;
   for ( i=0 ; i <nquestions ; i++ ){
-      data = read_question(this, buffer, buffer_end, data);
-      if (!data){
+      auto ok = read_question(this, parse_buffer);
+      if (!ok){
         WARNING("Ignoring mDNS packet!");
         return;
       }
   }
   for ( i=0 ; i <nanswers ; i++ ){
-      data = read_answer(this, buffer, buffer_end, data);
-      if (!data){
+      auto ok = read_answer(this, parse_buffer);
+      if (!ok){
         WARNING("Ignoring mDNS packet!");
         return;
       }
