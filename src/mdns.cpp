@@ -24,6 +24,7 @@
 #include "./exceptions.hpp"
 #include "./poller.hpp"
 #include "./logger.hpp"
+#include "./netutils.hpp"
 
 const auto DEBUG0 = false;
 
@@ -58,38 +59,6 @@ mdns::mdns(){
 
 mdns::~mdns(){
 
-}
-
-uint32_t parse_uint32(const uint8_t *buffer){
-  return ((uint32_t)buffer[0]<<24) + ((uint32_t)buffer[1]<<16) + ((uint32_t)buffer[2]<< 8) + ((uint32_t)buffer[3]);
-}
-
-uint16_t parse_uint16(const uint8_t *buffer){
-  return ((uint16_t)buffer[0]<< 8) + ((uint16_t)buffer[1]);
-}
-
-void print_hex(const uint8_t *data, int n){
-  for( int i=0 ; i<n ; i++ ){
-    printf("%02X ", data[i] & 0x0FF);
-    if (i % 4 == 3)
-      printf(" ");
-    if (i % 16 == 15)
-      printf("\n");
-  }
-  printf("\n");
-  for( int i=0 ; i<n ; i++ ){
-    if (isprint(data[i])){
-      printf("%c", data[i]);
-    }
-    else{
-      printf(".");
-    }
-    if (i % 4 == 3)
-      printf(" ");
-    if (i % 16 == 15)
-      printf("\n");
-  }
-  printf("\n");
 }
 
 // Due on how labels are in mem, jsut change the separators into '.' until two 0 are found.
@@ -154,20 +123,6 @@ uint8_t *write_label(uint8_t *data, const std::string_view &name){
   // end of labels
   *data++ = 0;
 
-  return data;
-}
-
-uint8_t *write_uint16(uint8_t *data, uint16_t n){
-  *data++ = (n>>8) & 0x0FF;
-  *data++ = (n & 0x0FF);
-  return data;
-}
-
-uint8_t *write_uint32(uint8_t *data, uint32_t n){
-  *data++ = (n>>24) & 0x0FF;
-  *data++ = (n>>16) & 0x0FF;
-  *data++ = (n>>8) & 0x0FF;
-  *data++ = (n & 0x0FF);
   return data;
 }
 

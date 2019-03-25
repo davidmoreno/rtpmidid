@@ -17,23 +17,30 @@
  */
 
 #include <iostream>
+#include <random>
 #include "./logger.hpp"
 #include "./aseq.hpp"
 #include "./rtpserver.hpp"
 #include "./stringpp.hpp"
 #include "./poller.hpp"
+#include "./rtpclient.hpp"
 #include "./mdns.hpp"
 
 using namespace std;
 
+const auto MYNAME = "rtpmidid";
+std::vector<std::shared_ptr<rtpmidid::rtppeer>> peers;
 
 int main(int argc, char **argv){
     INFO("Real Time Protocol Music Industry Digital Interface Daemon - v0.1");
     INFO("(C) 2019 David Moreno Montero <dmoreno@coralbits.com>");
 
+    // We dont need crypto rand, just some rand
+    srand(time(NULL));
+
     try{
       auto seq = rtpmidid::aseq("rtpmidid");
-      auto rtpserver = rtpmidid::rtpserver("rtpmidid", 15004);
+      auto rtpserver = rtpmidid::rtpserver(MYNAME, 15004);
       auto outputs = rtpmidid::get_ports(&seq);
       auto mdns = rtpmidid::mdns();
 
@@ -47,8 +54,10 @@ int main(int argc, char **argv){
           std::string name = srv->label.substr(0, srv->label.find('.'));
           mdns.query(srv->hostname, rtpmidid::mdns::A, [name, port](const rtpmidid::mdns::service *service){
             auto *ip = static_cast<const rtpmidid::mdns::service_a*>(service);
-            auto ip4 = ip->ip;
+            const uint8_t *ip4 = ip->ip;
             INFO("APPLE MIDI: {}, at {}.{}.{}.{}:{}", name, uint8_t(ip4[0]), uint8_t(ip4[1]), uint8_t(ip4[2]), uint8_t(ip4[3]), port);
+
+            peers.push_back(std::make_shared<rtpmidid::rtpclient>(MYNAME, ip4, port));
           });
         });
       });
@@ -56,11 +65,11 @@ int main(int argc, char **argv){
       auto ptr = std::make_unique<rtpmidid::mdns::service_ptr>();
       ptr->label = "_apple-midi._udp.local";
       ptr->type = rtpmidid::mdns::PTR;
-      ptr->servicename = "rtpmidid._apple-midi._udp.local";
+      ptr->servicename = fmt::format("{}._apple-midi._udp.local", MYNAME);
       mdns.announce(std::move(ptr));
 
       auto srv = std::make_unique<rtpmidid::mdns::service_srv>();
-      srv->label = "rtpmidid._apple-midi._udp.local";
+      srv->label = fmt::format("{}._apple-midi._udp.local", MYNAME);
       srv->type = rtpmidid::mdns::SRV;
       srv->hostname = "ucube.local";
       srv->port = 15004;

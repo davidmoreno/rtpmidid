@@ -23,8 +23,10 @@
 
 namespace rtpmidid {
   class rtpclient : public rtppeer {
+    bool connect_to(int socketfd, int16_t port);
   public:
-    rtpclient(std::string name, std::string hostname, int16_t port);
+    int32_t initiator_id;
+    rtpclient(std::string name, const uint8_t *ip4, int16_t port);
 
   };
 }

@@ -18,17 +18,34 @@
 
 #pragma once
 #include <string>
+#include <arpa/inet.h>
 
 namespace rtpmidid {
   class rtppeer {
+  public:
+    // Commands, th id is the same chars as the name
+    enum commands_e {
+      IN = 0x494e,
+      OK = 0x4f4b,
+      NO = 0x4e4f,
+      BY = 0x4259,
+      CK = 0x434b,
+      RS = 0x5253
+    };
+
+
+
+
     int control_socket;
     int midi_socket;
+    int base_port;
     std::string name;
-  public:
-    rtppeer(std::string _name, int startport);
-    ~rtppeer();
+    struct sockaddr_in peer_addr; // Will reuse addr, just changing the port
 
-    void control_ready();
-    void midi_ready();
+    rtppeer(std::string _name, int startport);
+    virtual ~rtppeer();
+
+    virtual void control_data_ready();
+    virtual void midi_data_ready();
   };
 }

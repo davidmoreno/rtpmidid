@@ -16,19 +16,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "./rtpserver.hpp"
-#include "./poller.hpp"
-#include "./exceptions.hpp"
-#include "./logger.hpp"
+#pragma once
+#include <cstdint>
+#include <string_view>
 
-using namespace rtpmidid;
+namespace rtpmidid{
+  uint32_t parse_uint32(const uint8_t *buffer);
+  uint16_t parse_uint16(const uint8_t *buffer);
 
-rtpserver::rtpserver(std::string name, int16_t port) : rtppeer(std::move(name), port){
-  DEBUG("RTP MIDI ports at 0.0.0.0:{} / 0.0.0.0:{}, with name: {} ({}, {})",
-    port, port + 1, name, control_socket, midi_socket);
-}
+  uint8_t *write_uint16(uint8_t *data, uint16_t n);
+  uint8_t *write_uint32(uint8_t *data, uint32_t n);
+  uint8_t *write_str0(uint8_t *data, const std::string_view &str);
 
-rtpserver::~rtpserver(){
-  poller.remove_fd(control_socket);
-  poller.remove_fd(midi_socket);
+  void print_hex(const uint8_t *data, int n);
 }
