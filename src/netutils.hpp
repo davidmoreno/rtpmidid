@@ -124,4 +124,6 @@ namespace rtpmidid{
   };
 
   uint8_t *raw_write_uint16(uint8_t *data, uint16_t n);
+  void read_label(parse_buffer_t &buffer, parse_buffer_t &label);
+  void write_label(parse_buffer_t &data, const std::string_view &name);
 }
