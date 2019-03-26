@@ -40,12 +40,12 @@ namespace rtpmidid{
     }
 
     void check_enought(int nbytes){
-      if (position + nbytes >= end)
-        throw exception("Try to access end of buffer");
+      if (position + nbytes > end)
+        throw exception("Try to access end of buffer at {}", (position - start) + nbytes);
     }
     void assert_valid_position(){
       if (position >= end)
-        throw exception("Invalid buffer position");
+        throw exception("Invalid buffer position {}", position - start);
     }
 
     uint32_t length(){
@@ -122,6 +122,14 @@ namespace rtpmidid{
         *position++ = c;
       }
       *position++ = '\0';
+    }
+
+    void copy_from(parse_buffer_t &from, uint32_t chars){
+      check_enought(chars);
+      from.check_enought(chars);
+      memcpy(position, from.position, chars);
+      position += chars;
+      from.position += chars;
     }
   };
 

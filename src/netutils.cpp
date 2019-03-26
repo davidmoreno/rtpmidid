@@ -34,48 +34,33 @@ void read_label(parse_buffer_t &buffer, parse_buffer_t &label){
   //   "Read label start: {:p}, end: {:p}, base: {:p}, str: {:p}, str_end: {:p}",
   //   start, end, base, str, str_end
   // );
-  uint8_t *data = buffer.position;
-  uint8_t *end = buffer.end;
-  uint8_t *base = buffer.start;
-  uint8_t *start = buffer.position;
-
-  uint8_t *str = label.position;
-  uint8_t *str_end = label.end;
-
   bool first = true;
-  while(data < end && str < str_end){
-    uint8_t nchars = *data;
+  while(true){
+    uint8_t nchars = buffer.parse_uint8();
     if (nchars == 192){
-      data++;
-      if (base + *data > start){
-        throw exception("Invalid package. Label pointer out of bounds. Max pos is begining current record.");
-      }
+      auto position_pointer = buffer.parse_uint8();
+      auto buffer_rec = buffer;
+      buffer_rec.position = buffer.start + position_pointer;
+      buffer_rec.assert_valid_position();
+
       if (first)
         first = false;
       else
-        *str++ = '.';
-      *str = 0;
+        label.write_uint8('.');
       // DEBUG("Label is compressed, refers to {}. So far read: {} bytes, <{}>", *data, nbytes, str - nbytes);
-      buffer.position = data;
-      label.position = str;
-      read_label(buffer, label);
+      read_label(buffer_rec, label);
       return;
     }
-    data++;
     if (nchars == 0){
-      *str = 0;
+      label.write_uint8('\0');
       return;
     }
     if (first)
       first = false;
     else
-      *str++ = '.';
-    for (int i=0; i< nchars; i++){
-      *str++ = *data++;
-    }
+      label.write_uint8('.');
+    label.copy_from(buffer, nchars);
   }
-  buffer.print_hex();
-  throw exception("Invalid package. Label out of bounds at {}.", data - base);
 }
 
 // Not prepared for pointers yet. Lazy, but should work ok,

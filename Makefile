@@ -7,7 +7,7 @@ build/bin/rtpmidid: src/* tests/* CMakeLists.txt conanfile.txt
 	mkdir -p build
 	cd build &&	conan install ..
 	cd build &&	cmake ..
-	cd build && make
+	cd build && make -j
 
 
 clean:
@@ -17,7 +17,7 @@ runcpp: build/bin/rtpmidid
 	timeout 10 valgrind build/bin/rtpmidid
 
 test: compile
-	cd build; make test
+	cd build; make -j test
 
 
 ## OLD Python daemon
