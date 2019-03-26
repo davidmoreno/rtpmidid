@@ -36,9 +36,9 @@ void read_label(parse_buffer_t &buffer, parse_buffer_t &label){
   // );
   bool first = true;
   while(true){
-    uint8_t nchars = buffer.parse_uint8();
+    uint8_t nchars = buffer.read_uint8();
     if (nchars == 192){
-      auto position_pointer = buffer.parse_uint8();
+      auto position_pointer = buffer.read_uint8();
       auto buffer_rec = buffer;
       buffer_rec.position = buffer.start + position_pointer;
       buffer_rec.assert_valid_position();

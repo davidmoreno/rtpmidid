@@ -66,8 +66,8 @@ bool read_question(mdns *server, parse_buffer_t &buffer){
   parse_buffer_t parse_label = {label, label+sizeof(label), label};
 
   read_label(buffer, parse_label);
-  int type_ = buffer.parse_uint16();
-  int class_ = buffer.parse_uint16();
+  int type_ = buffer.read_uint16();
+  int class_ = buffer.read_uint16();
   DEBUG("Question about: {} {} {}.", label, type_, class_);
 
   return server->answer_if_known(mdns::query_type_e(type_), (char*)label);
@@ -82,13 +82,13 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
   };
 
   read_label(buffer, buffer_label);
-  auto type_ = buffer.parse_uint16();
-  auto class_ = buffer.parse_uint16();
+  auto type_ = buffer.read_uint16();
+  auto class_ = buffer.read_uint16();
 
-  // auto ttl = parse_uint32(data);
+  // auto ttl = read_uint32(data);
   buffer.position += 4;
 
-  auto data_length = buffer.parse_uint16();
+  auto data_length = buffer.read_uint16();
   auto *pos = buffer.position;
 
   if (type_ == mdns::PTR){ // PTR
@@ -109,12 +109,12 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
     server->detected_service(&service);
   }
   else if (type_ == mdns::SRV){ // PTR
-    // auto priority = parse_uint16(data);
+    // auto priority = read_uint16(data);
     buffer.position += 2;
-    // auto weight = parse_uint16(data);
+    // auto weight = read_uint16(data);
     buffer.position += 2;
     buffer.assert_valid_position();
-    auto port = buffer.parse_uint16();
+    auto port = buffer.read_uint16();
 
     uint8_t target[128];
     parse_buffer_t buffer_target = {
@@ -143,10 +143,10 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
       (char*)label,
       mdns::A,
     };
-    service.ip[0] = buffer.parse_uint8();
-    service.ip[1] = buffer.parse_uint8();
-    service.ip[2] = buffer.parse_uint8();
-    service.ip[3] = buffer.parse_uint8();
+    service.ip[0] = buffer.read_uint8();
+    service.ip[1] = buffer.read_uint8();
+    service.ip[2] = buffer.read_uint8();
+    service.ip[3] = buffer.read_uint8();
 
     server->detected_service(&service);
 
@@ -290,14 +290,14 @@ void mdns::query(const std::string &name, mdns::query_type_e type){
 }
 
 void parse_packet(mdns *mdns, parse_buffer_t &parse_buffer){
-  int tid = parse_buffer.parse_uint16();
-  int8_t flags = parse_buffer.parse_uint16();
+  int tid = parse_buffer.read_uint16();
+  int8_t flags = parse_buffer.read_uint16();
   bool is_query = !(flags & 0x8000);
   int opcode = (flags >> 11) & 0x0007;
-  auto nquestions = parse_buffer.parse_uint16();
-  auto nanswers = parse_buffer.parse_uint16();
-  auto nauthority = parse_buffer.parse_uint16();
-  auto nadditional = parse_buffer.parse_uint16();
+  auto nquestions = parse_buffer.read_uint16();
+  auto nanswers = parse_buffer.read_uint16();
+  auto nauthority = parse_buffer.read_uint16();
+  auto nadditional = parse_buffer.read_uint16();
 
   if (DEBUG0){
     DEBUG(

@@ -44,7 +44,7 @@ namespace rtpmidid{
         throw exception("Try to access end of buffer at {}", (position - start) + nbytes);
     }
     void assert_valid_position(){
-      if (position >= end)
+      if (position > end)
         throw exception("Invalid buffer position {}", position - start);
     }
 
@@ -52,21 +52,21 @@ namespace rtpmidid{
       return position - start;
     }
 
-    uint32_t parse_uint32(){
+    uint32_t read_uint32(){
       check_enought(4);
       auto data = position;
       position += 4;
       return ((uint32_t)data[0]<<24) + ((uint32_t)data[1]<<16) + ((uint32_t)data[2]<< 8) + ((uint32_t)data[3]);
     }
 
-    uint16_t parse_uint16(){
+    uint16_t read_uint16(){
       check_enought(2);
       auto data = position;
       position += 2;
       return ((uint16_t)data[0]<< 8) + ((uint16_t)data[1]);
     }
 
-    uint8_t parse_uint8(){
+    uint8_t read_uint8(){
       check_enought(1);
       auto data = position;
       position += 1;
