@@ -29,37 +29,70 @@
 
 using namespace rtpmidid;
 
-rtppeer::rtppeer(std::string _name, int startport) : name(std::move(_name)) {
-  struct sockaddr_in servaddr;
+rtppeer::rtppeer(std::string _name, int startport) : name(std::move(_name)), local_base_port(startport) {
+  try {
+    remote_base_port = 0; // Not defined
+    control_socket = -1;
+    midi_socket = -1;
 
-  control_socket = socket(AF_INET, SOCK_DGRAM, 0);
-  if (control_socket < 0){
-    throw rtpmidid::exception("Can not open control socket. Out of sockets?");
-  }
-  memset(&servaddr, 0, sizeof(servaddr));
-  servaddr.sin_family = AF_INET;
-  servaddr.sin_addr.s_addr = INADDR_ANY;
-  servaddr.sin_port = htons(startport);
-  if (bind(control_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
-    throw rtpmidid::exception("Can not open control socket. Maybe addres is in use?");
-  }
-  poller.add_fd_in(control_socket, [this](int){ this->control_data_ready(); });
+    struct sockaddr_in servaddr;
 
-  midi_socket = socket(AF_INET, SOCK_DGRAM, 0);
-  if (midi_socket < 0){
-    throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
+    control_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (control_socket < 0){
+      throw rtpmidid::exception("Can not open control socket. Out of sockets?");
+    }
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = INADDR_ANY;
+    servaddr.sin_port = htons(startport);
+    if (bind(control_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
+      throw rtpmidid::exception("Can not open control socket. Maybe addres is in use?");
+    }
+    if (local_base_port == 0){
+      socklen_t len = sizeof(servaddr);
+      ::getsockname(control_socket, (struct sockaddr*)&servaddr, &len);
+      local_base_port = servaddr.sin_port;
+      poller.add_fd_in(control_socket, [this](int){ this->control_data_ready(); });
+      DEBUG("Got automatic port {} for control", local_base_port);
+    }
+
+    midi_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (midi_socket < 0){
+      throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
+    }
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = INADDR_ANY;
+    servaddr.sin_port = htons(local_base_port + 1);
+    if (bind(midi_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
+      throw rtpmidid::exception("Can not open MIDI socket. Maybe addres is in use?");
+    }
+    poller.add_fd_in(midi_socket, [this](int){ this->midi_data_ready(); });
+
+  } catch (...){
+    if (control_socket){
+      poller.remove_fd(control_socket);
+      close(control_socket);
+      control_socket = 0;
+    }
+    if (midi_socket){
+      poller.remove_fd(midi_socket);
+      close(midi_socket);
+      midi_socket = 0;
+    }
+    throw;
   }
-  memset(&servaddr, 0, sizeof(servaddr));
-  servaddr.sin_family = AF_INET;
-  servaddr.sin_addr.s_addr = INADDR_ANY;
-  servaddr.sin_port = htons(startport + 1);
-  if (bind(midi_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
-    throw rtpmidid::exception("Can not open MIDI socket. Maybe addres is in use?");
-  }
-  poller.add_fd_in(midi_socket, [this](int){ this->midi_data_ready(); });
 }
 
 rtppeer::~rtppeer(){
+  if (control_socket > 0){
+    poller.remove_fd(control_socket);
+    close(control_socket);
+  }
+  if (midi_socket > 0){
+    poller.remove_fd(midi_socket);
+    close(midi_socket);
+  }
 }
 
 void rtppeer::control_data_ready(){

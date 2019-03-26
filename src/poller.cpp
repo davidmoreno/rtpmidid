@@ -48,7 +48,7 @@ void poller_t::add_fd_inout(int fd, std::function<void(int)> f){
   ev.data.fd= fd;
   auto r = epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
   if (r == -1){
-    throw exception("Can't add fd {} to poller: {}", fd, strerror(errno));
+    throw exception("Can't add fd {} to poller: {} ({})", fd, strerror(errno), errno);
   }
 }
 void poller_t::add_fd_in(int fd, std::function<void(int)> f){
@@ -60,7 +60,7 @@ void poller_t::add_fd_in(int fd, std::function<void(int)> f){
   ev.data.fd= fd;
   auto r = epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
   if (r == -1){
-    throw exception("Can't add fd {} to poller: {}", fd, strerror(errno));
+    throw exception("Can't add fd {} to poller: {} ({})", fd, strerror(errno), errno);
   }
 }
 void poller_t::add_fd_out(int fd, std::function<void(int)> f){
@@ -72,7 +72,7 @@ void poller_t::add_fd_out(int fd, std::function<void(int)> f){
   ev.data.fd= fd;
   auto r = epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
   if (r == -1){
-    throw exception("Can't add fd {} to poller: {}", fd, strerror(errno));
+    throw exception("Can't add fd {} to poller: {} ({})", fd, strerror(errno), errno);
   }
 }
 
@@ -80,7 +80,7 @@ void poller_t::remove_fd(int fd){
   events.erase(fd);
   auto r = epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, NULL);
   if (r == -1){
-    throw exception("Can't remove fd {} from poller: {}", fd, strerror(errno));
+    throw exception("Can't remove fd {} from poller: {} ({})", fd, strerror(errno), errno);
   }
 }
 

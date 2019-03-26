@@ -33,12 +33,10 @@ namespace rtpmidid {
       RS = 0x5253
     };
 
-
-
-
     int control_socket;
     int midi_socket;
-    int base_port;
+    uint16_t local_base_port;
+    uint16_t remote_base_port;
     std::string name;
     struct sockaddr_in peer_addr; // Will reuse addr, just changing the port
 
