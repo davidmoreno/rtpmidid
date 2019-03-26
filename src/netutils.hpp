@@ -48,8 +48,14 @@ namespace rtpmidid{
         throw exception("Invalid buffer position {}", position - start);
     }
 
+    // This is used for writing to it, says current length
     uint32_t length(){
       return position - start;
+    }
+
+    // This is the total size, from start to end
+    uint32_t size(){
+      return end - start;
     }
 
     uint32_t read_uint32(){
@@ -71,6 +77,17 @@ namespace rtpmidid{
       auto data = position;
       position += 1;
       return data[0];
+    }
+
+    // The returned str is the address inside the buffer.
+    const char *read_str0(){
+      char *ret = (char*) position;
+      while (*position && position < end){
+        position++;
+      }
+      position++; // and skip the 0
+      assert_valid_position();
+      return ret;
     }
 
     void print_hex(bool to_end=false) const{

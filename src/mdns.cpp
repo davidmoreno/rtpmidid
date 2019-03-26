@@ -26,7 +26,7 @@
 #include "./logger.hpp"
 #include "./netutils.hpp"
 
-const auto DEBUG0 = true;
+const auto DEBUG0 = false;
 
 
 using namespace rtpmidid;

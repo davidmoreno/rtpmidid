@@ -28,8 +28,15 @@ namespace rtpmidid{
     exception(Args... args) {
       msg = fmt::format(args...);
     }
-    virtual const char *what() const noexcept{
+    const char *what() const noexcept{
       return msg.c_str();
+    }
+  };
+
+  class not_implemented : public std::exception {
+  public:
+    const char *what() const noexcept{
+      return "Not Implemented";
     }
   };
 }

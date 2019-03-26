@@ -21,6 +21,8 @@
 #include <arpa/inet.h>
 
 namespace rtpmidid {
+  struct parse_buffer_t;
+
   class rtppeer {
   public:
     // Commands, th id is the same chars as the name
@@ -37,6 +39,8 @@ namespace rtpmidid {
     int midi_socket;
     uint16_t local_base_port;
     uint16_t remote_base_port;
+    uint32_t initiator_id;
+    uint32_t remote_ssrc;
     std::string name;
     struct sockaddr_in peer_addr; // Will reuse addr, just changing the port
 
@@ -45,5 +49,7 @@ namespace rtpmidid {
 
     virtual void control_data_ready();
     virtual void midi_data_ready();
+    void parse_command(parse_buffer_t &, int port);
+    void parse_command_ok(parse_buffer_t &, int port);
   };
 }

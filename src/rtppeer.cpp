@@ -29,11 +29,14 @@
 
 using namespace rtpmidid;
 
-rtppeer::rtppeer(std::string _name, int startport) : name(std::move(_name)), local_base_port(startport) {
+bool is_command(parse_buffer_t &);
+
+rtppeer::rtppeer(std::string _name, int startport) : local_base_port(startport), name(std::move(_name)) {
   try {
     remote_base_port = 0; // Not defined
     control_socket = -1;
     midi_socket = -1;
+    remote_ssrc = 0;
 
     struct sockaddr_in servaddr;
 
@@ -96,19 +99,69 @@ rtppeer::~rtppeer(){
 }
 
 void rtppeer::control_data_ready(){
-  uint8_t buffer[1500];
+  uint8_t raw[1500];
   struct sockaddr_in cliaddr;
   unsigned int len = 0;
-  auto n = recvfrom(control_socket, buffer, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
+  auto n = recvfrom(control_socket, raw, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
   DEBUG("Got some data from control: {}", n);
-  parse_buffer_t(buffer, buffer + n, buffer + n).print_hex();
+  auto buffer = parse_buffer_t(raw, n);
+
+  if (is_command(buffer)){
+    parse_command(buffer, control_socket);
+  }
+
+  buffer.print_hex(true);
 }
 
 void rtppeer::midi_data_ready(){
-  uint8_t buffer[1500];
+  uint8_t raw[1500];
   struct sockaddr_in cliaddr;
   unsigned int len = 0;
-  auto n = recvfrom(midi_socket, buffer, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
+  auto n = recvfrom(midi_socket, raw, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
   DEBUG("Got some data from midi: {}", len);
-  parse_buffer_t(buffer, buffer + n, buffer + n).print_hex();
+  auto buffer = parse_buffer_t(raw, n);
+
+  if (is_command(buffer)){
+    parse_command(buffer, control_socket);
+  }
+
+  buffer.print_hex(true);
+}
+
+
+bool is_command(parse_buffer_t &pb){
+  DEBUG("Is command? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF, pb.start[1] == 0xFF);
+  return (pb.size() >= 16 && pb.start[0] == 0xFF && pb.start[1] == 0xFF);
+}
+
+void rtppeer::parse_command(parse_buffer_t &buffer, int port){
+  if (buffer.size() < 16){
+    // This should never be reachable, but should help to smart compilers for
+    // further size checks
+    throw exception("Invalid command packet.");
+  }
+  // auto _command =
+  buffer.read_uint16(); // We already know it is 0xFFFF
+  auto command = buffer.read_uint16();
+  DEBUG("Got command type {:X}", command);
+
+  switch(command){
+    case rtppeer::OK:
+      parse_command_ok(buffer, port);
+      break;
+    default:
+      throw not_implemented();
+  }
+}
+
+void rtppeer::parse_command_ok(parse_buffer_t &buffer, int port){
+  auto protocol = buffer.read_uint32();
+  auto initiator_id = buffer.read_uint32();
+  remote_ssrc = buffer.read_uint32();
+  auto name = buffer.read_str0();
+
+  INFO(
+    "Got confirmation from {}:{}, initiator_id: {} ({}) ssrc: {}, name: {}",
+    name, remote_base_port, initiator_id, this->initiator_id == initiator_id, remote_ssrc, name
+  );
 }
