@@ -29,6 +29,8 @@ namespace rtpmidid {
 
     aseq(std::string name);
     ~aseq();
+
+    uint8_t create_port(const std::string &name);
   };
 
   std::vector<std::string> get_ports(aseq *);

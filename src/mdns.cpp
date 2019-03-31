@@ -309,14 +309,14 @@ void parse_packet(mdns *mdns, parse_buffer_t &parse_buffer){
   for ( i=0 ; i <nquestions ; i++ ){
       auto ok = read_question(mdns, parse_buffer);
       if (!ok){
-        WARNING("Ignoring mDNS packet!");
+        DEBUG("Ignoring mDNS packet!");
         return;
       }
   }
   for ( i=0 ; i <nanswers ; i++ ){
       auto ok = read_answer(mdns, parse_buffer);
       if (!ok){
-        WARNING("Ignoring mDNS packet!");
+        DEBUG("Ignoring mDNS packet!");
         return;
       }
   }

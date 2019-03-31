@@ -48,9 +48,19 @@ namespace rtpmidid{
     if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0){
       throw rtpmidid::exception("Can't open sequencer. Maybe user has no permissions.");
     }
+    snd_seq_set_client_name(seq, name.c_str());
   }
   aseq::~aseq(){
     snd_seq_close(seq);
+  }
+
+  uint8_t aseq::create_port(const std::string &name){
+    auto caps = SND_SEQ_PORT_CAP_WRITE|SND_SEQ_PORT_CAP_SUBS_WRITE|SND_SEQ_PORT_CAP_READ|SND_SEQ_PORT_CAP_SUBS_READ;
+    auto type = SND_SEQ_TYPE_INET;
+
+    auto port = snd_seq_create_simple_port(seq, name.c_str(), caps, type);
+
+    return port;
   }
 
 
@@ -87,4 +97,6 @@ namespace rtpmidid{
 
       return ret;
   }
+
+
 }

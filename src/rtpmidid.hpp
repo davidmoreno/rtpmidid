@@ -16,33 +16,35 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <iostream>
-#include <random>
-#include "./logger.hpp"
-#include "./rtpmidid.hpp"
-#include "./poller.hpp"
+#pragma once
 
-using namespace std;
+#include <string>
+#include "./aseq.hpp"
+#include "./mdns.hpp"
+#include "./rtppeer.hpp"
 
-const auto MYNAME = "rtpmidid";
+namespace rtpmidid{
+  struct peer_info{
+    std::string name;
+    std::string address;
+    uint16_t port;
+    // This might be not intialized if not really connected yet.
+    std::shared_ptr<::rtpmidid::rtppeer> peer;
+  };
 
-int main(int argc, char **argv){
-    INFO("Real Time Protocol Music Industry Digital Interface Daemon - v0.1");
-    INFO("(C) 2019 David Moreno Montero <dmoreno@coralbits.com>");
+  class rtpmidid {
+  public:
+    std::string name;
+    ::rtpmidid::aseq seq;
+    ::rtpmidid::mdns mdns;
+    // Local port id to peer_info for connections
+    std::map<uint8_t, peer_info> known_peers;
 
-    // We dont need crypto rand, just some rand
-    srand(time(NULL));
+    rtpmidid(std::string &&name);
 
-    try{
-      auto rtpmidid = ::rtpmidid::rtpmidid(MYNAME);
-
-      for(;;){
-        rtpmidid::poller.wait();
-      }
-    } catch (const std::exception &e){
-      ERROR("{}", e.what());
-      return 1;
-    }
-    DEBUG("FIN");
-    return 0;
+  private:
+    void setup_mdns();
+    void add_rtpmidid_server(const std::string &name);
+    void add_rtpmidi_client(const std::string &name, const std::string &address, uint16_t port);
+  };
 }
