@@ -50,3 +50,14 @@ Development status / plan:
       connect both ports
 * [ ] Send all MIDI events to rtpmidi
 * [ ] Receive all MIDI events from rtpmidi
+
+## License
+
+RtpMidid is GPLv3 licensed. This bascially meass that you are free to use,
+modify and share it, given that you share your modifications with your users.
+
+This includes embeded software uses (anti
+[tivoization](https://en.wikipedia.org/wiki/Tivoization) clause of the GPLv3).
+
+If you think the license does not fit your use case, please contact me at
+dmoreno@coralbits.com for alternative licensing options.
