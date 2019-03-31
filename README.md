@@ -30,4 +30,23 @@ To understand the protocol, ease of development
 
 Receives the remote IP and port, and creates the seq bridges.
 
-## V1 may be in Rust or C
+## V1 in C++ (WIP)
+
+Development status / plan:
+
+* [x] mDNS client/server
+* [x] Async framework (epoll with callbacks based)
+* [x] mDNS publish and learn when there are rtpmidi running on the network
+* [ ] Create the alsa ports for found rtpmidi servers in the network
+* [ ] When there is any connection to the alsa sequencer port rtpmidid creates
+      the rtpmidi connection
+* [ ] Any message from alsa seq is sent to the MIDI rtp extreme
+* [ ] Any message from rtpmidi is replayed on the alsa seq
+* [ ] All local ports are offered as rtpmidi connections.
+* [ ] Create a black list not to export
+* [ ] Optionally create a config file to avoid some exports
+* [ ] When remote side request connections, create the alsa seq virtual port
+      for that connection (if it does not exist from an announcement) and
+      connect both ports
+* [ ] Send all MIDI events to rtpmidi
+* [ ] Receive all MIDI events from rtpmidi
