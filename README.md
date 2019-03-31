@@ -37,7 +37,7 @@ Development status / plan:
 * [x] mDNS client/server
 * [x] Async framework (epoll with callbacks based)
 * [x] mDNS publish and learn when there are rtpmidi running on the network
-* [ ] Create the alsa ports for found rtpmidi servers in the network
+* [x] Create the alsa ports for found rtpmidi servers in the network
 * [ ] When there is any connection to the alsa sequencer port rtpmidid creates
       the rtpmidi connection
 * [ ] Any message from alsa seq is sent to the MIDI rtp extreme
