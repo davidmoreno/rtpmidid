@@ -18,6 +18,8 @@
 #include "./logger.hpp"
 #include "./aseq.hpp"
 #include "./exceptions.hpp"
+#include "./poller.hpp"
+#include "./rtpclient.hpp"
 #include <fmt/format.h>
 #include <stdio.h>
 
@@ -49,9 +51,54 @@ namespace rtpmidid{
       throw rtpmidid::exception("Can't open sequencer. Maybe user has no permissions.");
     }
     snd_seq_set_client_name(seq, name.c_str());
+    snd_seq_nonblock(seq, 1);
+
+    auto poller_count = snd_seq_poll_descriptors_count(seq, POLLIN);
+    auto pfds = std::make_unique<struct pollfd[]>(poller_count);
+    auto poller_count_check = snd_seq_poll_descriptors(seq, pfds.get(), poller_count, POLLIN);
+    if (poller_count != poller_count_check){
+      throw exception("ALSA seq poller count does not match. {} != {}", poller_count, poller_count_check);
+    }
+    DEBUG("Got {} pollers", poller_count);
+    for (int i=0;i<poller_count;i++){
+      fds.push_back(pfds[i].fd);
+      DEBUG("Adding fd {} as alsa seq", pfds[i].fd);
+      poller.add_fd_in(pfds[i].fd, [this](int){
+        INFO("New event at alsa seq");
+        this->read_ready();
+      });
+    }
+    read_ready();
   }
+
   aseq::~aseq(){
+    for (auto fd: fds){
+      poller.remove_fd(fd);
+    }
     snd_seq_close(seq);
+  }
+
+  void aseq::read_ready(){
+    snd_seq_event_t *ev = nullptr;
+    int pending;
+    while ( (pending = snd_seq_event_input(seq, &ev)) > 0 ){
+      DEBUG("Got another event: {}, pending: {} / {}", ev->type, pending, snd_seq_event_input_pending(seq, 0));
+
+      switch(ev->type){
+        case SND_SEQ_EVENT_PORT_SUBSCRIBED:{
+          // auto client = std::make_shared<rtpmidid::rtpclient>(name);
+          auto name = get_client_name(&ev->data.addr);
+
+          DEBUG("Connected to me! {}", name);
+        }
+        break;
+        case SND_SEQ_EVENT_PORT_UNSUBSCRIBED:{
+          DEBUG("Disconnected");
+        }
+        break;
+      }
+
+    }
   }
 
   uint8_t aseq::create_port(const std::string &name){
@@ -98,5 +145,24 @@ namespace rtpmidid{
       return ret;
   }
 
+  std::string aseq::get_client_name(snd_seq_addr_t *addr){
+    snd_seq_client_info_t *client_info = nullptr;
+    snd_seq_client_info_malloc(&client_info);
+    snd_seq_get_any_client_info(seq, addr->client, client_info);
+    std::string client_name = snd_seq_client_info_get_name(client_info);
+
+    snd_seq_port_info_t *port_info = nullptr;
+    snd_seq_port_info_malloc(&port_info);
+    snd_seq_get_any_port_info(seq, addr->client, addr->port, port_info);
+    std::string port_name = snd_seq_port_info_get_name(port_info);
+
+    snd_seq_client_info_free(client_info);
+    snd_seq_port_info_free(port_info);
+
+    //  Many times the name is just a copy
+    if (client_name == port_name)
+      return client_name;
+    return fmt::format("{}-{}", client_name, port_name);
+  }
 
 }

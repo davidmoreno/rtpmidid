@@ -26,9 +26,13 @@ namespace rtpmidid {
   public:
     std::string name;
     snd_seq_t *seq;
+    std::vector<int> fds; // Normally 1?
 
     aseq(std::string name);
     ~aseq();
+
+    void read_ready();
+    std::string get_client_name(snd_seq_addr_t *addr);
 
     uint8_t create_port(const std::string &name);
   };
