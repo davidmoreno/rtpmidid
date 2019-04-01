@@ -28,9 +28,6 @@
 
 using namespace rtpmidid;
 
-// A random int32. Should be configurable, so diferent systems, have diferent SSRC.
-const uint32_t SSRC = 0x111f6c31;
-
 rtpclient::rtpclient(std::string name, const std::string &address, int16_t port) : rtppeer(std::move(name), 0){
   remote_base_port = port;
   initiator_id = rand();
@@ -47,8 +44,6 @@ rtpclient::rtpclient(std::string name, const std::string &address, int16_t port)
 }
 
 bool rtpclient::connect_to(int socketfd, int16_t port){
-  peer_addr.sin_port = htons(port);
-
   uint8_t packet[1500];
   auto buffer = parse_buffer_t(packet, 1500);
 
@@ -68,6 +63,7 @@ bool rtpclient::connect_to(int socketfd, int16_t port){
   DEBUG("Send packet:");
   buffer.print_hex();
 
+  peer_addr.sin_port = htons(port);
   sendto(socketfd, packet, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
 
   return true;

@@ -20,6 +20,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <time.h>
 
 #include "./logger.hpp"
 #include "./rtppeer.hpp"
@@ -46,6 +47,9 @@ rtppeer::rtppeer(std::string _name, int startport) : local_base_port(startport),
     control_socket = -1;
     midi_socket = -1;
     remote_ssrc = 0;
+    seq_nr = rand() & 0x0FFFF;
+    timestamp_start = 0;
+    timestamp_start = get_timestamp();
 
     struct sockaddr_in servaddr;
 
@@ -174,4 +178,35 @@ void rtppeer::parse_command_ok(parse_buffer_t &buffer, int port){
     "Got confirmation from {}:{}, initiator_id: {} ({}) ssrc: {}, name: {}",
     remote_name, remote_base_port, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name
   );
+}
+
+uint64_t rtppeer::get_timestamp(){
+  struct timespec spec;
+
+  clock_gettime(CLOCK_REALTIME, &spec);
+  uint64_t now = spec.tv_sec * 1000 + spec.tv_nsec / 1.0e7;
+
+  return uint32_t(now - timestamp_start);
+}
+
+void rtppeer::send_midi(parse_buffer_t *events){
+  uint8_t data[512];
+  parse_buffer_t buffer(data, sizeof(data));
+
+  uint32_t timestamp = get_timestamp();
+
+  buffer.write_uint8(0x80);
+  buffer.write_uint8(0x61);
+  buffer.write_uint16(seq_nr++);
+  buffer.write_uint32(timestamp);
+  buffer.write_uint32(SSRC);
+
+  // Now midi
+  buffer.write_uint8(events->size());
+  buffer.copy_from(*events);
+
+  // buffer.print_hex();
+
+  peer_addr.sin_port = htons(remote_base_port+1);
+  sendto(midi_socket, buffer.start, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
 }

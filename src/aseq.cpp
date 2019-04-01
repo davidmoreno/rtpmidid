@@ -88,9 +88,15 @@ namespace rtpmidid{
     midi_event_callbacks[port].push_back(f);
   }
 
-
+  /**
+   * @short data is ready at the sequencer to read
+   *
+   * FUTURE OPTIMIZATION: Instead of sending events one by one, send them in
+   *                      groups that go to the same port. This will save some
+   *                      bandwidth.
+   */
   void aseq::read_ready(){
-    snd_seq_event_t *ev = nullptr;
+    snd_seq_event_t *ev;
     int pending;
     while ( (pending = snd_seq_event_input(seq, &ev)) > 0 ){
       DEBUG("Got another event: {}, pending: {} / {}", ev->type, pending, snd_seq_event_input_pending(seq, 0));
@@ -116,6 +122,22 @@ namespace rtpmidid{
           DEBUG("Disconnected");
         }
         break;
+        case SND_SEQ_EVENT_NOTE:
+        case SND_SEQ_EVENT_NOTEOFF:
+        case SND_SEQ_EVENT_NOTEON:
+        case SND_SEQ_EVENT_CONTROLLER:
+        case SND_SEQ_EVENT_PGMCHANGE:
+        case SND_SEQ_EVENT_PITCHBEND:
+        {
+          auto myport = ev->dest.port;
+          for (auto &f: midi_event_callbacks[myport]){
+            f(ev);
+          }
+        }
+        break;
+        default:
+          DEBUG("This event type {} is not managed yet", ev->type);
+          break;
       }
 
     }

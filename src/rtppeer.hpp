@@ -20,6 +20,9 @@
 #include <string>
 #include <arpa/inet.h>
 
+// A random int32. Should be configurable, so diferent systems, have diferent SSRC.
+inline const uint32_t SSRC = 0x111f6c31;
+
 namespace rtpmidid {
   struct parse_buffer_t;
 
@@ -44,6 +47,8 @@ namespace rtpmidid {
     std::string local_name;
     std::string remote_name;
     struct sockaddr_in peer_addr; // Will reuse addr, just changing the port
+    uint16_t seq_nr;
+    uint64_t timestamp_start; // Time in ms
 
     rtppeer(std::string _name, int startport);
     virtual ~rtppeer();
@@ -52,5 +57,8 @@ namespace rtpmidid {
     virtual void midi_data_ready();
     void parse_command(parse_buffer_t &, int port);
     void parse_command_ok(parse_buffer_t &, int port);
+
+    void send_midi(parse_buffer_t *buffer);
+    uint64_t get_timestamp();
   };
 }

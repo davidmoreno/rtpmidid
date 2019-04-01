@@ -141,6 +141,11 @@ namespace rtpmidid{
       *position++ = '\0';
     }
 
+    /// Copies from position to the end
+    void copy_from(parse_buffer_t &from){
+      copy_from(from, from.end - from.position);
+    }
+
     void copy_from(parse_buffer_t &from, uint32_t chars){
       check_enought(chars);
       from.check_enought(chars);
