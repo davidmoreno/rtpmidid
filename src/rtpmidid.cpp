@@ -73,6 +73,16 @@ void ::rtpmidid::rtpmidid::setup_mdns(){
 }
 
 void ::rtpmidid::rtpmidid::add_rtpmidi_client(const std::string &name, const std::string &address, uint16_t net_port){
+  for (auto &known: known_peers){
+    if (known.second.address == address && known.second.port == net_port){
+      DEBUG(
+          "Trying to add again rtpmidi {}:{} server. Quite probably mDNS re announce. "
+          "Maybe somebody ask, or just periodically.", address, net_port
+      );
+      return;
+    }
+  }
+
   auto aseq_port = seq.create_port(name);
   auto peer_info = ::rtpmidid::peer_info{
     name, address, net_port, 0, nullptr,

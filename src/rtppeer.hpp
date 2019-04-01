@@ -59,6 +59,7 @@ namespace rtpmidid {
     void parse_command_ok(parse_buffer_t &, int port);
 
     void send_midi(parse_buffer_t *buffer);
+    void send_goodbye(int from_fd, int to_port);
     uint64_t get_timestamp();
   };
 }

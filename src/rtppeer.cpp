@@ -102,6 +102,9 @@ rtppeer::rtppeer(std::string _name, int startport) : local_base_port(startport),
 
 rtppeer::~rtppeer(){
   DEBUG("~rtppeer {}", local_name);
+
+  send_goodbye(control_socket, remote_base_port);
+  send_goodbye(midi_socket, remote_base_port+1);
   if (control_socket > 0){
     poller.remove_fd(control_socket);
     close(control_socket);
@@ -209,4 +212,18 @@ void rtppeer::send_midi(parse_buffer_t *events){
 
   peer_addr.sin_port = htons(remote_base_port+1);
   sendto(midi_socket, buffer.start, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
+}
+
+void rtppeer::send_goodbye(int from_fd, int to_port){
+  uint8_t data[64];
+  parse_buffer_t buffer(data, sizeof(data));
+
+  buffer.write_uint16(0x0FFFF);
+  buffer.write_uint16(::rtppeer::BY);
+  buffer.write_uint32(2);
+  buffer.write_uint32(initiator_id);
+  buffer.write_uint32(SSRC);
+
+  peer_addr.sin_port = htons(to_port);
+  sendto(from_fd, buffer.start, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
 }
