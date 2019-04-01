@@ -35,9 +35,16 @@ poller_t::poller_t(){
   }
 }
 poller_t::~poller_t(){
-  close(epollfd);
-  epollfd = -1;
+  close();
 }
+
+void poller_t::close(){
+  if (epollfd > 0){
+    ::close(epollfd);
+    epollfd = -1;
+  }
+}
+
 
 void poller_t::add_fd_inout(int fd, std::function<void(int)> f){
   events[fd] = f;
@@ -78,9 +85,11 @@ void poller_t::add_fd_out(int fd, std::function<void(int)> f){
 
 void poller_t::remove_fd(int fd){
   events.erase(fd);
-  auto r = epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, NULL);
-  if (r == -1){
-    throw exception("Can't remove fd {} from poller: {} ({})", fd, strerror(errno), errno);
+  if (is_open()){
+    auto r = epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, NULL);
+    if (r == -1){
+      throw exception("Can't remove fd {} from poller: {} ({})", fd, strerror(errno), errno);
+    }
   }
 }
 

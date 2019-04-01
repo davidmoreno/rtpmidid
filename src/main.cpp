@@ -18,6 +18,8 @@
 
 #include <iostream>
 #include <random>
+#include <signal.h>
+
 #include "./logger.hpp"
 #include "./rtpmidid.hpp"
 #include "./poller.hpp"
@@ -26,6 +28,15 @@ using namespace std;
 
 const auto MYNAME = "rtpmidid";
 
+void sigterm_f(int){
+  INFO("SIGTERM received. Closing.");
+  rtpmidid::poller.close();
+}
+void sigint_f(int){
+  INFO("SIGINT received. Closing.");
+  rtpmidid::poller.close();
+}
+
 int main(int argc, char **argv){
     INFO("Real Time Protocol Music Industry Digital Interface Daemon - v0.1");
     INFO("(C) 2019 David Moreno Montero <dmoreno@coralbits.com>");
@@ -33,10 +44,12 @@ int main(int argc, char **argv){
     // We dont need crypto rand, just some rand
     srand(time(NULL));
 
+    signal(SIGINT, sigint_f);
+    signal(SIGTERM, sigterm_f);
     try{
       auto rtpmidid = ::rtpmidid::rtpmidid(MYNAME);
 
-      for(;;){
+      while(rtpmidid::poller.is_open()){
         rtpmidid::poller.wait();
       }
     } catch (const std::exception &e){

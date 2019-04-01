@@ -40,6 +40,11 @@ namespace rtpmidid {
     void remove_fd(int fd);
 
     void wait(int timeout_ms=-1);
+
+    void close();
+    bool is_open(){
+      return epollfd > 0;
+    }
   };
 
   // Singleton for all events on the system.
