@@ -16,34 +16,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#pragma once
-#include <vector>
-#include <string>
-#include <sstream>
+#include "./stringpp.hpp"
 
-// Some functions to allow to_stirng to almost everything
-namespace std{
-  template<typename T>
-  std::string to_string(const std::vector<T> &list){
-    std::stringstream ss;
-    bool first = true;
-    ss<<"[";
-    for(auto &item: list){
-      if (!first)
-        ss<<", ";
-      else
-        first = false;
-      ss<<to_string(item);
-    }
-    ss<<"]";
-    return ss.str();
-  }
+std::vector<std::string> rtpmidid::split(std::string const &str, const char delim){
+  std::vector<std::string> ret;
+	size_t I;
+	size_t endI = 0;
 
-  inline std::string to_string(const std::string &str){
-    return str;
-  }
-
-}
-namespace rtpmidid{
-  std::vector<std::string> split(const std::string &str, char delim=' ');
+	while ((I = str.find_first_not_of(delim, endI)) != std::string::npos) {
+		endI = str.find(delim, I);
+		ret.push_back(str.substr(I, endI - I));
+	}
+  return ret;
 }

@@ -1,7 +1,7 @@
 add_executable(
   rtpmidid
   main.cpp rtpmidid.cpp
-  logger.cpp poller.cpp mdns.cpp aseq.cpp netutils.cpp
+  logger.cpp poller.cpp mdns.cpp aseq.cpp netutils.cpp stringpp.cpp
   rtppeer.cpp rtpclient.cpp rtpserver.cpp
 )
 
