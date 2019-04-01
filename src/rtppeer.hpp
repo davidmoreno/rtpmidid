@@ -47,6 +47,7 @@ namespace rtpmidid {
     std::string local_name;
     std::string remote_name;
     struct sockaddr_in peer_addr; // Will reuse addr, just changing the port
+    uint16_t seq_nr_ack;
     uint16_t seq_nr;
     uint64_t timestamp_start; // Time in ms
 
@@ -56,6 +57,7 @@ namespace rtpmidid {
     virtual void control_data_ready();
     virtual void midi_data_ready();
     void parse_command(parse_buffer_t &, int port);
+    void parse_feedback(parse_buffer_t &);
     void parse_command_ok(parse_buffer_t &, int port);
 
     void send_midi(parse_buffer_t *buffer);

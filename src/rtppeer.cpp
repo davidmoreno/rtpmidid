@@ -31,6 +31,7 @@
 using namespace rtpmidid;
 
 bool is_command(parse_buffer_t &);
+bool is_feedback(parse_buffer_t &);
 
 /**
  * @short Generic peer constructor
@@ -48,6 +49,7 @@ rtppeer::rtppeer(std::string _name, int startport) : local_base_port(startport),
     midi_socket = -1;
     remote_ssrc = 0;
     seq_nr = rand() & 0x0FFFF;
+    seq_nr_ack = seq_nr;
     timestamp_start = 0;
     timestamp_start = get_timestamp();
 
@@ -125,9 +127,12 @@ void rtppeer::control_data_ready(){
 
   if (is_command(buffer)){
     parse_command(buffer, control_socket);
+  } else if (is_feedback(buffer)) {
+    parse_feedback(buffer);
+  } else {
+    buffer.print_hex(true);
   }
 
-  buffer.print_hex(true);
 }
 
 void rtppeer::midi_data_ready(){
@@ -140,15 +145,19 @@ void rtppeer::midi_data_ready(){
 
   if (is_command(buffer)){
     parse_command(buffer, control_socket);
+  } else {
+    buffer.print_hex(true);
   }
-
-  buffer.print_hex(true);
 }
 
 
 bool is_command(parse_buffer_t &pb){
   DEBUG("Is command? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF, pb.start[1] == 0xFF);
   return (pb.size() >= 16 && pb.start[0] == 0xFF && pb.start[1] == 0xFF);
+}
+bool is_feedback(parse_buffer_t &pb){
+  DEBUG("Is command? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF, pb.start[1] == 0xFF);
+  return (pb.size() >= 12 && pb.start[0] == 0xFF && pb.start[1] == 0xFF && pb.start[2] == 0x52 && pb.start[3] == 0x53);
 }
 
 void rtppeer::parse_command(parse_buffer_t &buffer, int port){
@@ -183,6 +192,13 @@ void rtppeer::parse_command_ok(parse_buffer_t &buffer, int port){
   );
 }
 
+void rtppeer::parse_feedback(parse_buffer_t &buffer){
+  buffer.position = buffer.start + 8;
+  seq_nr_ack = buffer.read_uint16();
+
+  DEBUG("Got feedback until package {} / {}. No journal, so ignoring.", seq_nr_ack, seq_nr);
+}
+
 uint64_t rtppeer::get_timestamp(){
   struct timespec spec;
 
@@ -197,10 +213,11 @@ void rtppeer::send_midi(parse_buffer_t *events){
   parse_buffer_t buffer(data, sizeof(data));
 
   uint32_t timestamp = get_timestamp();
+  seq_nr++;
 
   buffer.write_uint8(0x80);
   buffer.write_uint8(0x61);
-  buffer.write_uint16(seq_nr++);
+  buffer.write_uint16(seq_nr);
   buffer.write_uint32(timestamp);
   buffer.write_uint32(SSRC);
 
