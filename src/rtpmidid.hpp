@@ -28,6 +28,7 @@ namespace rtpmidid{
     std::string name;
     std::string address;
     uint16_t port;
+    uint16_t use_count;
     // This might be not intialized if not really connected yet.
     std::shared_ptr<::rtpmidid::rtppeer> peer;
   };

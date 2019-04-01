@@ -31,7 +31,16 @@ using namespace rtpmidid;
 
 bool is_command(parse_buffer_t &);
 
-rtppeer::rtppeer(std::string _name, int startport) : local_base_port(startport), name(std::move(_name)) {
+/**
+ * @short Generic peer constructor
+ *
+ * A generic peer can be a client or a server. In any case it has a control
+ * and midi ports. The port can be random for clients, or fixed for server.
+ *
+ * BUGS: It needs two consecutive ports for client, but just ask a random and
+ *       expects next to be free. It almost always is, but can fail.
+ */
+rtppeer::rtppeer(std::string _name, int startport) : local_base_port(startport), local_name(std::move(_name)) {
   try {
     remote_base_port = 0; // Not defined
     control_socket = -1;
@@ -54,10 +63,10 @@ rtppeer::rtppeer(std::string _name, int startport) : local_base_port(startport),
     if (local_base_port == 0){
       socklen_t len = sizeof(servaddr);
       ::getsockname(control_socket, (struct sockaddr*)&servaddr, &len);
-      local_base_port = servaddr.sin_port;
-      poller.add_fd_in(control_socket, [this](int){ this->control_data_ready(); });
+      local_base_port = htons(servaddr.sin_port);
       DEBUG("Got automatic port {} for control", local_base_port);
     }
+    poller.add_fd_in(control_socket, [this](int){ this->control_data_ready(); });
 
     midi_socket = socket(AF_INET, SOCK_DGRAM, 0);
     if (midi_socket < 0){
@@ -88,6 +97,7 @@ rtppeer::rtppeer(std::string _name, int startport) : local_base_port(startport),
 }
 
 rtppeer::~rtppeer(){
+  DEBUG("~rtppeer {}", local_name);
   if (control_socket > 0){
     poller.remove_fd(control_socket);
     close(control_socket);
@@ -158,10 +168,10 @@ void rtppeer::parse_command_ok(parse_buffer_t &buffer, int port){
   auto protocol = buffer.read_uint32();
   auto initiator_id = buffer.read_uint32();
   remote_ssrc = buffer.read_uint32();
-  auto name = buffer.read_str0();
+  remote_name = buffer.read_str0();
 
   INFO(
     "Got confirmation from {}:{}, initiator_id: {} ({}) ssrc: {}, name: {}",
-    name, remote_base_port, initiator_id, this->initiator_id == initiator_id, remote_ssrc, name
+    remote_name, remote_base_port, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name
   );
 }

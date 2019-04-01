@@ -19,6 +19,8 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <functional>
+#include <map>
 #include <alsa/asoundlib.h>
 
 namespace rtpmidid {
@@ -27,6 +29,9 @@ namespace rtpmidid {
     std::string name;
     snd_seq_t *seq;
     std::vector<int> fds; // Normally 1?
+    std::map<int, std::vector<std::function<void(int client, int port, const std::string &name)>>> subscribe_callbacks;
+    std::map<int, std::vector<std::function<void(int client, int port)>>> unsubscribe_callbacks;
+    std::map<int, std::vector<std::function<void(snd_seq_event_t *)>>> midi_event_callbacks;
 
     aseq(std::string name);
     ~aseq();
@@ -35,6 +40,10 @@ namespace rtpmidid {
     std::string get_client_name(snd_seq_addr_t *addr);
 
     uint8_t create_port(const std::string &name);
+
+    void on_subscribe(int port, std::function<void(int client, int port, const std::string &name)> f);
+    void on_unsubscribe(int port, std::function<void(int client, int port)> f);
+    void on_midi_event(int port, std::function<void(snd_seq_event_t *)> f);
   };
 
   std::vector<std::string> get_ports(aseq *);

@@ -26,8 +26,10 @@
 #include "./logger.hpp"
 #include "./netutils.hpp"
 
-const auto DEBUG0 = false;
-
+#define DEBUG0(...)
+const bool debug0 = false;
+// Optionally
+// #define DEBUG0 DEBUG
 
 using namespace rtpmidid;
 
@@ -68,7 +70,7 @@ bool read_question(mdns *server, parse_buffer_t &buffer){
   read_label(buffer, parse_label);
   int type_ = buffer.read_uint16();
   int class_ = buffer.read_uint16();
-  DEBUG("Question about: {} {} {}.", label, type_, class_);
+  DEBUG0("Question about: {} {} {}.", label, type_, class_);
 
   return server->answer_if_known(mdns::query_type_e(type_), (char*)label);
 }
@@ -281,7 +283,7 @@ void mdns::query(const std::string &name, mdns::query_type_e type){
   buffer.write_uint16(1);
 
   /// DONE
-  if (DEBUG0){
+  if (debug0){
     DEBUG("Packet ready! {} bytes", buffer.length());
     buffer.print_hex();
   }
@@ -299,24 +301,22 @@ void parse_packet(mdns *mdns, parse_buffer_t &parse_buffer){
   auto nauthority = parse_buffer.read_uint16();
   auto nadditional = parse_buffer.read_uint16();
 
-  if (DEBUG0){
-    DEBUG(
-        "mDNS packet: id: {}, is_query: {}, opcode: {}, nquestions: {}, nanswers: {}, nauthority: {}, nadditional: {}",
-        tid, is_query ? "true" : "false", opcode, nquestions, nanswers, nauthority, nadditional
-    );
-  }
+  DEBUG0(
+      "mDNS packet: id: {}, is_query: {}, opcode: {}, nquestions: {}, nanswers: {}, nauthority: {}, nadditional: {}",
+      tid, is_query ? "true" : "false", opcode, nquestions, nanswers, nauthority, nadditional
+  );
   uint32_t i;
   for ( i=0 ; i <nquestions ; i++ ){
       auto ok = read_question(mdns, parse_buffer);
       if (!ok){
-        DEBUG("Ignoring mDNS packet!");
+        DEBUG0("Ignoring mDNS question!");
         return;
       }
   }
   for ( i=0 ; i <nanswers ; i++ ){
       auto ok = read_answer(mdns, parse_buffer);
       if (!ok){
-        DEBUG("Ignoring mDNS packet!");
+        DEBUG0("Ignoring mDNS answer!");
         return;
       }
   }
@@ -340,7 +340,7 @@ void mdns::mdns_ready(){
     buffer,
   };
 
-  if (DEBUG0){
+  if (debug0){
     DEBUG("Got some data from mDNS: {}", read_length);
     parse_buffer.print_hex(true);
   }

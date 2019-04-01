@@ -71,12 +71,29 @@ void ::rtpmidid::rtpmidid::setup_mdns(){
 
 }
 
-void ::rtpmidid::rtpmidid::add_rtpmidi_client(const std::string &name, const std::string &address, uint16_t port){
+void ::rtpmidid::rtpmidid::add_rtpmidi_client(const std::string &name, const std::string &address, uint16_t net_port){
   auto aseq_port = seq.create_port(name);
   auto peer_info = ::rtpmidid::peer_info{
-    name, address, port, nullptr,
+    name, address, net_port, 0, nullptr,
   };
 
-  INFO("New alsa port: {}, connects to {}:{} ({})", aseq_port, address, port, name);
+  INFO("New alsa port: {}, connects to {}:{} ({})", aseq_port, address, net_port, name);
   known_peers[aseq_port] = std::move(peer_info);
+
+  seq.on_subscribe(aseq_port, [this, aseq_port](int client, int port, const std::string &name){
+    DEBUG("Callback on subscribe at rtpmidid: {}", name);
+    auto peer_info = &known_peers[aseq_port];
+    if (!peer_info->peer){
+      peer_info->peer = std::make_shared<rtpclient>(name, peer_info->address, peer_info->port);
+      peer_info->use_count++;
+    }
+  });
+  seq.on_unsubscribe(aseq_port, [this, aseq_port](int client, int port){
+    DEBUG("Callback on unsubscribe at rtpmidid");
+    auto peer_info = &known_peers[aseq_port];
+    peer_info->use_count--;
+    if (peer_info->use_count <= 0){
+      peer_info->peer = nullptr;
+    }
+  });
 }

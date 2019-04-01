@@ -41,7 +41,8 @@ namespace rtpmidid {
     uint16_t remote_base_port;
     uint32_t initiator_id;
     uint32_t remote_ssrc;
-    std::string name;
+    std::string local_name;
+    std::string remote_name;
     struct sockaddr_in peer_addr; // Will reuse addr, just changing the port
 
     rtppeer(std::string _name, int startport);

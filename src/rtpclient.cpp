@@ -31,19 +31,18 @@ using namespace rtpmidid;
 // A random int32. Should be configurable, so diferent systems, have diferent SSRC.
 const uint32_t SSRC = 0x111f6c31;
 
-rtpclient::rtpclient(std::string name, const uint8_t *ip4, int16_t port) : rtppeer(std::move(name), 0){
+rtpclient::rtpclient(std::string name, const std::string &address, int16_t port) : rtppeer(std::move(name), 0){
   remote_base_port = port;
   initiator_id = rand();
 
   memset(&peer_addr, 0, sizeof(peer_addr));
   peer_addr.sin_family = AF_INET;
   // FIXME. For sure there is a direct path from four bytes to ip addr.
-  auto dottedaddr = fmt::format("{}.{}.{}.{}", uint8_t(ip4[0]), uint8_t(ip4[1]), uint8_t(ip4[2]), uint8_t(ip4[3]));
-  inet_aton(dottedaddr.c_str(), &peer_addr.sin_addr);
+  inet_aton(address.c_str(), &peer_addr.sin_addr);
 
-  DEBUG("Connecting control port {} to {}:{}", local_base_port, dottedaddr, port);
+  DEBUG("Connecting control port {} to {}:{}", local_base_port, address, port);
   connect_to(control_socket, port);
-  DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, dottedaddr, port + 1);
+  DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address, port + 1);
   connect_to(midi_socket, port + 1);
 }
 
@@ -64,7 +63,7 @@ bool rtpclient::connect_to(int socketfd, int16_t port){
   buffer.write_uint32(protocol);
   buffer.write_uint32(initiator_id);
   buffer.write_uint32(sender);
-  buffer.write_str0(name);
+  buffer.write_str0(local_name);
 
   DEBUG("Send packet:");
   buffer.print_hex();

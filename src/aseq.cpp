@@ -78,6 +78,17 @@ namespace rtpmidid{
     snd_seq_close(seq);
   }
 
+  void aseq::on_subscribe(int port, std::function<void(int client, int port, const std::string &name)> f){
+    subscribe_callbacks[port].push_back(f);
+  }
+  void aseq::on_unsubscribe(int port, std::function<void(int client, int port)> f){
+    unsubscribe_callbacks[port].push_back(f);
+  }
+  void aseq::on_midi_event(int port, std::function<void(snd_seq_event_t *)> f){
+    midi_event_callbacks[port].push_back(f);
+  }
+
+
   void aseq::read_ready(){
     snd_seq_event_t *ev = nullptr;
     int pending;
@@ -87,12 +98,21 @@ namespace rtpmidid{
       switch(ev->type){
         case SND_SEQ_EVENT_PORT_SUBSCRIBED:{
           // auto client = std::make_shared<rtpmidid::rtpclient>(name);
-          auto name = get_client_name(&ev->data.addr);
-
-          DEBUG("Connected to me! {}", name);
+          auto addr = &ev->data.addr;
+          auto name = get_client_name(addr);
+          auto myport = ev->dest.port;
+          for (auto &f: subscribe_callbacks[myport]){
+            f(addr->client, addr->port, name);
+          }
+          INFO("New ALSA connection from port {} ({}:{})", name, addr->client, addr->port);
         }
         break;
         case SND_SEQ_EVENT_PORT_UNSUBSCRIBED:{
+          auto addr = &ev->data.addr;
+          auto myport = ev->dest.port;
+          for (auto &f: unsubscribe_callbacks[myport]){
+            f(addr->client, addr->port);
+          }
           DEBUG("Disconnected");
         }
         break;
