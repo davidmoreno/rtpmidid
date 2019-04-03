@@ -146,7 +146,7 @@ void rtppeer::midi_data_ready(){
   if (is_command(buffer)){
     parse_command(buffer, midi_socket);
   } else {
-    buffer.print_hex(true);
+    parse_midi(buffer);
   }
 }
 
@@ -273,6 +273,35 @@ void rtppeer::parse_feedback(parse_buffer_t &buffer){
   seq_nr_ack = buffer.read_uint16();
 
   DEBUG("Got feedback until package {} / {}. No journal, so ignoring.", seq_nr_ack, seq_nr);
+}
+
+void rtppeer::parse_midi(parse_buffer_t &buffer){
+  auto _headers = buffer.read_uint8();
+  auto rtpmidi_id = buffer.read_uint8();
+  if (rtpmidi_id != 0x61){
+    WARNING("Received packet which is not RTP MIDI. Ignoring.");
+    return;
+  }
+  remote_seq_nr = buffer.read_uint16();
+  // In the future we may use a journal.
+  auto _remote_timestamp = buffer.read_uint32();
+  auto remote_ssrc = buffer.read_uint32();
+  if (remote_ssrc != this->remote_ssrc){
+    WARNING("Got message for unknown remote SSRC on this port. (from {:04X}, I'm {:04X})", remote_ssrc, this->remote_ssrc);
+    return;
+  }
+
+
+  auto header = buffer.read_uint8();
+  if ((header & 0xF0) != 0){
+    WARNING("This RTP MIDI MIDI header is too complex. Not implemented yet. Ignoring.");
+    return;
+  }
+  int16_t length = header & 0x0F;
+  buffer.check_enought(length);
+
+  parse_buffer_t midi_data(buffer.position, length);
+  emit_midi_events(midi_data);
 }
 
 uint64_t rtppeer::get_timestamp(){

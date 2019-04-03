@@ -18,6 +18,7 @@
 
 #pragma once
 #include <string>
+#include <functional>
 #include <arpa/inet.h>
 
 // A random int32. Should be configurable, so diferent systems, have diferent SSRC.
@@ -52,16 +53,22 @@ namespace rtpmidid {
     uint16_t remote_seq_nr;
     uint64_t timestamp_start; // Time in ms
     uint64_t latency;
+    std::function<void(parse_buffer_t &)> emit_midi_events;
 
     rtppeer(std::string _name, int startport);
-    virtual ~rtppeer();
+    ~rtppeer();
 
-    virtual void control_data_ready();
-    virtual void midi_data_ready();
+    void on_midi(std::function<void(parse_buffer_t &)> f){
+      emit_midi_events = f;
+    }
+
+    void control_data_ready();
+    void midi_data_ready();
     void parse_command(parse_buffer_t &, int socket);
     void parse_feedback(parse_buffer_t &);
     void parse_command_ok(parse_buffer_t &, int socket);
     void parse_command_ck(parse_buffer_t &, int socket);
+    void parse_midi(parse_buffer_t &);
 
     void send_midi(parse_buffer_t *buffer);
     void send_goodbye(int from_fd, int to_port);

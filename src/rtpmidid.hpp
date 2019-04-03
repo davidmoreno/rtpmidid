@@ -46,6 +46,8 @@ namespace rtpmidid{
     // Manual connect to a server.
     void add_rtpmidi_client(const std::string &name, const std::string &address, uint16_t port);
 
+    void recv_rtpmidi_event(int port, parse_buffer_t &midi_data);
+    void recv_alsamidi_event(int port, snd_seq_event_t *ev);
   private:
     void setup_mdns();
     void add_rtpmidid_server(const std::string &name);
