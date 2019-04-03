@@ -49,16 +49,19 @@ namespace rtpmidid {
     struct sockaddr_in peer_addr; // Will reuse addr, just changing the port
     uint16_t seq_nr_ack;
     uint16_t seq_nr;
+    uint16_t remote_seq_nr;
     uint64_t timestamp_start; // Time in ms
+    uint64_t latency;
 
     rtppeer(std::string _name, int startport);
     virtual ~rtppeer();
 
     virtual void control_data_ready();
     virtual void midi_data_ready();
-    void parse_command(parse_buffer_t &, int port);
+    void parse_command(parse_buffer_t &, int socket);
     void parse_feedback(parse_buffer_t &);
-    void parse_command_ok(parse_buffer_t &, int port);
+    void parse_command_ok(parse_buffer_t &, int socket);
+    void parse_command_ck(parse_buffer_t &, int socket);
 
     void send_midi(parse_buffer_t *buffer);
     void send_goodbye(int from_fd, int to_port);

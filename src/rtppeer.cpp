@@ -122,7 +122,7 @@ void rtppeer::control_data_ready(){
   struct sockaddr_in cliaddr;
   unsigned int len = 0;
   auto n = recvfrom(control_socket, raw, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
-  DEBUG("Got some data from control: {}", n);
+  // DEBUG("Got some data from control: {}", n);
   auto buffer = parse_buffer_t(raw, n);
 
   if (is_command(buffer)){
@@ -140,11 +140,11 @@ void rtppeer::midi_data_ready(){
   struct sockaddr_in cliaddr;
   unsigned int len = 0;
   auto n = recvfrom(midi_socket, raw, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
-  DEBUG("Got some data from midi: {}", len);
+  // DEBUG("Got some data from midi: {}", len);
   auto buffer = parse_buffer_t(raw, n);
 
   if (is_command(buffer)){
-    parse_command(buffer, control_socket);
+    parse_command(buffer, midi_socket);
   } else {
     buffer.print_hex(true);
   }
@@ -152,15 +152,15 @@ void rtppeer::midi_data_ready(){
 
 
 bool is_command(parse_buffer_t &pb){
-  DEBUG("Is command? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF, pb.start[1] == 0xFF);
+  // DEBUG("Is command? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF, pb.start[1] == 0xFF);
   return (pb.size() >= 16 && pb.start[0] == 0xFF && pb.start[1] == 0xFF);
 }
 bool is_feedback(parse_buffer_t &pb){
-  DEBUG("Is command? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF, pb.start[1] == 0xFF);
+  // DEBUG("Is feedback? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF, pb.start[1] == 0xFF);
   return (pb.size() >= 12 && pb.start[0] == 0xFF && pb.start[1] == 0xFF && pb.start[2] == 0x52 && pb.start[3] == 0x53);
 }
 
-void rtppeer::parse_command(parse_buffer_t &buffer, int port){
+void rtppeer::parse_command(parse_buffer_t &buffer, int socket){
   if (buffer.size() < 16){
     // This should never be reachable, but should help to smart compilers for
     // further size checks
@@ -169,18 +169,22 @@ void rtppeer::parse_command(parse_buffer_t &buffer, int port){
   // auto _command =
   buffer.read_uint16(); // We already know it is 0xFFFF
   auto command = buffer.read_uint16();
-  DEBUG("Got command type {:X}", command);
+  // DEBUG("Got command type {:X}", command);
 
   switch(command){
     case rtppeer::OK:
-      parse_command_ok(buffer, port);
+      parse_command_ok(buffer, socket);
+      break;
+    case rtppeer::CK:
+      parse_command_ck(buffer, socket);
       break;
     default:
+      buffer.print_hex(true);
       throw not_implemented();
   }
 }
 
-void rtppeer::parse_command_ok(parse_buffer_t &buffer, int port){
+void rtppeer::parse_command_ok(parse_buffer_t &buffer, int _socket){
   auto protocol = buffer.read_uint32();
   auto initiator_id = buffer.read_uint32();
   remote_ssrc = buffer.read_uint32();
@@ -190,6 +194,78 @@ void rtppeer::parse_command_ok(parse_buffer_t &buffer, int port){
     "Got confirmation from {}:{}, initiator_id: {} ({}) ssrc: {}, name: {}",
     remote_name, remote_base_port, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name
   );
+}
+
+
+void rtppeer::parse_command_ck(parse_buffer_t &buffer, int socket){
+  auto ssrc = buffer.read_uint32();
+  auto count = buffer.read_uint8();
+  // padding / unused 24 bits
+  buffer.read_uint8();
+  buffer.read_uint16();
+
+  uint64_t ck1 = buffer.read_uint64();
+  uint64_t ck2 = 0;
+  uint64_t ck3 = 0;
+
+  switch(count){
+    case 0:
+    {
+      // Send my timestamp. I will use it later when I receive 2.
+      ck2 = get_timestamp();
+      count = 1;
+    }
+    break;
+    case 1:
+    {
+      // Send my timestamp. I will use it when get answer with 3.
+      ck2 = buffer.read_uint64();
+      ck3 = get_timestamp();
+      count = 2;
+      latency = ck3 - ck1;
+      DEBUG("Latency {}: {:.2f} ms", remote_name, latency / 100.0);
+    }
+    break;
+    case 2:
+    {
+      // Receive the other side CK, I can calculate latency
+      ck2 = buffer.read_uint64();
+      ck3 = buffer.read_uint64();
+      latency = get_timestamp() - ck2;
+      DEBUG("Latency {}: {:.2f} ms", remote_name, latency / 100.0);
+      // No need to send message
+      return;
+    }
+    default:
+      ERROR("Bad CK count. Ignoring.");
+      return;
+  }
+
+  uint8_t ret[36];
+  parse_buffer_t retbuffer(ret, sizeof(ret));
+  retbuffer.write_uint16(0xFFFF);
+  retbuffer.write_uint16(rtppeer::CK);
+  retbuffer.write_uint32(SSRC);
+  retbuffer.write_uint8(count);
+  // padding
+  retbuffer.write_uint8(0);
+  retbuffer.write_uint16(0);
+  // cks
+  retbuffer.write_uint64(ck1);
+  retbuffer.write_uint64(ck2);
+  retbuffer.write_uint64(ck3);
+
+  // DEBUG("Got packet CK");
+  // buffer.print_hex(true);
+  //
+  // DEBUG("Send packet CK");
+  // retbuffer.print_hex();
+
+  if (socket == midi_socket)
+    peer_addr.sin_port = htons(remote_base_port + 1);
+  else
+    peer_addr.sin_port = htons(remote_base_port);
+  sendto(socket, retbuffer.start, retbuffer.length(), MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
 }
 
 void rtppeer::parse_feedback(parse_buffer_t &buffer){

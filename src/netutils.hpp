@@ -65,6 +65,16 @@ namespace rtpmidid{
       return ((uint32_t)data[0]<<24) + ((uint32_t)data[1]<<16) + ((uint32_t)data[2]<< 8) + ((uint32_t)data[3]);
     }
 
+    uint64_t read_uint64(){
+      check_enought(8);
+      auto data = position;
+      position += 8;
+      return (
+        ((uint64_t)data[0]<<56) + ((uint64_t)data[1]<<48) + ((uint64_t)data[2]<<40) + ((uint64_t)data[3]<<32) +
+        ((uint64_t)data[4]<<24) + ((uint64_t)data[5]<<16) + ((uint64_t)data[6]<< 8) + ((uint64_t)data[7])
+      );
+    }
+
     uint16_t read_uint16(){
       check_enought(2);
       auto data = position;
@@ -80,13 +90,15 @@ namespace rtpmidid{
     }
 
     // The returned str is the address inside the buffer.
-    const char *read_str0(){
-      char *ret = (char*) position;
+    std::string read_str0(){
+      auto *strstart = position;
       while (*position && position < end){
         position++;
       }
-      position++; // and skip the 0
-      assert_valid_position();
+      // Normally I stopped because of *position == 0.. But I might have got out of range
+      // If I'm on range, construct the std::string up tp pos
+      std::string ret((char*)strstart, size_t(position - strstart));
+      position++;
       return ret;
     }
 
@@ -128,6 +140,18 @@ namespace rtpmidid{
 
     void write_uint32(uint32_t n){
       check_enought(4);
+      *position++ = (n>>24) & 0x0FF;
+      *position++ = (n>>16) & 0x0FF;
+      *position++ = (n>>8) & 0x0FF;
+      *position++ = (n & 0x0FF);
+    }
+    void write_uint64(uint64_t n){
+      check_enought(8);
+      *position++ = (n>>56) & 0x0FF;
+      *position++ = (n>>48) & 0x0FF;
+      *position++ = (n>>40) & 0x0FF;
+      *position++ = (n>>32) & 0x0FF;
+
       *position++ = (n>>24) & 0x0FF;
       *position++ = (n>>16) & 0x0FF;
       *position++ = (n>>8) & 0x0FF;
