@@ -1,6 +1,6 @@
 # RTP MIDI User Space Driver Daemon for Linux
 
-## Real Time Protocol Music Instrument Digital Interface Daemon
+## Real Time Protocol Musical Instrument Digital Interface Daemon
 
 Still not working.
 
@@ -38,10 +38,10 @@ Development status / plan:
 * [x] Async framework (epoll with callbacks based)
 * [x] mDNS publish and learn when there are rtpmidi running on the network
 * [x] Create the alsa ports for found rtpmidi servers in the network
-* [ ] When there is any connection to the alsa sequencer port rtpmidid creates
+* [x] When there is any connection to the alsa sequencer port rtpmidid creates
       the rtpmidi connection
-* [ ] Any message from alsa seq is sent to the MIDI rtp extreme
-* [ ] Any message from rtpmidi is replayed on the alsa seq
+* [x] Any message from alsa seq is sent to the MIDI rtp extreme
+* [x] Any message from rtpmidi is replayed on the alsa seq
 * [ ] All local ports are offered as rtpmidi connections.
 * [ ] Create a black list not to export
 * [ ] Optionally create a config file to avoid some exports
