@@ -1,6 +1,6 @@
 # RTP MIDI User Space Driver Daemon for Linux
 
-## Real Time Protocol Music Industry Digital Interface Daemon
+## Real Time Protocol Music Instrument Digital Interface Daemon
 
 Still not working.
 
