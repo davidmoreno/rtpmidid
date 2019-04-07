@@ -140,6 +140,7 @@ void ::rtpmidid::rtpmidid::recv_rtpmidi_event(int port, parse_buffer_t &midi_dat
       	snd_seq_ev_set_direct(&ev);
         snd_seq_event_output_direct(seq.seq, &ev);
       }
+      break;
       case 0x90:
       {
         snd_seq_ev_clear(&ev);
@@ -149,6 +150,7 @@ void ::rtpmidid::rtpmidid::recv_rtpmidi_event(int port, parse_buffer_t &midi_dat
       	snd_seq_ev_set_direct(&ev);
         snd_seq_event_output_direct(seq.seq, &ev);
       }
+      break;
       case 0x80:
       {
         snd_seq_ev_clear(&ev);
@@ -159,8 +161,21 @@ void ::rtpmidid::rtpmidid::recv_rtpmidi_event(int port, parse_buffer_t &midi_dat
         snd_seq_event_output_direct(seq.seq, &ev);
       }
       break;
+      case 0xE0:
+      {
+        snd_seq_ev_clear(&ev);
+        auto lsb = midi_data.read_uint8();
+        auto msb = midi_data.read_uint8();
+        snd_seq_ev_set_pitchbend(&ev, current_command & 0x0F,  (msb << 7) + lsb);
+        snd_seq_ev_set_source(&ev, port);
+        snd_seq_ev_set_subs(&ev);
+      	snd_seq_ev_set_direct(&ev);
+        snd_seq_event_output_direct(seq.seq, &ev);
+      }
+      break;
       default:
         WARNING("MIDI command type {:02X} not implemented yet", type);
+        return;
         break;
     }
   }
