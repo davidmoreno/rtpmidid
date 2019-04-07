@@ -87,8 +87,7 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
   auto type_ = buffer.read_uint16();
   auto class_ = buffer.read_uint16();
 
-  // auto ttl = read_uint32(data);
-  buffer.position += 4;
+  auto ttl = buffer.read_uint32();
 
   auto data_length = buffer.read_uint16();
   auto *pos = buffer.position;
@@ -102,12 +101,12 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
     };
     read_label(buffer, buffer_answer);
     DEBUG("PTR Answer about: {} {} {} -> <{}>", label, type_, class_, answer);
-    DEBUG("Asking now about {} SRV", answer);
-    mdns::service_srv service = {
+    mdns::service_ptr service(
       (char*)label,
       mdns::PTR,
-      (char*)answer,
-    };
+      ttl,
+      (char*)answer
+    );
     server->detected_service(&service);
   }
   else if (type_ == mdns::SRV){ // PTR
@@ -126,12 +125,13 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
     };
     read_label(buffer, buffer_target);
 
-    mdns::service_srv service = {
+    mdns::service_srv service(
       (char*)label,
       mdns::SRV,
+      ttl,
       (char*)target,
       port
-    };
+    );
     server->detected_service(&service);
 
     // char answer[128];
@@ -141,14 +141,18 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
     // server->query(answer, mdns::SRV);
   }
   else if (type_ == mdns::A){
-    mdns::service_a service = {
+    uint8_t ip[4] = {
+      buffer.read_uint8(),
+      buffer.read_uint8(),
+      buffer.read_uint8(),
+      buffer.read_uint8()
+    };
+    mdns::service_a service(
       (char*)label,
       mdns::A,
-    };
-    service.ip[0] = buffer.read_uint8();
-    service.ip[1] = buffer.read_uint8();
-    service.ip[2] = buffer.read_uint8();
-    service.ip[3] = buffer.read_uint8();
+      ttl,
+      ip
+    );
 
     server->detected_service(&service);
 
@@ -363,6 +367,15 @@ bool endswith(std::string_view const &full, std::string_view const &ending){
 void mdns::detected_service(const mdns::service *service){
   auto type_label = std::make_pair(service->type, service->label);
 
+  // Already in cache, so discovered not so long ago
+  for (auto &d: cache[type_label]) {
+    // DEBUG("Check if equal \n\t\t{}\n\t\t{}", d->to_string(), service->to_string());
+    if (d->equal(service)) {
+      // DEBUG("Got it at cache. Ignoring.");
+      return;
+    }
+  }
+
   for(auto &f: discovery_map[type_label]){
     f(service);
   }
@@ -372,6 +385,8 @@ void mdns::detected_service(const mdns::service *service){
 
   // remove them from query map, as fulfilled
   query_map.erase(type_label);
+  // Add it to cache
+  cache[type_label].push_back(service->clone());
 }
 
 
