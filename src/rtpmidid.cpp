@@ -29,6 +29,7 @@ using namespace rtpmidid;
   auto outputs = ::rtpmidid::get_ports(&seq);
 
   setup_mdns();
+  setup_alsa_seq();
 }
 
 void ::rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name){
@@ -220,4 +221,31 @@ void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev)
   stream.position = stream.start;
 
   peer_info->peer->send_midi(&stream);
+}
+
+
+void ::rtpmidid::rtpmidid::setup_alsa_seq(){
+  // Export only one, but all data that is conencted to it.
+  auto alsa_name = "export";
+  auto aseq_port = seq.create_port(alsa_name);
+  uint16_t netport = 15004;
+
+  auto peer_info = ::rtpmidid::peer_info{
+    name, "localhost", netport, 0, nullptr,
+  };
+
+  peer_info.peer = std::make_shared<rtpserver>(name, netport);
+  peer_info.peer->on_midi([this, aseq_port](parse_buffer_t &pb){
+    this->recv_rtpmidi_event(aseq_port, pb);
+  });
+  peer_info.use_count++;
+
+
+  seq.on_midi_event(aseq_port, [this, aseq_port](snd_seq_event_t *ev){
+    this->recv_alsamidi_event(aseq_port, ev);
+  });
+
+  INFO("Listening RTP midi at {}:{}. It is ALSA port {}", peer_info.address, peer_info.port, alsa_name);
+
+  known_peers[aseq_port] = std::move(peer_info);
 }

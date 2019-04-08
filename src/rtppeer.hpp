@@ -56,7 +56,7 @@ namespace rtpmidid {
     std::function<void(parse_buffer_t &)> emit_midi_events;
 
     rtppeer(std::string _name, int startport);
-    ~rtppeer();
+    virtual ~rtppeer();
 
     void on_midi(std::function<void(parse_buffer_t &)> f){
       emit_midi_events = f;
@@ -67,11 +67,14 @@ namespace rtpmidid {
     void parse_command(parse_buffer_t &, int socket);
     void parse_feedback(parse_buffer_t &);
     void parse_command_ok(parse_buffer_t &, int socket);
+    void parse_command_in(parse_buffer_t &, int socket);
     void parse_command_ck(parse_buffer_t &, int socket);
     void parse_midi(parse_buffer_t &);
 
     void send_midi(parse_buffer_t *buffer);
     void send_goodbye(int from_fd, int to_port);
     uint64_t get_timestamp();
+
+    void sendto(int socket, const parse_buffer_t &b);
   };
 }

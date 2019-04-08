@@ -43,6 +43,11 @@ rtpclient::rtpclient(std::string name, const std::string &address, int16_t port)
   connect_to(midi_socket, port + 1);
 }
 
+rtpclient::~rtpclient(){
+
+}
+
+
 bool rtpclient::connect_to(int socketfd, int16_t port){
   uint8_t packet[1500];
   auto buffer = parse_buffer_t(packet, 1500);
@@ -60,11 +65,11 @@ bool rtpclient::connect_to(int socketfd, int16_t port){
   buffer.write_uint32(sender);
   buffer.write_str0(local_name);
 
-  DEBUG("Send packet:");
-  buffer.print_hex();
+  // DEBUG("Send packet:");
+  // buffer.print_hex();
 
   peer_addr.sin_port = htons(port);
-  sendto(socketfd, packet, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
+  sendto(socketfd, buffer);
 
   return true;
 }

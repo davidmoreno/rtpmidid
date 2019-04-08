@@ -29,6 +29,4 @@ rtpserver::rtpserver(std::string name, int16_t port) : rtppeer(std::move(name), 
 }
 
 rtpserver::~rtpserver(){
-  poller.remove_fd(control_socket);
-  poller.remove_fd(midi_socket);
 }

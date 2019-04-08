@@ -24,6 +24,6 @@ namespace rtpmidid{
   class rtpserver : public rtppeer{
   public:
     rtpserver(std::string name, int16_t port);
-    ~rtpserver();
+    virtual ~rtpserver();
   };
 }

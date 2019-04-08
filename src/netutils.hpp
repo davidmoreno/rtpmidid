@@ -39,22 +39,22 @@ namespace rtpmidid{
       this->position = start;
     }
 
-    void check_enought(int nbytes){
+    void check_enought(int nbytes) const{
       if (position + nbytes > end)
         throw exception("Try to access end of buffer at {}", (position - start) + nbytes);
     }
-    void assert_valid_position(){
+    void assert_valid_position() const{
       if (position > end)
         throw exception("Invalid buffer position {}", position - start);
     }
 
     // This is used for writing to it, says current length
-    uint32_t length(){
+    uint32_t length() const{
       return position - start;
     }
 
     // This is the total size, from start to end
-    uint32_t size(){
+    uint32_t size() const{
       return end - start;
     }
 

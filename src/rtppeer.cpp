@@ -52,6 +52,7 @@ rtppeer::rtppeer(std::string _name, int startport) : local_base_port(startport),
     seq_nr_ack = seq_nr;
     timestamp_start = 0;
     timestamp_start = get_timestamp();
+    initiator_id = 0;
 
     struct sockaddr_in servaddr;
 
@@ -120,19 +121,30 @@ rtppeer::~rtppeer(){
 void rtppeer::control_data_ready(){
   uint8_t raw[1500];
   struct sockaddr_in cliaddr;
-  unsigned int len = 0;
+  unsigned int len = sizeof(cliaddr);
   auto n = recvfrom(control_socket, raw, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
   // DEBUG("Got some data from control: {}", n);
+  if (n < 0){
+    throw exception("Error reading from rtppeer {}:{}", remote_name, remote_base_port);
+  }
+
   auto buffer = parse_buffer_t(raw, n);
 
   if (is_command(buffer)){
+    if (initiator_id == 0) {
+      char *ip = inet_ntoa(cliaddr.sin_addr);
+      remote_base_port = htons(cliaddr.sin_port);
+      DEBUG("Connected from {}:{}", ip, remote_base_port);
+      // First message from other end. Just copy the remote address.
+      ::memcpy(&peer_addr, &cliaddr, len);
+    }
+
     parse_command(buffer, control_socket);
   } else if (is_feedback(buffer)) {
     parse_feedback(buffer);
   } else {
     buffer.print_hex(true);
   }
-
 }
 
 void rtppeer::midi_data_ready(){
@@ -175,6 +187,9 @@ void rtppeer::parse_command(parse_buffer_t &buffer, int socket){
     case rtppeer::OK:
       parse_command_ok(buffer, socket);
       break;
+    case rtppeer::IN:
+      parse_command_in(buffer, socket);
+      break;
     case rtppeer::CK:
       parse_command_ck(buffer, socket);
       break;
@@ -196,6 +211,33 @@ void rtppeer::parse_command_ok(parse_buffer_t &buffer, int _socket){
   );
 }
 
+
+void rtppeer::parse_command_in(parse_buffer_t &buffer, int socket){
+  auto protocol = buffer.read_uint32();
+  initiator_id = buffer.read_uint32();
+  remote_ssrc = buffer.read_uint32();
+  remote_name = buffer.read_str0();
+
+  if (protocol != 2){
+    throw exception("rtpmidid only understands RTP MIDI protocol 2. Fill an issue at https://github.com/davidmoreno/rtpmidid/. Got protocol {}", protocol);
+  }
+
+  INFO(
+    "Got connection request from {}:{}, initiator_id: {} ({}) ssrc: {}, name: {}",
+    remote_name, remote_base_port, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name
+  );
+
+  uint8_t response[128];
+  parse_buffer_t response_buffer(response, sizeof(response));
+  response_buffer.write_uint16(0xFFFF);
+  response_buffer.write_uint16(OK);
+  response_buffer.write_uint32(2);
+  response_buffer.write_uint32(initiator_id);
+  response_buffer.write_uint32(SSRC);
+  response_buffer.write_str0(local_name);
+
+  sendto(socket, response_buffer);
+}
 
 void rtppeer::parse_command_ck(parse_buffer_t &buffer, int socket){
   auto ssrc = buffer.read_uint32();
@@ -261,11 +303,7 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, int socket){
   // DEBUG("Send packet CK");
   // retbuffer.print_hex();
 
-  if (socket == midi_socket)
-    peer_addr.sin_port = htons(remote_base_port + 1);
-  else
-    peer_addr.sin_port = htons(remote_base_port);
-  sendto(socket, retbuffer.start, retbuffer.length(), MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
+  sendto(socket, retbuffer);
 }
 
 void rtppeer::parse_feedback(parse_buffer_t &buffer){
@@ -332,8 +370,7 @@ void rtppeer::send_midi(parse_buffer_t *events){
 
   // buffer.print_hex();
 
-  peer_addr.sin_port = htons(remote_base_port+1);
-  sendto(midi_socket, buffer.start, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
+  sendto(midi_socket, buffer);
 }
 
 void rtppeer::send_goodbye(int from_fd, int to_port){
@@ -346,6 +383,21 @@ void rtppeer::send_goodbye(int from_fd, int to_port){
   buffer.write_uint32(initiator_id);
   buffer.write_uint32(SSRC);
 
-  peer_addr.sin_port = htons(to_port);
-  sendto(from_fd, buffer.start, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
+  sendto(from_fd, buffer);
+}
+
+void rtppeer::sendto(int socket, const parse_buffer_t &pb){
+  if (socket == midi_socket)
+    peer_addr.sin_port = htons(remote_base_port + 1);
+  else
+    peer_addr.sin_port = htons(remote_base_port);
+
+  auto res = ::sendto(
+    socket, pb.start, pb.length(),
+    MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr)
+  );
+
+  if (res != pb.length()){
+    throw exception("Could not send all data to {}:{}. Sent {}", remote_name, remote_base_port, res);
+  }
 }

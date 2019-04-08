@@ -26,6 +26,6 @@ namespace rtpmidid {
     bool connect_to(int socketfd, int16_t port);
   public:
     rtpclient(std::string name, const std::string &address, int16_t port);
-
+    virtual ~rtpclient();
   };
 }
