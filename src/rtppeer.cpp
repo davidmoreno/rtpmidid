@@ -89,6 +89,7 @@ rtppeer::rtppeer(std::string _name, int startport) : local_base_port(startport),
     poller.add_fd_in(midi_socket, [this](int){ this->midi_data_ready(); });
 
   } catch (...){
+    ERROR("Error creating rtppeer.");
     if (control_socket){
       poller.remove_fd(control_socket);
       close(control_socket);

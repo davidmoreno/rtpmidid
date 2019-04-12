@@ -24,8 +24,8 @@
 using namespace rtpmidid;
 
 rtpserver::rtpserver(std::string name, int16_t port) : rtppeer(std::move(name), port){
-  DEBUG("RTP MIDI ports at 0.0.0.0:{} / 0.0.0.0:{}, with name: {} ({}, {})",
-    port, port + 1, name, control_socket, midi_socket);
+  DEBUG("RTP MIDI ports at 0.0.0.0:{} / 0.0.0.0:{}, with name: '{}'",
+    local_base_port, local_base_port + 1, local_name);
 }
 
 rtpserver::~rtpserver(){
