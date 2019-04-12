@@ -19,6 +19,7 @@
 #include <iostream>
 #include <random>
 #include <signal.h>
+#include <unistd.h>
 
 #include "./logger.hpp"
 #include "./rtpmidid.hpp"
@@ -27,7 +28,6 @@
 
 using namespace std;
 
-const auto MYNAME = "rtpmidid";
 
 void sigterm_f(int){
   INFO("SIGTERM received. Closing.");
@@ -48,7 +48,9 @@ int main(int argc, char **argv){
     signal(SIGINT, sigint_f);
     signal(SIGTERM, sigterm_f);
     try{
-      auto rtpmidid = ::rtpmidid::rtpmidid(MYNAME);
+      char hostname[256];
+      gethostname(hostname, size(hostname));
+      auto rtpmidid = ::rtpmidid::rtpmidid(hostname);
 
       for (int n=1; n<argc; n++){
         auto s = rtpmidid::split(argv[n], ':');
