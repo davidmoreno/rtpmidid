@@ -100,10 +100,9 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
       answer
     };
     read_label(buffer, buffer_answer);
-    DEBUG("PTR Answer about: {} {} {} -> <{}>", label, type_, class_, answer);
+    // DEBUG("PTR Answer: {} {} {} -> <{}>", label, type_, class_, answer);
     mdns::service_ptr service(
       (char*)label,
-      mdns::PTR,
       ttl,
       (char*)answer
     );
@@ -127,7 +126,6 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
 
     mdns::service_srv service(
       (char*)label,
-      mdns::SRV,
       ttl,
       (char*)target,
       port
@@ -149,7 +147,6 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
     };
     mdns::service_a service(
       (char*)label,
-      mdns::A,
       ttl,
       ip
     );
@@ -250,7 +247,7 @@ void mdns::send_response(const service &service){
   }
 
   uint16_t nbytes = buffer.position - length_data_pos - 2;
-  DEBUG("Send RR type: {} size: {}", service.type, nbytes);
+  DEBUG("Send mDNS response: {}", service.to_string());
 
   // A little go and back
   raw_write_uint16(length_data_pos, nbytes);
@@ -330,8 +327,12 @@ void mdns::mdns_ready(){
   uint8_t buffer[1501];
   memset(buffer, 0, sizeof(buffer));
   struct sockaddr_in cliaddr;
-  unsigned int len = 0;
+  unsigned int len = sizeof(cliaddr);
   auto read_length = recvfrom(socketfd, buffer, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
+
+  // char *remotename = inet_ntoa(cliaddr.sin_addr);
+  // auto remoteport = ntohs(cliaddr.sin_port);
+  // DEBUG("Got packet from {}:{}", remotename, remoteport);
 
   if (read_length < 16){
     ERROR("Invalid mDNS packet. Minimum size is 16 bytes. Ignoring.");
@@ -376,6 +377,19 @@ void mdns::detected_service(const mdns::service *service){
     }
   }
 
+  // Ignore my own records. Only if the exact match. Must check all one by one.
+  for (auto &d: announcements){
+    if (d.first.first == service->type){
+      for (auto &s: d.second){
+        // DEBUG("Check if same {} =? {} => {}", service->to_string(), s->to_string(), s->equal(service));
+        if (s->equal(service)){
+          // DEBUG("Got my own announcement. Ignore.");
+          return;
+        }
+      }
+    }
+  }
+
   for(auto &f: discovery_map[type_label]){
     f(service);
   }
@@ -389,6 +403,12 @@ void mdns::detected_service(const mdns::service *service){
   cache[type_label].push_back(service->clone());
 }
 
+
+std::string mdns::local(){
+  char hostname[256];
+  gethostname(hostname, sizeof(hostname));
+  return fmt::format("{}.local", hostname);
+}
 
 std::string std::to_string(const rtpmidid::mdns::service_ptr &s){
   return fmt::format("PTR record. label: {}, pointer: {}", s.label, s.servicename);

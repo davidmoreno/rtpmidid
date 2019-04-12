@@ -48,6 +48,9 @@ namespace rtpmidid {
       virtual bool equal(const service *other) {
         return false;
       }
+      bool base_equal(const service *other){
+        return type == other->type && label == other->label;
+      }
       virtual std::string to_string() const{
         return fmt::format("?? Q {} T {} ttl {}", label, type, ttl);
       }
@@ -59,8 +62,8 @@ namespace rtpmidid {
       };
 
       service_a() {}
-      service_a(std::string label_, query_type_e type_, uint32_t ttl_, uint8_t ip_[4]) :
-        service(std::move(label_), type_, ttl_) {
+      service_a(std::string label_, uint32_t ttl_, uint8_t ip_[4]) :
+        service(std::move(label_), A, ttl_) {
           ip[0] = ip_[0];
           ip[1] = ip_[1];
           ip[2] = ip_[2];
@@ -73,6 +76,8 @@ namespace rtpmidid {
         return ret;
       }
       virtual bool equal(const service *other_){
+        if (!base_equal(other_))
+          return false;
         if (const service_a *other = dynamic_cast<const service_a *>(other_)){
           return ip4 == other->ip4;
         }
@@ -88,8 +93,8 @@ namespace rtpmidid {
       uint16_t port;
 
       service_srv() {}
-      service_srv(std::string label_, query_type_e type_, uint32_t ttl_, std::string hostname_, uint16_t port_) :
-        service(std::move(label_), type_, ttl_),  hostname(std::move(hostname_)), port(port_) {}
+      service_srv(std::string label_, uint32_t ttl_, std::string hostname_, uint16_t port_) :
+        service(std::move(label_), SRV, ttl_),  hostname(std::move(hostname_)), port(port_) {}
       virtual std::unique_ptr<service> clone() const{
         auto ret = std::make_unique<service_srv>();
         *ret = *this;
@@ -97,6 +102,8 @@ namespace rtpmidid {
         return ret;
       }
       virtual bool equal(const service *other_){
+        if (!base_equal(other_))
+          return false;
         if (const service_srv *other = dynamic_cast<const service_srv *>(other_)){
           return hostname == other->hostname && port == other->port;
         }
@@ -111,8 +118,8 @@ namespace rtpmidid {
       std::string servicename;
 
       service_ptr() {}
-      service_ptr(std::string label_, query_type_e type_, uint32_t ttl_, std::string servicename_) :
-        service(std::move(label_), type_, ttl_), servicename(std::move(servicename_)) {}
+      service_ptr(std::string label_, uint32_t ttl_, std::string servicename_) :
+        service(std::move(label_), PTR, ttl_), servicename(std::move(servicename_)) {}
       virtual std::unique_ptr<service> clone() const{
         auto ret = std::make_unique<service_ptr>();
         *ret = *this;
@@ -120,6 +127,8 @@ namespace rtpmidid {
         return ret;
       }
       virtual bool equal(const service *other_){
+        if (!base_equal(other_))
+          return false;
         if (const service_ptr *other = dynamic_cast<const service_ptr *>(other_)){
           return servicename == other->servicename;
         }
@@ -158,6 +167,9 @@ namespace rtpmidid {
     bool answer_if_known(mdns::query_type_e type_, const std::string &label);
     void send_response(const service &);
     void mdns_ready();
+
+    // The local name as can be resolved.
+    std::string local();
   };
 }
 
