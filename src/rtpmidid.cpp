@@ -25,7 +25,7 @@
 
 using namespace rtpmidid;
 
-::rtpmidid::rtpmidid::rtpmidid(std::string &&_name) : name(_name), seq(name){
+::rtpmidid::rtpmidid::rtpmidid(std::string &&_name) : name(_name), seq("rtpmidid"){
   auto outputs = ::rtpmidid::get_ports(&seq);
 
   setup_mdns();
@@ -242,7 +242,7 @@ void ::rtpmidid::rtpmidid::add_remote_peer(const std::string &id, uint8_t aseq_p
     name, "localhost", netport, 0, nullptr,
   };
 
-  auto rtpname = fmt::format("{}-{}", name, id);
+  auto rtpname = fmt::format("{} {}", name, id);
   peer_info.peer = std::make_shared<rtpserver>(rtpname, netport);
   peer_info.peer->on_midi([this, aseq_port](parse_buffer_t &pb){
     this->recv_rtpmidi_event(aseq_port, pb);
@@ -260,7 +260,7 @@ void ::rtpmidid::rtpmidid::add_remote_peer(const std::string &id, uint8_t aseq_p
     this->recv_alsamidi_event(aseq_port, ev);
   });
 
-  auto ptrname = fmt::format("_rtpmidid-{}._apple-midi._udp.local", rtpname);
+  auto ptrname = fmt::format("{}._apple-midi._udp.local", rtpname);
   auto ptr = std::make_unique<mdns::service_ptr>(
       "_apple-midi._udp.local",
       300,
@@ -277,7 +277,7 @@ void ::rtpmidid::rtpmidid::add_remote_peer(const std::string &id, uint8_t aseq_p
   mdns.announce(std::move(srv), true);
 
 
-  INFO("Listening RTP midi at {}:{}. ID {}", peer_info.address, peer_info.port, id);
+  INFO("Listening RTP midi at {}:{}, name {}. ID {}", peer_info.address, peer_info.port, rtpname, id);
 
   known_peers[aseq_port] = std::move(peer_info);
 }
