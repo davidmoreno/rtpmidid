@@ -226,18 +226,30 @@ void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev)
 
 void ::rtpmidid::rtpmidid::setup_alsa_seq(){
   // Export only one, but all data that is conencted to it.
-  auto alsa_name = "Export A";
+  add_remote_peer("A");
+}
+
+void ::rtpmidid::rtpmidid::add_remote_peer(const std::string &id){
+  auto alsa_name = fmt::format("Export A");
   auto aseq_port = seq.create_port(alsa_name);
+  add_remote_peer(id, aseq_port);
+}
+
+void ::rtpmidid::rtpmidid::add_remote_peer(const std::string &id, uint8_t aseq_port){
   uint16_t netport = 0;
 
   auto peer_info = ::rtpmidid::peer_info{
     name, "localhost", netport, 0, nullptr,
   };
 
-  auto rtpname = fmt::format("{}-A", name);
+  auto rtpname = fmt::format("{}-{}", name, id);
   peer_info.peer = std::make_shared<rtpserver>(rtpname, netport);
   peer_info.peer->on_midi([this, aseq_port](parse_buffer_t &pb){
     this->recv_rtpmidi_event(aseq_port, pb);
+  });
+  peer_info.peer->on_close([this, aseq_port, id](){
+    remove_peer(aseq_port);
+    add_remote_peer(id, aseq_port);
   });
   peer_info.use_count++;
   netport = peer_info.peer->local_base_port;
@@ -265,7 +277,12 @@ void ::rtpmidid::rtpmidid::setup_alsa_seq(){
   mdns.announce(std::move(srv), true);
 
 
-  INFO("Listening RTP midi at {}:{}. It is ALSA port '{}'", peer_info.address, peer_info.port, alsa_name);
+  INFO("Listening RTP midi at {}:{}. ID {}", peer_info.address, peer_info.port, id);
 
   known_peers[aseq_port] = std::move(peer_info);
+}
+
+void ::rtpmidid::rtpmidid::remove_peer(uint8_t port){
+  DEBUG("Removing peer from known peers list.");
+  known_peers.erase(port);
 }

@@ -194,6 +194,9 @@ void rtppeer::parse_command(parse_buffer_t &buffer, int socket){
     case rtppeer::CK:
       parse_command_ck(buffer, socket);
       break;
+    case rtppeer::BY:
+      parse_command_by(buffer, socket);
+      break;
     default:
       buffer.print_hex(true);
       throw not_implemented();
@@ -238,6 +241,28 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, int socket){
   response_buffer.write_str0(local_name);
 
   sendto(socket, response_buffer);
+}
+
+
+void rtppeer::parse_command_by(parse_buffer_t &buffer, int socket){
+  auto protocol = buffer.read_uint32();
+  initiator_id = buffer.read_uint32();
+  remote_ssrc = buffer.read_uint32();
+
+  if (protocol != 2){
+    throw exception("rtpmidid only understands RTP MIDI protocol 2. Fill an issue at https://github.com/davidmoreno/rtpmidid/. Got protocol {}", protocol);
+  }
+
+  if (remote_ssrc != this->remote_ssrc){
+    WARNING("Trying to disconnect from the wrong rtpmidi peer (bad port)");
+    return;
+  }
+
+  INFO("Disconnect from {}:{}", remote_name, remote_base_port);
+  // Normally this will schedule removal of peer.
+  if (close_peer){
+    close_peer();
+  }
 }
 
 void rtppeer::parse_command_ck(parse_buffer_t &buffer, int socket){

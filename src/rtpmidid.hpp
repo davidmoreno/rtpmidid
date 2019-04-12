@@ -53,5 +53,11 @@ namespace rtpmidid{
     void setup_alsa_seq();
 
     void add_rtpmidid_server(const std::string &name);
+
+    // Random aseq_ to be created
+    void add_remote_peer(const std::string &id);
+    // Use a specific port
+    void add_remote_peer(const std::string &id, uint8_t aseq_port);
+    void remove_peer(uint8_t alsa_port);
   };
 }
