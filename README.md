@@ -15,6 +15,20 @@ connections.
 
 Initial protoype is in Python, future daemon will be in C, C++ or Rust.
 
+## How to use it.
+
+rtpmidid creates a sequencer cliet with all found external ports to be just
+connected locally.
+
+To export local MIDI ports,  there is a special port "Export A". Connect a
+sequencer client to this port and it will be exported as RTPMIDI.
+
+After connecting to export port, a new "Export B" will appear and so on.
+
+Several clients can be connected to the same export, and if you want to use
+both input and input from the same port, you have to connect to both sides to
+the same export port.
+
 ## Goals
 
 * [ ] Daemon, no need for UI
@@ -42,14 +56,15 @@ Development status / plan:
       the rtpmidi connection
 * [x] Any message from alsa seq is sent to the MIDI rtp extreme
 * [x] Any message from rtpmidi is replayed on the alsa seq
-* [ ] All local ports are offered as rtpmidi connections.
-* [ ] Create a black list not to export
-* [ ] Optionally create a config file to avoid some exports
+* [x] Can export local ports, with user deciding which ones to export.
 * [ ] When remote side request connections, create the alsa seq virtual port
       for that connection (if it does not exist from an announcement) and
       connect both ports
-* [ ] Send all MIDI events to rtpmidi
-* [ ] Receive all MIDI events from rtpmidi
+* [x] Send all MIDI events to rtpmidi
+* [x] Receive all MIDI events from rtpmidi
+* [ ] Periodic check all peers are still on, no new peers
+* [ ] Remove ports when peer dissapears
+
 
 ## License
 
