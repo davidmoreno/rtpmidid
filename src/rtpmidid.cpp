@@ -226,26 +226,46 @@ void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev)
 
 void ::rtpmidid::rtpmidid::setup_alsa_seq(){
   // Export only one, but all data that is conencted to it.
-  auto alsa_name = "export";
+  auto alsa_name = "Export A";
   auto aseq_port = seq.create_port(alsa_name);
-  uint16_t netport = 15004;
+  uint16_t netport = 0;
 
   auto peer_info = ::rtpmidid::peer_info{
     name, "localhost", netport, 0, nullptr,
   };
 
-  peer_info.peer = std::make_shared<rtpserver>(name, netport);
+  auto rtpname = fmt::format("{}-A", name);
+  peer_info.peer = std::make_shared<rtpserver>(rtpname, netport);
   peer_info.peer->on_midi([this, aseq_port](parse_buffer_t &pb){
     this->recv_rtpmidi_event(aseq_port, pb);
   });
   peer_info.use_count++;
+  netport = peer_info.peer->local_base_port;
+  peer_info.port = netport;
 
 
   seq.on_midi_event(aseq_port, [this, aseq_port](snd_seq_event_t *ev){
     this->recv_alsamidi_event(aseq_port, ev);
   });
 
-  INFO("Listening RTP midi at {}:{}. It is ALSA port {}", peer_info.address, peer_info.port, alsa_name);
+  auto ptrname = fmt::format("_rtpmidid-{}._apple-midi._udp.local", rtpname);
+  auto ptr = std::make_unique<mdns::service_ptr>(
+      "_apple-midi._udp.local",
+      300,
+      ptrname
+  );
+  mdns.announce(std::move(ptr), true);
+
+  auto srv = std::make_unique<mdns::service_srv>(
+      ptrname,
+      300,
+      mdns.local(),
+      netport
+  );
+  mdns.announce(std::move(srv), true);
+
+
+  INFO("Listening RTP midi at {}:{}. It is ALSA port '{}'", peer_info.address, peer_info.port, alsa_name);
 
   known_peers[aseq_port] = std::move(peer_info);
 }
