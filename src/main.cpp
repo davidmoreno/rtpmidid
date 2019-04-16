@@ -26,7 +26,35 @@
 #include "./poller.hpp"
 #include "./stringpp.hpp"
 
+const auto VERSION = "alpha 19.04";
+const auto CMDLINE_HELP = ""
+"Real Time Protocol Music Instrument Digital Interface Daemon - alpha 19.04\n"
+"(C) 2019 David Moreno Montero <dmoreno@coralbits.com>\n\n"
+"Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.\n"
+"\n"
+"rtpmidi allows to use rtpmidi protocol to communicate with MIDI equipement \n"
+"using network equipiment. Recomended use is via ethernet cabling as with WiFi\n"
+"there is a lot more latency. Internet use has not been tested, but may also\n"
+"deliver high latency.\n"
+"\n"
+"Options:\n"
+"  -v                  Show version\n"
+"  -h                  Show this help\n"
+"  -n name             Forces a rtpmidi name\n"
+"  hostname            Connects to hostname:5400 port using rtpmidi\n"
+"  hostname:port       Connects to a hostname on a given port\n"
+"  name:hostname:port  Connects to a hostname on a given port and forces a name for alsaseq\n"
+"\n"
+;
+
+
 using namespace std;
+
+struct options_t {
+  std::string name;
+  std::vector<std::string> connect_to;
+};
+options_t parse_options(int argc, char **argv);
 
 
 void sigterm_f(int){
@@ -39,21 +67,23 @@ void sigint_f(int){
 }
 
 int main(int argc, char **argv){
-    INFO("Real Time Protocol Music Industry Digital Interface Daemon - v0.1");
-    INFO("(C) 2019 David Moreno Montero <dmoreno@coralbits.com>");
 
     // We dont need crypto rand, just some rand
     srand(time(NULL));
 
     signal(SIGINT, sigint_f);
     signal(SIGTERM, sigterm_f);
-    try{
-      char hostname[256];
-      gethostname(hostname, size(hostname));
-      auto rtpmidid = ::rtpmidid::rtpmidid(hostname);
 
-      for (int n=1; n<argc; n++){
-        auto s = rtpmidid::split(argv[n], ':');
+    auto options = parse_options(argc-1, argv+1);
+
+    INFO("Real Time Protocol Music Instrument Digital Interface Daemon - {}", VERSION);
+    INFO("(C) 2019 David Moreno Montero <dmoreno@coralbits.com>");
+
+    try{
+      auto rtpmidid = ::rtpmidid::rtpmidid(options.name);
+
+      for (auto &connect_to: options.connect_to){
+        auto s = rtpmidid::split(connect_to, ':');
         if (s.size() == 1){
           rtpmidid.add_rtpmidi_client(s[0], s[0], 5004);
         }
@@ -78,4 +108,51 @@ int main(int argc, char **argv){
     }
     DEBUG("FIN");
     return 0;
+}
+
+
+options_t parse_options(int argc, char **argv){
+  options_t opts;
+
+  char prevopt = '\0';
+  for (auto i=0; i<argc; i++){
+    auto len = strlen(argv[i]);
+    if (len == 0){
+      continue;
+    }
+    if (argv[i][0] == '-' && len == 2){
+      prevopt = argv[i][1];
+      switch(prevopt){
+        case 'v':
+          INFO("rtpmidid version {}", VERSION);
+          exit(0);
+          break;
+        case 'h':
+          fmt::print(CMDLINE_HELP);
+          exit(0);
+          break;
+      }
+    } else {
+      switch(prevopt){
+        case '\0':
+          opts.connect_to.push_back(argv[i]);
+          break;
+        case 'n':
+          opts.name = argv[i];
+          break;
+        default:
+          ERROR("Unknown option. Check options with -h.");
+          exit(1);
+          break;
+      }
+    }
+  }
+
+  if (opts.name.size() == 0){
+    char hostname[256];
+    gethostname(hostname, size(hostname));
+    opts.name = hostname;
+  }
+
+  return opts;
 }
