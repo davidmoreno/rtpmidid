@@ -25,7 +25,7 @@
 
 using namespace rtpmidid;
 
-::rtpmidid::rtpmidid::rtpmidid(std::string _name) : name(std::move(_name)), seq("rtpmidid"){
+::rtpmidid::rtpmidid::rtpmidid(std::string _name) : name(std::move(_name)), seq(fmt::format("rtpmidi {}", name)){
   auto outputs = ::rtpmidid::get_ports(&seq);
 
   setup_mdns();
