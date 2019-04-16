@@ -226,16 +226,20 @@ void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev)
 
 void ::rtpmidid::rtpmidid::setup_alsa_seq(){
   // Export only one, but all data that is conencted to it.
-  add_remote_peer("A");
+  add_export_port();
 }
 
-void ::rtpmidid::rtpmidid::add_remote_peer(const std::string &id){
-  auto alsa_name = fmt::format("Export A");
+void ::rtpmidid::rtpmidid::add_export_port(){
+  add_export_port(export_port_next_id++);
+}
+
+void ::rtpmidid::rtpmidid::add_export_port(char id){
+  auto alsa_name = fmt::format("Export {}", id);
   auto aseq_port = seq.create_port(alsa_name);
-  add_remote_peer(id, aseq_port);
+  add_export_port(id, aseq_port);
 }
 
-void ::rtpmidid::rtpmidid::add_remote_peer(const std::string &id, uint8_t aseq_port){
+void ::rtpmidid::rtpmidid::add_export_port(char id, uint8_t aseq_port){
   uint16_t netport = 0;
 
   auto peer_info = ::rtpmidid::peer_info{
@@ -249,7 +253,11 @@ void ::rtpmidid::rtpmidid::add_remote_peer(const std::string &id, uint8_t aseq_p
   });
   peer_info.peer->on_close([this, aseq_port, id](){
     remove_peer(aseq_port);
-    add_remote_peer(id, aseq_port);
+    add_export_port(id, aseq_port);
+  });
+  peer_info.peer->on_connect([this, id](const std::string &name){
+    if (export_port_next_id == id+1) // Only create next port if I'm the last
+    add_export_port();
   });
   peer_info.use_count++;
   netport = peer_info.peer->local_base_port;

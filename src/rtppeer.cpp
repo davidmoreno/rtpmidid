@@ -213,6 +213,9 @@ void rtppeer::parse_command_ok(parse_buffer_t &buffer, int _socket){
     "Got confirmation from {}:{}, initiator_id: {} ({}) ssrc: {}, name: {}",
     remote_name, remote_base_port, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name
   );
+  if (event_connect){
+    event_connect(remote_name);
+  }
 }
 
 
@@ -241,6 +244,10 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, int socket){
   response_buffer.write_str0(local_name);
 
   sendto(socket, response_buffer);
+
+  if (event_connect){
+    event_connect(remote_name);
+  }
 }
 
 
@@ -260,8 +267,8 @@ void rtppeer::parse_command_by(parse_buffer_t &buffer, int socket){
 
   INFO("Disconnect from {}:{}", remote_name, remote_base_port);
   // Normally this will schedule removal of peer.
-  if (close_peer){
-    close_peer();
+  if (event_close){
+    event_close();
   }
 }
 
@@ -365,7 +372,8 @@ void rtppeer::parse_midi(parse_buffer_t &buffer){
   buffer.check_enought(length);
 
   parse_buffer_t midi_data(buffer.position, length);
-  emit_midi_events(midi_data);
+  if (event_midi)
+    event_midi(midi_data);
 }
 
 uint64_t rtppeer::get_timestamp(){

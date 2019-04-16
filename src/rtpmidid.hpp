@@ -40,6 +40,7 @@ namespace rtpmidid{
     ::rtpmidid::mdns mdns;
     // Local port id to peer_info for connections
     std::map<uint8_t, peer_info> known_peers;
+    char export_port_next_id = 'A';
 
     rtpmidid(std::string &&name);
 
@@ -54,10 +55,12 @@ namespace rtpmidid{
 
     void add_rtpmidid_server(const std::string &name);
 
+    /// New export port, with next id
+    void add_export_port();
     // Random aseq_ to be created
-    void add_remote_peer(const std::string &id);
+    void add_export_port(char id);
     // Use a specific port
-    void add_remote_peer(const std::string &id, uint8_t aseq_port);
+    void add_export_port(char id, uint8_t aseq_port);
     void remove_peer(uint8_t alsa_port);
   };
 }

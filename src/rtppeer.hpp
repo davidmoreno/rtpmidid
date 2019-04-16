@@ -53,17 +53,21 @@ namespace rtpmidid {
     uint16_t remote_seq_nr;
     uint64_t timestamp_start; // Time in ms
     uint64_t latency;
-    std::function<void(parse_buffer_t &)> emit_midi_events;
-    std::function<void(void)> close_peer;
+    std::function<void(parse_buffer_t &)> event_midi;
+    std::function<void(void)> event_close;
+    std::function<void(const std::string &)> event_connect;
 
     rtppeer(std::string _name, int startport);
     virtual ~rtppeer();
 
     void on_midi(std::function<void(parse_buffer_t &)> f){
-      emit_midi_events = f;
+      event_midi = f;
     }
     void on_close(std::function<void(void)> f){
-      close_peer = f;
+      event_close = f;
+    }
+    void on_connect(std::function<void(const std::string &)> f){
+      event_connect = f;
     }
 
     void control_data_ready();
