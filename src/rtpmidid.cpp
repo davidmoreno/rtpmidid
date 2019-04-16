@@ -1,5 +1,5 @@
 /**
- * Real Time Protocol Music Industry Digital Interface Daemon
+ * Real Time Protocol Music Instrument Digital Interface Daemon
  * Copyright (C) 2019 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
 
 using namespace rtpmidid;
 
-::rtpmidid::rtpmidid::rtpmidid(std::string &&_name) : name(_name), seq("rtpmidid"){
+::rtpmidid::rtpmidid::rtpmidid(std::string _name) : name(std::move(_name)), seq("rtpmidid"){
   auto outputs = ::rtpmidid::get_ports(&seq);
 
   setup_mdns();
@@ -62,6 +62,10 @@ void ::rtpmidid::rtpmidid::setup_mdns(){
       INFO("Found apple midi response {}!", std::to_string(*srv));
       int16_t port = srv->port;
       std::string name = srv->label.substr(0, srv->label.find('.'));
+      if (service->ttl == 0) { // Remove!!
+        INFO("Removing remote rtpmidi {}", name);
+        return;
+      }
       mdns.query(srv->hostname, ::rtpmidid::mdns::A, [this, name, port](const ::rtpmidid::mdns::service *service){
         auto *ip = static_cast<const ::rtpmidid::mdns::service_a*>(service);
         const uint8_t *ip4 = ip->ip;

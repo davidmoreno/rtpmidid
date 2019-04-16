@@ -1,5 +1,5 @@
 /**
- * Real Time Protocol Music Industry Digital Interface Daemon
+ * Real Time Protocol Music Instrument Digital Interface Daemon
  * Copyright (C) 2019 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -42,7 +42,7 @@ namespace rtpmidid{
     std::map<uint8_t, peer_info> known_peers;
     char export_port_next_id = 'A';
 
-    rtpmidid(std::string &&name);
+    rtpmidid(std::string name);
 
     // Manual connect to a server.
     void add_rtpmidi_client(const std::string &name, const std::string &address, uint16_t port);
