@@ -68,6 +68,11 @@ mdns::~mdns(){
       send_response(*srv);
     }
   }
+
+  // Remove all timers
+  for (auto &timer: reannounce_timers){
+    poller.remove_timer(timer.second);
+  }
 }
 
 bool read_question(mdns *server, parse_buffer_t &buffer){
@@ -209,11 +214,12 @@ void mdns::announce(std::unique_ptr<service> service, bool broadcast){
 
 void mdns::reannounce_later(service *srv){
   DEBUG("Will reannounce in {}s", srv->ttl);
-  poller.add_timer_event(srv->ttl, [this, srv]{
+  auto timer_id = poller.add_timer_event(srv->ttl, [this, srv]{
     INFO("Reannounce srv: {}", srv->to_string());
     send_response(*srv);
     reannounce_later(srv);
   });
+  reannounce_timers[srv] = timer_id;
 }
 
 void mdns::unannounce(service *srv){
@@ -222,6 +228,12 @@ void mdns::unannounce(service *srv){
 
   auto idx = std::make_pair(srv->type, srv->label);
   auto annv = &announcements[idx];
+
+  auto maybe_timer = reannounce_timers.find(srv);
+  if (maybe_timer != reannounce_timers.end()){
+    poller.remove_timer(maybe_timer->second);
+    reannounce_timers.erase(maybe_timer);
+  }
 
   annv->erase(
     std::remove_if(

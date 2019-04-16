@@ -38,14 +38,14 @@ void ::rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name){
 
   auto ptr = std::make_unique<::rtpmidid::mdns::service_ptr>();
   ptr->label = "_apple-midi._udp.local";
-  ptr->ttl = 300;
+  ptr->ttl = 75 * 60; // As recommended by RFC 6762
   ptr->type = ::rtpmidid::mdns::PTR;
   ptr->servicename = fmt::format("{}._apple-midi._udp.local", name);
   mdns.announce(std::move(ptr));
 
   auto srv = std::make_unique<::rtpmidid::mdns::service_srv>();
   srv->label = fmt::format("{}._apple-midi._udp.local", name);
-  ptr->ttl = 300;
+  ptr->ttl = 75 * 60;
   srv->type = ::rtpmidid::mdns::SRV;
   srv->hostname = "ucube.local";
   srv->port = port;
@@ -284,14 +284,14 @@ void ::rtpmidid::rtpmidid::add_export_port(char id, uint8_t aseq_port){
   auto ptrname = fmt::format("{}._apple-midi._udp.local", rtpname);
   auto ptr = std::make_unique<mdns::service_ptr>(
       "_apple-midi._udp.local",
-      3,
+      45 * 60, // As recommended by RFC 6762
       ptrname
   );
   mdns.announce(std::move(ptr), true);
 
   auto srv = std::make_unique<mdns::service_srv>(
       ptrname,
-      3,
+      45 * 60, // As recommended by RFC 6762
       mdns.local(),
       netport
   );

@@ -31,13 +31,16 @@ namespace rtpmidid {
   class poller_t{
     int epollfd;
     std::map<int, std::function<void(int)>> fd_events;
-    std::vector<std::pair<std::time_t, std::function<void(void)>>> timer_events;
+    std::vector<std::tuple<std::time_t, int, std::function<void(void)>>> timer_events;
+    int max_timer_id = 0;
   public:
     poller_t();
     ~poller_t();
 
     // Call this function in X seconds
-    void add_timer_event(std::time_t in_secs, std::function<void(void)> event_f);
+    int add_timer_event(std::time_t in_secs, std::function<void(void)> event_f);
+    void remove_timer(int timer_id);
+
     void add_fd_in(int fd, std::function<void(int)> event_f);
     void add_fd_out(int fd, std::function<void(int)> event_f);
     void add_fd_inout(int fd, std::function<void(int)> event_f);

@@ -83,13 +83,15 @@ void poller_t::add_fd_out(int fd, std::function<void(int)> f){
   }
 }
 
-void poller_t::add_timer_event(std::time_t in_secs, std::function<void(void)> f){
+int poller_t::add_timer_event(std::time_t in_secs, std::function<void(void)> f){
   auto now = std::time(nullptr);
-  timer_events.push_back(std::make_pair(now + in_secs, f));
-  std::sort(std::begin(timer_events), std::end(timer_events), [](auto a, auto b){
-    return a.first < b.first;
+  auto timer_id = max_timer_id++;
+  timer_events.push_back(std::make_tuple(now + in_secs, timer_id, f));
+  std::sort(std::begin(timer_events), std::end(timer_events), [](const auto &a, const auto &b){
+    return std::get<0>(a) < std::get<0>(b);
   });
   // DEBUG("Next timer event will be in {} s", timer_events[0].first - now);
+  return timer_id;
 }
 
 void poller_t::remove_fd(int fd){
@@ -102,6 +104,15 @@ void poller_t::remove_fd(int fd){
   }
 }
 
+void poller_t::remove_timer(int timer_id){
+  timer_events.erase(std::remove_if(
+    timer_events.begin(), timer_events.end(),
+    [timer_id](const auto &b){
+      return (std::get<1>(b) == timer_id);
+    })
+  );
+}
+
 void poller_t::wait(){
   const auto MAX_EVENTS = 10;
   struct epoll_event events[MAX_EVENTS];
@@ -109,7 +120,7 @@ void poller_t::wait(){
 
   if (!timer_events.empty()){
     auto now = std::time(nullptr);
-    wait_ms = (timer_events[0].first - now) * 1000;
+    wait_ms = (std::get<0>(timer_events[0]) - now) * 1000;
   }
 
   auto nfds = epoll_wait(epollfd, events, MAX_EVENTS, wait_ms);
@@ -122,7 +133,7 @@ void poller_t::wait(){
     }
   }
   if (nfds == 0 && !timer_events.empty()){ // This was a timeout
-    timer_events[0].second();
+    std::get<2>(timer_events[0])();
     timer_events.erase(timer_events.begin());
     // if (!timer_events.empty()){
     //   auto now = std::time(nullptr);

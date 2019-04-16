@@ -151,6 +151,8 @@ namespace rtpmidid {
     std::map<std::pair<query_type_e, std::string>,  std::vector<std::unique_ptr<service>>> announcements;
     // Cache data.
     std::map<std::pair<query_type_e, std::string>,  std::vector<std::unique_ptr<service>>> cache;
+    // Known timers, with associated announcement service pointers
+    std::map<service *, int> reannounce_timers;
   public:
     mdns();
     ~mdns();
