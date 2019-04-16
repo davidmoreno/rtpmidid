@@ -230,6 +230,9 @@ void ::rtpmidid::rtpmidid::setup_alsa_seq(){
 }
 
 void ::rtpmidid::rtpmidid::add_export_port(){
+  // Max 26 ports. 
+  if (export_port_next_id > 'Z')
+    return;
   add_export_port(export_port_next_id++);
 }
 
@@ -255,10 +258,18 @@ void ::rtpmidid::rtpmidid::add_export_port(char id, uint8_t aseq_port){
     remove_peer(aseq_port);
     add_export_port(id, aseq_port);
   });
+
+  // When connecting, create new ports
   peer_info.peer->on_connect([this, id](const std::string &name){
     if (export_port_next_id == id+1) // Only create next port if I'm the last
     add_export_port();
   });
+  seq.on_subscribe(aseq_port, [this, id](int, int, const std::string &){
+    if (export_port_next_id == id+1) // Only create next port if I'm the last
+    add_export_port();
+  });
+
+
   peer_info.use_count++;
   netport = peer_info.peer->local_base_port;
   peer_info.port = netport;
