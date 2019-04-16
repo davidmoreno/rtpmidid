@@ -19,6 +19,7 @@
 #pragma once
 #include <map>
 #include <functional>
+#include <ctime>
 
 namespace rtpmidid {
   /**
@@ -29,17 +30,20 @@ namespace rtpmidid {
    */
   class poller_t{
     int epollfd;
-    std::map<int, std::function<void(int)>> events;
+    std::map<int, std::function<void(int)>> fd_events;
+    std::vector<std::pair<std::time_t, std::function<void(void)>>> timer_events;
   public:
     poller_t();
     ~poller_t();
 
+    // Call this function in X seconds
+    void add_timer_event(std::time_t in_secs, std::function<void(void)> event_f);
     void add_fd_in(int fd, std::function<void(int)> event_f);
     void add_fd_out(int fd, std::function<void(int)> event_f);
     void add_fd_inout(int fd, std::function<void(int)> event_f);
     void remove_fd(int fd);
 
-    void wait(int timeout_ms=-1);
+    void wait();
 
     void close();
     bool is_open(){

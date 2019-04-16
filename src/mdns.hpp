@@ -164,6 +164,7 @@ namespace rtpmidid {
     void detected_service(const service *res);
 
     void announce(std::unique_ptr<service>, bool broadcast=false);
+    void reannounce_later(service *);
     // Sends the goodbye mDNS packet and removes from current announcements list
     void unannounce(service *);
     bool answer_if_known(mdns::query_type_e type_, const std::string &label);

@@ -195,11 +195,25 @@ void mdns::announce(std::unique_ptr<service> service, bool broadcast){
   // preemptively tell everybody
   if (broadcast){
     send_response(*service);
-    DEBUG("Announce service: {}", service->label);
+    DEBUG("Announce service: {}", service->to_string());
+  }
+
+  // Will reannounce acording to ttl. I keep a pointer, but if removed it will be removed from the timers too.
+  if (broadcast && service->ttl > 0){
+    reannounce_later(service.get());
   }
 
   // And store. This order to use service before storing.
   announcements[idx].push_back(std::move(service));
+}
+
+void mdns::reannounce_later(service *srv){
+  DEBUG("Will reannounce in {}s", srv->ttl);
+  poller.add_timer_event(srv->ttl, [this, srv]{
+    INFO("Reannounce srv: {}", srv->to_string());
+    send_response(*srv);
+    reannounce_later(srv);
+  });
 }
 
 void mdns::unannounce(service *srv){

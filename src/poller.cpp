@@ -47,7 +47,7 @@ void poller_t::close(){
 
 
 void poller_t::add_fd_inout(int fd, std::function<void(int)> f){
-  events[fd] = f;
+  fd_events[fd] = f;
   struct epoll_event ev;
   memset(&ev, 0, sizeof(ev));
 
@@ -59,7 +59,7 @@ void poller_t::add_fd_inout(int fd, std::function<void(int)> f){
   }
 }
 void poller_t::add_fd_in(int fd, std::function<void(int)> f){
-  events[fd] = f;
+  fd_events[fd] = f;
   struct epoll_event ev;
   memset(&ev, 0, sizeof(ev));
 
@@ -71,7 +71,7 @@ void poller_t::add_fd_in(int fd, std::function<void(int)> f){
   }
 }
 void poller_t::add_fd_out(int fd, std::function<void(int)> f){
-  events[fd] = f;
+  fd_events[fd] = f;
   struct epoll_event ev;
   memset(&ev, 0, sizeof(ev));
 
@@ -83,8 +83,17 @@ void poller_t::add_fd_out(int fd, std::function<void(int)> f){
   }
 }
 
+void poller_t::add_timer_event(std::time_t in_secs, std::function<void(void)> f){
+  auto now = std::time(nullptr);
+  timer_events.push_back(std::make_pair(now + in_secs, f));
+  std::sort(std::begin(timer_events), std::end(timer_events), [](auto a, auto b){
+    return a.first < b.first;
+  });
+  // DEBUG("Next timer event will be in {} s", timer_events[0].first - now);
+}
+
 void poller_t::remove_fd(int fd){
-  events.erase(fd);
+  fd_events.erase(fd);
   if (is_open()){
     auto r = epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, NULL);
     if (r == -1){
@@ -93,17 +102,33 @@ void poller_t::remove_fd(int fd){
   }
 }
 
-void poller_t::wait(int wait_ms){
+void poller_t::wait(){
   const auto MAX_EVENTS = 10;
   struct epoll_event events[MAX_EVENTS];
+  auto wait_ms = -1;
+
+  if (!timer_events.empty()){
+    auto now = std::time(nullptr);
+    wait_ms = (timer_events[0].first - now) * 1000;
+  }
 
   auto nfds = epoll_wait(epollfd, events, MAX_EVENTS, wait_ms);
   for(auto n=0; n<nfds; n++){
     auto fd = events[n].data.fd;
     try{
-      this->events[fd](fd);
+      this->fd_events[fd](fd);
     } catch (const std::exception &e){
       ERROR("Catched exception at poller: {}", e.what());
     }
+  }
+  if (nfds == 0 && !timer_events.empty()){ // This was a timeout
+    timer_events[0].second();
+    timer_events.erase(timer_events.begin());
+    // if (!timer_events.empty()){
+    //   auto now = std::time(nullptr);
+    //   DEBUG("Next timer event in {} s. {} left.", timer_events[0].first - now, timer_events.size());
+    // } else {
+    //   DEBUG("No timer events.");
+    // }
   }
 }
