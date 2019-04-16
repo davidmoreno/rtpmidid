@@ -107,8 +107,11 @@ rtppeer::rtppeer(std::string _name, int startport) : local_base_port(startport),
 rtppeer::~rtppeer(){
   DEBUG("~rtppeer {}", local_name);
 
-  send_goodbye(control_socket, remote_base_port);
-  send_goodbye(midi_socket, remote_base_port+1);
+  if (is_connected()){
+    send_goodbye(control_socket, remote_base_port);
+    send_goodbye(midi_socket, remote_base_port+1);
+  }
+
   if (control_socket > 0){
     poller.remove_fd(control_socket);
     close(control_socket);
@@ -432,6 +435,9 @@ void rtppeer::sendto(int socket, const parse_buffer_t &pb){
   );
 
   if (res != pb.length()){
-    throw exception("Could not send all data to {}:{}. Sent {}", remote_name, remote_base_port, res);
+    throw exception(
+      "Could not send all data to {}:{}. Sent {}. {}",
+      remote_name, remote_base_port, res, strerror(errno)
+    );
   }
 }

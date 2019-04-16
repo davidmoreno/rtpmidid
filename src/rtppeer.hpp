@@ -69,6 +69,9 @@ namespace rtpmidid {
     void on_connect(std::function<void(const std::string &)> f){
       event_connect = f;
     }
+    bool is_connected(){
+      return remote_base_port != 0;
+    }
 
     void control_data_ready();
     void midi_data_ready();

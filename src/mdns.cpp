@@ -61,6 +61,13 @@ mdns::mdns(){
 
 mdns::~mdns(){
 
+  // Could be more efficient on packet with all the announcements of EOF.
+  for (auto &annp: announcements){
+    for (auto &srv: annp.second){
+      srv->ttl = 0;
+      send_response(*srv);
+    }
+  }
 }
 
 bool read_question(mdns *server, parse_buffer_t &buffer){
@@ -195,6 +202,21 @@ void mdns::announce(std::unique_ptr<service> service, bool broadcast){
   announcements[idx].push_back(std::move(service));
 }
 
+void mdns::unannounce(service *srv){
+  srv->ttl = 0;
+  send_response(*srv);
+
+  auto idx = std::make_pair(srv->type, srv->label);
+  auto annv = &announcements[idx];
+
+  annv->erase(
+    std::remove_if(
+      annv->begin(), annv->end(),
+      [srv](const std::unique_ptr<service> &x){ return x->equal(srv); }
+    ), annv->end()
+  );
+}
+
 void mdns::send_response(const service &service){
   uint8_t packet[1500];
   memset(packet, 0, sizeof(packet));
@@ -216,7 +238,7 @@ void mdns::send_response(const service &service){
   // class IN
   buffer.write_uint16(1);
   // ttl
-  buffer.write_uint32(600); // FIXME should not be fixed.
+  buffer.write_uint32(service.ttl);
   // data_length. I prepare the spot
   auto length_data_pos = buffer.position;
   buffer.position += 2;
