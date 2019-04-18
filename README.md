@@ -63,7 +63,7 @@ Development status / plan:
 * [x] Send all MIDI events to rtpmidi
 * [x] Receive all MIDI events from rtpmidi
 * [ ] Periodic check all peers are still on, no new peers
-* [ ] Remove ports when peer dissapears
+* [x] Remove ports when peer dissapears
 
 
 ## License
