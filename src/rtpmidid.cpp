@@ -195,9 +195,11 @@ void ::rtpmidid::rtpmidid::recv_rtpmidi_event(int port, parse_buffer_t &midi_dat
       case 0xE0:
       {
         snd_seq_ev_clear(&ev);
-        auto lsb = midi_data.read_uint8();
         auto msb = midi_data.read_uint8();
-        snd_seq_ev_set_pitchbend(&ev, current_command & 0x0F,  (msb << 7) + lsb);
+        auto lsb = midi_data.read_uint8();
+        auto pitch_bend = ((msb << 7) + lsb) - 8192;
+        // DEBUG("Pitch bend received {}", pitch_bend);
+        snd_seq_ev_set_pitchbend(&ev, current_command & 0x0F, pitch_bend);
         snd_seq_ev_set_source(&ev, port);
         snd_seq_ev_set_subs(&ev);
       	snd_seq_ev_set_direct(&ev);
@@ -215,7 +217,7 @@ void ::rtpmidid::rtpmidid::recv_rtpmidi_event(int port, parse_buffer_t &midi_dat
 
 
 void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev){
-  DEBUG("Callback on midi event at rtpmidid");
+  // DEBUG("Callback on midi event at rtpmidid");
   auto peer_info = &known_peers[aseq_port];
   if (!peer_info->peer){
     ERROR("There is no peer but I received an event! This situation should NEVER happen. File a bug.");
@@ -240,6 +242,17 @@ void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev)
       stream.write_uint8(0x80 | (ev->data.note.channel & 0x0F));
       stream.write_uint8(ev->data.note.note);
       stream.write_uint8(ev->data.note.velocity);
+    break;
+    case SND_SEQ_EVENT_CONTROLLER:
+      stream.write_uint8(0xB0 | (ev->data.control.channel & 0x0F));
+      stream.write_uint8(ev->data.control.param);
+      stream.write_uint8(ev->data.control.value);
+    break;
+    case SND_SEQ_EVENT_PITCHBEND:
+      // DEBUG("Send pitch bend {}", ev->data.control.value);
+      stream.write_uint8(0xE0 | (ev->data.control.channel & 0x0F));
+      stream.write_uint8((ev->data.control.value + 8192) >> 7 & 0x0FF);
+      stream.write_uint8((ev->data.control.value + 8192) & 0x0FF);
     break;
     default:
       WARNING("Event type not yet implemented! Not sending. {}", ev->type);

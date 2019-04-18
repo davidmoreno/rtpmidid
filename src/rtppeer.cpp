@@ -389,6 +389,10 @@ uint64_t rtppeer::get_timestamp(){
 }
 
 void rtppeer::send_midi(parse_buffer_t *events){
+  if (remote_base_port == 0){ // Not connected yet.
+    return;
+  }
+
   uint8_t data[512];
   parse_buffer_t buffer(data, sizeof(data));
 

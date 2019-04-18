@@ -99,7 +99,7 @@ namespace rtpmidid{
     snd_seq_event_t *ev;
     int pending;
     while ( (pending = snd_seq_event_input(seq, &ev)) > 0 ){
-      DEBUG("ALSA MIDI event: {}, pending: {} / {}", ev->type, pending, snd_seq_event_input_pending(seq, 0));
+      // DEBUG("ALSA MIDI event: {}, pending: {} / {}", ev->type, pending, snd_seq_event_input_pending(seq, 0));
 
       switch(ev->type){
         case SND_SEQ_EVENT_PORT_SUBSCRIBED:{
