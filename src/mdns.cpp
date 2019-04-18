@@ -172,10 +172,10 @@ void mdns::on_discovery(const std::string &service, mdns::query_type_e qt, std::
     throw exception("Service name too long. I only know how to search for smaller names.");
   }
   discovery_map[std::make_pair(qt, service)].push_back(f);
+}
 
-  if (!startswith(service, "*.")){
-    query(service, qt);
-  }
+void mdns::remove_discovery(const std::string &service, mdns::query_type_e type){
+  discovery_map.erase(std::make_pair(type, service));
 }
 
 void mdns::query(const std::string &service, mdns::query_type_e qt, std::function<void(const mdns::service *)> f){

@@ -40,6 +40,7 @@ namespace rtpmidid {
     std::string get_client_name(snd_seq_addr_t *addr);
 
     uint8_t create_port(const std::string &name);
+    void remove_port(uint8_t port);
 
     void on_subscribe(int port, std::function<void(int client, int port, const std::string &name)> f);
     void on_unsubscribe(int port, std::function<void(int client, int port)> f);

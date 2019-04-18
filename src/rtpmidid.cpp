@@ -62,34 +62,53 @@ void ::rtpmidid::rtpmidid::setup_mdns(){
     // just ask, next on discovery will catch it.
     mdns.query(ptr->servicename, ::rtpmidid::mdns::SRV);
   });
+  mdns.query("_apple-midi._udp.local", mdns::PTR);
+
   mdns.on_discovery("*._apple-midi._udp.local", ::rtpmidid::mdns::SRV, [this](const ::rtpmidid::mdns::service *service){
+    if (service->ttl == 0) // This is a removal, not interested
+      return;
+
     auto *srv = static_cast<const ::rtpmidid::mdns::service_srv*>(service);
     INFO("Found apple midi SRV response {}!", std::to_string(*srv));
-    int16_t port = srv->port;
-    std::string name = srv->label.substr(0, srv->label.find('.'));
-    if (service->ttl == 0) { // Remove!!
-      WARNING("TODO: remove rtpmidi {}", name);
-      return;
-    }
-    mdns.query(srv->hostname, ::rtpmidid::mdns::A, [this, name, port](const ::rtpmidid::mdns::service *service){
+    uint16_t port = srv->port;
+    std::string srvname = srv->label;
+    mdns.query(srv->hostname, ::rtpmidid::mdns::A, [this, srvname, port](const ::rtpmidid::mdns::service *service){
+      auto name = srvname.substr(0, srvname.find('.'));
       auto *ip = static_cast<const ::rtpmidid::mdns::service_a*>(service);
       const uint8_t *ip4 = ip->ip;
       std::string address = fmt::format("{}.{}.{}.{}", uint8_t(ip4[0]), uint8_t(ip4[1]), uint8_t(ip4[2]), uint8_t(ip4[3]));
       INFO("APPLE MIDI: {}, at {}:{}", name, address, port);
 
-      this->add_rtpmidi_client(name, address, port);
+      auto alsa_port = this->add_rtpmidi_client(name, address, port);
+
+      if (alsa_port){
+        auto aport = *alsa_port;
+        mdns.on_discovery(srvname, ::rtpmidid::mdns::SRV, [this, srvname, aport](const ::rtpmidid::mdns::service *service){
+          if (service->ttl != 0)
+            return; // Only insterested in removals of this specific name
+
+          INFO("Peer is not available anymore. name: {}", srvname);
+          seq.remove_port(aport);
+          auto I = known_peers.find(aport);
+          if (I != known_peers.end())
+            known_peers.erase(I);
+
+          mdns.remove_discovery(srvname, ::rtpmidid::mdns::SRV);
+        });
+      }
     });
   });
 }
 
-void ::rtpmidid::rtpmidid::add_rtpmidi_client(const std::string &name, const std::string &address, uint16_t net_port){
+std::optional<uint8_t> rtpmidid::rtpmidid::add_rtpmidi_client(
+    const std::string &name, const std::string &address, uint16_t net_port){
   for (auto &known: known_peers){
     if (known.second.address == address && known.second.port == net_port){
       DEBUG(
           "Trying to add again rtpmidi {}:{} server. Quite probably mDNS re announce. "
           "Maybe somebody ask, or just periodically.", address, net_port
       );
-      return;
+      return std::nullopt;
     }
   }
 
@@ -123,6 +142,8 @@ void ::rtpmidid::rtpmidid::add_rtpmidi_client(const std::string &name, const std
   seq.on_midi_event(aseq_port, [this, aseq_port](snd_seq_event_t *ev){
     this->recv_alsamidi_event(aseq_port, ev);
   });
+
+  return aseq_port;
 }
 
 

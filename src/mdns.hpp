@@ -179,6 +179,8 @@ namespace rtpmidid {
     void query(const std::string &name, query_type_e type, std::function<void(const service *)>);
     // Calls everytime we get a service with the given parameters
     void on_discovery(const std::string &service, query_type_e type, std::function<void(const mdns::service *)> f);
+    // Not interested anymore in this type
+    void remove_discovery(const std::string &service, query_type_e type);
     // A service is detected, call query and discovery services
     void detected_service(const service *res);
 

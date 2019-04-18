@@ -152,6 +152,10 @@ namespace rtpmidid{
     return port;
   }
 
+  void aseq::remove_port(uint8_t port){
+    snd_seq_delete_port(seq, port);
+  }
+
 
   std::vector<std::string> get_ports(aseq *seq){
       std::vector<std::string> ret;
