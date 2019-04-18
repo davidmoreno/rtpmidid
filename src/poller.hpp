@@ -34,12 +34,14 @@ namespace rtpmidid {
     std::vector<std::tuple<std::time_t, int, std::function<void(void)>>> timer_events;
     int max_timer_id = 0;
   public:
+    class timer_t;
+
     poller_t();
     ~poller_t();
 
     // Call this function in X seconds
-    int add_timer_event(std::time_t in_secs, std::function<void(void)> event_f);
-    void remove_timer(int timer_id);
+    timer_t add_timer_event(std::time_t in_secs, std::function<void(void)> event_f);
+    void remove_timer(timer_t &tid);
 
     void add_fd_in(int fd, std::function<void(int)> event_f);
     void add_fd_out(int fd, std::function<void(int)> event_f);
@@ -52,6 +54,20 @@ namespace rtpmidid {
     bool is_open(){
       return epollfd > 0;
     }
+  };
+
+  class poller_t::timer_t{
+  public:
+    int id;
+
+    timer_t();
+    timer_t(int id_);
+    timer_t(timer_t &&);
+    ~timer_t();
+    timer_t &operator=(timer_t &&other);
+
+    // No copying
+    timer_t(const timer_t &) = delete;
   };
 
   // Singleton for all events on the system.

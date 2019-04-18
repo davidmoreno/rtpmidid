@@ -19,6 +19,7 @@
 #pragma once
 #include <vector>
 #include <string>
+#include <string_view>
 #include <sstream>
 
 // Some functions to allow to_stirng to almost everything
@@ -43,6 +44,17 @@ namespace std{
     return str;
   }
 
+  inline bool startswith(const std::string_view &str, const std::string_view &maybe_start){
+    if (str.length() < maybe_start.length())
+      return false;
+    return std::equal(std::begin(maybe_start), std::end(maybe_start), std::begin(str));
+  }
+  inline bool endswith(const std::string_view &str, const std::string_view &maybe_end){
+    auto pos = str.length() - maybe_end.length();
+    if (pos < 0)
+      return false;
+    return std::equal(std::begin(str) + pos, std::end(str), std::begin(maybe_end));
+  }
 }
 namespace rtpmidid{
   std::vector<std::string> split(const std::string &str, char delim=' ');

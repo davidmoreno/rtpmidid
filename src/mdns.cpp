@@ -25,6 +25,7 @@
 #include "./poller.hpp"
 #include "./logger.hpp"
 #include "./netutils.hpp"
+#include "./stringpp.hpp"
 
 #define DEBUG0(...)
 const bool debug0 = false;
@@ -60,18 +61,12 @@ mdns::mdns(){
 }
 
 mdns::~mdns(){
-
   // Could be more efficient on packet with all the announcements of EOF.
   for (auto &annp: announcements){
     for (auto &srv: annp.second){
       srv->ttl = 0;
       send_response(*srv);
     }
-  }
-
-  // Remove all timers
-  for (auto &timer: reannounce_timers){
-    poller.remove_timer(timer.second);
   }
 }
 
@@ -178,7 +173,9 @@ void mdns::on_discovery(const std::string &service, mdns::query_type_e qt, std::
   }
   discovery_map[std::make_pair(qt, service)].push_back(f);
 
-  query(service, qt);
+  if (!startswith(service, "*.")){
+    query(service, qt);
+  }
 }
 
 void mdns::query(const std::string &service, mdns::query_type_e qt, std::function<void(const mdns::service *)> f){
@@ -219,7 +216,7 @@ void mdns::reannounce_later(service *srv){
     send_response(*srv);
     reannounce_later(srv);
   });
-  reannounce_timers[srv] = timer_id;
+  srv->cache_timeout_id = std::move(timer_id);
 }
 
 void mdns::unannounce(service *srv){
@@ -229,11 +226,7 @@ void mdns::unannounce(service *srv){
   auto idx = std::make_pair(srv->type, srv->label);
   auto annv = &announcements[idx];
 
-  auto maybe_timer = reannounce_timers.find(srv);
-  if (maybe_timer != reannounce_timers.end()){
-    poller.remove_timer(maybe_timer->second);
-    reannounce_timers.erase(maybe_timer);
-  }
+  reannounce_timers.erase(srv);
 
   annv->erase(
     std::remove_if(
@@ -316,6 +309,15 @@ bool mdns::answer_if_known(mdns::query_type_e type_, const std::string &label){
 }
 
 void mdns::query(const std::string &name, mdns::query_type_e type){
+  // Before asking, check my cache, and if there, use as answer
+  auto at_cache = cache.find(std::make_pair(type, name));
+  if (at_cache != cache.end()){
+    for (auto &service: at_cache->second){
+      detected_service(service.get());
+    }
+    return;
+  }
+
   // Now I will ask for it
   // I will prepare the package here
   uint8_t packet[120];
@@ -336,7 +338,7 @@ void mdns::query(const std::string &name, mdns::query_type_e type){
     DEBUG("Packet ready! {} bytes", buffer.length());
     buffer.print_hex();
   }
-
+  DEBUG("Send query {} {}", name, type);
   sendto(socketfd, packet, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
 }
 
@@ -405,25 +407,16 @@ void mdns::mdns_ready(){
   parse_packet(this, parse_buffer);
 }
 
-bool endswith(std::string_view const &full, std::string_view const &ending){
-    if (full.length() >= ending.length()) {
-        return (0 == full.compare (full.length() - ending.length(), ending.length(), ending));
-    } else {
-        return false;
-    }
+bool discovery_match(const std::string &expr, const std::string &label){
+  if (startswith(expr, "*.")){
+    return endswith(label, expr.substr(2));
+  } else {
+    return expr == label;
+  }
 }
 
 void mdns::detected_service(const mdns::service *service){
   auto type_label = std::make_pair(service->type, service->label);
-
-  // Already in cache, so discovered not so long ago
-  for (auto &d: cache[type_label]) {
-    // DEBUG("Check if equal \n\t\t{}\n\t\t{}", d->to_string(), service->to_string());
-    if (d->equal(service)) {
-      // DEBUG("Got it at cache. Ignoring.");
-      return;
-    }
-  }
 
   // Ignore my own records. Only if the exact match. Must check all one by one.
   for (auto &d: announcements){
@@ -438,8 +431,12 @@ void mdns::detected_service(const mdns::service *service){
     }
   }
 
-  for(auto &f: discovery_map[type_label]){
-    f(service);
+  for (auto &discovery: discovery_map){
+    if (service->type == discovery.first.first && discovery_match(discovery.first.second, service->label)){
+      for(auto &f: discovery.second){
+        f(service);
+      }
+    }
   }
   for(auto &f: query_map[type_label]){
     f(service);
@@ -447,10 +444,44 @@ void mdns::detected_service(const mdns::service *service){
 
   // remove them from query map, as fulfilled
   query_map.erase(type_label);
-  // Add it to cache
-  cache[type_label].push_back(service->clone());
+
+  update_cache(service);
 }
 
+void mdns::update_cache(const mdns::service *service){
+  // Maybe add it to cache, update TTL, or remove, depends on TTL
+  auto type_label = std::make_pair(service->type, service->label);
+  mdns::service *service_at_cache = nullptr;
+
+  // Remove from cache and timers
+  if (service->ttl == 0) {
+
+    auto &services = cache[type_label];
+    services.erase( std::remove_if(
+      std::begin(services), std::end(services),
+      [service](auto &d){
+        return d->equal(service);
+      })
+    );
+
+    return;
+  }
+
+  // Will have to update or add
+  for (auto &d: cache[type_label]) {
+    // DEBUG("Check if equal \n\t\t{}\n\t\t{}", d->to_string(), service->to_string());
+    if (d->equal(service)) {
+      DEBUG("Got it at cache. Update TTL.");
+      d->ttl = service->ttl;
+      service_at_cache = d.get();
+    }
+  }
+  if (!service_at_cache){
+    auto cloned = service->clone();
+    service_at_cache = cloned.get();
+    cache[type_label].push_back(std::move(cloned));
+  }
+}
 
 std::string mdns::local(){
   char hostname[256];

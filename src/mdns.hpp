@@ -22,6 +22,7 @@
 #include <fmt/format.h>
 #include <arpa/inet.h>
 #include "./exceptions.hpp"
+#include "./poller.hpp"
 
 
 namespace rtpmidid {
@@ -35,6 +36,7 @@ namespace rtpmidid {
     };
 
     struct service{
+      rtpmidid::poller_t::timer_t cache_timeout_id;
       std::string label;
       query_type_e type;
       uint32_t ttl;
@@ -43,7 +45,7 @@ namespace rtpmidid {
       service(std::string label_, query_type_e type_, uint32_t ttl_) :
         label(std::move(label_)), type(type_), ttl(ttl_) {}
       virtual std::unique_ptr<service> clone() const{
-        throw exception("Not implemented clone for basic DNS.");
+        throw exception("Not implemented clone for basic service.");
       }
       virtual bool equal(const service *other) {
         return false;
@@ -71,7 +73,11 @@ namespace rtpmidid {
         }
       virtual std::unique_ptr<service> clone() const{
         auto ret = std::make_unique<service_a>();
-        *ret = *this;
+
+        ret->label = label;
+        ret->type = type;
+        ret->ttl = ttl;
+        ret->ip4 = ip4;
 
         return ret;
       }
@@ -97,7 +103,12 @@ namespace rtpmidid {
         service(std::move(label_), SRV, ttl_),  hostname(std::move(hostname_)), port(port_) {}
       virtual std::unique_ptr<service> clone() const{
         auto ret = std::make_unique<service_srv>();
-        *ret = *this;
+
+        ret->label = label;
+        ret->type = type;
+        ret->ttl = ttl;
+        ret->hostname = hostname;
+        ret->port = port;
 
         return ret;
       }
@@ -122,7 +133,11 @@ namespace rtpmidid {
         service(std::move(label_), PTR, ttl_), servicename(std::move(servicename_)) {}
       virtual std::unique_ptr<service> clone() const{
         auto ret = std::make_unique<service_ptr>();
-        *ret = *this;
+
+        ret->label = label;
+        ret->type = type;
+        ret->ttl = ttl;
+        ret->servicename = servicename;
 
         return ret;
       }
@@ -151,8 +166,10 @@ namespace rtpmidid {
     std::map<std::pair<query_type_e, std::string>,  std::vector<std::unique_ptr<service>>> announcements;
     // Cache data.
     std::map<std::pair<query_type_e, std::string>,  std::vector<std::unique_ptr<service>>> cache;
-    // Known timers, with associated announcement service pointers
-    std::map<service *, int> reannounce_timers;
+    // Reannounce timers, with associated announcement service pointers
+    std::map<service *, rtpmidid::poller_t::timer_t> reannounce_timers;
+    // Cache timers, with associated announcement service pointers
+    std::map<service *, rtpmidid::poller_t::timer_t> cache_timers;
   public:
     mdns();
     ~mdns();
@@ -172,6 +189,8 @@ namespace rtpmidid {
     bool answer_if_known(mdns::query_type_e type_, const std::string &label);
     void send_response(const service &);
     void mdns_ready();
+    void update_cache(const service *service);
+    void remove_cache_timer(const service *service);
 
     // The local name as can be resolved.
     std::string local();

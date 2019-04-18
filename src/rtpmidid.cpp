@@ -23,6 +23,8 @@
 #include "./logger.hpp"
 #include "./netutils.hpp"
 
+const int TIMEOUT_REANNOUNCE = 75 * 60;  // As recommended by RFC 6762
+
 using namespace rtpmidid;
 
 ::rtpmidid::rtpmidid::rtpmidid(std::string _name) : name(std::move(_name)), seq(fmt::format("rtpmidi {}", name)){
@@ -38,14 +40,14 @@ void ::rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name){
 
   auto ptr = std::make_unique<::rtpmidid::mdns::service_ptr>();
   ptr->label = "_apple-midi._udp.local";
-  ptr->ttl = 75 * 60; // As recommended by RFC 6762
+  ptr->ttl = TIMEOUT_REANNOUNCE;
   ptr->type = ::rtpmidid::mdns::PTR;
   ptr->servicename = fmt::format("{}._apple-midi._udp.local", name);
   mdns.announce(std::move(ptr));
 
   auto srv = std::make_unique<::rtpmidid::mdns::service_srv>();
   srv->label = fmt::format("{}._apple-midi._udp.local", name);
-  ptr->ttl = 75 * 60;
+  ptr->ttl = TIMEOUT_REANNOUNCE;
   srv->type = ::rtpmidid::mdns::SRV;
   srv->hostname = "ucube.local";
   srv->port = port;
@@ -56,27 +58,28 @@ void ::rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name){
 void ::rtpmidid::rtpmidid::setup_mdns(){
   mdns.on_discovery("_apple-midi._udp.local", mdns::PTR, [this](const ::rtpmidid::mdns::service *service){
     const ::rtpmidid::mdns::service_ptr *ptr = static_cast<const ::rtpmidid::mdns::service_ptr*>(service);
-    INFO("Found apple midi response {}!", std::to_string(*ptr));
-    mdns.on_discovery(ptr->servicename, ::rtpmidid::mdns::SRV, [this](const ::rtpmidid::mdns::service *service){
-      auto *srv = static_cast<const ::rtpmidid::mdns::service_srv*>(service);
-      INFO("Found apple midi response {}!", std::to_string(*srv));
-      int16_t port = srv->port;
-      std::string name = srv->label.substr(0, srv->label.find('.'));
-      if (service->ttl == 0) { // Remove!!
-        INFO("Removing remote rtpmidi {}", name);
-        return;
-      }
-      mdns.query(srv->hostname, ::rtpmidid::mdns::A, [this, name, port](const ::rtpmidid::mdns::service *service){
-        auto *ip = static_cast<const ::rtpmidid::mdns::service_a*>(service);
-        const uint8_t *ip4 = ip->ip;
-        std::string address = fmt::format("{}.{}.{}.{}", uint8_t(ip4[0]), uint8_t(ip4[1]), uint8_t(ip4[2]), uint8_t(ip4[3]));
-        INFO("APPLE MIDI: {}, at {}:{}", name, address, port);
+    INFO("Found apple midi PTR response {}!", std::to_string(*ptr));
+    // just ask, next on discovery will catch it.
+    mdns.query(ptr->servicename, ::rtpmidid::mdns::SRV);
+  });
+  mdns.on_discovery("*._apple-midi._udp.local", ::rtpmidid::mdns::SRV, [this](const ::rtpmidid::mdns::service *service){
+    auto *srv = static_cast<const ::rtpmidid::mdns::service_srv*>(service);
+    INFO("Found apple midi SRV response {}!", std::to_string(*srv));
+    int16_t port = srv->port;
+    std::string name = srv->label.substr(0, srv->label.find('.'));
+    if (service->ttl == 0) { // Remove!!
+      WARNING("TODO: remove rtpmidi {}", name);
+      return;
+    }
+    mdns.query(srv->hostname, ::rtpmidid::mdns::A, [this, name, port](const ::rtpmidid::mdns::service *service){
+      auto *ip = static_cast<const ::rtpmidid::mdns::service_a*>(service);
+      const uint8_t *ip4 = ip->ip;
+      std::string address = fmt::format("{}.{}.{}.{}", uint8_t(ip4[0]), uint8_t(ip4[1]), uint8_t(ip4[2]), uint8_t(ip4[3]));
+      INFO("APPLE MIDI: {}, at {}:{}", name, address, port);
 
-        this->add_rtpmidi_client(name, address, port);
-      });
+      this->add_rtpmidi_client(name, address, port);
     });
   });
-
 }
 
 void ::rtpmidid::rtpmidid::add_rtpmidi_client(const std::string &name, const std::string &address, uint16_t net_port){
@@ -288,14 +291,14 @@ void ::rtpmidid::rtpmidid::add_export_port(char id, uint8_t aseq_port){
   auto ptrname = fmt::format("{}._apple-midi._udp.local", rtpname);
   auto ptr = std::make_unique<mdns::service_ptr>(
       "_apple-midi._udp.local",
-      45 * 60, // As recommended by RFC 6762
+      TIMEOUT_REANNOUNCE,
       ptrname
   );
   mdns.announce(std::move(ptr), true);
 
   auto srv = std::make_unique<mdns::service_srv>(
       ptrname,
-      45 * 60, // As recommended by RFC 6762
+      TIMEOUT_REANNOUNCE,
       mdns.local(),
       netport
   );

@@ -83,15 +83,15 @@ void poller_t::add_fd_out(int fd, std::function<void(int)> f){
   }
 }
 
-int poller_t::add_timer_event(std::time_t in_secs, std::function<void(void)> f){
+poller_t::timer_t poller_t::add_timer_event(std::time_t in_secs, std::function<void(void)> f){
   auto now = std::time(nullptr);
   auto timer_id = max_timer_id++;
   timer_events.push_back(std::make_tuple(now + in_secs, timer_id, f));
   std::sort(std::begin(timer_events), std::end(timer_events), [](const auto &a, const auto &b){
-    return std::get<0>(a) < std::get<0>(b);
+    return std::get<0>(a) > std::get<0>(b);
   });
-  // DEBUG("Next timer event will be in {} s", timer_events[0].first - now);
-  return timer_id;
+  // DEBUG("Added timer {}. {} s ({} pending)", timer_id, in_secs, timer_events.size());
+  return poller_t::timer_t(timer_id);
 }
 
 void poller_t::remove_fd(int fd){
@@ -104,13 +104,18 @@ void poller_t::remove_fd(int fd){
   }
 }
 
-void poller_t::remove_timer(int timer_id){
+void poller_t::remove_timer(timer_t &tid){
   timer_events.erase(std::remove_if(
     timer_events.begin(), timer_events.end(),
-    [timer_id](const auto &b){
-      return (std::get<1>(b) == timer_id);
-    })
+    [&tid](const auto &b){
+      // DEBUG("Remove {}. {}? {}", tid.id, std::get<1>(b), std::get<1>(b) == tid.id);
+      return (std::get<1>(b) == tid.id);
+    }),
+    timer_events.end()
   );
+  // DEBUG("Remove timer {}. {} left", tid.id, timer_events.size());
+  // Invalidate
+  tid.id = 0;
 }
 
 void poller_t::wait(){
@@ -121,9 +126,14 @@ void poller_t::wait(){
   if (!timer_events.empty()){
     auto now = std::time(nullptr);
     wait_ms = (std::get<0>(timer_events[0]) - now) * 1000;
+    // DEBUG("Timer event in {}ms", wait_ms);
+    wait_ms = std::max(wait_ms, 0); // min wait 0ms.
   }
 
-  auto nfds = epoll_wait(epollfd, events, MAX_EVENTS, wait_ms);
+  auto nfds = 0;
+  if (wait_ms != 0) // Maybe no wait. Some timer event pending.
+    nfds = epoll_wait(epollfd, events, MAX_EVENTS, wait_ms);
+
   for(auto n=0; n<nfds; n++){
     auto fd = events[n].data.fd;
     try{
@@ -133,13 +143,44 @@ void poller_t::wait(){
     }
   }
   if (nfds == 0 && !timer_events.empty()){ // This was a timeout
-    std::get<2>(timer_events[0])();
-    timer_events.erase(timer_events.begin());
+    // Will ensure remove via RTTI
+    {
+      auto firstI = timer_events.begin();
+      timer_t id = std::get<1>(*firstI);
+      std::get<2>(*firstI)();
+    }
     // if (!timer_events.empty()){
     //   auto now = std::time(nullptr);
-    //   DEBUG("Next timer event in {} s. {} left.", timer_events[0].first - now, timer_events.size());
+    //   // DEBUG("Next timer event {} in {} s. {} left.", std::get<1>(timer_events[0]), std::get<0>(timer_events[0]) - now, timer_events.size());
     // } else {
     //   DEBUG("No timer events.");
     // }
   }
+
+}
+
+poller_t::timer_t::timer_t() : id(0) {
+}
+poller_t::timer_t::timer_t(int id_) : id(id_) {
+}
+poller_t::timer_t::timer_t(poller_t::timer_t &&other) {
+  if (id !=0 ){
+    poller.remove_timer(*this);
+  }
+  id = other.id;
+  other.id = 0;
+}
+poller_t::timer_t::~timer_t() {
+  if (id !=0 ){
+    poller.remove_timer(*this);
+  }
+}
+poller_t::timer_t &poller_t::timer_t::operator=(poller_t::timer_t &&other) {
+  if (id !=0 ){
+    poller.remove_timer(*this);
+  }
+  id = other.id;
+  other.id = 0;
+
+  return *this;
 }
