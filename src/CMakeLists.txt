@@ -5,4 +5,4 @@ add_executable(
   rtppeer.cpp rtpclient.cpp rtpserver.cpp
 )
 
-target_link_libraries(rtpmidid ${CONAN_LIBS} -lasound)
+target_link_libraries(rtpmidid -lasound -lfmt)

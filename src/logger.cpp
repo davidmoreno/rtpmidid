@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <string>
 #include <string_view>
+#include <fmt/ostream.h>
 #include "logger.hpp"
 
 namespace logger{

@@ -3,9 +3,8 @@ all: compile
 
 compile: build/bin/rtpmidid
 
-build/bin/rtpmidid: src/* tests/* CMakeLists.txt conanfile.txt
+build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 	mkdir -p build
-	cd build &&	conan install ..
 	cd build &&	cmake ..
 	cd build && make -j
 
