@@ -163,47 +163,32 @@ void ::rtpmidid::rtpmidid::recv_rtpmidi_event(int port, parse_buffer_t &midi_dat
 
     switch(type){
       case 0xB0: // CC
-      {
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_controller(&ev, current_command & 0x0F, midi_data.read_uint8(), midi_data.read_uint8());
-        snd_seq_ev_set_source(&ev, port);
-        snd_seq_ev_set_subs(&ev);
-      	snd_seq_ev_set_direct(&ev);
-        snd_seq_event_output_direct(seq.seq, &ev);
-      }
       break;
       case 0x90:
-      {
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_noteon(&ev, current_command & 0x0F, midi_data.read_uint8(), midi_data.read_uint8());
-        snd_seq_ev_set_source(&ev, port);
-        snd_seq_ev_set_subs(&ev);
-      	snd_seq_ev_set_direct(&ev);
-        snd_seq_event_output_direct(seq.seq, &ev);
-      }
       break;
       case 0x80:
-      {
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_noteoff(&ev, current_command & 0x0F, midi_data.read_uint8(), midi_data.read_uint8());
-        snd_seq_ev_set_source(&ev, port);
-        snd_seq_ev_set_subs(&ev);
-      	snd_seq_ev_set_direct(&ev);
-        snd_seq_event_output_direct(seq.seq, &ev);
-      }
       break;
+      case 0xC0:
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_pgmchange(&ev, current_command & 0x0F, midi_data.read_uint8());
+        break;
+      case 0xD0:
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_chanpress(&ev, current_command & 0x0F, midi_data.read_uint8());
       case 0xE0:
       {
         snd_seq_ev_clear(&ev);
-        auto msb = midi_data.read_uint8();
         auto lsb = midi_data.read_uint8();
+        auto msb = midi_data.read_uint8();
         auto pitch_bend = ((msb << 7) + lsb) - 8192;
         // DEBUG("Pitch bend received {}", pitch_bend);
         snd_seq_ev_set_pitchbend(&ev, current_command & 0x0F, pitch_bend);
-        snd_seq_ev_set_source(&ev, port);
-        snd_seq_ev_set_subs(&ev);
-      	snd_seq_ev_set_direct(&ev);
-        snd_seq_event_output_direct(seq.seq, &ev);
       }
       break;
       default:
@@ -211,6 +196,10 @@ void ::rtpmidid::rtpmidid::recv_rtpmidi_event(int port, parse_buffer_t &midi_dat
         return;
         break;
     }
+    snd_seq_ev_set_source(&ev, port);
+    snd_seq_ev_set_subs(&ev);
+    snd_seq_ev_set_direct(&ev);
+    snd_seq_event_output_direct(seq.seq, &ev);
   }
 
 }
@@ -248,11 +237,19 @@ void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev)
       stream.write_uint8(ev->data.control.param);
       stream.write_uint8(ev->data.control.value);
     break;
+    case SND_SEQ_EVENT_PGMCHANGE:
+      stream.write_uint8(0xC0 | (ev->data.control.channel));
+      stream.write_uint8(ev->data.control.value & 0x0FF);
+    break;
+    case SND_SEQ_EVENT_CHANPRESS:
+      stream.write_uint8(0xD0 | (ev->data.control.channel));
+      stream.write_uint8(ev->data.control.value & 0x0FF);
+    break;
     case SND_SEQ_EVENT_PITCHBEND:
       // DEBUG("Send pitch bend {}", ev->data.control.value);
       stream.write_uint8(0xE0 | (ev->data.control.channel & 0x0F));
-      stream.write_uint8((ev->data.control.value + 8192) >> 7 & 0x0FF);
-      stream.write_uint8((ev->data.control.value + 8192) & 0x0FF);
+      stream.write_uint8((ev->data.control.value + 8192) & 0x07F);
+      stream.write_uint8((ev->data.control.value + 8192) >> 7 & 0x07F);
     break;
     default:
       WARNING("Event type not yet implemented! Not sending. {}", ev->type);
