@@ -431,12 +431,18 @@ void mdns::detected_service(const mdns::service *service){
     }
   }
 
+  // This has to be a gather what to call, and then call as f can try to remove a
+  // service from discovery map. And that is not allowed (for loop and remove item from the loop).
+  std::vector<std::function<void(const mdns::service *)>> tocall;
   for (auto &discovery: discovery_map){
     if (service->type == discovery.first.first && discovery_match(discovery.first.second, service->label)){
       for(auto &f: discovery.second){
-        f(service);
+        tocall.push_back(f);
       }
     }
+  }
+  for (auto &f: tocall){
+    f(service);
   }
   for(auto &f: query_map[type_label]){
     f(service);
