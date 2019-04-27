@@ -41,21 +41,12 @@ namespace rtpmidid {
       query_type_e type;
       uint32_t ttl;
 
-      service() {};
-      service(std::string label_, query_type_e type_, uint32_t ttl_) :
-        label(std::move(label_)), type(type_), ttl(ttl_) {}
-      virtual std::unique_ptr<service> clone() const{
-        throw exception("Not implemented clone for basic service.");
-      }
-      virtual bool equal(const service *other) {
-        return false;
-      }
-      bool base_equal(const service *other){
-        return type == other->type && label == other->label;
-      }
-      virtual std::string to_string() const{
-        return fmt::format("?? Q {} T {} ttl {}", label, type, ttl);
-      }
+      service();
+      service(std::string label_, query_type_e type_, uint32_t ttl_);
+      virtual std::unique_ptr<service> clone() const;
+      virtual bool equal(const service *other);
+      bool base_equal(const service *other);
+      virtual std::string to_string() const;
     };
     struct service_a : public service {
       union{
@@ -63,96 +54,30 @@ namespace rtpmidid {
         uint32_t ip4;
       };
 
-      service_a() {}
-      service_a(std::string label_, uint32_t ttl_, uint8_t ip_[4]) :
-        service(std::move(label_), A, ttl_) {
-          ip[0] = ip_[0];
-          ip[1] = ip_[1];
-          ip[2] = ip_[2];
-          ip[3] = ip_[3];
-        }
-      virtual std::unique_ptr<service> clone() const{
-        auto ret = std::make_unique<service_a>();
-
-        ret->label = label;
-        ret->type = type;
-        ret->ttl = ttl;
-        ret->ip4 = ip4;
-
-        return ret;
-      }
-      virtual bool equal(const service *other_){
-        if (!base_equal(other_))
-          return false;
-        if (const service_a *other = dynamic_cast<const service_a *>(other_)){
-          return ip4 == other->ip4;
-        }
-        return false;
-      }
-      virtual std::string to_string() const{
-        return fmt::format("A Q {} T {} ttl {} ip {}.{}.{}.{}", label, type, ttl,
-          uint8_t(ip[0]), uint8_t(ip[1]), uint8_t(ip[2]), uint8_t(ip[3]));
-      }
+      service_a();
+      service_a(std::string label_, uint32_t ttl_, uint8_t ip_[4]);
+      virtual std::unique_ptr<service> clone() const;
+      virtual bool equal(const service *other_);
+      virtual std::string to_string() const;
     };
     struct service_srv : public service {
       std::string hostname;
       uint16_t port;
 
-      service_srv() {}
-      service_srv(std::string label_, uint32_t ttl_, std::string hostname_, uint16_t port_) :
-        service(std::move(label_), SRV, ttl_),  hostname(std::move(hostname_)), port(port_) {}
-      virtual std::unique_ptr<service> clone() const{
-        auto ret = std::make_unique<service_srv>();
-
-        ret->label = label;
-        ret->type = type;
-        ret->ttl = ttl;
-        ret->hostname = hostname;
-        ret->port = port;
-
-        return ret;
-      }
-      virtual bool equal(const service *other_){
-        if (!base_equal(other_))
-          return false;
-        if (const service_srv *other = dynamic_cast<const service_srv *>(other_)){
-          return hostname == other->hostname && port == other->port;
-        }
-        return false;
-      }
-      virtual std::string to_string() const{
-        return fmt::format("SRV Q {} T {} ttl {} hostname {} port {}", label, type, ttl,
-          hostname, port);
-      }
+      service_srv();
+      service_srv(std::string label_, uint32_t ttl_, std::string hostname_, uint16_t port_);
+      virtual std::unique_ptr<service> clone() const;
+      virtual bool equal(const service *other_);
+      virtual std::string to_string() const;
     };
     struct service_ptr : public service {
       std::string servicename;
 
-      service_ptr() {}
-      service_ptr(std::string label_, uint32_t ttl_, std::string servicename_) :
-        service(std::move(label_), PTR, ttl_), servicename(std::move(servicename_)) {}
-      virtual std::unique_ptr<service> clone() const{
-        auto ret = std::make_unique<service_ptr>();
-
-        ret->label = label;
-        ret->type = type;
-        ret->ttl = ttl;
-        ret->servicename = servicename;
-
-        return ret;
-      }
-      virtual bool equal(const service *other_){
-        if (!base_equal(other_))
-          return false;
-        if (const service_ptr *other = dynamic_cast<const service_ptr *>(other_)){
-          return servicename == other->servicename;
-        }
-        return false;
-      }
-      virtual std::string to_string() const{
-        return fmt::format("PTR Q {} T {} ttl {} servicename {}", label, type, ttl,
-          servicename);
-      }
+      service_ptr();
+      service_ptr(std::string label_, uint32_t ttl_, std::string servicename_);
+      virtual std::unique_ptr<service> clone() const;
+      virtual bool equal(const service *other_);
+      virtual std::string to_string() const;
     };
 
   private:
