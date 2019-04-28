@@ -19,6 +19,7 @@
 #pragma once
 
 #include <string>
+#include <set>
 #include "./aseq.hpp"
 #include "./mdns.hpp"
 #include "./rtppeer.hpp"
@@ -41,6 +42,7 @@ namespace rtpmidid{
     // Local port id to peer_info for connections
     std::map<uint8_t, peer_info> known_peers;
     char export_port_next_id = 'A';
+    std::set<std::string> known_mdns_peers;
 
     rtpmidid(std::string name);
 

@@ -58,7 +58,7 @@ void ::rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name){
 void ::rtpmidid::rtpmidid::setup_mdns(){
   mdns.on_discovery("_apple-midi._udp.local", mdns::PTR, [this](const ::rtpmidid::mdns::service *service){
     const ::rtpmidid::mdns::service_ptr *ptr = static_cast<const ::rtpmidid::mdns::service_ptr*>(service);
-    INFO("Found apple midi PTR response {}!", std::to_string(*ptr));
+    // INFO("Found apple midi PTR response {}!", std::to_string(*ptr));
     // just ask, next on discovery will catch it.
     mdns.query(ptr->servicename, ::rtpmidid::mdns::SRV);
   });
@@ -69,9 +69,15 @@ void ::rtpmidid::rtpmidid::setup_mdns(){
       return;
 
     auto *srv = static_cast<const ::rtpmidid::mdns::service_srv*>(service);
-    INFO("Found apple midi SRV response {}!", std::to_string(*srv));
     uint16_t port = srv->port;
     std::string srvname = srv->label;
+    if (known_mdns_peers.count(srvname) != 0){
+      DEBUG("Reannounce of known rtpmidi server. Ignoring.");
+      return;
+    }
+    known_mdns_peers.insert(srvname);
+
+    INFO("Found apple midi SRV response {}!", std::to_string(*srv));
     mdns.query(srv->hostname, ::rtpmidid::mdns::A, [this, srvname, port](const ::rtpmidid::mdns::service *service){
       auto name = srvname.substr(0, srvname.find('.'));
       auto *ip = static_cast<const ::rtpmidid::mdns::service_a*>(service);
@@ -94,6 +100,7 @@ void ::rtpmidid::rtpmidid::setup_mdns(){
             known_peers.erase(I);
 
           mdns.remove_discovery(srvname, ::rtpmidid::mdns::SRV);
+          known_mdns_peers.erase(srvname);
         });
       }
     });

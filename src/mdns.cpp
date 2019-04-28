@@ -477,7 +477,7 @@ void mdns::update_cache(const mdns::service *service){
   for (auto &d: cache[type_label]) {
     // DEBUG("Check if equal \n\t\t{}\n\t\t{}", d->to_string(), service->to_string());
     if (d->equal(service)) {
-      DEBUG("Got it at cache. Update TTL.");
+      // DEBUG("Got it at cache. Update TTL.");
       d->ttl = service->ttl;
       service_at_cache = d.get();
     }
