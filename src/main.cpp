@@ -88,7 +88,7 @@ int main(int argc, char **argv){
           rtpmidid.add_rtpmidi_client(s[0], s[0], 5004);
         }
         else if (s.size() == 2){
-          rtpmidid.add_rtpmidi_client(s[0], s[1], 5004);
+          rtpmidid.add_rtpmidi_client(s[0], s[0], stoi(s[1].c_str()));
         }
         else if (s.size() == 3){
           rtpmidid.add_rtpmidi_client(s[0], s[1], stoi(s[2].c_str()));
