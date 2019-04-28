@@ -38,7 +38,14 @@ namespace rtpmidid {
       CK = 0x434b,
       RS = 0x5253
     };
+    enum status_e {
+      NOT_CONNECTED = 0,
+      CONTROL_CONNECTED = 1,
+      MIDI_CONNECTED = 2,
+      CONNECTED = 3
+    };
 
+    status_e status;
     int control_socket;
     int midi_socket;
     uint16_t local_base_port;
@@ -55,7 +62,7 @@ namespace rtpmidid {
     uint64_t latency;
     std::function<void(parse_buffer_t &)> event_midi;
     std::function<void(void)> event_close;
-    std::function<void(const std::string &)> event_connect;
+    std::vector<std::function<void(const std::string &)>> event_connect;
 
     rtppeer(std::string _name, int startport);
     virtual ~rtppeer();
@@ -67,7 +74,7 @@ namespace rtpmidid {
       event_close = f;
     }
     void on_connect(std::function<void(const std::string &)> f){
-      event_connect = f;
+      event_connect.push_back(f);
     }
     bool is_connected(){
       return remote_base_port != 0;
@@ -86,6 +93,7 @@ namespace rtpmidid {
 
     void send_midi(parse_buffer_t *buffer);
     void send_goodbye(int from_fd, int to_port);
+    void send_ck0();
     uint64_t get_timestamp();
 
     void sendto(int socket, const parse_buffer_t &b);

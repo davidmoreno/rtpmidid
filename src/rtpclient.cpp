@@ -41,6 +41,10 @@ rtpclient::rtpclient(std::string name, const std::string &address, int16_t port)
   connect_to(control_socket, port);
   DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address, port + 1);
   connect_to(midi_socket, port + 1);
+
+  on_connect([this](const std::string &){
+    send_ck0();
+  });
 }
 
 rtpclient::~rtpclient(){
