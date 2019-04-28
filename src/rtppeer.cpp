@@ -352,7 +352,7 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, int socket){
       ck3 = get_timestamp();
       count = 2;
       latency = ck3 - ck1;
-      DEBUG("Latency {}: {:.2f} ms", remote_name, latency / 100.0);
+      DEBUG("Latency {}: {:.2f} ms (client / 2)", remote_name, latency / 10.0);
     }
     break;
     case 2:
@@ -361,7 +361,7 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, int socket){
       ck2 = buffer.read_uint64();
       ck3 = buffer.read_uint64();
       latency = get_timestamp() - ck2;
-      DEBUG("Latency {}: {:.2f} ms", remote_name, latency / 100.0);
+      DEBUG("Latency {}: {:.2f} ms (server / 3)", remote_name, latency / 10.0);
       // No need to send message
       return;
     }
@@ -460,6 +460,11 @@ void rtppeer::parse_midi(parse_buffer_t &buffer){
     event_midi(midi_data);
 }
 
+/**
+ * Returns the times since start of this object in 100 us (1e-4) / 0.1 ms
+ *
+ * 10 ts = 1ms, 10000 ts = 1s. 1ms = 0.1ts
+ */
 uint64_t rtppeer::get_timestamp(){
   struct timespec spec;
 
