@@ -294,9 +294,10 @@ void ::rtpmidid::rtpmidid::add_export_port(char id, uint8_t aseq_port){
   peer_info.peer->on_midi([this, aseq_port](parse_buffer_t &pb){
     this->recv_rtpmidi_event(aseq_port, pb);
   });
-  peer_info.peer->on_close([this, aseq_port, id](){
-    remove_peer(aseq_port);
-    add_export_port(id, aseq_port);
+
+  // When other side closes, I reset the peer status to waiting for connections
+  peer_info.peer->on_close([this, aseq_port](){
+    known_peers[aseq_port].peer->reset();
   });
 
   // When connecting, create new ports

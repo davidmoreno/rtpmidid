@@ -122,6 +122,13 @@ rtppeer::~rtppeer(){
   }
 }
 
+void rtppeer::reset(){
+  remote_name = "";
+  remote_base_port = 0;
+  remote_ssrc = 0;
+  initiator_id = 0;
+}
+
 void rtppeer::control_data_ready(){
   uint8_t raw[1500];
   struct sockaddr_in cliaddr;

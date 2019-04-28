@@ -72,6 +72,7 @@ namespace rtpmidid {
     bool is_connected(){
       return remote_base_port != 0;
     }
+    void reset();
 
     void control_data_ready();
     void midi_data_ready();
