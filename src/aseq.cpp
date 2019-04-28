@@ -76,6 +76,7 @@ namespace rtpmidid{
       poller.remove_fd(fd);
     }
     snd_seq_close(seq);
+    snd_config_update_free_global();
   }
 
   void aseq::on_subscribe(int port, std::function<void(int client, int port, const std::string &name)> f){
