@@ -94,6 +94,11 @@ poller_t::timer_t poller_t::add_timer_event(std::time_t in_secs, std::function<v
   return poller_t::timer_t(timer_id);
 }
 
+void poller_t::call_later(std::function<void(void)> later_f){
+  later_events.push_back(std::move(later_f));
+}
+
+
 void poller_t::remove_fd(int fd){
   fd_events.erase(fd);
   if (is_open()){
@@ -157,6 +162,14 @@ void poller_t::wait(){
     // }
   }
 
+  while(!later_events.empty()){
+    std::vector<std::function<void(void)>> call_now;
+    // Clean the later, get the now.
+    std::swap(call_now, later_events);
+    for (auto &f: call_now){
+        f();
+    }
+  }
 }
 
 poller_t::timer_t::timer_t() : id(0) {

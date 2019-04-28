@@ -32,6 +32,7 @@ namespace rtpmidid {
     int epollfd;
     std::map<int, std::function<void(int)>> fd_events;
     std::vector<std::tuple<std::time_t, int, std::function<void(void)>>> timer_events;
+    std::vector<std::function<void(void)>> later_events;
     int max_timer_id = 0;
   public:
     class timer_t;
@@ -42,6 +43,9 @@ namespace rtpmidid {
     // Call this function in X seconds
     timer_t add_timer_event(std::time_t in_secs, std::function<void(void)> event_f);
     void remove_timer(timer_t &tid);
+
+    // Just call it later. after finishing current round of event loop
+    void call_later(std::function<void(void)> later_f);
 
     void add_fd_in(int fd, std::function<void(int)> event_f);
     void add_fd_out(int fd, std::function<void(int)> event_f);
