@@ -197,7 +197,7 @@ void mdns::announce(std::unique_ptr<service> service, bool broadcast){
   // preemptively tell everybody
   if (broadcast){
     send_response(*service);
-    DEBUG("Announce service: {}", service->to_string());
+    // DEBUG("Announce service: {}", service->to_string());
   }
 
   // Will reannounce acording to ttl. I keep a pointer, but if removed it will be removed from the timers too.
@@ -210,7 +210,7 @@ void mdns::announce(std::unique_ptr<service> service, bool broadcast){
 }
 
 void mdns::reannounce_later(service *srv){
-  DEBUG("Will reannounce in {}s", srv->ttl);
+  // DEBUG("Will reannounce in {}s", srv->ttl);
   auto timer_id = poller.add_timer_event(srv->ttl, [this, srv]{
     INFO("Reannounce srv: {}", srv->to_string());
     send_response(*srv);
@@ -288,7 +288,7 @@ void mdns::send_response(const service &service){
   }
 
   uint16_t nbytes = buffer.position - length_data_pos - 2;
-  DEBUG("Send mDNS response: {}", service.to_string());
+  // DEBUG("Send mDNS response: {}", service.to_string());
 
   // A little go and back
   raw_write_uint16(length_data_pos, nbytes);
@@ -338,7 +338,7 @@ void mdns::query(const std::string &name, mdns::query_type_e type){
     DEBUG("Packet ready! {} bytes", buffer.length());
     buffer.print_hex();
   }
-  DEBUG("Send query {} {}", name, type);
+  // DEBUG("Send query {} {}", name, type);
   sendto(socketfd, packet, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
 }
 

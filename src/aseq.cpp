@@ -59,10 +59,10 @@ namespace rtpmidid{
     if (poller_count != poller_count_check){
       throw exception("ALSA seq poller count does not match. {} != {}", poller_count, poller_count_check);
     }
-    DEBUG("Got {} pollers", poller_count);
+    // DEBUG("Got {} pollers", poller_count);
     for (int i=0;i<poller_count;i++){
       fds.push_back(pfds[i].fd);
-      DEBUG("Adding fd {} as alsa seq", pfds[i].fd);
+      // DEBUG("Adding fd {} as alsa seq", pfds[i].fd);
       poller.add_fd_in(pfds[i].fd, [this](int){
         // INFO("New event at alsa seq");
         this->read_ready();
