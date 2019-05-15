@@ -1,4 +1,25 @@
-all:
+all: compile
+
+
+compile: build/bin/rtpmidid
+
+build/bin/rtpmidid: src/* tests/* CMakeLists.txt
+	mkdir -p build
+	cd build &&	cmake ..
+	cd build && make -j
+
+
+clean:
+	rm -rf build
+
+runcpp: build/bin/rtpmidid
+	timeout 10 valgrind build/bin/rtpmidid
+
+test: compile
+	cd build; make -j test
+
+
+## OLD Python daemon
 
 .PHONY: setup
 setup: requirements.txt
