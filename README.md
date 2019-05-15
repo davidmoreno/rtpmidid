@@ -57,13 +57,17 @@ Development status / plan:
 * [x] Any message from alsa seq is sent to the MIDI rtp extreme
 * [x] Any message from rtpmidi is replayed on the alsa seq
 * [x] Can export local ports, with user deciding which ones to export.
-* [ ] When remote side request connections, create the alsa seq virtual port
-      for that connection (if it does not exist from an announcement) and
-      connect both ports
+* [ ] Server mode at a known port, when remote side request connections, create
+      the alsa seq virtual port for that connection and connect both ports.
 * [x] Send all MIDI events to rtpmidi
 * [x] Receive all MIDI events from rtpmidi
 * [ ] Periodic check all peers are still on, no new peers
 * [x] Remove ports when peer dissapears
+* [ ] Client send CK every minute
+* [ ] Journal support for note off
+* [ ] Journal support for CC
+* [ ] Journal support for Program Change
+* [ ] Journal support for Pitch Bend
 
 
 ## License
