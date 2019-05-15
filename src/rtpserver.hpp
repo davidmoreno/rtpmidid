@@ -18,12 +18,24 @@
 
 #pragma once
 
+#include <map>
+#include <memory>
 #include "./rtppeer.hpp"
+
+struct sockaddr_in;
 
 namespace rtpmidid{
   class rtpserver{
   public:
-    rtppeer peer;
+    // Stupid RTPMIDI uses initiator_id sometimes and ssrc other times.
+
+    // Maps the peers to the initiator_id.
+    std::map<uint32_t, std::shared_ptr<rtppeer>> initiator_to_peer;
+    // Maps the peers to the ssrc.
+    std::map<uint32_t, std::shared_ptr<rtppeer>> ssrc_to_peer;
+
+    std::string name;
+
     int midi_socket;
     int control_socket;
 
@@ -33,7 +45,11 @@ namespace rtpmidid{
     rtpserver(std::string name, int16_t port);
     ~rtpserver();
 
+    // Returns the peer for that packet, or nullptr
+    std::shared_ptr<rtppeer> get_peer_by_packet(parse_buffer_t &b);
+
     void data_ready(rtppeer::port_e port);
+    void sendto(const parse_buffer_t &b, rtppeer::port_e port, struct sockaddr_in *, int remote_base_port);
 
     void on_midi(std::function<void(parse_buffer_t &)> f){
     }

@@ -25,7 +25,7 @@
 
 using namespace rtpmidid;
 
-rtpserver::rtpserver(std::string name, int16_t port) : peer(std::move(name)){
+rtpserver::rtpserver(std::string _name, int16_t port) : name(std::move(_name)){
   control_socket = midi_socket = 0;
   control_port = port;
   midi_port = port + 1;
@@ -81,7 +81,7 @@ rtpserver::rtpserver(std::string name, int16_t port) : peer(std::move(name)){
   }
 
   INFO("Listening RTP MIDI connections at 0.0.0.0:{}, with name: '{}'",
-    control_port, peer.local_name);
+    control_port, name);
 }
 
 rtpserver::~rtpserver(){
@@ -95,20 +95,109 @@ rtpserver::~rtpserver(){
   }
 }
 
+std::shared_ptr<rtppeer> rtpserver::get_peer_by_packet(parse_buffer_t &buffer){
+  // Commands may be by SSRC or initiator_id
+  auto command = rtppeer::commands_e((uint16_t(buffer.start[2])<<8) + buffer.start[3]);
+
+  switch(command){
+    case rtppeer::IN:
+    case rtppeer::OK:
+    case rtppeer::BY:
+    case rtppeer::NO:
+      {
+        buffer.position = buffer.start + 8;
+        auto initiator_id = buffer.read_uint32();
+        buffer.position = buffer.start;
+        return initiator_to_peer[initiator_id];
+      }
+    case rtppeer::CK:
+    case rtppeer::RS:
+    {
+      buffer.position = buffer.start + 4;
+      auto ssrc = buffer.read_uint32();
+      buffer.position = buffer.start;
+      auto peer = ssrc_to_peer[ssrc];
+      if (peer)
+        return peer;
+
+      // If just connected, maybe we dont know the SSRC yet. Check all the peers to update
+      for(auto &initiator_peer: initiator_to_peer){
+        if (initiator_peer.second->remote_ssrc == ssrc){
+          ssrc_to_peer[ssrc] = initiator_peer.second;
+          return initiator_peer.second;
+        }
+      }
+      return nullptr;
+    }
+    default:
+      DEBUG("COMMAND if {:X}", int(command));
+      return nullptr;
+  }
+}
+
 void rtpserver::data_ready(rtppeer::port_e port){
   DEBUG("Data ready at server");
 
   uint8_t raw[1500];
   struct sockaddr_in cliaddr;
   unsigned int len = sizeof(cliaddr);
-  auto socket = port == rtppeer::CONTROL_PORT ? control_socket : midi_socket;
+  auto socket = (port == rtppeer::CONTROL_PORT) ? control_socket : midi_socket;
   auto n = recvfrom(socket, raw, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
   // DEBUG("Got some data from control: {}", n);
   if (n < 0){
-    auto netport = port == rtppeer::CONTROL_PORT ? control_port : midi_port;
-    throw exception("Error reading from rtppeer {}:{}", peer.remote_name, netport);
+    auto netport = (port == rtppeer::CONTROL_PORT) ? control_port : midi_port;
+    throw exception("Error reading from server 0.0.0.0:{}", netport);
   }
 
   auto buffer = parse_buffer_t(raw, n);
-  peer.data_ready(buffer, port);
+
+  auto peer = get_peer_by_packet(buffer);
+  if (peer){
+    peer->data_ready(buffer, port);
+  } else {
+    // If I dont know the other peer I'm only interested in IN, ignore others
+    // If it is not a CONTROL PORT the messages come in the wrong order. The first IN should create the peer.
+    if (port == rtppeer::CONTROL_PORT && rtppeer::is_command(buffer) && buffer.start[2] == 'I' && buffer.start[3] == 'N'){
+      auto peer = std::make_shared<rtppeer>(name);
+      auto address = std::make_shared<struct sockaddr_in>();
+      ::memcpy(address.get(), &cliaddr, sizeof(cliaddr));
+      auto remote_base_port = htons(cliaddr.sin_port);
+      // DEBUG("Address family {} {}. From {}", cliaddr.sin_family, address->sin_family, socket);
+
+      // This is the send to the proper ports
+      peer->sendto = [this, address, remote_base_port](const parse_buffer_t &buff, rtppeer::port_e port){
+        this->sendto(buff, port, address.get(), remote_base_port);
+      };
+      peer->data_ready(buffer, port);
+
+      // After read the first packet I know the initiator_id
+      initiator_to_peer[peer->initiator_id] = peer;
+    } else {
+      DEBUG("Unknown peer, and not connect on control. Ignoring.");
+      buffer.print_hex(true);
+    }
+  }
+}
+
+void rtpserver::sendto(const parse_buffer_t &pb, rtppeer::port_e port, struct sockaddr_in *address, int remote_base_port){
+  if (port == rtppeer::MIDI_PORT)
+    address->sin_port = htons(remote_base_port + 1);
+  else
+    address->sin_port = htons(remote_base_port);
+
+  auto socket = rtppeer::MIDI_PORT == port ? midi_socket : control_socket;
+
+  // DEBUG("Send to {}, {}, family {} {}. {} {}", port, socket, AF_INET, address->sin_family, inet_ntoa(address->sin_addr), htons(address->sin_port));
+
+  auto res = ::sendto(
+    socket, pb.start, pb.length(),
+    MSG_CONFIRM, (const struct sockaddr *)address, sizeof(struct sockaddr_in)
+  );
+
+  if (res != pb.length()){
+    throw exception(
+      "Could not send all data. Sent {}. {}",
+      res, strerror(errno)
+    );
+  }
 }
