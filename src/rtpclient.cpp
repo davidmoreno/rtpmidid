@@ -96,7 +96,7 @@ void rtpclient::connect_to(std::string address, int port){
     }
     poller.add_fd_in(midi_socket, [this](int){ this->data_ready(rtppeer::MIDI_PORT); });
   } catch (...){
-    ERROR("Error creating rtppeer.");
+    ERROR("Error creating rtp client.");
     if (control_socket){
       poller.remove_fd(control_socket);
       ::close(control_socket);
