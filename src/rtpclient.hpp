@@ -20,12 +20,17 @@
 
 #include <string>
 #include "./rtppeer.hpp"
+#include "./poller.hpp"
 
 namespace rtpmidid {
   class rtpclient : public rtppeer {
-    bool connect_to(int socketfd, int16_t port);
   public:
+    poller_t::timer_t timer_ck;
+
     rtpclient(std::string name, const std::string &address, int16_t port);
     virtual ~rtpclient();
+
+    bool connect_to(int socketfd, int16_t port);
+    void start_ck_1min_sync();
   };
 }

@@ -43,7 +43,7 @@ rtpclient::rtpclient(std::string name, const std::string &address, int16_t port)
   connect_to(midi_socket, port + 1);
 
   on_connect([this](const std::string &){
-    send_ck0();
+    start_ck_1min_sync();
   });
 }
 
@@ -51,6 +51,18 @@ rtpclient::~rtpclient(){
 
 }
 
+
+/**
+ * Every 60 seconds, do a ck sync.
+ *
+ * TODO If not answered in some time, asume disconnection.
+ */
+void rtpclient::start_ck_1min_sync(){
+  send_ck0();
+  timer_ck = std::move(poller.add_timer_event(60, [this]{
+    start_ck_1min_sync();
+  }));
+}
 
 bool rtpclient::connect_to(int socketfd, int16_t port){
   uint8_t packet[1500];
