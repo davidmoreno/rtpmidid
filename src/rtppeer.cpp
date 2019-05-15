@@ -220,8 +220,8 @@ void rtppeer::parse_command_by(parse_buffer_t &buffer, port_e port){
 
   INFO("Disconnect from {}", remote_name);
   // Normally this will schedule removal of peer.
-  if (event_close){
-    event_close();
+  if (event_disconnect){
+    event_disconnect();
   }
 }
 
@@ -411,6 +411,12 @@ void rtppeer::send_goodbye(port_e to_port){
   buffer.write_uint32(SSRC);
 
   sendto(to_port, buffer);
+
+  status = status_e(int(status) & ~int(to_port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED));
+
+  if (status == NOT_CONNECTED && event_disconnect){
+    event_disconnect();
+  }
 }
 
 void rtppeer::connect_to(port_e rtp_port){

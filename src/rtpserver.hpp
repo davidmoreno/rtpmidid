@@ -24,11 +24,16 @@ namespace rtpmidid{
   class rtpserver{
   public:
     rtppeer peer;
+    int midi_socket;
+    int control_socket;
 
-    uint16_t local_base_port;
+    uint16_t midi_port;
+    uint16_t control_port;
 
     rtpserver(std::string name, int16_t port);
     ~rtpserver();
+
+    void data_ready(rtppeer::port_e port);
 
     void on_midi(std::function<void(parse_buffer_t &)> f){
     }

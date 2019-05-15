@@ -34,14 +34,34 @@
 using namespace rtpmidid;
 
 rtpclient::rtpclient(std::string name, const std::string &address, int16_t port)
-    : local_base_port(port), peer(std::move(name)) {
-  remote_base_port = port;
+    : peer(std::move(name)) {
+  local_base_port = port;
   remote_base_port = 0; // Not defined
   control_socket = -1;
   midi_socket = -1;
   auto startport = local_base_port;
   peer.initiator_id = rand();
 
+  connect_to(address, port);
+}
+
+rtpclient::~rtpclient(){
+  if (peer.is_connected()){
+    peer.send_goodbye(rtppeer::CONTROL_PORT);
+    peer.send_goodbye(rtppeer::MIDI_PORT);
+  }
+
+  if (control_socket > 0){
+    poller.remove_fd(control_socket);
+    close(control_socket);
+  }
+  if (midi_socket > 0){
+    poller.remove_fd(midi_socket);
+    close(midi_socket);
+  }
+}
+
+void rtpclient::connect_to(std::string address, int port){
   try{
     struct sockaddr_in servaddr;
     control_socket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -51,9 +71,9 @@ rtpclient::rtpclient(std::string name, const std::string &address, int16_t port)
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = INADDR_ANY;
-    servaddr.sin_port = htons(startport);
+    servaddr.sin_port = htons(port);
     if (bind(control_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
-      throw rtpmidid::exception("Can not open control socket. Maybe addres is in use?");
+      throw rtpmidid::exception("Can not open control socket. Maybe address is in use?");
     }
     if (local_base_port == 0){
       socklen_t len = sizeof(servaddr);
@@ -72,7 +92,7 @@ rtpclient::rtpclient(std::string name, const std::string &address, int16_t port)
     servaddr.sin_addr.s_addr = INADDR_ANY;
     servaddr.sin_port = htons(local_base_port + 1);
     if (bind(midi_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
-      throw rtpmidid::exception("Can not open MIDI socket. Maybe addres is in use?");
+      throw rtpmidid::exception("Can not open MIDI socket. Maybe address is in use?");
     }
     poller.add_fd_in(midi_socket, [this](int){ this->data_ready(rtppeer::MIDI_PORT); });
   } catch (...){
@@ -103,22 +123,6 @@ rtpclient::rtpclient(std::string name, const std::string &address, int16_t port)
   peer.on_connect([this](const std::string &){
     start_ck_1min_sync();
   });
-}
-
-rtpclient::~rtpclient(){
-  if (peer.is_connected()){
-    peer.send_goodbye(rtppeer::CONTROL_PORT);
-    peer.send_goodbye(rtppeer::MIDI_PORT);
-  }
-
-  if (control_socket > 0){
-    poller.remove_fd(control_socket);
-    close(control_socket);
-  }
-  if (midi_socket > 0){
-    poller.remove_fd(midi_socket);
-    close(midi_socket);
-  }
 }
 
 void rtpclient::sendto(rtppeer::port_e port, const parse_buffer_t &pb){

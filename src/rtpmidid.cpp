@@ -71,7 +71,6 @@ using namespace rtpmidid;
 
 uint16_t rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name, uint16_t port){
   auto rtpserver = std::make_shared<::rtpmidid::rtpserver>(name, port);
-  port = rtpserver->local_base_port;
 
   auto ptr = std::make_unique<::rtpmidid::mdns::service_ptr>();
   ptr->label = "_apple-midi._udp.local";
@@ -376,10 +375,8 @@ void ::rtpmidid::rtpmidid::add_export_port(char id, uint8_t aseq_port){
     add_export_port();
   });
 
-
-  netport = server_info.peer->local_base_port;
+  netport = server_info.peer->control_port;
   server_info.port = netport;
-
 
   seq.on_midi_event(aseq_port, [this, aseq_port](snd_seq_event_t *ev){
     this->recv_alsamidi_event(aseq_port, ev);
