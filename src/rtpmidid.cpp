@@ -31,8 +31,16 @@ const int TIMEOUT_REANNOUNCE = 75 * 60;  // As recommended by RFC 6762
 
 using namespace rtpmidid;
 
-::rtpmidid::rtpmidid::rtpmidid(config_t *config) : name(std::move(config->name)), seq(fmt::format("rtpmidi {}", name)){
-  auto outputs = ::rtpmidid::get_ports(&seq);
+::rtpmidid::rtpmidid::rtpmidid(config_t *config) : name(config->name), seq(fmt::format("rtpmidi {}", name)){
+  // Max automatic export port. They are automatically created as connected to "Export A, Export B and so on."
+  if (config->max_export_port == '0'){
+    max_export_port_next_id = '\0';
+  } else {
+    if (config->max_export_port < 'A' || config->max_export_port > 'Z'){
+      throw exception("Invalid max export port. Should be between A and Z.");
+    }
+    this->max_export_port_next_id = config->max_export_port;
+  }
 
   setup_mdns();
   setup_alsa_seq();
@@ -308,8 +316,9 @@ void ::rtpmidid::rtpmidid::setup_alsa_seq(){
 }
 
 void ::rtpmidid::rtpmidid::add_export_port(){
+  INFO("Create automatic port. Next is {}, max {}", export_port_next_id, max_export_port_next_id);
   // Max 26 ports.
-  if (export_port_next_id > 'Z')
+  if (export_port_next_id > max_export_port_next_id)
     return;
   add_export_port(export_port_next_id++);
 }

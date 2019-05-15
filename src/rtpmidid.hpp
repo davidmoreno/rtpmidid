@@ -26,7 +26,7 @@
 
 namespace rtpmidid{
   struct config_t;
-  
+
   struct peer_info{
     std::string name;
     std::string address;
@@ -44,6 +44,7 @@ namespace rtpmidid{
     // Local port id to peer_info for connections
     std::map<uint8_t, peer_info> known_peers;
     char export_port_next_id = 'A';
+    char max_export_port_next_id = 'Z';
     std::set<std::string> known_mdns_peers;
 
     rtpmidid(config_t *config);
