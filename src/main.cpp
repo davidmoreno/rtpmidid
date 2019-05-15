@@ -43,10 +43,10 @@ int main(int argc, char **argv){
     signal(SIGINT, sigint_f);
     signal(SIGTERM, sigterm_f);
 
-    auto options = rtpmidid::parse_cmd_args(argc-1, argv+1);
-
     INFO("Real Time Protocol Music Instrument Digital Interface Daemon - {}", rtpmidid::VERSION);
     INFO("(C) 2019 David Moreno Montero <dmoreno@coralbits.com>");
+
+    auto options = rtpmidid::parse_cmd_args(argc-1, argv+1);
 
     try{
       auto rtpmidid = ::rtpmidid::rtpmidid(&options);

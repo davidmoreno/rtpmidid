@@ -22,7 +22,7 @@
 
 namespace rtpmidid{
   extern const char *VERSION;
-   
+
   /**
    * @short All rtpmidi options in a nice struct to pass around
    *
@@ -34,7 +34,7 @@ namespace rtpmidid{
     std::vector<std::string> connect_to;
     // Create clients at this ports to start with. Later will see.
     std::vector<uint16_t> ports;
-    bool automatic_create_ports = true;
+    char max_export_port = 'D';
   };
   config_t parse_cmd_args(int argc, char **argv);
 }
