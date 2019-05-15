@@ -26,8 +26,6 @@
 using namespace rtpmidid;
 
 rtpserver::rtpserver(std::string name, int16_t port) : peer(std::move(name)){
-  INFO("Listening RTP MIDI connections at 0.0.0.0:{}, with name: '{}'",
-    port, name);
   control_socket = midi_socket = 0;
   control_port = port;
   midi_port = port + 1;
@@ -45,7 +43,7 @@ rtpserver::rtpserver(std::string name, int16_t port) : peer(std::move(name)){
     if (bind(control_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
       throw rtpmidid::exception("Can not open control socket. Maybe address is in use?");
     }
-    if (control_socket == 0){
+    if (control_port == 0){
       socklen_t len = sizeof(servaddr);
       ::getsockname(control_socket, (struct sockaddr*)&servaddr, &len);
       control_port = htons(servaddr.sin_port);
@@ -68,7 +66,7 @@ rtpserver::rtpserver(std::string name, int16_t port) : peer(std::move(name)){
     }
     poller.add_fd_in(midi_socket, [this](int){ this->data_ready(rtppeer::MIDI_PORT); });
   } catch (...){
-    ERROR("Error creating server.");
+    ERROR("Error creating server at port {}", control_port);
     if (control_socket){
       poller.remove_fd(control_socket);
       ::close(control_socket);
@@ -81,6 +79,9 @@ rtpserver::rtpserver(std::string name, int16_t port) : peer(std::move(name)){
     }
     throw;
   }
+
+  INFO("Listening RTP MIDI connections at 0.0.0.0:{}, with name: '{}'",
+    control_port, peer.local_name);
 }
 
 rtpserver::~rtpserver(){
