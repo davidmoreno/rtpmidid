@@ -15,6 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+#include <stdlib.h>
+#include <string>
 
 #include "./rtpmidid.hpp"
 #include "./aseq.hpp"
@@ -22,20 +24,45 @@
 #include "./rtpclient.hpp"
 #include "./logger.hpp"
 #include "./netutils.hpp"
+#include "./config.hpp"
+#include "./stringpp.hpp"
 
 const int TIMEOUT_REANNOUNCE = 75 * 60;  // As recommended by RFC 6762
 
 using namespace rtpmidid;
 
-::rtpmidid::rtpmidid::rtpmidid(std::string _name) : name(std::move(_name)), seq(fmt::format("rtpmidi {}", name)){
+::rtpmidid::rtpmidid::rtpmidid(config_t *config) : name(std::move(config->name)), seq(fmt::format("rtpmidi {}", name)){
   auto outputs = ::rtpmidid::get_ports(&seq);
 
   setup_mdns();
   setup_alsa_seq();
+
+
+  for (auto &port: config->ports){
+    add_rtpmidid_server(config->name, port);
+  }
+
+
+  for (auto &connect_to: config->connect_to){
+    auto s = ::rtpmidid::split(connect_to, ':');
+    if (s.size() == 1){
+      add_rtpmidi_client(s[0], s[0], 5004);
+    }
+    else if (s.size() == 2){
+      add_rtpmidi_client(s[0], s[0], std::stoi(s[1].c_str()));
+    }
+    else if (s.size() == 3){
+      add_rtpmidi_client(s[0], s[1], std::stoi(s[2].c_str()));
+    }
+    else {
+      ERROR("Invalid remote address. Format is ip, name:ip, or name:ip:port. {}", s.size());
+      throw exception("Invalid remote address to connect to.");
+    }
+  }
 }
 
 uint16_t rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name, uint16_t port){
-  auto rtpserver = std::make_unique<::rtpmidid::rtpserver>(name, port);
+  auto rtpserver = std::make_shared<::rtpmidid::rtpserver>(name, port);
   port = rtpserver->local_base_port;
 
   auto ptr = std::make_unique<::rtpmidid::mdns::service_ptr>();

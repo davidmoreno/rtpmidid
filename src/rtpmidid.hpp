@@ -25,6 +25,8 @@
 #include "./rtppeer.hpp"
 
 namespace rtpmidid{
+  struct config_t;
+  
   struct peer_info{
     std::string name;
     std::string address;
@@ -43,9 +45,8 @@ namespace rtpmidid{
     std::map<uint8_t, peer_info> known_peers;
     char export_port_next_id = 'A';
     std::set<std::string> known_mdns_peers;
-    std::vector<std::unique_ptr<::rtpmidid::rtppeer>> servers;
 
-    rtpmidid(std::string name);
+    rtpmidid(config_t *config);
 
     // Manual connect to a server.
     std::optional<uint8_t> add_rtpmidi_client(const std::string &name, const std::string &address, uint16_t port);
