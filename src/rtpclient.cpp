@@ -36,11 +36,14 @@ using namespace rtpmidid;
 rtpclient::rtpclient(std::string name, const std::string &address, int16_t port)
     : peer(std::move(name)) {
   local_base_port = port;
-  remote_base_port = 0; // Not defined
+  remote_base_port = -1; // Not defined
   control_socket = -1;
   midi_socket = -1;
   auto startport = local_base_port;
   peer.initiator_id = rand();
+  peer.sendto = [this](rtppeer::port_e port, const parse_buffer_t &data){
+    this->sendto(port, data);
+  };
 
   connect_to(address, port);
 }
@@ -62,6 +65,7 @@ rtpclient::~rtpclient(){
 }
 
 void rtpclient::connect_to(std::string address, int port){
+  remote_base_port = port;
   try{
     struct sockaddr_in servaddr;
     control_socket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -112,7 +116,6 @@ void rtpclient::connect_to(std::string address, int port){
 
   memset(&peer_addr, 0, sizeof(peer_addr));
   peer_addr.sin_family = AF_INET;
-  // FIXME. For sure there is a direct path from four bytes to ip addr.
   inet_aton(address.c_str(), &peer_addr.sin_addr);
 
   DEBUG("Connecting control port {} to {}:{}", local_base_port, address, port);
