@@ -50,7 +50,6 @@ using namespace rtpmidid;
     add_rtpmidid_server(config->name, port);
   }
 
-
   for (auto &connect_to: config->connect_to){
     auto s = ::rtpmidid::split(connect_to, ':');
     if (s.size() == 1){
@@ -107,6 +106,8 @@ uint16_t rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name, uint16
 
     known_servers[aseq_port] = peer;
   });
+
+  servers.push_back(rtpserver);
 
   return port;
 }
@@ -273,7 +274,7 @@ void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev)
   // DEBUG("Callback on midi event at rtpmidid");
   auto peer_info = &known_clients[aseq_port];
   if (!peer_info->peer){
-    ERROR("There is no peer but I received an event! This situation should NEVER happen. File a bug.");
+    ERROR("There is no peer but I received an event! This situation should NEVER happen. File a bug. Port {}", aseq_port);
     return;
   }
   uint8_t data[32];

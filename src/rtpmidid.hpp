@@ -53,6 +53,7 @@ namespace rtpmidid{
     // Local port id to client_info for connections
     std::map<uint8_t, client_info> known_clients;
     std::map<uint8_t, server_info> known_servers;
+    std::vector<std::shared_ptr<::rtpmidid::rtpserver>> servers;
     char export_port_next_id = 'A';
     char max_export_port_next_id = 'Z';
     std::set<std::string> known_mdns_peers;
