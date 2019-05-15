@@ -44,7 +44,7 @@ namespace rtpmidid {
     void reset();
     void sendto(rtppeer::port_e port, const parse_buffer_t &pb);
 
-    void connect_to(std::string address, int port);
+    void connect_to(std::string address, uint16_t port);
     void start_ck_1min_sync();
 
     void data_ready(rtppeer::port_e port);

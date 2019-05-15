@@ -64,7 +64,7 @@ rtpclient::~rtpclient(){
   }
 }
 
-void rtpclient::connect_to(std::string address, int port){
+void rtpclient::connect_to(std::string address, uint16_t port){
   remote_base_port = port;
   try{
     struct sockaddr_in servaddr;
