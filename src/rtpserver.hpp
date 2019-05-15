@@ -21,9 +21,25 @@
 #include "./rtppeer.hpp"
 
 namespace rtpmidid{
-  class rtpserver : public rtppeer{
+  class rtpserver{
   public:
+    rtppeer peer;
+
+    uint16_t local_base_port;
+
     rtpserver(std::string name, int16_t port);
-    virtual ~rtpserver();
+    ~rtpserver();
+
+    void on_midi(std::function<void(parse_buffer_t &)> f){
+    }
+    void on_close(std::function<void(void)> f){
+    }
+    void on_connect(std::function<void(const std::string &)> f){
+    }
+    void on_send(std::function<void(rtppeer::port_e, const parse_buffer_t &)> f){
+    }
+    void send_midi(parse_buffer_t *buffer){
+    }
+
   };
 }

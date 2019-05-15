@@ -99,15 +99,14 @@ uint16_t rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name, uint16
       this->recv_alsamidi_event(aseq_port, ev);
     });
 
-    peer_info peer={
+    server_info peer={
       name,
       "unknown",
       port,
-      1,
       rtpserver,
     };
 
-    known_peers[aseq_port] = peer;
+    known_servers[aseq_port] = peer;
   });
 
   return port;
@@ -154,9 +153,9 @@ void ::rtpmidid::rtpmidid::setup_mdns(){
 
           INFO("Peer is not available anymore. name: {}", srvname);
           seq.remove_port(aport);
-          auto I = known_peers.find(aport);
-          if (I != known_peers.end())
-            known_peers.erase(I);
+          auto I = known_clients.find(aport);
+          if (I != known_clients.end())
+            known_clients.erase(I);
 
           mdns.remove_discovery(srvname, ::rtpmidid::mdns::SRV);
           known_mdns_peers.erase(srvname);
@@ -168,7 +167,7 @@ void ::rtpmidid::rtpmidid::setup_mdns(){
 
 std::optional<uint8_t> rtpmidid::rtpmidid::add_rtpmidi_client(
     const std::string &name, const std::string &address, uint16_t net_port){
-  for (auto &known: known_peers){
+  for (auto &known: known_clients){
     if (known.second.address == address && known.second.port == net_port){
       DEBUG(
           "Trying to add again rtpmidi {}:{} server. Quite probably mDNS re announce. "
@@ -179,16 +178,16 @@ std::optional<uint8_t> rtpmidid::rtpmidid::add_rtpmidi_client(
   }
 
   auto aseq_port = seq.create_port(name);
-  auto peer_info = ::rtpmidid::peer_info{
+  auto peer_info = ::rtpmidid::client_info{
     name, address, net_port, 0, nullptr,
   };
 
   INFO("New alsa port: {}, connects to {}:{} ({})", aseq_port, address, net_port, name);
-  known_peers[aseq_port] = std::move(peer_info);
+  known_clients[aseq_port] = std::move(peer_info);
 
   seq.on_subscribe(aseq_port, [this, aseq_port](int client, int port, const std::string &name){
     DEBUG("Callback on subscribe at rtpmidid: {}", name);
-    auto peer_info = &known_peers[aseq_port];
+    auto peer_info = &known_clients[aseq_port];
     if (!peer_info->peer){
       peer_info->peer = std::make_shared<rtpclient>(name, peer_info->address, peer_info->port);
       peer_info->peer->on_midi([this, aseq_port](parse_buffer_t &pb){
@@ -199,7 +198,7 @@ std::optional<uint8_t> rtpmidid::rtpmidid::add_rtpmidi_client(
   });
   seq.on_unsubscribe(aseq_port, [this, aseq_port](int client, int port){
     DEBUG("Callback on unsubscribe at rtpmidid");
-    auto peer_info = &known_peers[aseq_port];
+    auto peer_info = &known_clients[aseq_port];
     peer_info->use_count--;
     if (peer_info->use_count <= 0){
       peer_info->peer = nullptr;
@@ -273,7 +272,7 @@ void ::rtpmidid::rtpmidid::recv_rtpmidi_event(int port, parse_buffer_t &midi_dat
 
 void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev){
   // DEBUG("Callback on midi event at rtpmidid");
-  auto peer_info = &known_peers[aseq_port];
+  auto peer_info = &known_clients[aseq_port];
   if (!peer_info->peer){
     ERROR("There is no peer but I received an event! This situation should NEVER happen. File a bug.");
     return;
@@ -352,23 +351,23 @@ void ::rtpmidid::rtpmidid::add_export_port(char id){
 void ::rtpmidid::rtpmidid::add_export_port(char id, uint8_t aseq_port){
   uint16_t netport = 0;
 
-  auto peer_info = ::rtpmidid::peer_info{
-    name, "localhost", netport, 0, nullptr,
+  auto server_info = ::rtpmidid::server_info{
+    name, "localhost", netport, nullptr,
   };
 
   auto rtpname = fmt::format("{} {}", name, id);
-  peer_info.peer = std::make_shared<rtpserver>(rtpname, netport);
-  peer_info.peer->on_midi([this, aseq_port](parse_buffer_t &pb){
+  server_info.peer = std::make_shared<rtpserver>(rtpname, netport);
+  server_info.peer->on_midi([this, aseq_port](parse_buffer_t &pb){
     this->recv_rtpmidi_event(aseq_port, pb);
   });
 
   // When other side closes, I reset the peer status to waiting for connections
-  peer_info.peer->on_close([this, aseq_port](){
-    known_peers[aseq_port].peer->reset();
+  server_info.peer->on_close([this, aseq_port](){
+    known_clients[aseq_port].peer->reset();
   });
 
   // When connecting, create new ports
-  peer_info.peer->on_connect([this, id](const std::string &name){
+  server_info.peer->on_connect([this, id](const std::string &name){
     if (export_port_next_id == id+1) // Only create next port if I'm the last
     add_export_port();
   });
@@ -378,9 +377,8 @@ void ::rtpmidid::rtpmidid::add_export_port(char id, uint8_t aseq_port){
   });
 
 
-  peer_info.use_count++;
-  netport = peer_info.peer->local_base_port;
-  peer_info.port = netport;
+  netport = server_info.peer->local_base_port;
+  server_info.port = netport;
 
 
   seq.on_midi_event(aseq_port, [this, aseq_port](snd_seq_event_t *ev){
@@ -404,12 +402,12 @@ void ::rtpmidid::rtpmidid::add_export_port(char id, uint8_t aseq_port){
   mdns.announce(std::move(srv), true);
 
 
-  INFO("Listening RTP midi at {}:{}, name {}. ID {}", peer_info.address, peer_info.port, rtpname, id);
+  INFO("Listening RTP midi at {}:{}, name {}. ID {}", server_info.address, server_info.port, rtpname, id);
 
-  known_peers[aseq_port] = std::move(peer_info);
+  known_servers[aseq_port] = std::move(server_info);
 }
 
-void ::rtpmidid::rtpmidid::remove_peer(uint8_t port){
+void ::rtpmidid::rtpmidid::remove_client(uint8_t port){
   DEBUG("Removing peer from known peers list.");
-  known_peers.erase(port);
+  known_clients.erase(port);
 }

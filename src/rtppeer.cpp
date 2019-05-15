@@ -15,11 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
 #include <time.h>
 
 #include "./logger.hpp"
@@ -42,139 +37,44 @@ bool is_feedback(parse_buffer_t &);
  * BUGS: It needs two consecutive ports for client, but just ask a random and
  *       expects next to be free. It almost always is, but can fail.
  */
-rtppeer::rtppeer(std::string _name, int startport) : local_base_port(startport), local_name(std::move(_name)) {
-  try {
-    status = NOT_CONNECTED;
-    remote_base_port = 0; // Not defined
-    control_socket = -1;
-    midi_socket = -1;
-    remote_ssrc = 0;
-    seq_nr = rand() & 0x0FFFF;
-    seq_nr_ack = seq_nr;
-    timestamp_start = 0;
-    timestamp_start = get_timestamp();
-    initiator_id = 0;
-
-    struct sockaddr_in servaddr;
-
-    control_socket = socket(AF_INET, SOCK_DGRAM, 0);
-    if (control_socket < 0){
-      throw rtpmidid::exception("Can not open control socket. Out of sockets?");
-    }
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = INADDR_ANY;
-    servaddr.sin_port = htons(startport);
-    if (bind(control_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
-      throw rtpmidid::exception("Can not open control socket. Maybe addres is in use?");
-    }
-    if (local_base_port == 0){
-      socklen_t len = sizeof(servaddr);
-      ::getsockname(control_socket, (struct sockaddr*)&servaddr, &len);
-      local_base_port = htons(servaddr.sin_port);
-      DEBUG("Got automatic port {} for control", local_base_port);
-    }
-    poller.add_fd_in(control_socket, [this](int){ this->control_data_ready(); });
-
-    midi_socket = socket(AF_INET, SOCK_DGRAM, 0);
-    if (midi_socket < 0){
-      throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
-    }
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = INADDR_ANY;
-    servaddr.sin_port = htons(local_base_port + 1);
-    if (bind(midi_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
-      throw rtpmidid::exception("Can not open MIDI socket. Maybe addres is in use?");
-    }
-    poller.add_fd_in(midi_socket, [this](int){ this->midi_data_ready(); });
-
-  } catch (...){
-    ERROR("Error creating rtppeer.");
-    if (control_socket){
-      poller.remove_fd(control_socket);
-      close(control_socket);
-      control_socket = 0;
-    }
-    if (midi_socket){
-      poller.remove_fd(midi_socket);
-      close(midi_socket);
-      midi_socket = 0;
-    }
-    throw;
-  }
+rtppeer::rtppeer(std::string _name) : local_name(std::move(_name)) {
+  status = NOT_CONNECTED;
+  remote_ssrc = 0;
+  seq_nr = rand() & 0x0FFFF;
+  seq_nr_ack = seq_nr;
+  timestamp_start = 0;
+  timestamp_start = get_timestamp();
+  initiator_id = 0;
 }
 
 rtppeer::~rtppeer(){
   DEBUG("~rtppeer {}", local_name);
-
-  if (is_connected()){
-    send_goodbye(control_socket, remote_base_port);
-    send_goodbye(midi_socket, remote_base_port+1);
-  }
-
-  if (control_socket > 0){
-    poller.remove_fd(control_socket);
-    close(control_socket);
-  }
-  if (midi_socket > 0){
-    poller.remove_fd(midi_socket);
-    close(midi_socket);
-  }
 }
 
 void rtppeer::reset(){
   status = NOT_CONNECTED;
   remote_name = "";
-  remote_base_port = 0;
   remote_ssrc = 0;
   initiator_id = 0;
 }
 
-void rtppeer::control_data_ready(){
-  uint8_t raw[1500];
-  struct sockaddr_in cliaddr;
-  unsigned int len = sizeof(cliaddr);
-  auto n = recvfrom(control_socket, raw, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
-  // DEBUG("Got some data from control: {}", n);
-  if (n < 0){
-    throw exception("Error reading from rtppeer {}:{}", remote_name, remote_base_port);
-  }
-
-  auto buffer = parse_buffer_t(raw, n);
-
-  if (is_command(buffer)){
-    if (initiator_id == 0) {
-      char *ip = inet_ntoa(cliaddr.sin_addr);
-      remote_base_port = htons(cliaddr.sin_port);
-      DEBUG("Connected from {}:{}", ip, remote_base_port);
-      // First message from other end. Just copy the remote address.
-      ::memcpy(&peer_addr, &cliaddr, len);
+void rtppeer::data_ready(parse_buffer_t &buffer, port_e port){
+  if (port == CONTROL_PORT){
+    if (is_command(buffer)){
+      parse_command(buffer, port);
+    } else if (is_feedback(buffer)) {
+      parse_feedback(buffer);
+    } else {
+      buffer.print_hex(true);
     }
-
-    parse_command(buffer, control_socket);
-  } else if (is_feedback(buffer)) {
-    parse_feedback(buffer);
   } else {
-    buffer.print_hex(true);
+    if (is_command(buffer)){
+      parse_command(buffer, port);
+    } else {
+      parse_midi(buffer);
+    }
   }
 }
-
-void rtppeer::midi_data_ready(){
-  uint8_t raw[1500];
-  struct sockaddr_in cliaddr;
-  unsigned int len = 0;
-  auto n = recvfrom(midi_socket, raw, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
-  // DEBUG("Got some data from midi: {}", len);
-  auto buffer = parse_buffer_t(raw, n);
-
-  if (is_command(buffer)){
-    parse_command(buffer, midi_socket);
-  } else {
-    parse_midi(buffer);
-  }
-}
-
 
 bool is_command(parse_buffer_t &pb){
   // DEBUG("Is command? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF, pb.start[1] == 0xFF);
@@ -185,7 +85,7 @@ bool is_feedback(parse_buffer_t &pb){
   return (pb.size() >= 12 && pb.start[0] == 0xFF && pb.start[1] == 0xFF && pb.start[2] == 0x52 && pb.start[3] == 0x53);
 }
 
-void rtppeer::parse_command(parse_buffer_t &buffer, int socket){
+void rtppeer::parse_command(parse_buffer_t &buffer, port_e port){
   if (buffer.size() < 16){
     // This should never be reachable, but should help to smart compilers for
     // further size checks
@@ -198,16 +98,16 @@ void rtppeer::parse_command(parse_buffer_t &buffer, int socket){
 
   switch(command){
     case rtppeer::OK:
-      parse_command_ok(buffer, socket);
+      parse_command_ok(buffer, port);
       break;
     case rtppeer::IN:
-      parse_command_in(buffer, socket);
+      parse_command_in(buffer, port);
       break;
     case rtppeer::CK:
-      parse_command_ck(buffer, socket);
+      parse_command_ck(buffer, port);
       break;
     case rtppeer::BY:
-      parse_command_by(buffer, socket);
+      parse_command_by(buffer, port);
       break;
     default:
       buffer.print_hex(true);
@@ -220,7 +120,7 @@ void rtppeer::parse_command(parse_buffer_t &buffer, int socket){
  *
  * I already sent before the IN message, the server sent me OK
  */
-void rtppeer::parse_command_ok(parse_buffer_t &buffer, int _socket){
+void rtppeer::parse_command_ok(parse_buffer_t &buffer, port_e port){
   if (status == CONNECTED){
     WARNING("This peer is already connected. Need to disconnect to connect again.");
     return;
@@ -237,12 +137,12 @@ void rtppeer::parse_command_ok(parse_buffer_t &buffer, int _socket){
   }
 
   INFO(
-    "Got confirmation from {}:{}, initiator_id: {} ({}) ssrc: {}, name: {}",
-    remote_name, remote_base_port, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name
+    "Got confirmation from {}, initiator_id: {} ({}) ssrc: {}, name: {}",
+    remote_name, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name
   );
-  if (_socket == midi_socket)
+  if (port == MIDI_PORT)
     status = status_e(int(status) | int(MIDI_CONNECTED));
-  if (_socket == control_socket)
+  if (port == CONTROL_PORT)
     status = status_e(int(status) | int(CONTROL_CONNECTED));
 
   if (status == CONNECTED){
@@ -261,7 +161,7 @@ void rtppeer::parse_command_ok(parse_buffer_t &buffer, int _socket){
  * TODO It would be super nice to be able to have several clients
  * connected to me.
  */
-void rtppeer::parse_command_in(parse_buffer_t &buffer, int socket){
+void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port){
   if (status == CONNECTED){
     WARNING("This peer is already connected. Need to disconnect to connect again.");
     return;
@@ -276,8 +176,8 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, int socket){
   }
 
   INFO(
-    "Got connection request from {}:{}, initiator_id: {} ({}) ssrc: {}, name: {}",
-    remote_name, remote_base_port, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name
+    "Got connection request from {}, initiator_id: {} ({}) ssrc: {}, name: {}",
+    remote_name, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name
   );
 
   uint8_t response[128];
@@ -289,11 +189,11 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, int socket){
   response_buffer.write_uint32(SSRC);
   response_buffer.write_str0(local_name);
 
-  sendto(socket, response_buffer);
+  sendto(port, response_buffer);
 
-  if (socket == midi_socket)
+  if (port == MIDI_PORT)
     status = status_e(int(status) | int(MIDI_CONNECTED));
-  if (socket == control_socket)
+  if (port == CONTROL_PORT)
     status = status_e(int(status) | int(CONTROL_CONNECTED));
 
   if (status == CONNECTED){
@@ -304,7 +204,7 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, int socket){
 }
 
 
-void rtppeer::parse_command_by(parse_buffer_t &buffer, int socket){
+void rtppeer::parse_command_by(parse_buffer_t &buffer, port_e port){
   auto protocol = buffer.read_uint32();
   initiator_id = buffer.read_uint32();
   auto remote_ssrc = buffer.read_uint32();
@@ -318,14 +218,14 @@ void rtppeer::parse_command_by(parse_buffer_t &buffer, int socket){
     return;
   }
 
-  INFO("Disconnect from {}:{}", remote_name, remote_base_port);
+  INFO("Disconnect from {}", remote_name);
   // Normally this will schedule removal of peer.
   if (event_close){
     event_close();
   }
 }
 
-void rtppeer::parse_command_ck(parse_buffer_t &buffer, int socket){
+void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port){
   // auto ssrc =
   buffer.read_uint32();
   auto count = buffer.read_uint8();
@@ -390,7 +290,7 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, int socket){
   // DEBUG("Send packet CK");
   // retbuffer.print_hex();
 
-  sendto(socket, retbuffer);
+  sendto(port, retbuffer);
 }
 
 void rtppeer::send_ck0(){
@@ -418,7 +318,7 @@ void rtppeer::send_ck0(){
   // DEBUG("Send packet CK");
   // retbuffer.print_hex();
 
-  sendto(midi_socket, retbuffer);
+  sendto(MIDI_PORT, retbuffer);
 }
 
 void rtppeer::parse_feedback(parse_buffer_t &buffer){
@@ -475,7 +375,7 @@ uint64_t rtppeer::get_timestamp(){
 }
 
 void rtppeer::send_midi(parse_buffer_t *events){
-  if (remote_base_port == 0){ // Not connected yet.
+  if (!is_connected()){ // Not connected yet.
     return;
   }
 
@@ -497,10 +397,10 @@ void rtppeer::send_midi(parse_buffer_t *events){
 
   // buffer.print_hex();
 
-  sendto(midi_socket, buffer);
+  sendto(MIDI_PORT, buffer);
 }
 
-void rtppeer::send_goodbye(int from_fd, int to_port){
+void rtppeer::send_goodbye(port_e to_port){
   uint8_t data[64];
   parse_buffer_t buffer(data, sizeof(data));
 
@@ -510,24 +410,28 @@ void rtppeer::send_goodbye(int from_fd, int to_port){
   buffer.write_uint32(initiator_id);
   buffer.write_uint32(SSRC);
 
-  sendto(from_fd, buffer);
+  sendto(to_port, buffer);
 }
 
-void rtppeer::sendto(int socket, const parse_buffer_t &pb){
-  if (socket == midi_socket)
-    peer_addr.sin_port = htons(remote_base_port + 1);
-  else
-    peer_addr.sin_port = htons(remote_base_port);
+void rtppeer::connect_to(port_e rtp_port){
+  uint8_t packet[1500];
+  auto buffer = parse_buffer_t(packet, 1500);
 
-  auto res = ::sendto(
-    socket, pb.start, pb.length(),
-    MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr)
-  );
 
-  if (res != pb.length()){
-    throw exception(
-      "Could not send all data to {}:{}. Sent {}. {}",
-      remote_name, remote_base_port, res, strerror(errno)
-    );
-  }
+  auto signature = 0xFFFF;
+  auto command = rtppeer::IN;
+  auto protocol = 2;
+  auto sender = SSRC;
+
+  buffer.write_uint16(signature);
+  buffer.write_uint16(command);
+  buffer.write_uint32(protocol);
+  buffer.write_uint32(initiator_id);
+  buffer.write_uint32(sender);
+  buffer.write_str0(local_name);
+
+  // DEBUG("Send packet:");
+  // buffer.print_hex();
+
+  sendto(rtp_port, buffer);
 }

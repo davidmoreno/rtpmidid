@@ -21,7 +21,7 @@
 #include <functional>
 #include <arpa/inet.h>
 
-// A random int32. Should be configurable, so diferent systems, have diferent SSRC.
+// A random int32. Should be configurable, so different systems, have different SSRC.
 inline const uint32_t SSRC = 0x111f6c31;
 
 namespace rtpmidid {
@@ -29,7 +29,7 @@ namespace rtpmidid {
 
   class rtppeer {
   public:
-    // Commands, th id is the same chars as the name
+    // Commands, the id is the same chars as the name
     enum commands_e {
       IN = 0x494e,
       OK = 0x4f4b,
@@ -44,17 +44,16 @@ namespace rtpmidid {
       MIDI_CONNECTED = 2,
       CONNECTED = 3
     };
+    enum port_e {
+      MIDI_PORT,
+      CONTROL_PORT,
+    };
 
     status_e status;
-    int control_socket;
-    int midi_socket;
-    uint16_t local_base_port;
-    uint16_t remote_base_port;
     uint32_t initiator_id;
     uint32_t remote_ssrc;
     std::string local_name;
     std::string remote_name;
-    struct sockaddr_in peer_addr; // Will reuse addr, just changing the port
     uint16_t seq_nr_ack;
     uint16_t seq_nr;
     uint16_t remote_seq_nr;
@@ -63,9 +62,10 @@ namespace rtpmidid {
     std::function<void(parse_buffer_t &)> event_midi;
     std::function<void(void)> event_close;
     std::vector<std::function<void(const std::string &)>> event_connect;
+    std::function<void(port_e, const parse_buffer_t &)> sendto;
 
-    rtppeer(std::string _name, int startport);
-    virtual ~rtppeer();
+    rtppeer(std::string _name);
+    ~rtppeer();
 
     void on_midi(std::function<void(parse_buffer_t &)> f){
       event_midi = f;
@@ -76,26 +76,27 @@ namespace rtpmidid {
     void on_connect(std::function<void(const std::string &)> f){
       event_connect.push_back(f);
     }
+    void on_send(std::function<void(port_e, const parse_buffer_t &)> f){
+      sendto = f;
+    }
     bool is_connected(){
-      return remote_base_port != 0;
+      return status == CONNECTED;
     }
     void reset();
+    void data_ready(parse_buffer_t &, port_e port);
 
-    void control_data_ready();
-    void midi_data_ready();
-    void parse_command(parse_buffer_t &, int socket);
+    void parse_command(parse_buffer_t &, port_e port);
     void parse_feedback(parse_buffer_t &);
-    void parse_command_ok(parse_buffer_t &, int socket);
-    void parse_command_in(parse_buffer_t &, int socket);
-    void parse_command_ck(parse_buffer_t &, int socket);
-    void parse_command_by(parse_buffer_t &, int socket);
+    void parse_command_ok(parse_buffer_t &, port_e port);
+    void parse_command_in(parse_buffer_t &, port_e port);
+    void parse_command_ck(parse_buffer_t &, port_e port);
+    void parse_command_by(parse_buffer_t &, port_e port);
     void parse_midi(parse_buffer_t &);
 
     void send_midi(parse_buffer_t *buffer);
-    void send_goodbye(int from_fd, int to_port);
+    void send_goodbye(port_e to_port);
+    void connect_to(port_e rtp_port);
     void send_ck0();
     uint64_t get_timestamp();
-
-    void sendto(int socket, const parse_buffer_t &b);
   };
 }

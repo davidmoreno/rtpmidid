@@ -22,18 +22,27 @@
 #include <set>
 #include "./aseq.hpp"
 #include "./mdns.hpp"
-#include "./rtppeer.hpp"
 
 namespace rtpmidid{
   struct config_t;
+  class rtpserver;
+  class rtpclient;
+  class parse_buffer_t;
 
-  struct peer_info{
+  struct client_info{
     std::string name;
     std::string address;
     uint16_t port;
     uint16_t use_count;
     // This might be not intialized if not really connected yet.
-    std::shared_ptr<::rtpmidid::rtppeer> peer;
+    std::shared_ptr<::rtpmidid::rtpclient> peer;
+  };
+  struct server_info{
+    std::string name;
+    std::string address;
+    uint16_t port;
+    // This might be not intialized if not really connected yet.
+    std::shared_ptr<::rtpmidid::rtpserver> peer;
   };
 
   class rtpmidid {
@@ -41,8 +50,9 @@ namespace rtpmidid{
     std::string name;
     ::rtpmidid::aseq seq;
     ::rtpmidid::mdns mdns;
-    // Local port id to peer_info for connections
-    std::map<uint8_t, peer_info> known_peers;
+    // Local port id to client_info for connections
+    std::map<uint8_t, client_info> known_clients;
+    std::map<uint8_t, server_info> known_servers;
     char export_port_next_id = 'A';
     char max_export_port_next_id = 'Z';
     std::set<std::string> known_mdns_peers;
@@ -66,6 +76,6 @@ namespace rtpmidid{
     void add_export_port(char id);
     // Use a specific port
     void add_export_port(char id, uint8_t aseq_port);
-    void remove_peer(uint8_t alsa_port);
+    void remove_client(uint8_t alsa_port);
   };
 }
