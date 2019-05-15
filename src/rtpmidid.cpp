@@ -86,25 +86,44 @@ uint16_t rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name, uint16
   srv->port = port;
   mdns.announce(std::move(srv));
 
-  rtpserver->on_connect([this, port, rtpserver](const std::string &name){
-    INFO("Remote client connects to local server at port {}. Name: {}", port, name);
-    auto aseq_port = seq.create_port(name);
+  rtpserver->on_connected([this, rtpserver, port](std::shared_ptr<::rtpmidid::rtppeer> peer){
+    INFO("Remote client connects to local server at port {}. Name: {}", port, peer->remote_name);
+    auto aseq_port = seq.create_port(peer->remote_name);
 
-    rtpserver->on_midi([this, aseq_port](parse_buffer_t &pb){
+    peer->on_midi([this, aseq_port](parse_buffer_t &pb){
       this->recv_rtpmidi_event(aseq_port, pb);
     });
     seq.on_midi_event(aseq_port, [this, aseq_port](snd_seq_event_t *ev){
-      this->recv_alsamidi_event(aseq_port, ev);
+      auto peer_it = known_servers_connections.find(aseq_port);
+      if (peer_it == std::end(known_servers_connections)){
+        WARNING("Got MIDI event in an non existing anymore peer.");
+        return;
+      }
+      auto conn = &peer_it->second;
+
+      uint8_t data[32];
+      parse_buffer_t stream(data, sizeof(data));
+
+      alsamidi_to_midiprotocol(ev, stream);
+
+      // Reset
+      stream.end = stream.position;
+      stream.position = stream.start;
+
+      // And send
+      conn->peer->send_midi(&stream);
+    });
+    peer->on_disconnect([this, aseq_port]{
+      known_servers_connections.erase(aseq_port);
     });
 
-    server_info peer={
-      name,
-      "unknown",
-      port,
+    server_conn_info server_conn={
+      peer->remote_name,
+      peer,
       rtpserver,
     };
 
-    known_servers[aseq_port] = peer;
+    known_servers_connections[aseq_port] = server_conn;
   });
 
   servers.push_back(rtpserver);
@@ -280,6 +299,17 @@ void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev)
   uint8_t data[32];
   parse_buffer_t stream(data, sizeof(data));
 
+  alsamidi_to_midiprotocol(ev, stream);
+
+  // Reset
+  stream.end = stream.position;
+  stream.position = stream.start;
+
+  // And send
+  peer_info->peer->send_midi(&stream);
+}
+
+void ::rtpmidid::rtpmidid::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &stream){
   switch(ev->type){
     case SND_SEQ_EVENT_NOTE:
     case SND_SEQ_EVENT_NOTEON:
@@ -321,11 +351,6 @@ void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev)
       return;
       break;
   }
-
-  stream.end = stream.position;
-  stream.position = stream.start;
-
-  peer_info->peer->send_midi(&stream);
 }
 
 
@@ -349,60 +374,62 @@ void ::rtpmidid::rtpmidid::add_export_port(char id){
 }
 
 void ::rtpmidid::rtpmidid::add_export_port(char id, uint8_t aseq_port){
-  uint16_t netport = 0;
+  // uint16_t netport = 0;
+  //
+  // auto server_info = ::rtpmidid::server_info{
+  //   name, "localhost", netport, nullptr,
+  // };
+  //
+  // auto rtpname = fmt::format("{} {}", name, id);
+  // server_info.peer = std::make_shared<rtpserver>(rtpname, netport);
+  // server_info.peer->on_midi([this, aseq_port](parse_buffer_t &pb){
+  //   this->recv_rtpmidi_event(aseq_port, pb);
+  // });
+  //
+  // // When other side closes, I reset the peer status to waiting for connections
+  // server_info.peer->on_close([this, aseq_port](){
+  //   known_clients[aseq_port].peer->reset();
+  // });
+  //
+  // // When connecting, create new ports
+  // server_info.peer->on_connect([this, id](const std::string &name){
+  //   if (export_port_next_id == id+1) // Only create next port if I'm the last
+  //   add_export_port();
+  // });
+  // seq.on_subscribe(aseq_port, [this, id](int, int, const std::string &){
+  //   if (export_port_next_id == id+1) // Only create next port if I'm the last
+  //   add_export_port();
+  // });
+  //
+  // netport = server_info.peer->control_port;
+  // server_info.port = netport;
+  //
+  // seq.on_midi_event(aseq_port, [this, aseq_port](snd_seq_event_t *ev){
+  //   this->recv_alsamidi_event(aseq_port, ev);
+  // });
+  //
+  // auto ptrname = fmt::format("{}._apple-midi._udp.local", rtpname);
+  // auto ptr = std::make_unique<mdns::service_ptr>(
+  //     "_apple-midi._udp.local",
+  //     TIMEOUT_REANNOUNCE,
+  //     ptrname
+  // );
+  // mdns.announce(std::move(ptr), true);
+  //
+  // auto srv = std::make_unique<mdns::service_srv>(
+  //     ptrname,
+  //     TIMEOUT_REANNOUNCE,
+  //     mdns.local(),
+  //     netport
+  // );
+  // mdns.announce(std::move(srv), true);
+  //
+  //
+  // INFO("Listening RTP midi at {}:{}, name {}. ID {}", server_info.address, server_info.port, rtpname, id);
+  //
+  // known_servers[aseq_port] = std::move(server_info);
 
-  auto server_info = ::rtpmidid::server_info{
-    name, "localhost", netport, nullptr,
-  };
-
-  auto rtpname = fmt::format("{} {}", name, id);
-  server_info.peer = std::make_shared<rtpserver>(rtpname, netport);
-  server_info.peer->on_midi([this, aseq_port](parse_buffer_t &pb){
-    this->recv_rtpmidi_event(aseq_port, pb);
-  });
-
-  // When other side closes, I reset the peer status to waiting for connections
-  server_info.peer->on_close([this, aseq_port](){
-    known_clients[aseq_port].peer->reset();
-  });
-
-  // When connecting, create new ports
-  server_info.peer->on_connect([this, id](const std::string &name){
-    if (export_port_next_id == id+1) // Only create next port if I'm the last
-    add_export_port();
-  });
-  seq.on_subscribe(aseq_port, [this, id](int, int, const std::string &){
-    if (export_port_next_id == id+1) // Only create next port if I'm the last
-    add_export_port();
-  });
-
-  netport = server_info.peer->control_port;
-  server_info.port = netport;
-
-  seq.on_midi_event(aseq_port, [this, aseq_port](snd_seq_event_t *ev){
-    this->recv_alsamidi_event(aseq_port, ev);
-  });
-
-  auto ptrname = fmt::format("{}._apple-midi._udp.local", rtpname);
-  auto ptr = std::make_unique<mdns::service_ptr>(
-      "_apple-midi._udp.local",
-      TIMEOUT_REANNOUNCE,
-      ptrname
-  );
-  mdns.announce(std::move(ptr), true);
-
-  auto srv = std::make_unique<mdns::service_srv>(
-      ptrname,
-      TIMEOUT_REANNOUNCE,
-      mdns.local(),
-      netport
-  );
-  mdns.announce(std::move(srv), true);
-
-
-  INFO("Listening RTP midi at {}:{}, name {}. ID {}", server_info.address, server_info.port, rtpname, id);
-
-  known_servers[aseq_port] = std::move(server_info);
+  WARNING("Not Implemented. Commented code. I think this functionality is not going to be here.");
 }
 
 void ::rtpmidid::rtpmidid::remove_client(uint8_t port){

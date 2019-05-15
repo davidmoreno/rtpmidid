@@ -34,6 +34,9 @@ namespace rtpmidid{
     // Maps the peers to the ssrc.
     std::map<uint32_t, std::shared_ptr<rtppeer>> ssrc_to_peer;
 
+    // Callbacks to call when new connections
+    std::vector<std::function<void(std::shared_ptr<rtppeer>)>> connected_events;
+
     std::string name;
 
     int midi_socket;
@@ -46,21 +49,15 @@ namespace rtpmidid{
     ~rtpserver();
 
     // Returns the peer for that packet, or nullptr
-    std::shared_ptr<rtppeer> get_peer_by_packet(parse_buffer_t &b);
+    std::shared_ptr<rtppeer> get_peer_by_packet(parse_buffer_t &b, rtppeer::port_e port);
+    std::shared_ptr<rtppeer> get_peer_by_ssrc(uint32_t ssrc);
+    void create_peer_from(parse_buffer_t &buffer, struct sockaddr_in *cliaddr);
 
     void data_ready(rtppeer::port_e port);
     void sendto(const parse_buffer_t &b, rtppeer::port_e port, struct sockaddr_in *, int remote_base_port);
 
-    void on_midi(std::function<void(parse_buffer_t &)> f){
+    void on_connected(std::function<void(std::shared_ptr<rtppeer>)> f){
+      connected_events.push_back(f);
     }
-    void on_close(std::function<void(void)> f){
-    }
-    void on_connect(std::function<void(const std::string &)> f){
-    }
-    void on_send(std::function<void(rtppeer::port_e, const parse_buffer_t &)> f){
-    }
-    void send_midi(parse_buffer_t *buffer){
-    }
-
   };
 }

@@ -45,7 +45,7 @@ rtppeer::rtppeer(std::string _name) : local_name(std::move(_name)) {
 }
 
 rtppeer::~rtppeer(){
-  DEBUG("~rtppeer {}", local_name);
+  DEBUG("~rtppeer {} <-> {}", local_name, remote_name);
 }
 
 void rtppeer::reset(){

@@ -27,6 +27,7 @@ namespace rtpmidid{
   struct config_t;
   class rtpserver;
   class rtpclient;
+  class rtppeer;
   class parse_buffer_t;
 
   struct client_info{
@@ -37,12 +38,11 @@ namespace rtpmidid{
     // This might be not intialized if not really connected yet.
     std::shared_ptr<::rtpmidid::rtpclient> peer;
   };
-  struct server_info{
+  struct server_conn_info{
     std::string name;
-    std::string address;
-    uint16_t port;
     // This might be not intialized if not really connected yet.
-    std::shared_ptr<::rtpmidid::rtpserver> peer;
+    std::shared_ptr<::rtpmidid::rtppeer> peer;
+    std::shared_ptr<::rtpmidid::rtpserver> server;
   };
 
   class rtpmidid {
@@ -52,7 +52,7 @@ namespace rtpmidid{
     ::rtpmidid::mdns mdns;
     // Local port id to client_info for connections
     std::map<uint8_t, client_info> known_clients;
-    std::map<uint8_t, server_info> known_servers;
+    std::map<uint8_t, server_conn_info> known_servers_connections;
     std::vector<std::shared_ptr<::rtpmidid::rtpserver>> servers;
     char export_port_next_id = 'A';
     char max_export_port_next_id = 'Z';
@@ -65,6 +65,8 @@ namespace rtpmidid{
 
     void recv_rtpmidi_event(int port, parse_buffer_t &midi_data);
     void recv_alsamidi_event(int port, snd_seq_event_t *ev);
+
+    void alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &buffer);
 
     void setup_mdns();
     void setup_alsa_seq();
