@@ -34,9 +34,9 @@ using namespace rtpmidid;
   setup_alsa_seq();
 }
 
-void ::rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name){
-  auto rtpserver = ::rtpmidid::rtpserver(name, 0);
-  auto port = rtpserver.local_base_port;
+uint16_t rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name, uint16_t port){
+  auto rtpserver = std::make_unique<::rtpmidid::rtpserver>(name, port);
+  port = rtpserver->local_base_port;
 
   auto ptr = std::make_unique<::rtpmidid::mdns::service_ptr>();
   ptr->label = "_apple-midi._udp.local";
@@ -47,11 +47,15 @@ void ::rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name){
 
   auto srv = std::make_unique<::rtpmidid::mdns::service_srv>();
   srv->label = fmt::format("{}._apple-midi._udp.local", name);
-  ptr->ttl = TIMEOUT_REANNOUNCE;
+  srv->ttl = TIMEOUT_REANNOUNCE;
   srv->type = ::rtpmidid::mdns::SRV;
   srv->hostname = "ucube.local";
   srv->port = port;
   mdns.announce(std::move(srv));
+
+  servers.push_back(std::move(rtpserver));
+
+  return port;
 }
 
 

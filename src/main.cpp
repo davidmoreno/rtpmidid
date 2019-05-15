@@ -41,6 +41,7 @@ const auto CMDLINE_HELP = ""
 "  -v                  Show version\n"
 "  -h                  Show this help\n"
 "  -n name             Forces a rtpmidi name\n"
+"  -p port             Opens local port as server. Default 5400. Can set several.\n"
 "  hostname            Connects to hostname:5400 port using rtpmidi\n"
 "  hostname:port       Connects to a hostname on a given port\n"
 "  name:hostname:port  Connects to a hostname on a given port and forces a name for alsaseq\n"
@@ -53,6 +54,8 @@ using namespace std;
 struct options_t {
   std::string name;
   std::vector<std::string> connect_to;
+  // Create clients at this ports to start with. Later will see.
+  std::vector<uint16_t> ports;
 };
 options_t parse_options(int argc, char **argv);
 
@@ -81,6 +84,11 @@ int main(int argc, char **argv){
 
     try{
       auto rtpmidid = ::rtpmidid::rtpmidid(options.name);
+
+      for (auto &port: options.ports){
+        rtpmidid.add_rtpmidid_server(options.name, port);
+      }
+
 
       for (auto &connect_to: options.connect_to){
         auto s = rtpmidid::split(connect_to, ':');
@@ -139,6 +147,9 @@ options_t parse_options(int argc, char **argv){
           break;
         case 'n':
           opts.name = argv[i];
+          break;
+        case 'p':
+          opts.ports.push_back(atoi(argv[i]));
           break;
         default:
           ERROR("Unknown option. Check options with -h.");

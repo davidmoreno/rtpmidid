@@ -43,6 +43,7 @@ namespace rtpmidid{
     std::map<uint8_t, peer_info> known_peers;
     char export_port_next_id = 'A';
     std::set<std::string> known_mdns_peers;
+    std::vector<std::unique_ptr<::rtpmidid::rtppeer>> servers;
 
     rtpmidid(std::string name);
 
@@ -55,7 +56,7 @@ namespace rtpmidid{
     void setup_mdns();
     void setup_alsa_seq();
 
-    void add_rtpmidid_server(const std::string &name);
+    uint16_t add_rtpmidid_server(const std::string &name, uint16_t port);
 
     /// New export port, with next id
     void add_export_port();
