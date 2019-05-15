@@ -72,6 +72,7 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv){
           break;
         case 'n':
           opts.name = argv[i];
+          INFO("Set RTP MIDI name to {}", opts.name);
           break;
         case 'p':
           opts.ports.push_back(atoi(argv[i]));
@@ -92,6 +93,10 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv){
     char hostname[256];
     gethostname(hostname, std::size(hostname));
     opts.name = hostname;
+  }
+
+  if (opts.ports.size() == 0){
+    opts.ports.push_back(5400);
   }
 
   return opts;
