@@ -25,9 +25,6 @@
 
 using namespace rtpmidid;
 
-bool is_command(parse_buffer_t &);
-bool is_feedback(parse_buffer_t &);
-
 /**
  * @short Generic peer constructor
  *
@@ -76,11 +73,11 @@ void rtppeer::data_ready(parse_buffer_t &buffer, port_e port){
   }
 }
 
-bool is_command(parse_buffer_t &pb){
+bool rtppeer::is_command(parse_buffer_t &pb){
   // DEBUG("Is command? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF, pb.start[1] == 0xFF);
   return (pb.size() >= 16 && pb.start[0] == 0xFF && pb.start[1] == 0xFF);
 }
-bool is_feedback(parse_buffer_t &pb){
+bool rtppeer::is_feedback(parse_buffer_t &pb){
   // DEBUG("Is feedback? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF, pb.start[1] == 0xFF);
   return (pb.size() >= 12 && pb.start[0] == 0xFF && pb.start[1] == 0xFF && pb.start[2] == 0x52 && pb.start[3] == 0x53);
 }

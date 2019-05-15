@@ -64,6 +64,9 @@ namespace rtpmidid {
     std::function<void(port_e, const parse_buffer_t &)> sendto;
     std::function<void(void)> event_disconnect;
 
+    static bool is_command(parse_buffer_t &);
+    static bool is_feedback(parse_buffer_t &);
+
     rtppeer(std::string _name);
     ~rtppeer();
 
