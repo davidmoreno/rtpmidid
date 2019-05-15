@@ -173,8 +173,8 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port){
   }
 
   INFO(
-    "Got connection request from {}, initiator_id: {} ({}) ssrc: {}, name: {}",
-    remote_name, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name
+    "Got connection request from {}, initiator_id: {} ({}) ssrc: {}, name: {}, at control? {}",
+    remote_name, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name, port == CONTROL_PORT
   );
 
   uint8_t response[128];
@@ -186,7 +186,7 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port){
   response_buffer.write_uint32(SSRC);
   response_buffer.write_str0(local_name);
 
-  sendto(port, response_buffer);
+  sendto(response_buffer, port);
 
   if (port == MIDI_PORT)
     status = status_e(int(status) | int(MIDI_CONNECTED));
@@ -287,7 +287,7 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port){
   // DEBUG("Send packet CK");
   // retbuffer.print_hex();
 
-  sendto(port, retbuffer);
+  sendto(retbuffer, port);
 }
 
 void rtppeer::send_ck0(){
@@ -315,7 +315,7 @@ void rtppeer::send_ck0(){
   // DEBUG("Send packet CK");
   // retbuffer.print_hex();
 
-  sendto(MIDI_PORT, retbuffer);
+  sendto(retbuffer, MIDI_PORT);
 }
 
 void rtppeer::parse_feedback(parse_buffer_t &buffer){
@@ -394,7 +394,7 @@ void rtppeer::send_midi(parse_buffer_t *events){
 
   // buffer.print_hex();
 
-  sendto(MIDI_PORT, buffer);
+  sendto(buffer, MIDI_PORT);
 }
 
 void rtppeer::send_goodbye(port_e to_port){
@@ -407,7 +407,7 @@ void rtppeer::send_goodbye(port_e to_port){
   buffer.write_uint32(initiator_id);
   buffer.write_uint32(SSRC);
 
-  sendto(to_port, buffer);
+  sendto(buffer, to_port);
 
   status = status_e(int(status) & ~int(to_port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED));
 
@@ -436,5 +436,5 @@ void rtppeer::connect_to(port_e rtp_port){
   // DEBUG("Send packet:");
   // buffer.print_hex();
 
-  sendto(rtp_port, buffer);
+  sendto(buffer, rtp_port);
 }

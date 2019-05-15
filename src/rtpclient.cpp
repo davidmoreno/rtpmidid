@@ -41,8 +41,8 @@ rtpclient::rtpclient(std::string name, const std::string &address, int16_t port)
   midi_socket = -1;
   auto startport = local_base_port;
   peer.initiator_id = rand();
-  peer.sendto = [this](rtppeer::port_e port, const parse_buffer_t &data){
-    this->sendto(port, data);
+  peer.sendto = [this](const parse_buffer_t &data, rtppeer::port_e port){
+    this->sendto(data, port);
   };
 
   connect_to(address, port);
@@ -128,7 +128,7 @@ void rtpclient::connect_to(std::string address, uint16_t port){
   });
 }
 
-void rtpclient::sendto(rtppeer::port_e port, const parse_buffer_t &pb){
+void rtpclient::sendto(const parse_buffer_t &pb, rtppeer::port_e port){
   if (port == rtppeer::MIDI_PORT)
     peer_addr.sin_port = htons(remote_base_port + 1);
   else

@@ -42,7 +42,7 @@ namespace rtpmidid {
     rtpclient(std::string name, const std::string &address, int16_t port);
     ~rtpclient();
     void reset();
-    void sendto(rtppeer::port_e port, const parse_buffer_t &pb);
+    void sendto(const parse_buffer_t &pb, rtppeer::port_e port);
 
     void connect_to(std::string address, uint16_t port);
     void start_ck_1min_sync();
@@ -56,7 +56,7 @@ namespace rtpmidid {
     void on_connect(std::function<void(const std::string &)> f){
       peer.on_connect(f);
     }
-    void on_send(std::function<void(rtppeer::port_e, const parse_buffer_t &)> f){
+    void on_send(std::function<void(const parse_buffer_t &, rtppeer::port_e)> f){
       peer.on_send(f);
     }
     void on_disconnect(std::function<void()> f){

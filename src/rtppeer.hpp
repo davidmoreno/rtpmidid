@@ -61,7 +61,7 @@ namespace rtpmidid {
     uint64_t latency;
     std::function<void(parse_buffer_t &)> event_midi;
     std::vector<std::function<void(const std::string &)>> event_connect;
-    std::function<void(port_e, const parse_buffer_t &)> sendto;
+    std::function<void(const parse_buffer_t &, port_e)> sendto;
     std::function<void(void)> event_disconnect;
 
     static bool is_command(parse_buffer_t &);
@@ -79,7 +79,7 @@ namespace rtpmidid {
     void on_disconnect(std::function<void()> f){
       event_disconnect = f;
     }
-    void on_send(std::function<void(port_e, const parse_buffer_t &)> f){
+    void on_send(std::function<void(const parse_buffer_t &, port_e)> f){
       sendto = f;
     }
 
