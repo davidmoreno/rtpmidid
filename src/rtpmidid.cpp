@@ -88,7 +88,27 @@ uint16_t rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name, uint16
   srv->port = port;
   mdns.announce(std::move(srv));
 
-  servers.push_back(std::move(rtpserver));
+  rtpserver->on_connect([this, port, rtpserver](const std::string &name){
+    INFO("Remote client connects to local server at port {}. Name: {}", port, name);
+    auto aseq_port = seq.create_port(name);
+
+    rtpserver->on_midi([this, aseq_port](parse_buffer_t &pb){
+      this->recv_rtpmidi_event(aseq_port, pb);
+    });
+    seq.on_midi_event(aseq_port, [this, aseq_port](snd_seq_event_t *ev){
+      this->recv_alsamidi_event(aseq_port, ev);
+    });
+
+    peer_info peer={
+      name,
+      "unknown",
+      port,
+      1,
+      rtpserver,
+    };
+
+    known_peers[aseq_port] = peer;
+  });
 
   return port;
 }
