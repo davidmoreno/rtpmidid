@@ -136,6 +136,7 @@ std::shared_ptr<rtpserver> rtpmidid::rtpmidid::add_rtpmidid_import_server(const 
       conn->peer->send_midi(stream);
     });
     peer->on_disconnect([this, aseq_port]{
+      seq.remove_port(aseq_port);
       known_servers_connections.erase(aseq_port);
     });
 
