@@ -190,7 +190,7 @@ void ::rtpmidid::rtpmidid::setup_alsa_seq(){
   seq.on_subscribe(alsaport, [this, alsaport](aseq::port_t from, const std::string &name){
     DEBUG("Connected to network port. Create server for this alsa data.");
 
-    add_rtpmidid_export_server(name, alsaport, from);
+    add_rtpmidid_export_server(fmt::format("{}/{}", this->name, name), alsaport, from);
   });
 }
 
