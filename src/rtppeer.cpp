@@ -45,7 +45,7 @@ rtppeer::rtppeer(std::string _name) : local_name(std::move(_name)) {
 }
 
 rtppeer::~rtppeer(){
-  DEBUG("~rtppeer {} <-> {}", local_name, remote_name);
+  DEBUG("~rtppeer '{}' (local) <-> '{}' (remote)", local_name, remote_name);
 }
 
 void rtppeer::reset(){
@@ -392,6 +392,7 @@ void rtppeer::send_midi(parse_buffer_t &events){
   buffer.write_uint8(events.size());
   buffer.copy_from(events);
 
+  // events.print_hex();
   // buffer.print_hex();
 
   sendto(buffer, MIDI_PORT);

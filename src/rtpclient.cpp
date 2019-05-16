@@ -75,8 +75,9 @@ void rtpclient::connect_to(std::string address, uint16_t port){
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = INADDR_ANY;
-    servaddr.sin_port = htons(port);
+    servaddr.sin_port = htons(local_base_port);
     if (bind(control_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
+      DEBUG("Error opening control socket, port {}", port);
       throw rtpmidid::exception("Can not open control socket. Maybe address is in use?");
     }
     if (local_base_port == 0){
@@ -96,11 +97,12 @@ void rtpclient::connect_to(std::string address, uint16_t port){
     servaddr.sin_addr.s_addr = INADDR_ANY;
     servaddr.sin_port = htons(local_base_port + 1);
     if (bind(midi_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
+      DEBUG("Error opening midi socket, port {}", port);
       throw rtpmidid::exception("Can not open MIDI socket. Maybe address is in use?");
     }
     poller.add_fd_in(midi_socket, [this](int){ this->data_ready(rtppeer::MIDI_PORT); });
-  } catch (...){
-    ERROR("Error creating rtp client.");
+  } catch (const std::exception &excp) {
+    ERROR("Error creating rtp client: {}", excp.what());
     if (control_socket){
       poller.remove_fd(control_socket);
       ::close(control_socket);

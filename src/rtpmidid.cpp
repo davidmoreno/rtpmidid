@@ -161,6 +161,8 @@ std::shared_ptr<rtpserver> rtpmidid::rtpmidid::add_rtpmidid_export_server(
       uint8_t tmp[64];
       parse_buffer_t buffer(tmp, sizeof(tmp));
       alsamidi_to_midiprotocol(ev, buffer);
+      buffer.end = buffer.position;
+      buffer.position = buffer.start;
 
       server->send_midi_to_all_peers(buffer);
     });
