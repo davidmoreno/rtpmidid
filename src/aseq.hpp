@@ -26,11 +26,22 @@
 namespace rtpmidid {
   class aseq {
   public:
+    struct port_t {
+      uint8_t client;
+      uint8_t port;
+
+      port_t(uint8_t a, uint8_t b) : client(a), port(b) {}
+
+      bool operator<(const port_t &other) const{
+        return client < other.client && port < other.port;
+      }
+    };
+
     std::string name;
     snd_seq_t *seq;
     std::vector<int> fds; // Normally 1?
-    std::map<int, std::vector<std::function<void(int client, int port, const std::string &name)>>> subscribe_callbacks;
-    std::map<int, std::vector<std::function<void(int client, int port)>>> unsubscribe_callbacks;
+    std::map<int, std::vector<std::function<void(port_t, const std::string &name)>>> subscribe_callbacks;
+    std::map<int, std::vector<std::function<void(port_t)>>> unsubscribe_callbacks;
     std::map<int, std::vector<std::function<void(snd_seq_event_t *)>>> midi_event_callbacks;
 
     aseq(std::string name);
@@ -42,8 +53,8 @@ namespace rtpmidid {
     uint8_t create_port(const std::string &name);
     void remove_port(uint8_t port);
 
-    void on_subscribe(int port, std::function<void(int client, int port, const std::string &name)> f);
-    void on_unsubscribe(int port, std::function<void(int client, int port)> f);
+    void on_subscribe(int port, std::function<void(port_t, const std::string &name)> f);
+    void on_unsubscribe(int port, std::function<void(port_t)> f);
     void on_midi_event(int port, std::function<void(snd_seq_event_t *)> f);
   };
 

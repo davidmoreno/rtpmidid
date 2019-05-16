@@ -371,7 +371,7 @@ uint64_t rtppeer::get_timestamp(){
   return uint32_t(now - timestamp_start);
 }
 
-void rtppeer::send_midi(parse_buffer_t *events){
+void rtppeer::send_midi(parse_buffer_t &events){
   if (!is_connected()){ // Not connected yet.
     return;
   }
@@ -389,8 +389,8 @@ void rtppeer::send_midi(parse_buffer_t *events){
   buffer.write_uint32(SSRC);
 
   // Now midi
-  buffer.write_uint8(events->size());
-  buffer.copy_from(*events);
+  buffer.write_uint8(events.size());
+  buffer.copy_from(events);
 
   // buffer.print_hex();
 

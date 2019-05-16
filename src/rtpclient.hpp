@@ -63,7 +63,7 @@ namespace rtpmidid {
       peer.on_disconnect(f);
     }
 
-    void send_midi(parse_buffer_t *buffer){
+    void send_midi(parse_buffer_t &buffer){
       peer.send_midi(buffer);
     }
   };

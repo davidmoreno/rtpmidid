@@ -15,36 +15,42 @@ connections.
 
 Initial protoype is in Python, future daemon will be in C, C++ or Rust.
 
-## How to use it.
+## How it works / How to use rptmidid
 
-rtpmidid creates a sequencer cliet with all found external ports to be just
-connected locally.
+It provides two modes of operation, one focused on importing another on
+exporting.
 
-To export local MIDI ports,  there is a special port "Export A". Connect a
-sequencer client to this port and it will be exported as RTPMIDI.
+### Importing
 
-After connecting to export port, a new "Export B" will appear and so on.
+For each found mDNS item, and connections to port 5400 (by default), it creates
+alsa seq ports which provide the events on those endpoints.
 
-Several clients can be connected to the same export, and if you want to use
-both input and input from the same port, you have to connect to both sides to
-the same export port.
+For mDNS discovered endpoints, the connection is delayed until the alsa seq
+connection.
+
+Also it can conneto to other endpoint by ip and port. Right now only at startup
+but in the future via some other running mechanism, as watching for a config
+file changes.
+
+### Exporting
+
+To export a local alsa sequencer port, connect it to the "Network" port.
+
+It will create the server, announce the mDNS service so other endpoints know it
+exist, and accept connections.
+
+MIDI data is rerouted to the proper endpoint by checking the source port.
+
 
 ## Goals
 
 * [ ] Daemon, no need for UI
 * [ ] RTP Hub -- Connects RTP clients between them
 * [ ] ALSA MIDI -- Inputs as ALSA MIDI inputs, outputs a ALSA MIDI outputs
-* [ ] Autoconfigurable for Avahi Endpoints
+* [ ] Autoconfigurable for mDNS Endpoints
 * [ ] Configurable for external non Avahi endpoints
 
-
-## V0 in python
-
-To understand the protocol, ease of development
-
-Receives the remote IP and port, and creates the seq bridges.
-
-## V1 in C++ (WIP)
+## Features and status
 
 Development status / plan:
 

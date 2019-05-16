@@ -197,7 +197,9 @@ void mdns::announce(std::unique_ptr<service> service, bool broadcast){
   // preemptively tell everybody
   if (broadcast){
     send_response(*service);
-    // DEBUG("Announce service: {}", service->to_string());
+    INFO("Announce service: {}", service->to_string());
+  } else {
+    DEBUG("NOT announcing service: {}", service->to_string());
   }
 
   // Will reannounce acording to ttl. I keep a pointer, but if removed it will be removed from the timers too.
@@ -457,12 +459,13 @@ void mdns::detected_service(const mdns::service *service){
 void mdns::update_cache(const mdns::service *service){
   // Maybe add it to cache, update TTL, or remove, depends on TTL
   auto type_label = std::make_pair(service->type, service->label);
-  mdns::service *service_at_cache = nullptr;
 
   // Remove from cache and timers
   if (service->ttl == 0) {
 
     auto &services = cache[type_label];
+    if (services.size() == 0)
+      return;
     services.erase( std::remove_if(
       std::begin(services), std::end(services),
       [service](auto &d){
@@ -474,6 +477,7 @@ void mdns::update_cache(const mdns::service *service){
   }
 
   // Will have to update or add
+  mdns::service *service_at_cache = nullptr;
   for (auto &d: cache[type_label]) {
     // DEBUG("Check if equal \n\t\t{}\n\t\t{}", d->to_string(), service->to_string());
     if (d->equal(service)) {

@@ -47,7 +47,8 @@ using namespace rtpmidid;
 
 
   for (auto &port: config->ports){
-    add_rtpmidid_server(config->name, port);
+    auto server = add_rtpmidid_import_server(config->name, port);
+    servers.push_back(std::move(server));
   }
 
   for (auto &connect_to: config->connect_to){
@@ -68,23 +69,44 @@ using namespace rtpmidid;
   }
 }
 
-uint16_t rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name, uint16_t port){
-  auto rtpserver = std::make_shared<::rtpmidid::rtpserver>(name, port);
-
+void rtpmidid::rtpmidid::announce_rtpmidid_server(const std::string &name, uint16_t port){
   auto ptr = std::make_unique<::rtpmidid::mdns::service_ptr>();
   ptr->label = "_apple-midi._udp.local";
   ptr->ttl = TIMEOUT_REANNOUNCE;
   ptr->type = ::rtpmidid::mdns::PTR;
   ptr->servicename = fmt::format("{}._apple-midi._udp.local", name);
-  mdns.announce(std::move(ptr));
+  mdns.announce(std::move(ptr), true);
 
   auto srv = std::make_unique<::rtpmidid::mdns::service_srv>();
   srv->label = fmt::format("{}._apple-midi._udp.local", name);
   srv->ttl = TIMEOUT_REANNOUNCE;
   srv->type = ::rtpmidid::mdns::SRV;
-  srv->hostname = "ucube.local";
+  srv->hostname = "ucube.local"; // FIXME!!!
   srv->port = port;
-  mdns.announce(std::move(srv));
+  mdns.announce(std::move(srv), true);
+}
+
+void rtpmidid::rtpmidid::unannounce_rtpmidid_server(const std::string &name, uint16_t port){
+  ::rtpmidid::mdns::service_ptr ptr;
+  ptr.label = "_apple-midi._udp.local";
+  ptr.ttl = 0; // This means, remove
+  ptr.type = ::rtpmidid::mdns::PTR;
+  ptr.servicename = fmt::format("{}._apple-midi._udp.local", name);
+  mdns.unannounce(&ptr);
+
+  ::rtpmidid::mdns::service_srv srv;
+  srv.label = fmt::format("{}._apple-midi._udp.local", name);
+  srv.ttl = 0;
+  srv.type = ::rtpmidid::mdns::SRV;
+  srv.hostname = "ucube.local"; // FIXME!!!
+  srv.port = port;
+  mdns.unannounce(&srv);
+}
+
+std::shared_ptr<rtpserver> rtpmidid::rtpmidid::add_rtpmidid_import_server(const std::string &name, uint16_t port){
+  auto rtpserver = std::make_shared<::rtpmidid::rtpserver>(name, port);
+
+  announce_rtpmidid_server(name, rtpserver->control_port);
 
   rtpserver->on_connected([this, rtpserver, port](std::shared_ptr<::rtpmidid::rtppeer> peer){
     INFO("Remote client connects to local server at port {}. Name: {}", port, peer->remote_name);
@@ -111,7 +133,7 @@ uint16_t rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name, uint16
       stream.position = stream.start;
 
       // And send
-      conn->peer->send_midi(&stream);
+      conn->peer->send_midi(stream);
     });
     peer->on_disconnect([this, aseq_port]{
       known_servers_connections.erase(aseq_port);
@@ -126,9 +148,48 @@ uint16_t rtpmidid::rtpmidid::add_rtpmidid_server(const std::string &name, uint16
     known_servers_connections[aseq_port] = server_conn;
   });
 
-  servers.push_back(rtpserver);
+  return rtpserver;
+}
 
-  return port;
+std::shared_ptr<rtpserver> rtpmidid::rtpmidid::add_rtpmidid_export_server(
+      const std::string &name, uint8_t alsaport, aseq::port_t &from){
+    auto server = std::make_shared<rtpserver>(name, 0);
+
+    announce_rtpmidid_server(name, server->control_port);
+
+    seq.on_midi_event(alsaport, [this, server, alsaport](snd_seq_event_t *ev){
+      uint8_t tmp[64];
+      parse_buffer_t buffer(tmp, sizeof(tmp));
+      alsamidi_to_midiprotocol(ev, buffer);
+
+      server->send_midi_to_all_peers(buffer);
+    });
+
+    seq.on_unsubscribe(alsaport, [this, alsaport, name, server](aseq::port_t from){
+      // This should destroy the server.
+      unannounce_rtpmidid_server(name, server->control_port);
+      // TODO: disconnect from on_midi_event.
+      alsa_to_server.erase(from);
+    });
+
+    server->on_midi_event_on_any_peer([this](parse_buffer_t &buffer){
+      DEBUG("Got data from the remote side");
+    });
+
+    alsa_to_server[from] = server;
+
+    return server;
+}
+
+void ::rtpmidid::rtpmidid::setup_alsa_seq(){
+  // Export only one, but all data that is conencted to it.
+  // add_export_port();
+  auto alsaport = seq.create_port("Network");
+  seq.on_subscribe(alsaport, [this, alsaport](aseq::port_t from, const std::string &name){
+    DEBUG("Connected to network port. Create server for this alsa data.");
+
+    add_rtpmidid_export_server(name, alsaport, from);
+  });
 }
 
 
@@ -204,7 +265,7 @@ std::optional<uint8_t> rtpmidid::rtpmidid::add_rtpmidi_client(
   INFO("New alsa port: {}, connects to {}:{} ({})", aseq_port, address, net_port, name);
   known_clients[aseq_port] = std::move(peer_info);
 
-  seq.on_subscribe(aseq_port, [this, aseq_port](int client, int port, const std::string &name){
+  seq.on_subscribe(aseq_port, [this, aseq_port](aseq::port_t port, const std::string &name){
     DEBUG("Callback on subscribe at rtpmidid: {}", name);
     auto peer_info = &known_clients[aseq_port];
     if (!peer_info->peer){
@@ -215,7 +276,7 @@ std::optional<uint8_t> rtpmidid::rtpmidid::add_rtpmidi_client(
       peer_info->use_count++;
     }
   });
-  seq.on_unsubscribe(aseq_port, [this, aseq_port](int client, int port){
+  seq.on_unsubscribe(aseq_port, [this, aseq_port](aseq::port_t port){
     DEBUG("Callback on unsubscribe at rtpmidid");
     auto peer_info = &known_clients[aseq_port];
     peer_info->use_count--;
@@ -306,7 +367,7 @@ void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev)
   stream.position = stream.start;
 
   // And send
-  peer_info->peer->send_midi(&stream);
+  peer_info->peer->send_midi(stream);
 }
 
 void ::rtpmidid::rtpmidid::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &stream){
@@ -353,11 +414,6 @@ void ::rtpmidid::rtpmidid::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_b
   }
 }
 
-
-void ::rtpmidid::rtpmidid::setup_alsa_seq(){
-  // Export only one, but all data that is conencted to it.
-  add_export_port();
-}
 
 void ::rtpmidid::rtpmidid::add_export_port(){
   INFO("Create automatic port. Next is {}, max {}", export_port_next_id, max_export_port_next_id);

@@ -35,7 +35,7 @@ using namespace rtpmidid;
 
 rtpclient::rtpclient(std::string name, const std::string &address, int16_t port)
     : peer(std::move(name)) {
-  local_base_port = port;
+  local_base_port = 0;
   remote_base_port = -1; // Not defined
   control_socket = -1;
   midi_socket = -1;

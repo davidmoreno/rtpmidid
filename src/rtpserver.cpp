@@ -183,7 +183,7 @@ void rtpserver::sendto(const parse_buffer_t &pb, rtppeer::port_e port, struct so
 
   auto socket = rtppeer::MIDI_PORT == port ? midi_socket : control_socket;
 
-  DEBUG("Send to {}, {}, family {} {}. {} {}", port, socket, AF_INET, address->sin_family, inet_ntoa(address->sin_addr), htons(address->sin_port));
+  // DEBUG("Send to {}, {}, family {} {}. {} {}", port, socket, AF_INET, address->sin_family, inet_ntoa(address->sin_addr), htons(address->sin_port));
 
   auto res = ::sendto(
     socket, pb.start, pb.length(),
@@ -222,4 +222,10 @@ void rtpserver::create_peer_from(parse_buffer_t &buffer, struct sockaddr_in *cli
       f(peer);
     }
   });
+}
+
+void rtpserver::send_midi_to_all_peers(parse_buffer_t &buffer){
+  for(auto &speers: ssrc_to_peer){
+    speers.second->send_midi(buffer);
+  }
 }

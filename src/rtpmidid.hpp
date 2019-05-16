@@ -54,6 +54,7 @@ namespace rtpmidid{
     std::map<uint8_t, client_info> known_clients;
     std::map<uint8_t, server_conn_info> known_servers_connections;
     std::vector<std::shared_ptr<::rtpmidid::rtpserver>> servers;
+    std::map<aseq::port_t, std::shared_ptr<::rtpmidid::rtpserver>> alsa_to_server;
     char export_port_next_id = 'A';
     char max_export_port_next_id = 'Z';
     std::set<std::string> known_mdns_peers;
@@ -70,8 +71,15 @@ namespace rtpmidid{
 
     void setup_mdns();
     void setup_alsa_seq();
+    void announce_rtpmidid_server(const std::string &name, uint16_t port);
+    void unannounce_rtpmidid_server(const std::string &name, uint16_t port);
 
-    uint16_t add_rtpmidid_server(const std::string &name, uint16_t port);
+    // An import server is one that for each discovered connection, creates the alsa ports
+    std::shared_ptr<rtpserver> add_rtpmidid_import_server(const std::string &name, uint16_t port);
+
+    // An export server is one that exports a local ALSA seq port. It is announced with the
+    // aseq port name and so on. There is one per connection to the "Network"
+    std::shared_ptr<rtpserver> add_rtpmidid_export_server(const std::string &name, uint8_t alsaport, aseq::port_t &from);
 
     /// New export port, with next id
     void add_export_port();
