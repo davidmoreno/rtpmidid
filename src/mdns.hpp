@@ -50,6 +50,7 @@ namespace rtpmidid {
     };
     struct service_a : public service {
       union{
+        // If 0.0.0.0 I will answer my own IP
         uint8_t ip[4];
         uint32_t ip4;
       };
@@ -95,6 +96,8 @@ namespace rtpmidid {
     std::map<service *, rtpmidid::poller_t::timer_t> reannounce_timers;
     // Cache timers, with associated announcement service pointers
     std::map<service *, rtpmidid::poller_t::timer_t> cache_timers;
+    // IP to answer for A queries with 0.0.0.0 answer (marker for myself)
+    uint8_t ip4[4];
   public:
     mdns();
     ~mdns();

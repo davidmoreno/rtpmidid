@@ -266,10 +266,19 @@ void mdns::send_response(const service &service){
   switch(service.type){
     case mdns::A:{
       auto a = static_cast<const mdns::service_a*>(&service);
-      buffer.write_uint8(a->ip[0]);
-      buffer.write_uint8(a->ip[1]);
-      buffer.write_uint8(a->ip[2]);
-      buffer.write_uint8(a->ip[3]);
+
+      if (a->ip4 == 0){
+        // Put here my own IP
+        buffer.write_uint8(ip4[0]);
+        buffer.write_uint8(ip4[1]);
+        buffer.write_uint8(ip4[2]);
+        buffer.write_uint8(ip4[3]);
+      } else {
+        buffer.write_uint8(a->ip[0]);
+        buffer.write_uint8(a->ip[1]);
+        buffer.write_uint8(a->ip[2]);
+        buffer.write_uint8(a->ip[3]);
+      }
     }
     break;
     case mdns::PTR:{

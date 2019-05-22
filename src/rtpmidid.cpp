@@ -77,13 +77,21 @@ void rtpmidid::rtpmidid::announce_rtpmidid_server(const std::string &name, uint1
   ptr->servicename = fmt::format("{}._apple-midi._udp.local", name);
   mdns.announce(std::move(ptr), true);
 
+  auto hostname = fmt::format("rtpmidid-{}.local", this->name);
   auto srv = std::make_unique<::rtpmidid::mdns::service_srv>();
   srv->label = fmt::format("{}._apple-midi._udp.local", name);
   srv->ttl = TIMEOUT_REANNOUNCE;
   srv->type = ::rtpmidid::mdns::SRV;
-  srv->hostname = "ucube.local"; // FIXME!!!
+  srv->hostname = hostname;
   srv->port = port;
   mdns.announce(std::move(srv), true);
+
+  auto a = std::make_unique<::rtpmidid::mdns::service_a>();
+  a->label = hostname;
+  a->ttl = TIMEOUT_REANNOUNCE;
+  a->type = ::rtpmidid::mdns::A;
+  a->ip4 = 0;
+  mdns.announce(std::move(a), true);
 }
 
 void rtpmidid::rtpmidid::unannounce_rtpmidid_server(const std::string &name, uint16_t port){
@@ -94,13 +102,21 @@ void rtpmidid::rtpmidid::unannounce_rtpmidid_server(const std::string &name, uin
   ptr.servicename = fmt::format("{}._apple-midi._udp.local", name);
   mdns.unannounce(&ptr);
 
+  auto hostname = fmt::format("rtpmidid-{}.local", this->name);
   ::rtpmidid::mdns::service_srv srv;
   srv.label = fmt::format("{}._apple-midi._udp.local", name);
   srv.ttl = 0;
   srv.type = ::rtpmidid::mdns::SRV;
-  srv.hostname = "ucube.local"; // FIXME!!!
+  srv.hostname = hostname;
   srv.port = port;
   mdns.unannounce(&srv);
+
+  auto a = std::make_unique<::rtpmidid::mdns::service_a>();
+  a->label = hostname;
+  a->ttl = 0;
+  a->type = ::rtpmidid::mdns::A;
+  a->ip4 = 0;
+  mdns.announce(std::move(a), true);
 }
 
 std::shared_ptr<rtpserver> rtpmidid::rtpmidid::add_rtpmidid_import_server(const std::string &name, uint16_t port){
