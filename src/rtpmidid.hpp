@@ -45,7 +45,7 @@ namespace rtpmidid{
     std::shared_ptr<::rtpmidid::rtpserver> server;
   };
 
-  class rtpmidid {
+  class rtpmidid_t {
   public:
     std::string name;
     ::rtpmidid::aseq seq;
@@ -59,7 +59,7 @@ namespace rtpmidid{
     char max_export_port_next_id = 'Z';
     std::set<std::string> known_mdns_peers;
 
-    rtpmidid(config_t *config);
+    rtpmidid_t(config_t *config);
 
     // Manual connect to a server.
     std::optional<uint8_t> add_rtpmidi_client(const std::string &name, const std::string &address, uint16_t port);

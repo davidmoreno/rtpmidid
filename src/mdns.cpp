@@ -26,6 +26,8 @@
 #include "./logger.hpp"
 #include "./netutils.hpp"
 #include "./stringpp.hpp"
+#include "./utils.hpp"
+
 
 #define DEBUG0(...)
 const bool debug0 = false;
@@ -76,7 +78,7 @@ bool read_question(mdns *server, parse_buffer_t &buffer){
 
   read_label(buffer, parse_label);
   int type_ = buffer.read_uint16();
-  int class_ = buffer.read_uint16();
+  UNUSED int class_ = buffer.read_uint16();
   DEBUG0("Question about: {} {} {}.", label, type_, class_);
 
   return server->answer_if_known(mdns::query_type_e(type_), (char*)label);
@@ -92,7 +94,7 @@ bool read_answer(mdns *server, parse_buffer_t &buffer){
 
   read_label(buffer, buffer_label);
   auto type_ = buffer.read_uint16();
-  auto class_ = buffer.read_uint16();
+  UNUSED auto class_ = buffer.read_uint16();
 
   auto ttl = buffer.read_uint32();
 
@@ -354,14 +356,14 @@ void mdns::query(const std::string &name, mdns::query_type_e type){
 }
 
 void parse_packet(mdns *mdns, parse_buffer_t &parse_buffer){
-  int tid = parse_buffer.read_uint16();
-  int8_t flags = parse_buffer.read_uint16();
-  bool is_query = !(flags & 0x8000);
-  int opcode = (flags >> 11) & 0x0007;
+  UNUSED int tid = parse_buffer.read_uint16();
+  UNUSED int8_t flags = parse_buffer.read_uint16();
+  // UNUSED bool is_query = !(flags & 0x8000);
+  // UNUSED int opcode = (flags >> 11) & 0x0007;
   auto nquestions = parse_buffer.read_uint16();
   auto nanswers = parse_buffer.read_uint16();
-  auto nauthority = parse_buffer.read_uint16();
-  auto nadditional = parse_buffer.read_uint16();
+  UNUSED auto nauthority = parse_buffer.read_uint16();
+  UNUSED auto nadditional = parse_buffer.read_uint16();
 
   DEBUG0(
       "mDNS packet: id: {}, is_query: {}, opcode: {}, nquestions: {}, nanswers: {}, nauthority: {}, nadditional: {}",
@@ -497,7 +499,6 @@ void mdns::update_cache(const mdns::service *service){
   }
   if (!service_at_cache){
     auto cloned = service->clone();
-    service_at_cache = cloned.get();
     cache[type_label].push_back(std::move(cloned));
   }
 }

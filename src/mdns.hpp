@@ -43,6 +43,7 @@ namespace rtpmidid {
 
       service();
       service(std::string label_, query_type_e type_, uint32_t ttl_);
+      virtual ~service(){}
       virtual std::unique_ptr<service> clone() const;
       virtual bool equal(const service *other);
       bool base_equal(const service *other);

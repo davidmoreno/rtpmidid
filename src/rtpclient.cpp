@@ -39,7 +39,6 @@ rtpclient::rtpclient(std::string name, const std::string &address, int16_t port)
   remote_base_port = -1; // Not defined
   control_socket = -1;
   midi_socket = -1;
-  auto startport = local_base_port;
   peer.initiator_id = rand();
   peer.sendto = [this](const parse_buffer_t &data, rtppeer::port_e port){
     this->sendto(data, port);

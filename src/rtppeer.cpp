@@ -256,7 +256,7 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port){
     {
       // Receive the other side CK, I can calculate latency
       ck2 = buffer.read_uint64();
-      ck3 = buffer.read_uint64();
+      // ck3 = buffer.read_uint64();
       latency = get_timestamp() - ck2;
       DEBUG("Latency {}: {:.2f} ms (server / 3)", remote_name, latency / 10.0);
       // No need to send message

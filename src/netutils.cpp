@@ -43,9 +43,7 @@ void read_label(parse_buffer_t &buffer, parse_buffer_t &label){
       buffer_rec.position = buffer.start + position_pointer;
       buffer_rec.assert_valid_position();
 
-      if (first)
-        first = false;
-      else
+      if (!first)
         label.write_uint8('.');
       // DEBUG("Label is compressed, refers to {}. So far read: {} bytes, <{}>", *data, nbytes, str - nbytes);
       read_label(buffer_rec, label);

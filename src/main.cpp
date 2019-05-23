@@ -49,7 +49,7 @@ int main(int argc, char **argv){
     auto options = rtpmidid::parse_cmd_args(argc-1, argv+1);
 
     try{
-      auto rtpmidid = ::rtpmidid::rtpmidid(&options);
+      auto rtpmidid = rtpmidid::rtpmidid_t(&options);
 
       while(rtpmidid::poller.is_open()){
         rtpmidid::poller.wait();

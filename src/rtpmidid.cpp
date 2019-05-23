@@ -31,7 +31,7 @@ const int TIMEOUT_REANNOUNCE = 75 * 60;  // As recommended by RFC 6762
 
 using namespace rtpmidid;
 
-::rtpmidid::rtpmidid::rtpmidid(config_t *config) : name(config->name), seq(fmt::format("rtpmidi {}", name)){
+rtpmidid_t::rtpmidid_t(config_t *config) : name(config->name), seq(fmt::format("rtpmidi {}", name)){
   // Max automatic export port. They are automatically created as connected to "Export A, Export B and so on."
   if (config->max_export_port == '0'){
     max_export_port_next_id = '\0';
@@ -69,7 +69,7 @@ using namespace rtpmidid;
   }
 }
 
-void rtpmidid::rtpmidid::announce_rtpmidid_server(const std::string &name, uint16_t port){
+void rtpmidid_t::announce_rtpmidid_server(const std::string &name, uint16_t port){
   auto ptr = std::make_unique<::rtpmidid::mdns::service_ptr>();
   ptr->label = "_apple-midi._udp.local";
   ptr->ttl = TIMEOUT_REANNOUNCE;
@@ -94,7 +94,7 @@ void rtpmidid::rtpmidid::announce_rtpmidid_server(const std::string &name, uint1
   mdns.announce(std::move(a), true);
 }
 
-void rtpmidid::rtpmidid::unannounce_rtpmidid_server(const std::string &name, uint16_t port){
+void rtpmidid_t::unannounce_rtpmidid_server(const std::string &name, uint16_t port){
   ::rtpmidid::mdns::service_ptr ptr;
   ptr.label = "_apple-midi._udp.local";
   ptr.ttl = 0; // This means, remove
@@ -119,7 +119,7 @@ void rtpmidid::rtpmidid::unannounce_rtpmidid_server(const std::string &name, uin
   mdns.announce(std::move(a), true);
 }
 
-std::shared_ptr<rtpserver> rtpmidid::rtpmidid::add_rtpmidid_import_server(const std::string &name, uint16_t port){
+std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::string &name, uint16_t port){
   auto rtpserver = std::make_shared<::rtpmidid::rtpserver>(name, port);
 
   announce_rtpmidid_server(name, rtpserver->control_port);
@@ -168,7 +168,7 @@ std::shared_ptr<rtpserver> rtpmidid::rtpmidid::add_rtpmidid_import_server(const 
   return rtpserver;
 }
 
-std::shared_ptr<rtpserver> rtpmidid::rtpmidid::add_rtpmidid_export_server(
+std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_export_server(
       const std::string &name, uint8_t alsaport, aseq::port_t &from){
     auto server = std::make_shared<rtpserver>(name, 0);
 
@@ -200,7 +200,7 @@ std::shared_ptr<rtpserver> rtpmidid::rtpmidid::add_rtpmidid_export_server(
     return server;
 }
 
-void ::rtpmidid::rtpmidid::setup_alsa_seq(){
+void rtpmidid_t::setup_alsa_seq(){
   // Export only one, but all data that is conencted to it.
   // add_export_port();
   auto alsaport = seq.create_port("Network");
@@ -212,7 +212,7 @@ void ::rtpmidid::rtpmidid::setup_alsa_seq(){
 }
 
 
-void ::rtpmidid::rtpmidid::setup_mdns(){
+void rtpmidid_t::setup_mdns(){
   mdns.on_discovery("_apple-midi._udp.local", mdns::PTR, [this](const ::rtpmidid::mdns::service *service){
     const ::rtpmidid::mdns::service_ptr *ptr = static_cast<const ::rtpmidid::mdns::service_ptr*>(service);
     // INFO("Found apple midi PTR response {}!", std::to_string(*ptr));
@@ -264,7 +264,7 @@ void ::rtpmidid::rtpmidid::setup_mdns(){
   });
 }
 
-std::optional<uint8_t> rtpmidid::rtpmidid::add_rtpmidi_client(
+std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
     const std::string &name, const std::string &address, uint16_t net_port){
   for (auto &known: known_clients){
     if (known.second.address == address && known.second.port == net_port){
@@ -311,7 +311,7 @@ std::optional<uint8_t> rtpmidid::rtpmidid::add_rtpmidi_client(
 }
 
 
-void ::rtpmidid::rtpmidid::recv_rtpmidi_event(int port, parse_buffer_t &midi_data){
+void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data){
   uint8_t current_command =  0;
   snd_seq_event_t ev;
 
@@ -369,7 +369,7 @@ void ::rtpmidid::rtpmidid::recv_rtpmidi_event(int port, parse_buffer_t &midi_dat
 }
 
 
-void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev){
+void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev){
   // DEBUG("Callback on midi event at rtpmidid");
   auto peer_info = &known_clients[aseq_port];
   if (!peer_info->peer){
@@ -389,7 +389,7 @@ void ::rtpmidid::rtpmidid::recv_alsamidi_event(int aseq_port, snd_seq_event *ev)
   peer_info->peer->send_midi(stream);
 }
 
-void ::rtpmidid::rtpmidid::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &stream){
+void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &stream){
   switch(ev->type){
     case SND_SEQ_EVENT_NOTE:
     case SND_SEQ_EVENT_NOTEON:
@@ -434,7 +434,7 @@ void ::rtpmidid::rtpmidid::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_b
 }
 
 
-void ::rtpmidid::rtpmidid::add_export_port(){
+void rtpmidid_t::add_export_port(){
   INFO("Create automatic port. Next is {}, max {}", export_port_next_id, max_export_port_next_id);
   // Max 26 ports.
   if (export_port_next_id > max_export_port_next_id)
@@ -442,13 +442,13 @@ void ::rtpmidid::rtpmidid::add_export_port(){
   add_export_port(export_port_next_id++);
 }
 
-void ::rtpmidid::rtpmidid::add_export_port(char id){
+void rtpmidid_t::add_export_port(char id){
   auto alsa_name = fmt::format("Export {}", id);
   auto aseq_port = seq.create_port(alsa_name);
   add_export_port(id, aseq_port);
 }
 
-void ::rtpmidid::rtpmidid::add_export_port(char id, uint8_t aseq_port){
+void rtpmidid_t::add_export_port(char id, uint8_t aseq_port){
   // uint16_t netport = 0;
   //
   // auto server_info = ::rtpmidid::server_info{
@@ -507,7 +507,7 @@ void ::rtpmidid::rtpmidid::add_export_port(char id, uint8_t aseq_port){
   WARNING("Not Implemented. Commented code. I think this functionality is not going to be here.");
 }
 
-void ::rtpmidid::rtpmidid::remove_client(uint8_t port){
+void rtpmidid_t::remove_client(uint8_t port){
   DEBUG("Removing peer from known peers list.");
   known_clients.erase(port);
 }
