@@ -178,7 +178,7 @@ void rtpclient::data_ready(rtppeer::port_e port){
  */
 void rtpclient::start_ck_1min_sync(){
   peer.send_ck0();
-  timer_ck = std::move(poller.add_timer_event(60, [this]{
+  timer_ck = poller.add_timer_event(60, [this]{
     start_ck_1min_sync();
-  }));
+  });
 }

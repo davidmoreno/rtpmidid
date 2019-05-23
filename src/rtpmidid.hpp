@@ -28,7 +28,7 @@ namespace rtpmidid{
   class rtpserver;
   class rtpclient;
   class rtppeer;
-  class parse_buffer_t;
+  struct parse_buffer_t;
 
   struct client_info{
     std::string name;

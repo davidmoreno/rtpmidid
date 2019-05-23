@@ -174,7 +174,7 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_export_server(
 
     announce_rtpmidid_server(name, server->control_port);
 
-    seq.on_midi_event(alsaport, [this, server, alsaport](snd_seq_event_t *ev){
+    seq.on_midi_event(alsaport, [this, server](snd_seq_event_t *ev){
       uint8_t tmp[64];
       parse_buffer_t buffer(tmp, sizeof(tmp));
       alsamidi_to_midiprotocol(ev, buffer);
@@ -184,14 +184,14 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_export_server(
       server->send_midi_to_all_peers(buffer);
     });
 
-    seq.on_unsubscribe(alsaport, [this, alsaport, name, server](aseq::port_t from){
+    seq.on_unsubscribe(alsaport, [this, name, server](aseq::port_t from){
       // This should destroy the server.
       unannounce_rtpmidid_server(name, server->control_port);
       // TODO: disconnect from on_midi_event.
       alsa_to_server.erase(from);
     });
 
-    server->on_midi_event_on_any_peer([this](parse_buffer_t &buffer){
+    server->on_midi_event_on_any_peer([](parse_buffer_t &buffer){
       DEBUG("Got data from the remote side");
     });
 

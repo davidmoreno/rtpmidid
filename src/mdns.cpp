@@ -242,8 +242,7 @@ void mdns::unannounce(service *srv){
 
 void mdns::send_response(const service &service){
   uint8_t packet[1500];
-  memset(packet, 0, sizeof(packet));
-  parse_buffer_t buffer = { packet, packet + 1500, packet };
+  parse_buffer_t buffer = { packet, packet + sizeof(packet), packet };
 
   // Response and authoritative
   buffer.position[2] = 0x84;
