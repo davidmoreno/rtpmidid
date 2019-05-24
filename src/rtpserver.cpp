@@ -222,6 +222,13 @@ void rtpserver::create_peer_from(parse_buffer_t &buffer, struct sockaddr_in *cli
       f(peer);
     }
   });
+
+  peer->on_midi([this](parse_buffer_t &data){
+    // DEBUG("Got MIDI from the remote peer into this server.");
+    for (auto &f: midi_event_events){
+      f(data);
+    }
+  });
 }
 
 void rtpserver::send_midi_to_all_peers(parse_buffer_t &buffer){

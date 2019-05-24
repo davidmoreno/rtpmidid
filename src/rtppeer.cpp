@@ -373,6 +373,7 @@ uint64_t rtppeer::get_timestamp(){
 
 void rtppeer::send_midi(parse_buffer_t &events){
   if (!is_connected()){ // Not connected yet.
+    DEBUG("Can not send MIDI data to {} yet, not connected.", remote_name);
     return;
   }
 

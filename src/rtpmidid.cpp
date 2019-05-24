@@ -191,8 +191,8 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_export_server(
       alsa_to_server.erase(from);
     });
 
-    server->on_midi_event_on_any_peer([](parse_buffer_t &buffer){
-      DEBUG("Got data from the remote side");
+    server->on_midi_event_on_any_peer([this, alsaport](parse_buffer_t &buffer){
+      this->recv_rtpmidi_event(alsaport, buffer);
     });
 
     alsa_to_server[from] = server;
@@ -294,6 +294,9 @@ std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
       });
       peer_info->use_count++;
     }
+    else {
+      DEBUG("Already connected.");
+    }
   });
   seq.on_unsubscribe(aseq_port, [this, aseq_port](aseq::port_t port){
     DEBUG("Callback on unsubscribe at rtpmidid");
@@ -370,7 +373,7 @@ void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data){
 
 
 void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev){
-  // DEBUG("Callback on midi event at rtpmidid");
+  DEBUG("Callback on midi event at rtpmidid, port {}", aseq_port);
   auto peer_info = &known_clients[aseq_port];
   if (!peer_info->peer){
     ERROR("There is no peer but I received an event! This situation should NEVER happen. File a bug. Port {}", aseq_port);
