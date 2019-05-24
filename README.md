@@ -2,18 +2,41 @@
 
 ## Real Time Protocol Musical Instrument Digital Interface Daemon
 
-Still not working.
+Alpha software. Use at your own risk.
 
-The idea is to have the daemon always running, and it will create alsa seq
-points for Network devices, and export all your seq devices into the network for
-external consumption.
+`rtpmidid` allows you to share ALSA sequencer devices on the network using RTP MIDI, and import other network shared RTP MIDI devices.
 
-This also allows to use ALSA seq routing to route between your devices.
+`rtpmidid` is an user daemon, and when a RTP MIDI device is announced using mDNS (also known as Zeroconf, Avahi, and multicast DNS) it exposes this alsa sequencer port.
 
-Right now I'm just exploring RTP MIDI protocol and options with single
-connections.
+## Other implementations
 
-Initial protoype is in Python, future daemon will be in C, C++ or Rust.
+There is many hardware with RTP MIDI support, normally controllers, but for
+example Behriger DeepMind12 Synthetizer has support over Wifi.
+
+### Linux
+
+On linux there is [raveloxmidi](https://github.com/ravelox/pimidi), but
+is not intented as a ALSA sequencer bridge but directly to use on your hoardware
+devices.
+
+rtpmidid pretends to be a zero configuration daemon to have always on.
+
+### MacOS
+
+On MacOS there is support included in the OS.
+
+### Windows
+
+On windows there is
+[rtpmidi](https://www.tobias-erichsen.de/software/rtpmidi.html) by Tobias
+Erichsen.
+
+### Mobiles / tablets
+
+There are also many Apple iPad / iPhone and Android programs with rtp midi
+support. I have only access to Android, and I have tested it with
+[TouchDAW](https://www.humatic.de/htools/touchdaw/).
+
 
 ## How it works / How to use rptmidid
 
@@ -22,15 +45,15 @@ exporting.
 
 ### Importing
 
-For each found mDNS item, and connections to port 5400 (by default), it creates
+For each found mDNS item, and connections to port 5004 (by default), it creates
 alsa seq ports which provide the events on those endpoints.
 
 For mDNS discovered endpoints, the connection is delayed until the alsa seq
 connection.
 
-Also it can conneto to other endpoint by ip and port. Right now only at startup
-but in the future via some other running mechanism, as watching for a config
-file changes.
+Also it can connect to other endpoints by ip and port. Right now it is only
+possible at but in the future via some other running mechanism, as watching for
+a config file changes.
 
 ### Exporting
 
@@ -40,6 +63,11 @@ It will create the server, announce the mDNS service so other endpoints know it
 exist, and accept connections.
 
 MIDI data is rerouted to the proper endpoint by checking the source port.
+
+When connecting the Network port to an input, it merges all the midi events
+from all exported services. Normally this is not the desired behaviour, so it is
+recomended to export output ports, not input ones. This will be fixed in the
+future.
 
 ## Goals
 
@@ -52,7 +80,7 @@ MIDI data is rerouted to the proper endpoint by checking the source port.
 Development status / plan:
 
 * [x] mDNS client/server
-* [x] Async framework (epoll with callbacks based)
+* [x] Async framework (epoll with callbacks based code)
 * [x] mDNS publish and learn when there are rtpmidi running on the network
 * [x] Create the alsa ports for found rtpmidi servers in the network
 * [x] When there is any connection to the alsa sequencer port rtpmidid creates
@@ -68,6 +96,8 @@ Development status / plan:
 * [ ] Periodic check all peers are still on, no new peers
 * [x] Remove ports when peer dissapears
 * [x] Client send CK every minute
+* [ ] Jack MIDI support instead of ALSA seq
+* [ ] Use rtp midi timestamps
 * [ ] Journal support for note off
 * [ ] Journal support for CC
 * [ ] Journal support for Program Change
@@ -83,4 +113,5 @@ This includes embeded software uses (anti
 [tivoization](https://en.wikipedia.org/wiki/Tivoization) clause of the GPLv3).
 
 If you think the license does not fit your use case, please contact me at
-dmoreno@coralbits.com for alternative licensing options.
+dmoreno@coralbits.com for alternative licensing options. I'm a freelancer
+looking for new projects.
