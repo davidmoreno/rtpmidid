@@ -38,9 +38,13 @@ const bool debug0 = false;
 
 using namespace rtpmidid;
 
-static uint32_t get_ip_for_route(struct in_addr);
+static uint32_t route_get_ip_for_route(struct in_addr);
+static void route_setup();
+static uint32_t route_default_ip = 0;
 
 mdns::mdns(){
+  route_setup();
+
   socketfd = socket(AF_INET, SOCK_DGRAM, 0);
   if (socketfd < 0){
     throw rtpmidid::exception("Can not open mDNS socket. Out of sockets?");
@@ -63,10 +67,7 @@ mdns::mdns(){
   }
   poller.add_fd_in(socketfd, [this](int){ this->mdns_ready(); });
 
-  ip4[0] = 127;
-  ip4[1] = 0;
-  ip4[2] = 0;
-  ip4[3] = 1;
+  *((int32_t*)ip4) = route_default_ip;
 
   DEBUG("mDNS wating for requests at 224.0.0.251:5353");
 }
@@ -407,7 +408,7 @@ void mdns::mdns_ready(){
   unsigned int len = sizeof(cliaddr);
   auto read_length = recvfrom(socketfd, buffer, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
 
-  uint32_t ip = get_ip_for_route(cliaddr.sin_addr);
+  uint32_t ip = route_get_ip_for_route(cliaddr.sin_addr);
 
   // memcpy(&ip4, (char*)&ip, sizeof(ip)); // Next line is equivalent, but faster
   *((int32_t *)&ip4) = ip;
@@ -552,9 +553,41 @@ struct ip_route4_t {
 };
 
 static std::vector<ip_route4_t> routes;
-static uint32_t default_ip = 0;
 
-static uint32_t get_ip_for_route(struct in_addr in_other){
+static void route_setup(){
+  ip_route4_t route;
+  struct ifaddrs *addrs, *next;
+
+  getifaddrs(&addrs);
+
+  next = addrs;
+  while(next){
+    if (next->ifa_addr->sa_family == AF_INET){
+      struct sockaddr_in *ip = (struct sockaddr_in*)next->ifa_addr;
+      struct sockaddr_in *ip_mask = (struct sockaddr_in*)next->ifa_netmask;
+
+      route.ip = ip->sin_addr.s_addr;
+      route.mask = ip_mask->sin_addr.s_addr;
+
+      routes.push_back(route);
+
+      if (route_default_ip == 0 && !(next->ifa_flags & IFF_LOOPBACK)){
+        route_default_ip = route.ip;
+      }
+      // DEBUG("Add {:X} / {:X}", route.ip, route.mask);
+    }
+
+    next = next->ifa_next;
+  }
+
+  freeifaddrs(addrs);
+
+  uint8_t ip[4];
+  *((int32_t*)&ip) = route_default_ip;
+  DEBUG("Routing table ready. Default IP is {}.{}.{}.{}.", ip[0], ip[1], ip[2], ip[3]);
+}
+
+static uint32_t route_get_ip_for_route(struct in_addr in_other){
   union ip_t{
     uint8_t ip4p[4];
     uint32_t ip4;
@@ -562,40 +595,6 @@ static uint32_t get_ip_for_route(struct in_addr in_other){
   ip_t other;
   other.ip4 = in_other.s_addr;
 
-  // DEBUG("Get route for {}.{}.{}.{}", other.ip4p[0], other.ip4p[1], other.ip4p[2], other.ip4p[3]);
-  if (routes.size()==0){
-    // Read
-    ip_route4_t route;
-    struct ifaddrs *addrs, *next;
-
-    getifaddrs(&addrs);
-
-    next = addrs;
-    while(next){
-      if (next->ifa_addr->sa_family == AF_INET){
-        struct sockaddr_in *ip = (struct sockaddr_in*)next->ifa_addr;
-        struct sockaddr_in *ip_mask = (struct sockaddr_in*)next->ifa_netmask;
-
-        route.ip = ip->sin_addr.s_addr;
-        route.mask = ip_mask->sin_addr.s_addr;
-
-        routes.push_back(route);
-
-        if (default_ip == 0 && !(next->ifa_flags & IFF_LOOPBACK)){
-          default_ip = route.ip;
-        }
-        // DEBUG("Add {:X} / {:X}", route.ip, route.mask);
-      }
-
-      next = next->ifa_next;
-    }
-
-    freeifaddrs(addrs);
-
-    uint8_t ip[4];
-    *((int32_t*)&ip) = default_ip;
-    DEBUG("Routing table ready. Default IP is {}.{}.{}.{}.", ip[0], ip[1], ip[2], ip[3]);
-  }
   for (auto &route: routes){
     if (route.match(other.ip4)){
       // DEBUG("Found at IP routes: {}", route.ip);
@@ -603,5 +602,5 @@ static uint32_t get_ip_for_route(struct in_addr in_other){
     }
   }
   // DEBUG("Default");
-  return default_ip;
+  return route_default_ip;
 }
