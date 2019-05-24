@@ -43,6 +43,7 @@ namespace rtpmidid {
     std::map<int, std::vector<std::function<void(port_t, const std::string &name)>>> subscribe_callbacks;
     std::map<int, std::vector<std::function<void(port_t)>>> unsubscribe_callbacks;
     std::map<int, std::vector<std::function<void(snd_seq_event_t *)>>> midi_event_callbacks;
+    uint8_t client_id;
 
     aseq(std::string name);
     ~aseq();

@@ -53,6 +53,12 @@ namespace rtpmidid{
     snd_seq_set_client_name(seq, name.c_str());
     snd_seq_nonblock(seq, 1);
 
+    snd_seq_client_info_t *info;
+    snd_seq_client_info_malloc(&info);
+    snd_seq_get_client_info(seq, info);
+    client_id = snd_seq_client_info_get_client(info);
+    snd_seq_client_info_free(info);
+
     auto poller_count = snd_seq_poll_descriptors_count(seq, POLLIN);
     auto pfds = std::make_unique<struct pollfd[]>(poller_count);
     auto poller_count_check = snd_seq_poll_descriptors(seq, pfds.get(), poller_count, POLLIN);
@@ -105,13 +111,23 @@ namespace rtpmidid{
       switch(ev->type){
         case SND_SEQ_EVENT_PORT_SUBSCRIBED:{
           // auto client = std::make_shared<rtpmidid::rtpclient>(name);
-          auto addr = &ev->data.addr;
-          auto name = get_client_name(addr);
+          uint8_t client, port;
+          std::string name;
+          snd_seq_addr_t *addr;
+          if (ev->data.connect.sender.client != client_id){
+            addr = &ev->data.connect.sender;
+          } else {
+            addr = &ev->data.connect.dest;
+          }
+
+          name = get_client_name(addr);
+          client = addr->client;
+          port = addr->port;
           auto myport = ev->dest.port;
-          INFO("New ALSA connection from port {} ({}:{})", name, addr->client, addr->port);
+          INFO("New ALSA connection from port {} ({}:{})", name, client, port);
 
           for (auto &f: subscribe_callbacks[myport]){
-            f(port_t(addr->client, addr->port), name);
+            f(port_t(client, port), name);
           }
         }
         break;
