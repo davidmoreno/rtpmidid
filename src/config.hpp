@@ -34,7 +34,6 @@ namespace rtpmidid{
     std::vector<std::string> connect_to;
     // Create clients at this ports to start with. Later will see.
     std::vector<uint16_t> ports;
-    char max_export_port = '0';
   };
   config_t parse_cmd_args(int argc, char **argv);
 }

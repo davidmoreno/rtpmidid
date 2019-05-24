@@ -55,8 +55,6 @@ namespace rtpmidid{
     std::map<uint8_t, server_conn_info> known_servers_connections;
     std::vector<std::shared_ptr<::rtpmidid::rtpserver>> servers;
     std::map<aseq::port_t, std::shared_ptr<::rtpmidid::rtpserver>> alsa_to_server;
-    char export_port_next_id = 'A';
-    char max_export_port_next_id = 'Z';
     std::set<std::string> known_mdns_peers;
 
     rtpmidid_t(config_t *config);
@@ -81,12 +79,6 @@ namespace rtpmidid{
     // aseq port name and so on. There is one per connection to the "Network"
     std::shared_ptr<rtpserver> add_rtpmidid_export_server(const std::string &name, uint8_t alsaport, aseq::port_t &from);
 
-    /// New export port, with next id
-    void add_export_port();
-    // Random aseq_ to be created
-    void add_export_port(char id);
-    // Use a specific port
-    void add_export_port(char id, uint8_t aseq_port);
     void remove_client(uint8_t alsa_port);
   };
 }

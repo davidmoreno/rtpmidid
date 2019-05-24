@@ -22,7 +22,7 @@
 
 using namespace rtpmidid;
 
-const char *::rtpmidid::VERSION = "alpha 19.04";
+const char *::rtpmidid::VERSION = "alpha 19.05";
 const char *CMDLINE_HELP = ""
 "Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.\n"
 "\n"
@@ -36,7 +36,6 @@ const char *CMDLINE_HELP = ""
 "  -h                  Show this help\n"
 "  -n name             Forces a rtpmidi name\n"
 "  -p port             Opens local port as server. Default 5400. Can set several.\n"
-"  -m id               Max automatic rtpmidi port to create. A letter between A and Z. Default D. If '0' no automatic export ports."
 "  hostname            Connects to hostname:5400 port using rtpmidi\n"
 "  hostname:port       Connects to a hostname on a given port\n"
 "  name:hostname:port  Connects to a hostname on a given port and forces a name for alsaseq\n"
@@ -76,10 +75,6 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv){
           break;
         case 'p':
           opts.ports.push_back(atoi(argv[i]));
-          break;
-        case 'm':
-          opts.max_export_port = argv[i][0];
-          INFO("Maximum automatic export port is {}", opts.max_export_port);
           break;
         default:
           ERROR("Unknown option. Check options with -h.");
