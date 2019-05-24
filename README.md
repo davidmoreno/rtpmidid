@@ -104,6 +104,38 @@ Development status / plan:
 * [ ] Journal support for Pitch Bend
 
 
+## Compile
+
+Requires C++17 (Ubuntu 18.04+), and libfmt-dev, libasound2-dev.
+
+To compile and run, execute:
+
+```shell
+make
+build/src/rtpmidid
+```
+
+There are some command line options:
+
+```
+Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.
+
+rtpmidi allows to use rtpmidi protocol to communicate with MIDI equipement
+using network equipiment. Recomended use is via ethernet cabling as with WiFi
+there is a lot more latency. Internet use has not been tested, but may also
+deliver high latency.
+
+Options:
+  -v                  Show version
+  -h                  Show this help
+  -n name             Forces a rtpmidi name
+  -p port             Opens local port as server. Default 5400. Can set several.
+  hostname            Connects to hostname:5400 port using rtpmidi
+  hostname:port       Connects to a hostname on a given port
+  name:hostname:port  Connects to a hostname on a given port and forces a name for alsaseq
+```
+
+
 ## License
 
 RtpMidid is GPLv3 licensed. This bascially meass that you are free to use,
