@@ -41,14 +41,11 @@ exist, and accept connections.
 
 MIDI data is rerouted to the proper endpoint by checking the source port.
 
-
 ## Goals
 
-* [ ] Daemon, no need for UI
-* [ ] RTP Hub -- Connects RTP clients between them
-* [ ] ALSA MIDI -- Inputs as ALSA MIDI inputs, outputs a ALSA MIDI outputs
-* [ ] Autoconfigurable for mDNS Endpoints
-* [ ] Configurable for external non Avahi endpoints
+* [x] Daemon, no need for UI
+* [x] ALSA MIDI -- Inputs as ALSA MIDI inputs, outputs a ALSA MIDI outputs
+* [x] Autoconfigurable for mDNS Endpoints
 
 ## Features and status
 
@@ -65,7 +62,7 @@ Development status / plan:
 * [x] Can export local ports, with user deciding which ones to export.
 * [x] Server mode at a known port, when remote side request connections, create
       the alsa seq virtual port for that connection and connect both ports.
-* [ ] Allow several connections on the server port. Each its own aseq port.
+* [x] Allow several connections on the server port. Each its own aseq port.
 * [x] Send all MIDI events to rtpmidi
 * [x] Receive all MIDI events from rtpmidi
 * [ ] Periodic check all peers are still on, no new peers
