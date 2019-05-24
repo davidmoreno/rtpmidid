@@ -373,7 +373,7 @@ void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data){
 
 
 void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev){
-  DEBUG("Callback on midi event at rtpmidid, port {}", aseq_port);
+  // DEBUG("Callback on midi event at rtpmidid, port {}", aseq_port);
   auto peer_info = &known_clients[aseq_port];
   if (!peer_info->peer){
     ERROR("There is no peer but I received an event! This situation should NEVER happen. File a bug. Port {}", aseq_port);
