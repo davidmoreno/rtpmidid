@@ -59,6 +59,11 @@ mdns::mdns(){
   }
   poller.add_fd_in(socketfd, [this](int){ this->mdns_ready(); });
 
+  ip4[0] = 127;
+  ip4[1] = 0;
+  ip4[2] = 0;
+  ip4[3] = 1;
+
   DEBUG("mDNS wating for requests at 224.0.0.251:5353");
 }
 
@@ -242,7 +247,8 @@ void mdns::unannounce(service *srv){
 
 void mdns::send_response(const service &service){
   uint8_t packet[1500];
-  parse_buffer_t buffer = { packet, packet + sizeof(packet), packet };
+  memset(packet, 0, 16); // Here there are some zeros, the rest will be overwritten or not used
+  parse_buffer_t buffer = { packet, packet + 1500, packet };
 
   // Response and authoritative
   buffer.position[2] = 0x84;
@@ -305,7 +311,12 @@ void mdns::send_response(const service &service){
   // A little go and back
   raw_write_uint16(length_data_pos, nbytes);
 
-  sendto(socketfd, packet, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
+  this->broadcast(&buffer);
+  //sendto(socketfd, packet, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
+}
+
+int mdns::broadcast(const parse_buffer_t *buffer){
+  return ::sendto(socketfd, buffer->start, buffer->length(), MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
 }
 
 
@@ -351,7 +362,7 @@ void mdns::query(const std::string &name, mdns::query_type_e type){
     buffer.print_hex();
   }
   // DEBUG("Send query {} {}", name, type);
-  sendto(socketfd, packet, buffer.length(), MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
+  broadcast(&buffer);
 }
 
 void parse_packet(mdns *mdns, parse_buffer_t &parse_buffer){

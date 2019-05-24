@@ -26,6 +26,8 @@
 
 
 namespace rtpmidid {
+  struct parse_buffer_t;
+
   class mdns {
   public:
     enum query_type_e{
@@ -123,6 +125,7 @@ namespace rtpmidid {
     void update_cache(const service *service);
     void remove_cache_timer(const service *service);
 
+    int broadcast(const parse_buffer_t *buffer);
     // The local name as can be resolved.
     std::string local();
   };
