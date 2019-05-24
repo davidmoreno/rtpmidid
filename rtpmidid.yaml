@@ -1,7 +1,0 @@
-# Id is Coralbits.
-id: C04a1b17
-port: 10099
-
-connect:
-  # DeepMind 12D
-  192.168.1.17:5004
