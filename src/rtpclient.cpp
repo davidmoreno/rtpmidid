@@ -138,11 +138,11 @@ void rtpclient::sendto(const parse_buffer_t &pb, rtppeer::port_e port){
   auto socket = rtppeer::MIDI_PORT == port ? midi_socket : control_socket;
 
   auto res = ::sendto(
-    socket, pb.start, pb.length(),
+    socket, pb.start, pb.capacity(),
     MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr)
   );
 
-  if (res != pb.length()){
+  if (res != pb.capacity()){
     throw exception(
       "Could not send all data to {}:{}. Sent {}. {}",
       peer.remote_name, remote_base_port, res, strerror(errno)

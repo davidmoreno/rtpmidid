@@ -186,11 +186,11 @@ void rtpserver::sendto(const parse_buffer_t &pb, rtppeer::port_e port, struct so
   // DEBUG("Send to {}, {}, family {} {}. {} {}", port, socket, AF_INET, address->sin_family, inet_ntoa(address->sin_addr), htons(address->sin_port));
 
   auto res = ::sendto(
-    socket, pb.start, pb.length(),
+    socket, pb.start, pb.capacity(),
     MSG_CONFIRM, (const struct sockaddr *)address, sizeof(struct sockaddr_in)
   );
 
-  if (res != pb.length()){
+  if (res != pb.capacity()){
     throw exception(
       "Could not send all data. Sent {}. {}",
       res, strerror(errno)

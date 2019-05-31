@@ -321,7 +321,7 @@ void mdns::send_response(const service &service){
 }
 
 int mdns::broadcast(const parse_buffer_t *buffer){
-  return ::sendto(socketfd, buffer->start, buffer->length(), MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
+  return ::sendto(socketfd, buffer->start, buffer->capacity(), MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
 }
 
 
@@ -363,7 +363,7 @@ void mdns::query(const std::string &name, mdns::query_type_e type){
 
   /// DONE
   if (debug0){
-    DEBUG("Packet ready! {} bytes", buffer.length());
+    DEBUG("Packet ready! {} bytes", buffer.capacity());
     buffer.print_hex();
   }
   // DEBUG("Send query {} {}", name, type);

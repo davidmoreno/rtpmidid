@@ -49,7 +49,7 @@ namespace rtpmidid{
     }
 
     // This is used for writing to it, says current length
-    uint32_t length() const{
+    uint32_t capacity() const{
       return position - start;
     }
 
