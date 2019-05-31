@@ -93,6 +93,8 @@ public:
 };
 
 
+#define ASSERT_TRUE(A) if (!(A)){ throw TestFail(__FILE__, __LINE__, "Assert [" #A "] failed"); }
+#define ASSERT_FALSE(A) if (A){ throw TestFail(__FILE__, __LINE__, "Assert ![" #A "] failed"); }
 #define ASSERT_EQUAL(A, B) if ((A) != (B)){ throw TestFail(__FILE__, __LINE__, "Assert [" #A " == " #B "] failed"); }
 #define ASSERT_NOT_EQUAL(A, B) if ((A) == (B)){ throw TestFail(__FILE__, __LINE__, "Assert [" #A " != " #B "] failed"); }
 #define ASSERT_GT(A, B) if ((A) <= (B)){ throw TestFail(__FILE__, __LINE__, "Assert [" #A " > " #B "] failed"); }

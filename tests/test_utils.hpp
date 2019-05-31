@@ -29,6 +29,7 @@ public:
   }
 
   rtpmidid::parse_buffer_t &operator*(){
+    buffer.position = buffer.start; // rewind
     return buffer;
   }
 };

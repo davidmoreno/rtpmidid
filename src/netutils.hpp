@@ -177,6 +177,18 @@ namespace rtpmidid{
       position += chars;
       from.position += chars;
     }
+
+    bool compare(const parse_buffer_t &other){
+      if (size() != other.size())
+        return false;
+      auto i=0;
+      auto l = size();
+      for (i=0;i<l;i++){
+        if (other.start[i] != start[i])
+          return false;
+      }
+      return true;
+    }
   };
 
   uint8_t *raw_write_uint16(uint8_t *data, uint16_t n);
