@@ -52,7 +52,7 @@ namespace rtpmidid{
     // Returns the peer for that packet, or nullptr
     std::shared_ptr<rtppeer> get_peer_by_packet(parse_buffer_t &b, rtppeer::port_e port);
     std::shared_ptr<rtppeer> get_peer_by_ssrc(uint32_t ssrc);
-    void create_peer_from(parse_buffer_t &buffer, struct sockaddr_in *cliaddr);
+    void create_peer_from(parse_buffer_t &buffer, struct sockaddr_in *cliaddr, rtppeer::port_e port);
 
     void send_midi_to_all_peers(parse_buffer_t &bufer);
 

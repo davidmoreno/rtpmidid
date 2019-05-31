@@ -25,14 +25,14 @@ auto connect_msg = hex_to_bin(
   "FF FF 'IN'"
   "0000 0002"
   "'fast' 'beef'"
-  "'testing' 00"
+  "'first' 00"
 );
 
 auto connect_msg2 = hex_to_bin(
   "FF FF 'IN'"
   "0000 0002"
   "'slow' 'deer'"
-  "'testing' 00"
+  "'second' 00"
 );
 
 void test_several_connect_to_server(){
@@ -64,7 +64,9 @@ void test_several_connect_to_server(){
 
   ASSERT_EQUAL(server.initiator_to_peer.size(), 2);
 
-
+  for(auto &peer: server.initiator_to_peer){
+    ASSERT_TRUE(peer.second->is_connected());
+  }
 
   rtpmidid::poller.close();
 }

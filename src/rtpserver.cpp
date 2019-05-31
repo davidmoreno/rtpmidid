@@ -166,8 +166,8 @@ void rtpserver::data_ready(rtppeer::port_e port){
   } else {
     // If I dont know the other peer I'm only interested in IN, ignore others
     // If it is not a CONTROL PORT the messages come in the wrong order. The first IN should create the peer.
-    if (port == rtppeer::CONTROL_PORT && rtppeer::is_command(buffer) && buffer.start[2] == 'I' && buffer.start[3] == 'N'){
-      create_peer_from(buffer, &cliaddr);
+    if (rtppeer::is_command(buffer) && buffer.start[2] == 'I' && buffer.start[3] == 'N'){
+      create_peer_from(buffer, &cliaddr, port);
     } else {
       DEBUG("Unknown peer, and not connect on control. Ignoring. {} port.", port == rtppeer::MIDI_PORT ? "MIDI" : "Control");
       buffer.print_hex(true);
@@ -199,7 +199,7 @@ void rtpserver::sendto(const parse_buffer_t &pb, rtppeer::port_e port, struct so
 }
 
 
-void rtpserver::create_peer_from(parse_buffer_t &buffer, struct sockaddr_in *cliaddr){
+void rtpserver::create_peer_from(parse_buffer_t &buffer, struct sockaddr_in *cliaddr, rtppeer::port_e port){
   auto peer = std::make_shared<rtppeer>(name);
   auto address = std::make_shared<struct sockaddr_in>();
   ::memcpy(address.get(), cliaddr, sizeof(struct sockaddr_in));
@@ -211,7 +211,7 @@ void rtpserver::create_peer_from(parse_buffer_t &buffer, struct sockaddr_in *cli
     this->sendto(buff, port, address.get(), remote_base_port);
   };
 
-  peer->data_ready(buffer, rtppeer::CONTROL_PORT);
+  peer->data_ready(buffer, port);
 
   // After read the first packet I know the initiator_id
   initiator_to_peer[peer->initiator_id] = peer;

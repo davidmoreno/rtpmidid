@@ -174,7 +174,7 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port){
   }
 
   INFO(
-    "Got connection request from {}, initiator_id: {} ({}) ssrc: {}, name: {}, at control? {}",
+    "Got connection request from {}, initiator_id: {:X} ({}) ssrc: {:X}, name: {}, at control? {}",
     remote_name, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name, port == CONTROL_PORT
   );
 
