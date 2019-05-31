@@ -91,7 +91,7 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv){
   }
 
   if (opts.ports.size() == 0){
-    opts.ports.push_back(5400);
+    opts.ports.push_back(5004);
   }
 
   return opts;
