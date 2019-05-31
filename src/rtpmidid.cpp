@@ -114,7 +114,13 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::str
 
   announce_rtpmidid_server(name, rtpserver->control_port);
 
-  rtpserver->on_connected([this, rtpserver, port](std::shared_ptr<::rtpmidid::rtppeer> peer){
+  auto wrtpserver = std::weak_ptr(rtpserver);
+  rtpserver->on_connected([this, wrtpserver, port](std::shared_ptr<::rtpmidid::rtppeer> peer){
+    if (wrtpserver.expired()){
+      return;
+    }
+    auto rtpserver = wrtpserver.lock();
+
     INFO("Remote client connects to local server at port {}. Name: {}", port, peer->remote_name);
     auto aseq_port = seq.create_port(peer->remote_name);
 
