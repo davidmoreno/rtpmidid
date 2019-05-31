@@ -216,7 +216,9 @@ void rtppeer::parse_command_by(parse_buffer_t &buffer, port_e port){
     return;
   }
 
-  INFO("Disconnect from {}", remote_name);
+  status = (status_e) (((int)status) & ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
+  INFO("Disconnect from {}, {} port. Status {:X}", remote_name, port == MIDI_PORT ? "MIDI" : "Control", (int)status);
+
   // Normally this will schedule removal of peer.
   if (event_disconnect){
     event_disconnect();

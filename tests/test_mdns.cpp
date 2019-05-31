@@ -17,6 +17,7 @@
  */
 #include <cstdint>
 #include "../src/netutils.hpp"
+#include "./testcase.hpp"
 
 uint8_t packet_res[] = {
   0x00, 0x00, 0x84, 0x00 , 0x00, 0x00, 0x00, 0x01 , 0x00, 0x00, 0x00, 0x00 , 0x0B, 0x5F, 0x61, 0x70, // 16
@@ -59,10 +60,11 @@ bool test_label_w_pointer(){
 
 
 int main(){
-  bool ok = true;
+  TestCase tests{
+    TEST(test_label_simple),
+    TEST(test_label_w_pointer)
+  };
+  tests.run();
 
-  ok |= test_label_simple();
-  ok |= test_label_w_pointer();
-
-  return ok ? 0 : 1;
+  return tests.exit_code();
 }

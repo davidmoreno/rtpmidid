@@ -31,6 +31,7 @@
 #define WARNING(...) logger::log(__FILE__, __LINE__, logger::WARNING, __VA_ARGS__)
 #define ERROR(...) logger::log(__FILE__, __LINE__, logger::ERROR, __VA_ARGS__)
 #define INFO(...) logger::log(__FILE__, __LINE__, logger::INFO, __VA_ARGS__)
+#define SUCCESS(...) logger::log(__FILE__, __LINE__, logger::SUCCESS, __VA_ARGS__)
 
 namespace logger{
   class logger;
@@ -42,6 +43,7 @@ namespace logger{
     WARNING,
     ERROR,
     INFO,
+    SUCCESS,
   };
 
   class logger{

@@ -11,4 +11,6 @@ clean:
 	rm -rf build
 
 test: compile
-	cd build; make -j test
+	cd build; make -j
+	valgrind build/tests/test_mdns
+	valgrind build/tests/test_rtppeer

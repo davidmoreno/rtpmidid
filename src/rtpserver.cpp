@@ -169,7 +169,7 @@ void rtpserver::data_ready(rtppeer::port_e port){
     if (port == rtppeer::CONTROL_PORT && rtppeer::is_command(buffer) && buffer.start[2] == 'I' && buffer.start[3] == 'N'){
       create_peer_from(buffer, &cliaddr);
     } else {
-      DEBUG("Unknown peer, and not connect on control. Ignoring. Port {}", port == rtppeer::MIDI_PORT);
+      DEBUG("Unknown peer, and not connect on control. Ignoring. {} port.", port == rtppeer::MIDI_PORT ? "MIDI" : "Control");
       buffer.print_hex(true);
     }
   }

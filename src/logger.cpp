@@ -70,6 +70,9 @@ namespace logger{
       case INFO:
         my_color = WHITE;
       break;
+      case SUCCESS:
+        my_color = GREEN;
+      break;
     }
 
     fmt::print("{} {}\n", color(
