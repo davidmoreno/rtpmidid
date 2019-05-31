@@ -37,6 +37,7 @@ using namespace rtpmidid;
 rtppeer::rtppeer(std::string _name) : local_name(std::move(_name)) {
   status = NOT_CONNECTED;
   remote_ssrc = 0;
+  local_ssrc = rand() & 0x0FFFF;
   seq_nr = rand() & 0x0FFFF;
   seq_nr_ack = seq_nr;
   timestamp_start = 0;
@@ -183,7 +184,7 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port){
   response_buffer.write_uint16(OK);
   response_buffer.write_uint32(2);
   response_buffer.write_uint32(initiator_id);
-  response_buffer.write_uint32(SSRC);
+  response_buffer.write_uint32(local_ssrc);
   response_buffer.write_str0(local_name);
 
   sendto(response_buffer, port);
@@ -271,7 +272,7 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port){
   parse_buffer_t retbuffer(ret, sizeof(ret));
   retbuffer.write_uint16(0xFFFF);
   retbuffer.write_uint16(rtppeer::CK);
-  retbuffer.write_uint32(SSRC);
+  retbuffer.write_uint32(local_ssrc);
   retbuffer.write_uint8(count);
   // padding
   retbuffer.write_uint8(0);
@@ -299,7 +300,7 @@ void rtppeer::send_ck0(){
   parse_buffer_t retbuffer(ret, sizeof(ret));
   retbuffer.write_uint16(0xFFFF);
   retbuffer.write_uint16(rtppeer::CK);
-  retbuffer.write_uint32(SSRC);
+  retbuffer.write_uint32(local_ssrc);
   retbuffer.write_uint8(0);
   // padding
   retbuffer.write_uint8(0);
@@ -373,7 +374,7 @@ uint64_t rtppeer::get_timestamp(){
 
 void rtppeer::send_midi(parse_buffer_t &events){
   if (!is_connected()){ // Not connected yet.
-    DEBUG("Can not send MIDI data to {} yet, not connected.", remote_name);
+    DEBUG("Can not send MIDI data to {} yet, not connected ({:X}).", remote_name, (int)status);
     return;
   }
 
@@ -387,7 +388,7 @@ void rtppeer::send_midi(parse_buffer_t &events){
   buffer.write_uint8(0x61);
   buffer.write_uint16(seq_nr);
   buffer.write_uint32(timestamp);
-  buffer.write_uint32(SSRC);
+  buffer.write_uint32(local_ssrc);
 
   // Now midi
   buffer.write_uint8(events.size());
@@ -407,7 +408,7 @@ void rtppeer::send_goodbye(port_e to_port){
   buffer.write_uint16(::rtppeer::BY);
   buffer.write_uint32(2);
   buffer.write_uint32(initiator_id);
-  buffer.write_uint32(SSRC);
+  buffer.write_uint32(local_ssrc);
 
   sendto(buffer, to_port);
 
@@ -426,7 +427,7 @@ void rtppeer::connect_to(port_e rtp_port){
   auto signature = 0xFFFF;
   auto command = rtppeer::IN;
   auto protocol = 2;
-  auto sender = SSRC;
+  auto sender = local_ssrc;
 
   buffer.write_uint16(signature);
   buffer.write_uint16(command);

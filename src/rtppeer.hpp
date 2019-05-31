@@ -21,9 +21,6 @@
 #include <functional>
 #include <arpa/inet.h>
 
-// A random int32. Should be configurable, so different systems, have different SSRC.
-inline const uint32_t SSRC = 0x111f6c31;
-
 namespace rtpmidid {
   struct parse_buffer_t;
 
@@ -52,6 +49,7 @@ namespace rtpmidid {
     status_e status;
     uint32_t initiator_id;
     uint32_t remote_ssrc;
+    uint32_t local_ssrc;
     std::string local_name;
     std::string remote_name;
     uint16_t seq_nr_ack;
