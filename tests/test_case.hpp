@@ -23,14 +23,14 @@
 
 #define TEST(fn) {#fn, fn}
 
-class TestFail : public std::exception{
+class test_exception : public std::exception{
 public:
   std::string msg;
   const char *filename;
   int line;
   std::string error;
 
-  TestFail(const char *file, int line, const std::string &error){
+  test_exception(const char *file, int line, const std::string &error){
     this->filename = file;
     this->line = line;
     this->error = error;
@@ -41,17 +41,17 @@ public:
   }
 };
 
-struct Test {
+struct test_t {
   std::string name;
   std::function<void(void)> fn;
 };
 
-class TestCase{
+class test_case_t{
 public:
-  std::vector<Test> tests;
+  std::vector<test_t> tests;
   bool error = false;
 
-  TestCase(const std::initializer_list<Test> &tests_){
+  test_case_t(const std::initializer_list<test_t> &tests_){
     tests = tests_;
   }
 
@@ -66,7 +66,7 @@ public:
       try{
         tcase.fn();
         SUCCESS("Test {} OK", tcase.name);
-      } catch (const TestFail &e) {
+      } catch (const test_exception &e) {
         logger::log(e.filename, e.line, logger::ERROR, e.error);
         errors += 1;
       } catch (const std::exception &e) {
@@ -93,12 +93,12 @@ public:
 };
 
 
-#define ASSERT_TRUE(A) if (!(A)){ throw TestFail(__FILE__, __LINE__, "Assert [" #A "] failed"); }
-#define ASSERT_FALSE(A) if (A){ throw TestFail(__FILE__, __LINE__, "Assert ![" #A "] failed"); }
-#define ASSERT_EQUAL(A, B) if ((A) != (B)){ throw TestFail(__FILE__, __LINE__, "Assert [" #A " == " #B "] failed"); }
-#define ASSERT_NOT_EQUAL(A, B) if ((A) == (B)){ throw TestFail(__FILE__, __LINE__, "Assert [" #A " != " #B "] failed"); }
-#define ASSERT_GT(A, B) if ((A) <= (B)){ throw TestFail(__FILE__, __LINE__, "Assert [" #A " > " #B "] failed"); }
-#define ASSERT_GTE(A, B) if ((A) < (B)){ throw TestFail(__FILE__, __LINE__, "Assert [" #A " >= " #B "] failed"); }
-#define ASSERT_LT(A, B) if ((A) >= (B)){ throw TestFail(__FILE__, __LINE__, "Assert [" #A " < " #B "] failed"); }
-#define ASSERT_LTE(A, B) if ((A) > (B)){ throw TestFail(__FILE__, __LINE__, "Assert [" #A " <= " #B "] failed"); }
-#define FAIL(msg) { throw TestFail(__FILE__, __LINE__, msg); }
+#define ASSERT_TRUE(A) if (!(A)){ throw test_exception(__FILE__, __LINE__, "Assert [" #A "] failed"); }
+#define ASSERT_FALSE(A) if (A){ throw test_exception(__FILE__, __LINE__, "Assert ![" #A "] failed"); }
+#define ASSERT_EQUAL(A, B) if ((A) != (B)){ throw test_exception(__FILE__, __LINE__, "Assert [" #A " == " #B "] failed"); }
+#define ASSERT_NOT_EQUAL(A, B) if ((A) == (B)){ throw test_exception(__FILE__, __LINE__, "Assert [" #A " != " #B "] failed"); }
+#define ASSERT_GT(A, B) if ((A) <= (B)){ throw test_exception(__FILE__, __LINE__, "Assert [" #A " > " #B "] failed"); }
+#define ASSERT_GTE(A, B) if ((A) < (B)){ throw test_exception(__FILE__, __LINE__, "Assert [" #A " >= " #B "] failed"); }
+#define ASSERT_LT(A, B) if ((A) >= (B)){ throw test_exception(__FILE__, __LINE__, "Assert [" #A " < " #B "] failed"); }
+#define ASSERT_LTE(A, B) if ((A) > (B)){ throw test_exception(__FILE__, __LINE__, "Assert [" #A " <= " #B "] failed"); }
+#define FAIL(msg) { throw test_exception(__FILE__, __LINE__, msg); }

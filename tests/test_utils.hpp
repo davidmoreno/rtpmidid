@@ -34,4 +34,15 @@ public:
   }
 };
 
+class test_client_t {
+public:
+  int sockfd;
+  int local_port;
+  int remote_port;
+  // UDP connection to this "localhost":port
+  test_client_t(int local_port, int remote_port);
+  void send(rtpmidid::parse_buffer_t &data);
+  void recv(rtpmidid::parse_buffer_t &data);
+};
+
 managed_parse_buffer_t hex_to_bin(const std::string &str);

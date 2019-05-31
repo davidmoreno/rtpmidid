@@ -18,7 +18,7 @@
 #include <cstdint>
 #include "../src/netutils.hpp"
 #include "../src/logger.hpp"
-#include "./testcase.hpp"
+#include "./test_case.hpp"
 #include "./test_utils.hpp"
 
 auto packet_dns = hex_to_bin(
@@ -71,7 +71,7 @@ void test_label_w_pointer(){
 
 
 int main(){
-  TestCase tests{
+  test_case_t tests{
     TEST(test_label_simple),
     TEST(test_label_w_pointer)
   };

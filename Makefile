@@ -10,7 +10,15 @@ build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 clean:
 	rm -rf build
 
-test: compile
-	cd build; make -j
+.PHONY: test test_mdns test_rtppeer test_rtpserver
+
+test: test_mdns test_rtppeer test_rtpserver
+
+test_mdns: compile
 	valgrind build/tests/test_mdns
+
+test_rtppeer: compile
 	valgrind build/tests/test_rtppeer
+
+test_rtpserver: compile
+	valgrind --leak-check=full build/tests/test_rtpserver

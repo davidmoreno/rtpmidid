@@ -17,7 +17,7 @@
  */
 
 #include <memory>
-#include "./testcase.hpp"
+#include "./test_case.hpp"
 #include "../src/rtppeer.hpp"
 #include "../src/netutils.hpp"
 #include "../tests/test_utils.hpp"
@@ -109,7 +109,7 @@ void test_send_some_midi(){
     if (connected){
       data.print_hex();
 
-      auto midi_data = rtpmidid::parse_buffer_t(data.start + 12, data.length() - 12);
+      auto midi_data = rtpmidid::parse_buffer_t(data.start + 12, data.capacity() - 12);
       ASSERT_TRUE(midi_data.compare(*hex_to_bin(
         "07 90 64 7F 68 7F 71 7F"
       )));
@@ -163,7 +163,7 @@ void test_recv_some_midi(){
 }
 
 int main(void){
-  TestCase testcase{
+  test_case_t testcase{
     TEST(test_connect_disconnect),
     TEST(test_connect_disconnect_reverse_order),
     TEST(test_send_some_midi),
