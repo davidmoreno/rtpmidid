@@ -4,9 +4,12 @@
 
 Alpha software. Use at your own risk.
 
-`rtpmidid` allows you to share ALSA sequencer devices on the network using RTP MIDI, and import other network shared RTP MIDI devices.
+`rtpmidid` allows you to share ALSA sequencer devices on the network using RTP
+MIDI, and import other network shared RTP MIDI devices.
 
-`rtpmidid` is an user daemon, and when a RTP MIDI device is announced using mDNS (also known as Zeroconf, Avahi, and multicast DNS) it exposes this alsa sequencer port.
+`rtpmidid` is an user daemon, and when a RTP MIDI device is announced using mDNS
+(also known as Zeroconf, Avahi, and multicast DNS) it exposes this ALSA
+sequencer port.
 
 ## Other implementations
 
@@ -15,11 +18,11 @@ example Behriger DeepMind12 Synthetizer has support over Wifi.
 
 ### Linux
 
-On linux there is [raveloxmidi](https://github.com/ravelox/pimidi), but
-is not intented as a ALSA sequencer bridge but directly to use on your hoardware
-devices.
-
-rtpmidid pretends to be a zero configuration daemon to have always on.
+* [raveloxmidi](https://github.com/ravelox/pimidi) - Intended to be used
+  directly with hardware devices or emulate midi over FIFO.
+* [rtpmidi](https://mclarenlabs.com/rtpmidi/) from [McLaren
+  Labs](https://mclarenlabs.com/). It is a feature complete, GUI driven,
+  Comercial implementation. Very similar to Tobias Erichsen's rtpmidi.
 
 ### MacOS
 
@@ -27,20 +30,21 @@ On MacOS there is support included in the OS.
 
 ### Windows
 
-On windows there is
-[rtpmidi](https://www.tobias-erichsen.de/software/rtpmidi.html) by Tobias
-Erichsen.
+* [rtpmidi](https://www.tobias-erichsen.de/software/rtpmidi.html) by Tobias
+  Erichsen.
 
-### Mobiles / tablets
+### Mobile / Tablet
 
 There are also many Apple iPad / iPhone and Android programs with rtp midi
-support. I have only access to Android, and I have tested it with
-[TouchDAW](https://www.humatic.de/htools/touchdaw/).
+support. I will try to list them as I find them:
 
+#### Android
 
-## How it works / How to use rptmidid
+* [TouchDAW](https://www.humatic.de/htools/touchdaw/).
 
-It provides two modes of operation, one focused on importing another on
+## How to use `rtpmidid`
+
+`rtpmidid` provides two modes of operation, one focused on importing another on
 exporting.
 
 ### Importing
@@ -83,7 +87,7 @@ Development status / plan:
 * [x] Async framework (epoll with callbacks based code)
 * [x] mDNS publish and learn when there are rtpmidi running on the network
 * [x] Create the alsa ports for found rtpmidi servers in the network
-* [x] When there is any connection to the alsa sequencer port rtpmidid creates
+* [x] When there is any connection to the alsa sequencer port `rtpmidid` creates
       the rtpmidi connection
 * [x] Any message from alsa seq is sent to the MIDI rtp extreme
 * [x] Any message from rtpmidi is replayed on the alsa seq
