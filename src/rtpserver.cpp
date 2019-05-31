@@ -217,7 +217,11 @@ void rtpserver::create_peer_from(parse_buffer_t &buffer, struct sockaddr_in *cli
   initiator_to_peer[peer->initiator_id] = peer;
 
   // Setup some callbacks
-  peer->on_connect([this, peer](const std::string &name){
+  auto wpeer = std::weak_ptr(peer);
+  peer->on_connect([this, wpeer](const std::string &name){
+    if (wpeer.expired())
+      return;
+    auto peer = wpeer.lock();
     for(auto &f: connected_events){
       f(peer);
     }

@@ -14,11 +14,13 @@ clean:
 
 test: test_mdns test_rtppeer test_rtpserver
 
+VALGRINDFLAGS := --leak-check=full --error-exitcode=1
+
 test_mdns: compile
-	valgrind build/tests/test_mdns
+	valgrind $(VALGRINDFLAGS) build/tests/test_mdns
 
 test_rtppeer: compile
-	valgrind build/tests/test_rtppeer
+	valgrind $(VALGRINDFLAGS) build/tests/test_rtppeer
 
 test_rtpserver: compile
-	valgrind --leak-check=full build/tests/test_rtpserver
+	valgrind $(VALGRINDFLAGS) build/tests/test_rtpserver
