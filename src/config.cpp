@@ -19,6 +19,7 @@
 
 #include "./config.hpp"
 #include "./logger.hpp"
+#include "./stringpp.hpp"
 
 using namespace rtpmidid;
 
@@ -32,53 +33,68 @@ const char *CMDLINE_HELP = ""
 "deliver high latency.\n"
 "\n"
 "Options:\n"
-"  -v                  Show version\n"
-"  -h                  Show this help\n"
-"  -n name             Forces a rtpmidi name\n"
-"  -p port             Opens local port as server. Default 5400. Can set several.\n"
+"  --version           Show version\n"
+"  --help              Show this help\n"
+"  --name <name>       Forces a rtpmidi name\n"
+"  --port <port>       Opens local port as server. Default 5400. Can set several.\n"
+"  --connect <address> Connects the given address. This is default, no need for --connect"
 "  hostname            Connects to hostname:5400 port using rtpmidi\n"
 "  hostname:port       Connects to a hostname on a given port\n"
 "  name:hostname:port  Connects to a hostname on a given port and forces a name for alsaseq\n"
 "\n"
 ;
 
+typedef enum {
+  ARG_NONE=0,
+  ARG_NAME,
+  ARG_PORT,
+  ARG_CONNECT,
+} optnames_e;
 
 config_t rtpmidid::parse_cmd_args(int argc, char **argv){
   config_t opts;
 
-  char prevopt = '\0';
+  optnames_e prevopt = ARG_NONE;
   for (auto i=0; i<argc; i++){
     auto len = strlen(argv[i]);
     if (len == 0){
       continue;
     }
-    if (argv[i][0] == '-' && len == 2){
-      prevopt = argv[i][1];
-      switch(prevopt){
-        case 'v':
-          INFO("rtpmidid version {}", VERSION);
-          exit(0);
-          break;
-        case 'h':
-          fmt::print(CMDLINE_HELP);
-          exit(0);
-          break;
+    if (prevopt == ARG_NONE){
+      std::string argname{argv[i]};
+      if (argname == "--help"){
+        fmt::print(CMDLINE_HELP);
+        exit(0);
+      }
+      if (argname == "--version"){
+        INFO("rtpmidid version {}", VERSION);
+        exit(0);
+      }
+      if (argname == "--name") {
+        prevopt = ARG_NAME;
+      } else if (argname == "--port") {
+        prevopt = ARG_PORT;
+      } else if (argname == "--connect") {
+        prevopt = ARG_CONNECT;
+      } else if (startswith(argname, "--")) {
+        ERROR("Unknown option. Check options with --help.");
+      } else {
+        DEBUG("Implicit connect to: {}", argname);
+        opts.connect_to.push_back(argname);
       }
     } else {
       switch(prevopt){
-        case '\0':
+        case ARG_NONE:
+        case ARG_CONNECT:
           opts.connect_to.push_back(argv[i]);
+          DEBUG("Explicit connect to: {}", argv[i]);
           break;
-        case 'n':
+        case ARG_NAME:
           opts.name = argv[i];
           INFO("Set RTP MIDI name to {}", opts.name);
           break;
-        case 'p':
+        case ARG_PORT:
           opts.ports.push_back(atoi(argv[i]));
-          break;
-        default:
-          ERROR("Unknown option. Check options with -h.");
-          exit(1);
           break;
       }
     }
