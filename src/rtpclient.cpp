@@ -120,9 +120,14 @@ void rtpclient::connect_to(std::string address, uint16_t port){
   inet_aton(address.c_str(), &peer_addr.sin_addr);
 
   DEBUG("Connecting control port {} to {}:{}", local_base_port, address, port);
+
+  // If not connected, connect now the MIDI port
+  peer.on_connect_control([this, address, port](const std::string &name) {
+    DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address, port + 1);
+    peer.connect_to(rtppeer::MIDI_PORT);
+  });
+
   peer.connect_to(rtppeer::CONTROL_PORT);
-  DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address, port + 1);
-  peer.connect_to(rtppeer::MIDI_PORT);
 
   peer.on_connect([this](const std::string &){
     start_ck_1min_sync();

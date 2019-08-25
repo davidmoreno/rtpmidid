@@ -140,8 +140,12 @@ void rtppeer::parse_command_ok(parse_buffer_t &buffer, port_e port){
   );
   if (port == MIDI_PORT)
     status = status_e(int(status) | int(MIDI_CONNECTED));
-  if (port == CONTROL_PORT)
+  if (port == CONTROL_PORT){
     status = status_e(int(status) | int(CONTROL_CONNECTED));
+    for (auto &ec: event_connect_control) {
+      ec(remote_name);
+    }
+  }
 
   if (status == CONNECTED){
     for (auto &ec: event_connect) {

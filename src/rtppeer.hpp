@@ -58,6 +58,7 @@ namespace rtpmidid {
     uint64_t timestamp_start; // Time in ms
     uint64_t latency;
     std::function<void(parse_buffer_t &)> event_midi;
+    std::vector<std::function<void(const std::string &)>> event_connect_control;
     std::vector<std::function<void(const std::string &)>> event_connect;
     std::function<void(const parse_buffer_t &, port_e)> sendto;
     std::function<void(void)> event_disconnect;
@@ -73,6 +74,9 @@ namespace rtpmidid {
     }
     void on_connect(std::function<void(const std::string &)> f){
       event_connect.push_back(f);
+    }
+    void on_connect_control(std::function<void(const std::string &)> f){
+      event_connect_control.push_back(f);
     }
     void on_disconnect(std::function<void()> f){
       event_disconnect = f;
