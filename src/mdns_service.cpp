@@ -38,7 +38,7 @@ std::string mdns::service::to_string() const{
 }
 
 
-mdns::service_a::service_a() {}
+mdns::service_a::service_a() { type = A; }
 mdns::service_a::service_a(std::string label_, uint32_t ttl_, uint8_t ip_[4]) :
   service(std::move(label_), A, ttl_) {
     ip[0] = ip_[0];
@@ -70,7 +70,7 @@ std::string mdns::service_a::to_string() const{
 }
 
 
-mdns::service_srv::service_srv() {}
+mdns::service_srv::service_srv() { type = SRV; }
 mdns::service_srv::service_srv(std::string label_, uint32_t ttl_, std::string hostname_, uint16_t port_) :
   service(std::move(label_), SRV, ttl_),  hostname(std::move(hostname_)), port(port_) {}
 std::unique_ptr<mdns::service_srv::service> mdns::service_srv::clone() const{
@@ -98,7 +98,7 @@ std::string mdns::service_srv::to_string() const{
 }
 
 
-mdns::service_ptr::service_ptr() {}
+mdns::service_ptr::service_ptr() { type = PTR; }
 mdns::service_ptr::service_ptr(std::string label_, uint32_t ttl_, std::string servicename_) :
   service(std::move(label_), PTR, ttl_), servicename(std::move(servicename_)) {}
 std::unique_ptr<mdns::service_ptr::service> mdns::service_ptr::clone() const{
@@ -122,4 +122,30 @@ bool mdns::service_ptr::equal(const mdns::service_ptr::service *other_){
 std::string mdns::service_ptr::to_string() const{
   return fmt::format("PTR Q {} T {} ttl {} servicename {}", label, type, ttl,
     servicename);
+}
+
+mdns::service_txt::service_txt() { type = TXT; }
+mdns::service_txt::service_txt(std::string label_, uint32_t ttl_, std::string txt_) :
+  service(std::move(label_), TXT, ttl_), txt(std::move(txt_)) {}
+std::unique_ptr<mdns::service_txt::service> mdns::service_txt::clone() const{
+  auto ret = std::make_unique<mdns::service_txt>();
+
+  ret->label = label;
+  ret->type = type;
+  ret->ttl = ttl;
+  ret->txt = txt;
+
+  return ret;
+}
+bool mdns::service_txt::equal(const mdns::service_txt::service *other_){
+  if (!base_equal(other_))
+    return false;
+  if (const service_txt *other = dynamic_cast<const service_txt *>(other_)){
+    return txt == other->txt;
+  }
+  return false;
+}
+std::string mdns::service_txt::to_string() const{
+  return fmt::format("TXT Q {} T {} ttl {} txt {}", label, type, ttl,
+    txt);
 }

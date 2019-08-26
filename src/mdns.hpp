@@ -35,6 +35,7 @@ namespace rtpmidid {
       SRV=33,
       A=1,
       AAAA=28,
+      TXT=16,
     };
 
     struct service{
@@ -79,6 +80,15 @@ namespace rtpmidid {
 
       service_ptr();
       service_ptr(std::string label_, uint32_t ttl_, std::string servicename_);
+      virtual std::unique_ptr<service> clone() const;
+      virtual bool equal(const service *other_);
+      virtual std::string to_string() const;
+    };
+    struct service_txt : public service {
+      std::string txt;
+
+      service_txt();
+      service_txt(std::string label_, uint32_t ttl_, std::string txt_);
       virtual std::unique_ptr<service> clone() const;
       virtual bool equal(const service *other_);
       virtual std::string to_string() const;

@@ -82,6 +82,13 @@ void rtpmidid_t::announce_rtpmidid_server(const std::string &name, uint16_t port
   a->type = ::rtpmidid::mdns::A;
   a->ip4 = 0;
   mdns.announce(std::move(a), true);
+
+  auto txt = std::make_unique<::rtpmidid::mdns::service_txt>();
+  txt->label = hostname;
+  txt->ttl = TIMEOUT_REANNOUNCE;
+  txt->type = ::rtpmidid::mdns::TXT;
+  txt->txt = "";
+  mdns.announce(std::move(txt), true);
 }
 
 void rtpmidid_t::unannounce_rtpmidid_server(const std::string &name, uint16_t port){

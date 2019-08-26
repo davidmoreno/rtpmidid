@@ -305,6 +305,10 @@ void mdns::send_response(const service &service){
       buffer.write_uint16(srv->port);
       write_label(buffer, srv->hostname);
     }
+    case mdns::TXT:{
+      auto srv = static_cast<const mdns::service_txt*>(&service);
+      write_label(buffer, srv->txt);
+    }
     break;
     default:
       throw exception("I dont know how to announce this mDNS answer type: {}", service.type);
