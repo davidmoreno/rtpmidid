@@ -181,7 +181,7 @@ namespace rtpmidid{
     bool compare(const parse_buffer_t &other){
       if (size() != other.size())
         return false;
-      auto i=0;
+      uint32_t i=0;
       auto l = size();
       for (i=0;i<l;i++){
         if (other.start[i] != start[i])
