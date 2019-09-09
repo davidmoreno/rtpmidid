@@ -42,7 +42,7 @@ namespace rtpmidid {
 
     mdns_rtpmidi();
     ~mdns_rtpmidi();
-    void handle_connected();
+    void announce_all();
     void announce_rtpmidi(const std::string &name, const int32_t port);
     void unannounce_rtpmidi(const std::string &name, const int32_t port);
   };

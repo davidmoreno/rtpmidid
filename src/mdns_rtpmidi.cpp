@@ -175,7 +175,7 @@ static void client_callback(AvahiClient *c, AvahiClientState state, void * userd
             /* The server has startup successfully and registered its host
              * name on the network, so it's time to create our services */
             // create_services(c);
-            mr->handle_connected();
+            mr->announce_all();
             break;
         case AVAHI_CLIENT_FAILURE:
             ERROR("Client failure: {}", avahi_strerror(avahi_client_errno(c)));
@@ -220,33 +220,34 @@ mdns_rtpmidi::~mdns_rtpmidi() {
   avahi_client_free(client);
 }
 
-void mdns_rtpmidi::handle_connected() {
+void mdns_rtpmidi::announce_all() {
   if (!group) {
     if (!(group = avahi_entry_group_new(client, entry_group_callback, this))) {
         ERROR("avahi_entry_group_new() failed: {}", avahi_strerror(avahi_client_errno(client)));
         goto fail;
     }
   }
-  if (avahi_entry_group_is_empty(group)) {
-    int ret;
-    for(auto &entry: announcements) {
-      ret = avahi_entry_group_add_service(
-        group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, (AvahiPublishFlags)0,
-        entry.name.c_str(), "_apple-midi._udp", NULL, NULL,
-        entry.port, NULL
-      );
-      if (ret < 0) {
-        if (ret == AVAHI_ERR_COLLISION)
-          goto collision;
-        ERROR("Failed to add _ipp._tcp service: {}", avahi_strerror(ret));
-        goto fail;
-      }
+  if (!avahi_entry_group_is_empty(group)){
+    avahi_entry_group_reset(group);
+  }
+  int ret;
+  for(auto &entry: announcements) {
+    ret = avahi_entry_group_add_service(
+      group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, (AvahiPublishFlags)0,
+      entry.name.c_str(), "_apple-midi._udp", NULL, NULL,
+      entry.port, NULL
+    );
+    if (ret < 0) {
+      if (ret == AVAHI_ERR_COLLISION)
+        goto collision;
+      ERROR("Failed to add _ipp._tcp service: {}", avahi_strerror(ret));
+      goto fail;
     }
-    if (announcements.size() > 0) {
-      if ((ret = avahi_entry_group_commit(group)) < 0) {
-        ERROR("Failed to commit entry group: {}", avahi_strerror(ret));
-        goto fail;
-      }
+  }
+  if (announcements.size() > 0) {
+    if ((ret = avahi_entry_group_commit(group)) < 0) {
+      ERROR("Failed to commit entry group: {}", avahi_strerror(ret));
+      goto fail;
     }
   }
   return;
@@ -258,25 +259,16 @@ fail:
 }
 
 void mdns_rtpmidi::announce_rtpmidi(const std::string &name, const int32_t port){
-  int ret;
-  announcement_t entry = {
+  announcements.push_back({
     name, port
-  };
+  });
 
-  ret = avahi_entry_group_add_service(
-    group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, (AvahiPublishFlags)0,
-    entry.name.c_str(), "_apple-midi._udp", NULL, NULL,
-    entry.port, NULL
-  );
-
-  announcements.push_back(std::move(entry));
-
-  if ((ret = avahi_entry_group_commit(group)) < 0) {
-      ERROR("Failed to commit entry group: {}", avahi_strerror(ret));
-  }
-
+  announce_all();
 }
 
 void mdns_rtpmidi::unannounce_rtpmidi(const std::string &name, const int32_t port){
-
+  announcements.erase(std::remove_if(announcements.begin(), announcements.end(), [port](const announcement_t &t){
+    return port == t.port;
+  }), announcements.end());
+  announce_all();
 }
