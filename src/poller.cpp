@@ -177,9 +177,6 @@ poller_t::timer_t::timer_t() : id(0) {
 poller_t::timer_t::timer_t(int id_) : id(id_) {
 }
 poller_t::timer_t::timer_t(poller_t::timer_t &&other) {
-  if (id !=0 ){
-    poller.remove_timer(*this);
-  }
   id = other.id;
   other.id = 0;
 }

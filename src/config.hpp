@@ -18,6 +18,7 @@
 #pragma once
 #include <exception>
 #include <string>
+#include <vector>
 #include <fmt/format.h>
 
 namespace rtpmidid{

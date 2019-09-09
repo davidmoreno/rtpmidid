@@ -17,6 +17,8 @@
  */
 #pragma once
 
+#include <vector>
+
 #include "../src/netutils.hpp"
 
 class managed_parse_buffer_t {
