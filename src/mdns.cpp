@@ -38,12 +38,20 @@ const bool debug0 = false;
 
 using namespace rtpmidid;
 
-static uint32_t route_get_ip_for_route(struct in_addr);
-static void route_setup();
-static uint32_t route_default_ip = 0;
+static rtpmidid::ip4_t route_get_ip_for_route(struct in_addr);
+static rtpmidid::ip4_t guess_default_ip();
 
-mdns::mdns(){
-  route_setup();
+mdns::mdns(const std::string &default_ip){
+  ip4 = inet_addr(default_ip.c_str());
+
+  if (!ip4)
+    ip4 = guess_default_ip();
+
+  {
+    uint8_t ip[4];
+    *((int32_t*)&ip) = ip4;
+    DEBUG("Default IP is {}.{}.{}.{}.", ip[0], ip[1], ip[2], ip[3]);
+  }
 
   socketfd = socket(AF_INET, SOCK_DGRAM, 0);
   if (socketfd < 0){
@@ -66,8 +74,6 @@ mdns::mdns(){
     throw rtpmidid::exception("Can not open mDNS socket. Maybe addres is in use?");
   }
   poller.add_fd_in(socketfd, [this](int){ this->mdns_ready(); });
-
-  *((int32_t*)ip4) = route_default_ip;
 
   DEBUG("mDNS wating for requests at 224.0.0.251:5353");
 }
@@ -281,10 +287,7 @@ void mdns::send_response(const service &service){
 
       if (a->ip4 == 0){
         // Put here my own IP
-        buffer.write_uint8(ip4[0]);
-        buffer.write_uint8(ip4[1]);
-        buffer.write_uint8(ip4[2]);
-        buffer.write_uint8(ip4[3]);
+        buffer.write_uint32(ip4);
       } else {
         buffer.write_uint8(a->ip[0]);
         buffer.write_uint8(a->ip[1]);
@@ -548,8 +551,8 @@ std::string std::to_string(const rtpmidid::mdns::service_srv &s){
 /** Parses the /proc/net/routes to get the right address for a given IP, or default route address **/
 
 struct ip_route4_t {
-  uint32_t ip;
-  uint32_t mask;
+  rtpmidid::ip4_t ip;
+  rtpmidid::ip4_t mask;
 
   bool match(uint32_t other){
     return (other & mask) == (ip & mask);
@@ -558,9 +561,10 @@ struct ip_route4_t {
 
 static std::vector<ip_route4_t> routes;
 
-static void route_setup(){
+static rtpmidid::ip4_t guess_default_ip(){
   ip_route4_t route;
   struct ifaddrs *addrs, *next;
+  uint32_t route_default_ip = 0;
 
   getifaddrs(&addrs);
 
@@ -576,9 +580,11 @@ static void route_setup(){
       routes.push_back(route);
 
       if (route_default_ip == 0 && !(next->ifa_flags & IFF_LOOPBACK)){
+        // DEBUG("Add {:X} / {:X}", route.ip, route.mask);
         route_default_ip = route.ip;
+      } else {
+        // DEBUG("Skip Add {:X} / {:X}", route.ip, route.mask);
       }
-      // DEBUG("Add {:X} / {:X}", route.ip, route.mask);
     }
 
     next = next->ifa_next;
@@ -586,15 +592,13 @@ static void route_setup(){
 
   freeifaddrs(addrs);
 
-  uint8_t ip[4];
-  *((int32_t*)&ip) = route_default_ip;
-  DEBUG("Routing table ready. Default IP is {}.{}.{}.{}.", ip[0], ip[1], ip[2], ip[3]);
+  return route_default_ip;
 }
 
-static uint32_t route_get_ip_for_route(struct in_addr in_other){
+static rtpmidid::ip4_t route_get_ip_for_route(struct in_addr in_other){
   union ip_t{
     uint8_t ip4p[4];
-    uint32_t ip4;
+    rtpmidid::ip4_t ip4;
   };
   ip_t other;
   other.ip4 = in_other.s_addr;
@@ -606,5 +610,5 @@ static uint32_t route_get_ip_for_route(struct in_addr in_other){
     }
   }
   // DEBUG("Default");
-  return route_default_ip;
+  return 0;
 }

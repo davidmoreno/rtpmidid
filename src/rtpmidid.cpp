@@ -31,7 +31,7 @@ const int TIMEOUT_REANNOUNCE = 75 * 60;  // As recommended by RFC 6762
 
 using namespace rtpmidid;
 
-rtpmidid_t::rtpmidid_t(config_t *config) : name(config->name), seq(fmt::format("rtpmidi {}", name)){
+rtpmidid_t::rtpmidid_t(config_t *config) : name(config->name), seq(fmt::format("rtpmidi {}", name)), mdns(config->host){
   setup_mdns();
   setup_alsa_seq();
 

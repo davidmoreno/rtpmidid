@@ -36,6 +36,7 @@ const char *CMDLINE_HELP = ""
 "  --version           Show version\n"
 "  --help              Show this help\n"
 "  --name <name>       Forces a rtpmidi name\n"
+"  --host <address>    My default IP. Needed to answer mDNS. Normally guessed but may be attached to another ip."
 "  --port <port>       Opens local port as server. Default 5400. Can set several.\n"
 "  --connect <address> Connects the given address. This is default, no need for --connect"
 "  hostname            Connects to hostname:5400 port using rtpmidi\n"
@@ -47,12 +48,15 @@ const char *CMDLINE_HELP = ""
 typedef enum {
   ARG_NONE=0,
   ARG_NAME,
+  ARG_HOST,
   ARG_PORT,
   ARG_CONNECT,
 } optnames_e;
 
 config_t rtpmidid::parse_cmd_args(int argc, char **argv){
   config_t opts;
+
+  opts.host = "0.0.0.0";
 
   optnames_e prevopt = ARG_NONE;
   for (auto i=0; i<argc; i++){
@@ -72,6 +76,8 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv){
       }
       if (argname == "--name") {
         prevopt = ARG_NAME;
+      } else if (argname == "--host") {
+        prevopt = ARG_HOST;
       } else if (argname == "--port") {
         prevopt = ARG_PORT;
       } else if (argname == "--connect") {
@@ -92,6 +98,10 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv){
         case ARG_NAME:
           opts.name = argv[i];
           INFO("Set RTP MIDI name to {}", opts.name);
+          break;
+        case ARG_HOST:
+          opts.host = argv[i];
+          INFO("Set RTP MIDI listen host to {}", opts.host);
           break;
         case ARG_PORT:
           opts.ports.push_back(atoi(argv[i]));

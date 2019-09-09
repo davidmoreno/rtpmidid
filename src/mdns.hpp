@@ -26,6 +26,7 @@
 
 
 namespace rtpmidid {
+  typedef uint32_t ip4_t;
   struct parse_buffer_t;
 
   class mdns {
@@ -97,6 +98,8 @@ namespace rtpmidid {
   private:
     int socketfd;
     struct sockaddr_in multicast_addr;
+    // IP to answer for A queries with 0.0.0.0 answer (marker for myself)
+    ip4_t ip4;
     // queries are called once
     std::map<std::pair<query_type_e, std::string>, std::vector<std::function<void(const service *)>>> query_map;
     // discovery are called always there is a discovery
@@ -109,10 +112,8 @@ namespace rtpmidid {
     std::map<service *, rtpmidid::poller_t::timer_t> reannounce_timers;
     // Cache timers, with associated announcement service pointers
     std::map<service *, rtpmidid::poller_t::timer_t> cache_timers;
-    // IP to answer for A queries with 0.0.0.0 answer (marker for myself)
-    uint8_t ip4[4];
   public:
-    mdns();
+    mdns(const std::string &default_ip="0.0.0.0");
     ~mdns();
 
     void query(const std::string &name, query_type_e type);
