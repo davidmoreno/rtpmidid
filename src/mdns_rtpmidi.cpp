@@ -22,9 +22,11 @@
 
 #include <avahi-client/client.h>
 #include <avahi-client/publish.h>
+#include <avahi-client/lookup.h>
 #include <avahi-common/error.h>
 #include <avahi-common/alternative.h>
 #include <avahi-common/malloc.h>
+
 
 using namespace rtpmidid;
 
@@ -163,9 +165,6 @@ void poller_adapter_timeout_free(AvahiTimeout *to) {
 }
 
 static void client_callback(AvahiClient *c, AvahiClientState state, void * userdata) {
-    assert(c);
-    DEBUG("Callback called {}", state);
-
     mdns_rtpmidi *mr = (mdns_rtpmidi*) userdata;
     mr->client = c;
 
@@ -198,6 +197,101 @@ static void client_callback(AvahiClient *c, AvahiClientState state, void * userd
     }
 }
 
+static void resolve_callback(
+    AvahiServiceResolver *r,
+    AVAHI_GCC_UNUSED AvahiIfIndex interface,
+    AVAHI_GCC_UNUSED AvahiProtocol protocol,
+    AvahiResolverEvent event,
+    const char *name,
+    const char *type,
+    const char *domain,
+    const char *host_name,
+    const AvahiAddress *address,
+    uint16_t port,
+    AvahiStringList *txt,
+    AvahiLookupResultFlags flags,
+    AVAHI_GCC_UNUSED void* userdata) {
+
+  mdns_rtpmidi *mr = (mdns_rtpmidi*) userdata;
+
+  assert(r);
+  /* Called whenever a service has been resolved successfully or timed out */
+  switch (event) {
+    case AVAHI_RESOLVER_FAILURE:
+      DEBUG("(Resolver) Failed to resolve service '{}' of type '{}' in domain '{}': {}", name, type, domain, avahi_strerror(avahi_client_errno(avahi_service_resolver_get_client(r))));
+      break;
+    case AVAHI_RESOLVER_FOUND: {
+      if (!!(flags & AVAHI_LOOKUP_RESULT_OUR_OWN)){
+        DEBUG("Received own announcement");
+        return;
+      }
+      char a[AVAHI_ADDRESS_STR_MAX], *t;
+      DEBUG("Service '{}' of type '{}' in domain '{}'", name, type, domain);
+      avahi_address_snprint(a, sizeof(a), address);
+      t = avahi_string_list_to_string(txt);
+      DEBUG(
+              "\t{}:{} ({})\n"
+              "\tTXT={}\n"
+              "\tcookie is {}\n"
+              "\tis_local: {}\n"
+              "\tour_own: {}\n"
+              "\twide_area: {}\n"
+              "\tmulticast: {}\n"
+              "\tcached: {}",
+              host_name, port, a,
+              t,
+              avahi_string_list_get_service_cookie(txt),
+              !!(flags & AVAHI_LOOKUP_RESULT_WIDE_AREA),
+              !!(flags & AVAHI_LOOKUP_RESULT_LOCAL),
+              !!(flags & AVAHI_LOOKUP_RESULT_OUR_OWN),
+              !!(flags & AVAHI_LOOKUP_RESULT_MULTICAST),
+              !!(flags & AVAHI_LOOKUP_RESULT_CACHED));
+      mr->event_discover(name, a, port);
+
+      avahi_free(t);
+    }
+  }
+  avahi_service_resolver_free(r);
+}
+
+
+static void browse_callback(
+    AvahiServiceBrowser *b,
+    AvahiIfIndex interface,
+    AvahiProtocol protocol,
+    AvahiBrowserEvent event,
+    const char *name,
+    const char *type,
+    const char *domain,
+    AVAHI_GCC_UNUSED AvahiLookupResultFlags flags,
+    void* userdata) {
+
+  mdns_rtpmidi *mr = (mdns_rtpmidi*) userdata;
+
+  switch (event) {
+    case AVAHI_BROWSER_FAILURE:
+      ERROR("(Browser) {}", avahi_strerror(avahi_client_errno(avahi_service_browser_get_client(b))));
+      return;
+    case AVAHI_BROWSER_NEW:
+      INFO("(Browser) NEW: service '{}' of type '{}' in domain '{}'", name, type, domain);
+      /* We ignore the returned resolver object. In the callback
+         function we free it. If the server is terminated before
+         the callback function is called the server will free
+         the resolver for us. */
+      if (!(avahi_service_resolver_new(mr->client, interface, protocol, name, type, domain, AVAHI_PROTO_UNSPEC, (AvahiLookupFlags)0, resolve_callback, userdata)))
+          ERROR("Failed to resolve service '{}': {}", name, avahi_strerror(avahi_client_errno(mr->client)));
+      break;
+    case AVAHI_BROWSER_REMOVE:
+      INFO("(Browser) REMOVE: service '{}' of type '{}' in domain '{}'", name, type, domain);
+      mr->event_remove(name);
+      break;
+    case AVAHI_BROWSER_ALL_FOR_NOW:
+    case AVAHI_BROWSER_CACHE_EXHAUSTED:
+      INFO("(Browser) {}", event == AVAHI_BROWSER_CACHE_EXHAUSTED ? "CACHE_EXHAUSTED" : "ALL_FOR_NOW");
+      break;
+  }
+}
+
 mdns_rtpmidi::mdns_rtpmidi() {
   group = nullptr;
   poller_adapter = std::make_unique<AvahiPoll>();
@@ -213,6 +307,11 @@ mdns_rtpmidi::mdns_rtpmidi() {
   client = avahi_client_new(poller_adapter.get(), (AvahiClientFlags)0, client_callback, this, &error);
   if (!client){
     ERROR("Error creating avahi client: {} {}", error, avahi_strerror(error));
+  }
+
+  AvahiServiceBrowser *sb;
+  if (!(sb = avahi_service_browser_new(client, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, "_apple-midi._udp", NULL, (AvahiLookupFlags)0, browse_callback, this))) {
+    ERROR("Failed to create service browser: {}", avahi_strerror(avahi_client_errno(client)));
   }
 }
 

@@ -34,6 +34,7 @@ using namespace rtpmidid;
 rtpmidid_t::rtpmidid_t(config_t *config) :
     name(config->name),
     seq(fmt::format("rtpmidi {}", name)) {
+  setup_mdns();
   setup_alsa_seq();
 
   for (auto &port: config->ports){
@@ -164,6 +165,13 @@ void rtpmidid_t::setup_alsa_seq(){
     add_rtpmidid_export_server(fmt::format("{}/{}", this->name, name), alsaport, from);
   });
 }
+
+void rtpmidid_t::setup_mdns(){
+  mdns_rtpmidi.on_discovery([this](const std::string &name, const std::string &address, int32_t port){
+    this->add_rtpmidi_client(name, address, port);
+  });
+}
+
 
 std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
     const std::string &name, const std::string &address, uint16_t net_port){

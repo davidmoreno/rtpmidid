@@ -69,6 +69,7 @@ namespace rtpmidid{
     void alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &buffer);
 
     void setup_alsa_seq();
+    void setup_mdns();
     void announce_rtpmidid_server(const std::string &name, uint16_t port);
     void unannounce_rtpmidid_server(const std::string &name, uint16_t port);
 
