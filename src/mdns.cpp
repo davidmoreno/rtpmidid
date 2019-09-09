@@ -287,7 +287,7 @@ void mdns::send_response(const service &service){
 
       if (a->ip4 == 0){
         // Put here my own IP
-        buffer.write_uint32(ip4);
+        buffer.write_uint32(htonl(ip4));
       } else {
         buffer.write_uint8(a->ip[0]);
         buffer.write_uint8(a->ip[1]);
@@ -328,7 +328,14 @@ void mdns::send_response(const service &service){
 }
 
 int mdns::broadcast(const parse_buffer_t *buffer){
-  return ::sendto(socketfd, buffer->start, buffer->capacity(), MSG_CONFIRM, (const struct sockaddr *)&multicast_addr, sizeof(multicast_addr));
+  return ::sendto(
+    socketfd,
+    buffer->start,
+    buffer->capacity(),
+    MSG_CONFIRM,
+    (const struct sockaddr *)&multicast_addr,
+    sizeof(multicast_addr)
+  );
 }
 
 
