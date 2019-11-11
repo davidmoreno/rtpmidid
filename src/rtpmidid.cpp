@@ -142,7 +142,7 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::str
       }
       auto conn = &peer_it->second;
 
-      uint8_t data[32];
+      uint8_t data[128];
       parse_buffer_t stream(data, sizeof(data));
 
       alsamidi_to_midiprotocol(ev, stream);
@@ -178,7 +178,7 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_export_server(
     announce_rtpmidid_server(name, server->control_port);
 
     seq.on_midi_event(alsaport, [this, server](snd_seq_event_t *ev){
-      uint8_t tmp[64];
+      uint8_t tmp[128];
       parse_buffer_t buffer(tmp, sizeof(tmp));
       alsamidi_to_midiprotocol(ev, buffer);
       buffer.end = buffer.position;
@@ -344,6 +344,10 @@ void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data){
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_noteoff(&ev, current_command & 0x0F, midi_data.read_uint8(), midi_data.read_uint8());
       break;
+      case 0xA0:
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_keypress(&ev, current_command & 0x0F, midi_data.read_uint8(), midi_data.read_uint8());
+      break;
       case 0xC0:
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_pgmchange(&ev, current_command & 0x0F, midi_data.read_uint8());
@@ -351,6 +355,7 @@ void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data){
       case 0xD0:
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_chanpress(&ev, current_command & 0x0F, midi_data.read_uint8());
+	break;
       case 0xE0:
       {
         snd_seq_ev_clear(&ev);
@@ -361,6 +366,7 @@ void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data){
         snd_seq_ev_set_pitchbend(&ev, current_command & 0x0F, pitch_bend);
       }
       break;
+      // XXXTODO: sysex
       default:
         WARNING("MIDI command type {:02X} not implemented yet", type);
         return;
@@ -382,7 +388,7 @@ void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev){
     ERROR("There is no peer but I received an event! This situation should NEVER happen. File a bug. Port {}", aseq_port);
     return;
   }
-  uint8_t data[32];
+  uint8_t data[128];
   parse_buffer_t stream(data, sizeof(data));
 
   alsamidi_to_midiprotocol(ev, stream);
@@ -397,19 +403,19 @@ void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev){
 
 void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &stream){
   switch(ev->type){
-    case SND_SEQ_EVENT_NOTE:
+    //case SND_SEQ_EVENT_NOTE:
     case SND_SEQ_EVENT_NOTEON:
-      if (ev->data.note.velocity == 0){
-        stream.write_uint8(0x80 | (ev->data.note.channel & 0x0F));
-      }
-      else{
-        stream.write_uint8(0x90 | (ev->data.note.channel & 0x0F));
-      }
+      stream.write_uint8(0x90 | (ev->data.note.channel & 0x0F));
       stream.write_uint8(ev->data.note.note);
       stream.write_uint8(ev->data.note.velocity);
     break;
     case SND_SEQ_EVENT_NOTEOFF:
       stream.write_uint8(0x80 | (ev->data.note.channel & 0x0F));
+      stream.write_uint8(ev->data.note.note);
+      stream.write_uint8(ev->data.note.velocity);
+    break;
+    case SND_SEQ_EVENT_KEYPRESS:
+      stream.write_uint8(0xA0 | (ev->data.note.channel & 0x0F));
       stream.write_uint8(ev->data.note.note);
       stream.write_uint8(ev->data.note.velocity);
     break;
@@ -431,6 +437,18 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &s
       stream.write_uint8(0xE0 | (ev->data.control.channel & 0x0F));
       stream.write_uint8((ev->data.control.value + 8192) & 0x07F);
       stream.write_uint8((ev->data.control.value + 8192) >> 7 & 0x07F);
+    break;
+    case SND_SEQ_EVENT_SYSEX: {
+      unsigned len = ev->data.ext.len, sz = stream.size();
+      if (len <= sz) {
+	unsigned char *data = (unsigned char*)ev->data.ext.ptr;
+	for (unsigned i = 0; i < len; i++) {
+	  stream.write_uint8(data[i]);
+	}
+      } else {
+	WARNING("Sysex buffer overflow! Not sending. ({} bytes needed)", len);
+      }
+    }
     break;
     default:
       WARNING("Event type not yet implemented! Not sending. {}", ev->type);
