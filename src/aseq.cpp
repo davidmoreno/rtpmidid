@@ -140,12 +140,15 @@ namespace rtpmidid{
           DEBUG("Disconnected");
         }
         break;
-        case SND_SEQ_EVENT_NOTE:
+        //case SND_SEQ_EVENT_NOTE:
         case SND_SEQ_EVENT_NOTEOFF:
         case SND_SEQ_EVENT_NOTEON:
+        case SND_SEQ_EVENT_KEYPRESS:
         case SND_SEQ_EVENT_CONTROLLER:
         case SND_SEQ_EVENT_PGMCHANGE:
+        case SND_SEQ_EVENT_CHANPRESS:
         case SND_SEQ_EVENT_PITCHBEND:
+        case SND_SEQ_EVENT_SYSEX:
         {
           auto myport = ev->dest.port;
           for (auto &f: midi_event_callbacks[myport]){
