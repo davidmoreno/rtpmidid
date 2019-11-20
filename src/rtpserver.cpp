@@ -190,7 +190,7 @@ void rtpserver::sendto(const parse_buffer_t &pb, rtppeer::port_e port, struct so
     MSG_CONFIRM, (const struct sockaddr *)address, sizeof(struct sockaddr_in)
   );
 
-  if (res != pb.capacity()){
+  if (res < 0 || static_cast<uint32_t>(res) != pb.capacity()){
     throw exception(
       "Could not send all data. Sent {}. {}",
       res, strerror(errno)
