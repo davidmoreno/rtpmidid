@@ -147,7 +147,7 @@ void rtpclient::sendto(const parse_buffer_t &pb, rtppeer::port_e port){
     MSG_CONFIRM, (const struct sockaddr *)&peer_addr, sizeof(peer_addr)
   );
 
-  if (res != pb.capacity()){
+  if (res < 0 || static_cast<uint32_t>(res) != pb.capacity()){
     throw exception(
       "Could not send all data to {}:{}. Sent {}. {}",
       peer.remote_name, remote_base_port, res, strerror(errno)
