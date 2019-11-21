@@ -107,7 +107,8 @@ void test_client_t::send(rtpmidid::parse_buffer_t &msg){
 
   auto len = ::sendto(sockfd, msg.start, msg.size(), 0, (struct sockaddr *)&servaddr, sizeof(servaddr));
 
-  ASSERT_EQUAL(len, msg.size());
+  ASSERT_GTE(len,0);
+  ASSERT_EQUAL(static_cast<uint32_t>(len), msg.size());
 }
 
 void test_client_t::recv(rtpmidid::parse_buffer_t &msg){
