@@ -20,8 +20,9 @@
 
 #include <string>
 #include <set>
+#include <memory>
 #include "./aseq.hpp"
-#include "./mdns.hpp"
+#include "./mdns_rtpmidi.hpp"
 
 namespace rtpmidid{
   struct config_t;
@@ -49,7 +50,7 @@ namespace rtpmidid{
   public:
     std::string name;
     ::rtpmidid::aseq seq;
-    ::rtpmidid::mdns mdns;
+    ::rtpmidid::mdns_rtpmidi mdns_rtpmidi;
     // Local port id to client_info for connections
     std::map<uint8_t, client_info> known_clients;
     std::map<uint8_t, server_conn_info> known_servers_connections;
@@ -67,8 +68,8 @@ namespace rtpmidid{
 
     void alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &buffer);
 
-    void setup_mdns();
     void setup_alsa_seq();
+    void setup_mdns();
     void announce_rtpmidid_server(const std::string &name, uint16_t port);
     void unannounce_rtpmidid_server(const std::string &name, uint16_t port);
 

@@ -27,14 +27,13 @@
 #include "./config.hpp"
 #include "./stringpp.hpp"
 
-const int TIMEOUT_REANNOUNCE = 75 * 60;  // As recommended by RFC 6762
-
 using namespace rtpmidid;
 
-rtpmidid_t::rtpmidid_t(config_t *config) : name(config->name), seq(fmt::format("rtpmidi {}", name)){
+rtpmidid_t::rtpmidid_t(config_t *config) :
+    name(config->name),
+    seq(fmt::format("rtpmidi {}", name)) {
   setup_mdns();
   setup_alsa_seq();
-
 
   for (auto &port: config->ports){
     auto server = add_rtpmidid_import_server(config->name, port);
@@ -60,60 +59,11 @@ rtpmidid_t::rtpmidid_t(config_t *config) : name(config->name), seq(fmt::format("
 }
 
 void rtpmidid_t::announce_rtpmidid_server(const std::string &name, uint16_t port){
-  auto ptr = std::make_unique<::rtpmidid::mdns::service_ptr>();
-  ptr->label = "_apple-midi._udp.local";
-  ptr->ttl = TIMEOUT_REANNOUNCE;
-  ptr->type = ::rtpmidid::mdns::PTR;
-  ptr->servicename = fmt::format("{}._apple-midi._udp.local", name);
-  mdns.announce(std::move(ptr), true);
-
-  auto hostname = fmt::format("rtpmidid-{}.local", this->name);
-  auto srv = std::make_unique<::rtpmidid::mdns::service_srv>();
-  srv->label = fmt::format("{}._apple-midi._udp.local", name);
-  srv->ttl = TIMEOUT_REANNOUNCE;
-  srv->type = ::rtpmidid::mdns::SRV;
-  srv->hostname = hostname;
-  srv->port = port;
-  mdns.announce(std::move(srv), true);
-
-  auto a = std::make_unique<::rtpmidid::mdns::service_a>();
-  a->label = hostname;
-  a->ttl = TIMEOUT_REANNOUNCE;
-  a->type = ::rtpmidid::mdns::A;
-  a->ip4 = 0;
-  mdns.announce(std::move(a), true);
-
-  auto txt = std::make_unique<::rtpmidid::mdns::service_txt>();
-  txt->label = hostname;
-  txt->ttl = TIMEOUT_REANNOUNCE;
-  txt->type = ::rtpmidid::mdns::TXT;
-  txt->txt = "";
-  mdns.announce(std::move(txt), true);
+  mdns_rtpmidi.announce_rtpmidi(name, port);
 }
 
 void rtpmidid_t::unannounce_rtpmidid_server(const std::string &name, uint16_t port){
-  ::rtpmidid::mdns::service_ptr ptr;
-  ptr.label = "_apple-midi._udp.local";
-  ptr.ttl = 0; // This means, remove
-  ptr.type = ::rtpmidid::mdns::PTR;
-  ptr.servicename = fmt::format("{}._apple-midi._udp.local", name);
-  mdns.unannounce(&ptr);
-
-  auto hostname = fmt::format("rtpmidid-{}.local", this->name);
-  ::rtpmidid::mdns::service_srv srv;
-  srv.label = fmt::format("{}._apple-midi._udp.local", name);
-  srv.ttl = 0;
-  srv.type = ::rtpmidid::mdns::SRV;
-  srv.hostname = hostname;
-  srv.port = port;
-  mdns.unannounce(&srv);
-
-  auto a = std::make_unique<::rtpmidid::mdns::service_a>();
-  a->label = hostname;
-  a->ttl = 0;
-  a->type = ::rtpmidid::mdns::A;
-  a->ip4 = 0;
-  mdns.announce(std::move(a), true);
+  mdns_rtpmidi.unannounce_rtpmidi(name, port);
 }
 
 std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::string &name, uint16_t port){
@@ -214,58 +164,12 @@ void rtpmidid_t::setup_alsa_seq(){
   });
 }
 
-
 void rtpmidid_t::setup_mdns(){
-  mdns.on_discovery("_apple-midi._udp.local", mdns::PTR, [this](const ::rtpmidid::mdns::service *service){
-    const ::rtpmidid::mdns::service_ptr *ptr = static_cast<const ::rtpmidid::mdns::service_ptr*>(service);
-    // INFO("Found apple midi PTR response {}!", std::to_string(*ptr));
-    // just ask, next on discovery will catch it.
-    mdns.query(ptr->servicename, ::rtpmidid::mdns::SRV);
-  });
-  mdns.query("_apple-midi._udp.local", mdns::PTR);
-
-  mdns.on_discovery("*._apple-midi._udp.local", ::rtpmidid::mdns::SRV, [this](const ::rtpmidid::mdns::service *service){
-    if (service->ttl == 0) // This is a removal, not interested
-      return;
-
-    auto *srv = static_cast<const ::rtpmidid::mdns::service_srv*>(service);
-    uint16_t port = srv->port;
-    std::string srvname = srv->label;
-    if (known_mdns_peers.count(srvname) != 0){
-      DEBUG("Reannounce of known rtpmidi server. Ignoring.");
-      return;
-    }
-    known_mdns_peers.insert(srvname);
-
-    INFO("Found apple midi SRV response {}!", std::to_string(*srv));
-    mdns.query(srv->hostname, ::rtpmidid::mdns::A, [this, srvname, port](const ::rtpmidid::mdns::service *service){
-      auto name = srvname.substr(0, srvname.find('.'));
-      auto *ip = static_cast<const ::rtpmidid::mdns::service_a*>(service);
-      const uint8_t *ip4 = ip->ip;
-      std::string address = fmt::format("{}.{}.{}.{}", uint8_t(ip4[0]), uint8_t(ip4[1]), uint8_t(ip4[2]), uint8_t(ip4[3]));
-      INFO("APPLE MIDI: {}, at {}:{}", name, address, port);
-
-      auto alsa_port = this->add_rtpmidi_client(name, address, port);
-
-      if (alsa_port){
-        auto aport = *alsa_port;
-        mdns.on_discovery(srvname, ::rtpmidid::mdns::SRV, [this, srvname, aport](const ::rtpmidid::mdns::service *service){
-          if (service->ttl != 0)
-            return; // Only insterested in removals of this specific name
-
-          INFO("Peer is not available anymore. name: {}", srvname);
-          seq.remove_port(aport);
-          auto I = known_clients.find(aport);
-          if (I != known_clients.end())
-            known_clients.erase(I);
-
-          mdns.remove_discovery(srvname, ::rtpmidid::mdns::SRV);
-          known_mdns_peers.erase(srvname);
-        });
-      }
-    });
+  mdns_rtpmidi.on_discovery([this](const std::string &name, const std::string &address, int32_t port){
+    this->add_rtpmidi_client(name, address, port);
   });
 }
+
 
 std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
     const std::string &name, const std::string &address, uint16_t net_port){
