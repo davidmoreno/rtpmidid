@@ -27,8 +27,6 @@
 #include "./config.hpp"
 #include "./stringpp.hpp"
 
-const int TIMEOUT_REANNOUNCE = 75 * 60;  // As recommended by RFC 6762
-
 using namespace rtpmidid;
 
 rtpmidid_t::rtpmidid_t(config_t *config) :
