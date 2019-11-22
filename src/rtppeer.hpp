@@ -97,6 +97,7 @@ namespace rtpmidid {
     void parse_command_in(parse_buffer_t &, port_e port);
     void parse_command_ck(parse_buffer_t &, port_e port);
     void parse_command_by(parse_buffer_t &, port_e port);
+    void parse_command_no(parse_buffer_t &, port_e port);
     void parse_midi(parse_buffer_t &);
 
     void send_midi(parse_buffer_t &buffer);

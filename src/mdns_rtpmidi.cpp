@@ -199,7 +199,7 @@ static void client_callback(AvahiClient *c, AvahiClientState state, void * userd
 
 static void resolve_callback(
     AvahiServiceResolver *r,
-    AVAHI_GCC_UNUSED AvahiIfIndex interface,
+    AvahiIfIndex interface,
     AVAHI_GCC_UNUSED AvahiProtocol protocol,
     AvahiResolverEvent event,
     const char *name,
@@ -231,6 +231,7 @@ static void resolve_callback(
       t = avahi_string_list_to_string(txt);
       DEBUG(
               "\t{}:{} ({})\n"
+              "\tinterface={}\n"
               "\tTXT={}\n"
               "\tcookie is {}\n"
               "\tis_local: {}\n"
@@ -239,6 +240,7 @@ static void resolve_callback(
               "\tmulticast: {}\n"
               "\tcached: {}",
               host_name, port, a,
+              interface,
               t,
               avahi_string_list_get_service_cookie(txt),
               !!(flags & AVAHI_LOOKUP_RESULT_WIDE_AREA),
@@ -246,6 +248,8 @@ static void resolve_callback(
               !!(flags & AVAHI_LOOKUP_RESULT_OUR_OWN),
               !!(flags & AVAHI_LOOKUP_RESULT_MULTICAST),
               !!(flags & AVAHI_LOOKUP_RESULT_CACHED));
+
+      //FIXME: address is not correct for interface (!), so is not unique, how to make unique? or filter on interface?
       mr->event_discover(name, a, port);
 
       avahi_free(t);

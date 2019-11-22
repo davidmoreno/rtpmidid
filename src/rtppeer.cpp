@@ -107,6 +107,9 @@ void rtppeer::parse_command(parse_buffer_t &buffer, port_e port){
     case rtppeer::BY:
       parse_command_by(buffer, port);
       break;
+    case rtppeer::NO:
+      parse_command_no(buffer, port);
+      break;
     default:
       buffer.print_hex(true);
       throw not_implemented();
@@ -221,6 +224,25 @@ void rtppeer::parse_command_by(parse_buffer_t &buffer, port_e port){
   }
 
   status = (status_e) (((int)status) & ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
+  INFO("Disconnect from {}, {} port. Status {:X}", remote_name, port == MIDI_PORT ? "MIDI" : "Control", (int)status);
+
+  // Normally this will schedule removal of peer.
+  if (event_disconnect){
+    event_disconnect();
+  }
+}
+
+void rtppeer::parse_command_no(parse_buffer_t &buffer, port_e port){
+  auto protocol = buffer.read_uint32();
+  initiator_id = buffer.read_uint32();
+  auto remote_ssrc = buffer.read_uint32();
+
+  if (protocol != 2){
+    throw exception("rtpmidid only understands RTP MIDI protocol 2. Fill an issue at https://github.com/davidmoreno/rtpmidid/. Got protocol {}", protocol);
+  }
+
+  status = (status_e) (((int)status) & ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
+  WARNING("Invitation Rejected (NO) : remote ssrc {:X}",remote_ssrc); 
   INFO("Disconnect from {}, {} port. Status {:X}", remote_name, port == MIDI_PORT ? "MIDI" : "Control", (int)status);
 
   // Normally this will schedule removal of peer.
