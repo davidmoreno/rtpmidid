@@ -168,6 +168,11 @@ void rtpmidid_t::setup_mdns(){
   mdns_rtpmidi.on_discovery([this](const std::string &name, const std::string &address, int32_t port){
     this->add_rtpmidi_client(name, address, port);
   });
+  
+  mdns_rtpmidi.on_removed([this](const std::string &name){
+    // TODO : remove client / alsa sessions
+    WARNING("NOT IMPLEMENTED : network browser removed client {} ", name);
+  });
 }
 
 
@@ -259,7 +264,7 @@ void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data){
       case 0xD0:
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_chanpress(&ev, current_command & 0x0F, midi_data.read_uint8());
-	break;
+      break;
       case 0xE0:
       {
         snd_seq_ev_clear(&ev);
@@ -269,6 +274,11 @@ void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data){
         // DEBUG("Pitch bend received {}", pitch_bend);
         snd_seq_ev_set_pitchbend(&ev, current_command & 0x0F, pitch_bend);
       }
+      break;
+      case 0xFE: //active sense
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_SENSING;
       break;
       // XXXTODO: sysex
       default:
@@ -341,6 +351,9 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &s
       stream.write_uint8(0xE0 | (ev->data.control.channel & 0x0F));
       stream.write_uint8((ev->data.control.value + 8192) & 0x07F);
       stream.write_uint8((ev->data.control.value + 8192) >> 7 & 0x07F);
+    break;
+    case SND_SEQ_EVENT_SENSING:
+      stream.write_uint8(0xFE);
     break;
     case SND_SEQ_EVENT_SYSEX: {
       unsigned len = ev->data.ext.len, sz = stream.size();

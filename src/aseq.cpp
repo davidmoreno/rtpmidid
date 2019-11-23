@@ -149,6 +149,7 @@ namespace rtpmidid{
         case SND_SEQ_EVENT_CHANPRESS:
         case SND_SEQ_EVENT_PITCHBEND:
         case SND_SEQ_EVENT_SYSEX:
+        case SND_SEQ_EVENT_SENSING:
         {
           auto myport = ev->dest.port;
           for (auto &f: midi_event_callbacks[myport]){
@@ -157,8 +158,12 @@ namespace rtpmidid{
         }
         break;
         default:
-          DEBUG("This event type {} is not managed yet", ev->type);
-          break;
+        static bool warning_raised[SND_SEQ_EVENT_NONE+1];
+        if(!warning_raised[ev->type]) {
+          warning_raised[ev->type]=true; 
+          WARNING("This event type {} is not managed yet", ev->type);
+        }
+        break;
       }
 
     }
