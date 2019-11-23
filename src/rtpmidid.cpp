@@ -168,6 +168,11 @@ void rtpmidid_t::setup_mdns(){
   mdns_rtpmidi.on_discovery([this](const std::string &name, const std::string &address, int32_t port){
     this->add_rtpmidi_client(name, address, port);
   });
+  
+  mdns_rtpmidi.on_removed([this](const std::string &name){
+    // TODO : remove client / alsa sessions
+    WARNING("NOT IMPLEMENTED : network browser removed client {} ", name);
+  });
 }
 
 
