@@ -149,6 +149,7 @@ namespace rtpmidid{
         case SND_SEQ_EVENT_CHANPRESS:
         case SND_SEQ_EVENT_PITCHBEND:
         case SND_SEQ_EVENT_SYSEX:
+        case SND_SEQ_EVENT_SENSING:
         {
           auto myport = ev->dest.port;
           for (auto &f: midi_event_callbacks[myport]){
