@@ -158,9 +158,9 @@ namespace rtpmidid{
         }
         break;
         default:
-	static bool warningRaised[SND_SEQ_EVENT_NONE+1];
-        if(!warningRaised[ev->type]) {
-          warningRaised[ev->type]=true; 
+        static bool warning_raised[SND_SEQ_EVENT_NONE+1];
+        if(!warning_raised[ev->type]) {
+          warning_raised[ev->type]=true; 
           WARNING("This event type {} is not managed yet", ev->type);
         }
         break;
