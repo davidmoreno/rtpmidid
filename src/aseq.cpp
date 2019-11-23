@@ -157,8 +157,12 @@ namespace rtpmidid{
         }
         break;
         default:
-          DEBUG("This event type {} is not managed yet", ev->type);
-          break;
+	static bool warningRaised[SND_SEQ_EVENT_NONE+1];
+        if(!warningRaised[ev->type]) {
+          warningRaised[ev->type]=true; 
+          WARNING("This event type {} is not managed yet", ev->type);
+        }
+        break;
       }
 
     }
