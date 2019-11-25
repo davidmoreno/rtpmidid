@@ -14,7 +14,7 @@ sequencer port.
 ## Other implementations
 
 There is many hardware with RTP MIDI support, normally controllers, but for
-example Behriger DeepMind12 Synthetizer has support over Wifi.
+example Behringer DeepMind12 Synthetizer has support over Wifi.
 
 ### Linux
 
@@ -49,7 +49,7 @@ exporting.
 
 ### Importing
 
-For each found mDNS item, and connections to port 5004 (by default), it creates
+For each found mDNS item, and connections to port `5004` (by default), it creates
 alsa seq ports which provide the events on those endpoints.
 
 For mDNS discovered endpoints, the connection is delayed until the alsa seq
@@ -142,7 +142,7 @@ Options:
 
 ## License
 
-RtpMidid is GPLv3 licensed. This bascially meass that you are free to use,
+RtpMidid is GPLv3 licensed. This basically meass that you are free to use,
 modify and share it, given that you share your modifications with your users.
 
 This includes embeded software uses (anti
