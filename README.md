@@ -110,7 +110,7 @@ Development status / plan:
 
 ## Compile
 
-Requires C++17 (Ubuntu 18.04+), and libfmt-dev, libasound2-dev.
+Requires C++17 (Ubuntu 18.04+), and libfmt-dev, libasound2-dev, libavahi-client-dev.
 
 To compile and run, execute:
 
