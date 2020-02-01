@@ -3,6 +3,7 @@ add_library(
   STATIC
   logger.cpp poller.cpp mdns_rtpmidi.cpp aseq.cpp netutils.cpp stringpp.cpp
   rtppeer.cpp rtpclient.cpp rtpserver.cpp
+  control_socket.cpp
 )
 
 add_executable(
