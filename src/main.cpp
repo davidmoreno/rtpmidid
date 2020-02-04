@@ -51,7 +51,7 @@ int main(int argc, char **argv){
 
     try{
       auto rtpmidid = rtpmidid::rtpmidid_t(&options);
-      auto control = rtpmidid::control_socket_t(rtpmidid, "/tmp/rtpmidid.sock");
+      auto control = rtpmidid::control_socket_t(rtpmidid, options.control);
 
       while(rtpmidid::poller.is_open()){
         rtpmidid::poller.wait();

@@ -29,6 +29,7 @@ namespace rtpmidid {
      * See the /CONTROL.md file for known commands and protocol.
      */
     class control_socket_t {
+        time_t start_time;
         int listen_socket;
         std::vector<int> clients;
         rtpmidid_t &rtpmidid;

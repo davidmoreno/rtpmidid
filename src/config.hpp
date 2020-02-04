@@ -36,6 +36,7 @@ namespace rtpmidid{
     // Create clients at this ports to start with. Later will see.
     std::vector<uint16_t> ports;
     std::string host;
+    std::string control;
   };
   config_t parse_cmd_args(int argc, char **argv);
 }

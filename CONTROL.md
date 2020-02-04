@@ -1,7 +1,16 @@
 # Control protocol
 
 rtpmidi can be controlled using a UNIX socket file. By default it is at
-`/var/run/rtpmidid.sock`.
+`/var/run/rtpmidid/control.sock`.
+
+WARNING: This directory may not exist or not have proper permissions. The
+final location can be set at execution time with `./rtpmidid --control PATH`
+or create and allow the default location with (replace USER with your username):
+
+```shell
+sudo mkdir /var/run/rtpmidid/
+sudo chown :USER /var/run/rtpmidid/
+```
 
 Current there is only a line based protocol: User writes a command with some
 parameters and a JSON answer is returned.
@@ -15,10 +24,10 @@ stats
 {
     "version": "0.0.1",
     "uptime": 200.0,
-    "alsa": [
+    "clients": [
 
     ],
-    "remote": [
+    "servers": [
 
     ]
 }
@@ -42,7 +51,7 @@ Stops rtpmidid
 
 Creates the ALSA PORT for this HOST:PORT
 
-PORT is 5400 by default.
+PORT is 5004 by default.
 
 Its possible to later connect something to this port so the real RTPMidi
 connection is created.

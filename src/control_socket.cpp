@@ -54,7 +54,7 @@ rtpmidid::control_socket_t::control_socket_t(rtpmidid::rtpmidid_t &rtpmidid, con
 
     ret = bind(listen_socket, (const struct sockaddr *)(&addr), sizeof(struct sockaddr_un));
     if (ret == -1){
-        ERROR("Error Listening to socket: {}", strerror(errno));
+        ERROR("Error Listening to socket at {}: {}", socketfile, strerror(errno));
         close(listen_socket);
         listen_socket = -1;
         return;
@@ -64,6 +64,7 @@ rtpmidid::control_socket_t::control_socket_t(rtpmidid::rtpmidid_t &rtpmidid, con
         this->connection_ready();
     });
     INFO("Control socket ready at {}", socketfile);
+    start_time = time(NULL);
 }
 
 rtpmidid::control_socket_t::~control_socket_t(){
@@ -107,11 +108,36 @@ void rtpmidid::control_socket_t::data_ready(int fd){
 namespace rtpmidid{
     namespace commands {
         // Commands
-        static json stats(){
-            return {
+        static json stats(rtpmidid::rtpmidid_t &rtpmidid, time_t start_time){
+            auto js = json{
                 {"version", rtpmidid::VERSION},
-                {"uptime", 0}
+                {"uptime", time(NULL) - start_time}
             };
+
+            std::vector<json> clients;
+            for(auto port_client: rtpmidid.known_clients){
+                auto client = port_client.second;
+                json cl = {
+                    {"name", client.name},
+                    {"address", client.address},
+                    {"use_count", client.use_count},
+                    {"alsa_port", port_client.first}
+                };
+                clients.push_back(cl);
+            }
+            js["clients"] = clients;
+
+            std::vector<json> servers;
+            for(auto port_client: rtpmidid.known_servers_connections){
+                auto client = port_client.second;
+                json cl = {
+                    {"name", client.name},
+                };
+                clients.push_back(cl);
+            }
+            js["servers"] = servers;
+
+            return js;
         }
 
         static json exit(rtpmidid::rtpmidid_t &rtpmidid) {
@@ -148,7 +174,7 @@ std::string rtpmidid::control_socket_t::parse_command(const std::string &command
     auto cmd = command_split[0];
 
     if (cmd == "stats") {
-        auto js = rtpmidid::commands::stats();
+        auto js = rtpmidid::commands::stats(rtpmidid, start_time);
         return js.dump(2);
     }
     if (cmd == "exit" || cmd == "quit") {
@@ -159,7 +185,7 @@ std::string rtpmidid::control_socket_t::parse_command(const std::string &command
         json js;
         switch (command_split.size() ){
         case 2:
-            js = rtpmidid::commands::create(rtpmidid, command_split[1], command_split[1], "5400");
+            js = rtpmidid::commands::create(rtpmidid, command_split[1], command_split[1], "5004");
             break;
         case 3:
             js = rtpmidid::commands::create(rtpmidid, command_split[1], command_split[1], command_split[2]);
