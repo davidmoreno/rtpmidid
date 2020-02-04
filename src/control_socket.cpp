@@ -28,18 +28,18 @@
 #include "logger.hpp"
 #include "stringpp.hpp"
 #include "config.hpp"
+#include "rtpmidid.hpp"
 #include "control_socket.hpp"
+#include "exceptions.hpp"
 
 using json = nlohmann::json;
 
-// Commands
-static json stats();
+const char *MSG_CLOSE_CONN = "{\"event\": \"close\", \"detail\": \"Shutdown\", \"code\": 0}\n";
+const char *MSG_TOO_LONG = "{\"event\": \"close\", \"detail\": \"Message too long\", \"code\": 1}\n";
+const char *MSG_UNKNOWN_COMMAND = "{\"error\": \"Unknown command\", \"code\": 2}";
+const char *MSG_INVALID_PARAMS = "{\"error\": \"Invalid params\", \"code\": 3}";
 
-const char *MSG_CLOSE_CONN = "{\"method\": \"close\", \"params\": {\"detail\": \"Shutdown\", \"code\": 0}}\n";
-const char *MSG_TOO_LONG = "{\"method\": \"close\", \"params\": {\"detail\": \"Message too long\", \"code\": 1}}\n";
-const char *MSG_UNKNOWN_COMMAND = "{\"id\": 0, \"error\": {\"detail\": \"Unknown command\", \"code\": 2}}";
-
-rtpmidid::control_socket_t::control_socket_t(const std::string &socketfile){
+rtpmidid::control_socket_t::control_socket_t(rtpmidid::rtpmidid_t &rtpmidid, const std::string &socketfile) : rtpmidid(rtpmidid){
     int ret;
     ret = unlink(socketfile.c_str());
     if (ret>=0){
@@ -104,22 +104,73 @@ void rtpmidid::control_socket_t::data_ready(int fd){
     fsync(fd);
 }
 
-std::string rtpmidid::control_socket_t::parse_command(const std::string &command){
-    DEBUG("Received command: {}", command);
-    if (command == "STATS") {
-        auto js = stats();
-        return js.dump();
+namespace rtpmidid{
+    namespace commands {
+        // Commands
+        static json stats(){
+            return {
+                {"version", rtpmidid::VERSION},
+                {"uptime", 0}
+            };
+        }
+
+        static json exit(rtpmidid::rtpmidid_t &rtpmidid) {
+            rtpmidid::poller.close();
+            return {
+                {"detail", "Bye."}
+            };
+        }
+
+        static json create(rtpmidid::rtpmidid_t &rtpmidid, const std::string &name, const std::string &host, const std::string &port){
+            uint16_t port16 = atoi(port.c_str());
+            auto alsa_port = rtpmidid.add_rtpmidi_client(name, host, port16);
+            if (alsa_port.has_value()){
+                return {
+                    {"alsa_port", alsa_port.value()},
+                };
+            } else {
+                return {
+                    {"detail", "Could not create. Check logs."}
+                };
+            }
+        }
     }
-    return MSG_UNKNOWN_COMMAND;
 }
 
+// Last declaration to avoid forward declaration
 
+std::string rtpmidid::control_socket_t::parse_command(const std::string &command){
+    DEBUG("Received command: {}", command);
+    if (command.length() == 0){
+        return MSG_UNKNOWN_COMMAND;
+    }
+    auto command_split = rtpmidid::split(command);
+    auto cmd = command_split[0];
 
-// Commands
-
-static json stats(){
-    return {
-        {"version", rtpmidid::VERSION},
-        {"uptime", 0}
-    };
+    if (cmd == "stats") {
+        auto js = rtpmidid::commands::stats();
+        return js.dump(2);
+    }
+    if (cmd == "exit" || cmd == "quit") {
+        auto js = rtpmidid::commands::exit(rtpmidid);
+        return js.dump(2);
+    }
+    if (cmd == "create") {
+        json js;
+        switch (command_split.size() ){
+        case 2:
+            js = rtpmidid::commands::create(rtpmidid, command_split[1], command_split[1], "5400");
+            break;
+        case 3:
+            js = rtpmidid::commands::create(rtpmidid, command_split[1], command_split[1], command_split[2]);
+            break;
+        case 4:
+            js = rtpmidid::commands::create(rtpmidid, command_split[1], command_split[2], command_split[3]);
+            break;
+        default:
+            return MSG_INVALID_PARAMS;
+        }
+        return js.dump(2);
+    }
+    return MSG_UNKNOWN_COMMAND;
 }

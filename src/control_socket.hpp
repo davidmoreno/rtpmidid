@@ -21,6 +21,8 @@
 #include <vector>
 
 namespace rtpmidid {
+    class rtpmidid_t;
+
     /**
      * @short Opens a control socket that receives commands to control the rtpmidid
      *
@@ -29,8 +31,9 @@ namespace rtpmidid {
     class control_socket_t {
         int listen_socket;
         std::vector<int> clients;
+        rtpmidid_t &rtpmidid;
     public:
-        control_socket_t(const std::string &filename);
+        control_socket_t(rtpmidid::rtpmidid_t &rtpmidid, const std::string &filename);
         ~control_socket_t();
         void connection_ready();
         void data_ready(int fd);
