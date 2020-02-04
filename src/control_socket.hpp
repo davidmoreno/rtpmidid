@@ -16,27 +16,28 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #pragma once
-#include <exception>
+
 #include <string>
 #include <vector>
-#include <fmt/format.h>
 
-namespace rtpmidid{
-  extern const char *VERSION;
+namespace rtpmidid {
+    class rtpmidid_t;
 
-  /**
-   * @short All rtpmidi options in a nice struct to pass around
-   *
-   * This allows easy read config and parse command line and generate the
-   * rtpmidid object.
-   */
-  struct config_t {
-    std::string name;
-    std::vector<std::string> connect_to;
-    // Create clients at this ports to start with. Later will see.
-    std::vector<uint16_t> ports;
-    std::string host;
-    std::string control;
-  };
-  config_t parse_cmd_args(int argc, char **argv);
+    /**
+     * @short Opens a control socket that receives commands to control the rtpmidid
+     *
+     * See the /CONTROL.md file for known commands and protocol.
+     */
+    class control_socket_t {
+        time_t start_time;
+        int listen_socket;
+        std::vector<int> clients;
+        rtpmidid_t &rtpmidid;
+    public:
+        control_socket_t(rtpmidid::rtpmidid_t &rtpmidid, const std::string &filename);
+        ~control_socket_t();
+        void connection_ready();
+        void data_ready(int fd);
+        std::string parse_command(const std::string &);
+    };
 }

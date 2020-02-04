@@ -25,6 +25,7 @@
 #include "./rtpmidid.hpp"
 #include "./poller.hpp"
 #include "./config.hpp"
+#include "./control_socket.hpp"
 
 void sigterm_f(int){
   INFO("SIGTERM received. Closing.");
@@ -50,6 +51,7 @@ int main(int argc, char **argv){
 
     try{
       auto rtpmidid = rtpmidid::rtpmidid_t(&options);
+      auto control = rtpmidid::control_socket_t(rtpmidid, options.control);
 
       while(rtpmidid::poller.is_open()){
         rtpmidid::poller.wait();

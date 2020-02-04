@@ -39,6 +39,7 @@ const char *CMDLINE_HELP = ""
 "  --host <address>    My default IP. Needed to answer mDNS. Normally guessed but may be attached to another ip.\n"
 "  --port <port>       Opens local port as server. Default 5400. Can set several.\n"
 "  --connect <address> Connects the given address. This is default, no need for --connect\n"
+"  --control <path>    Creates a control socket. Check CONTROL.md. Default `/var/run/rtpmidid/control.sock`\n"
 "  address for connect:\n"
 "  hostname            Connects to hostname:5400 port using rtpmidi\n"
 "  hostname:port       Connects to a hostname on a given port\n"
@@ -52,12 +53,14 @@ typedef enum {
   ARG_HOST,
   ARG_PORT,
   ARG_CONNECT,
+  ARG_CONTROL,
 } optnames_e;
 
 config_t rtpmidid::parse_cmd_args(int argc, char **argv){
   config_t opts;
 
   opts.host = "0.0.0.0";
+  opts.control = "/var/run/rtpmidid/control.sock";
 
   optnames_e prevopt = ARG_NONE;
   for (auto i=0; i<argc; i++){
@@ -83,6 +86,8 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv){
         prevopt = ARG_PORT;
       } else if (argname == "--connect") {
         prevopt = ARG_CONNECT;
+      } else if (argname == "--control") {
+        prevopt = ARG_CONTROL;
       } else if (startswith(argname, "--")) {
         ERROR("Unknown option. Check options with --help.");
       } else {
@@ -107,7 +112,11 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv){
         case ARG_PORT:
           opts.ports.push_back(atoi(argv[i]));
           break;
+        case ARG_CONTROL:
+          opts.control = argv[i];
+          break;
       }
+      prevopt = ARG_NONE;
     }
   }
 
