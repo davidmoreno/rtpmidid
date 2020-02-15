@@ -37,7 +37,12 @@ using json = nlohmann::json;
 const char *MSG_CLOSE_CONN = "{\"event\": \"close\", \"detail\": \"Shutdown\", \"code\": 0}\n";
 const char *MSG_TOO_LONG = "{\"event\": \"close\", \"detail\": \"Message too long\", \"code\": 1}\n";
 const char *MSG_UNKNOWN_COMMAND = "{\"error\": \"Unknown command\", \"code\": 2}";
-const char *MSG_INVALID_PARAMS = "{\"error\": \"Invalid params\", \"code\": 3}";
+
+struct control_msg_t {
+    int id;
+    std::string method;
+    json params;
+};
 
 rtpmidid::control_socket_t::control_socket_t(rtpmidid::rtpmidid_t &rtpmidid, const std::string &socketfile) : rtpmidid(rtpmidid){
     int ret;
@@ -166,37 +171,59 @@ namespace rtpmidid{
 // Last declaration to avoid forward declaration
 
 std::string rtpmidid::control_socket_t::parse_command(const std::string &command){
+    control_msg_t msg;
+    msg.id = 0;
     DEBUG("Received command: {}", command);
     if (command.length() == 0){
         return MSG_UNKNOWN_COMMAND;
     }
-    auto command_split = rtpmidid::split(command);
-    auto cmd = command_split[0];
+    if (std::startswith(command, "{")){
+        auto js = json::parse(command);
+        msg.method = js["method"];
+        msg.params = js["params"];
+        if (js.contains("id"))
+            msg.id = js["id"];
+    } else {
+        auto command_split = rtpmidid::split(command);
+        msg.method = command_split[0];
+        std::vector<json> params;
+        msg.params = params;
+    }
+    json ret = nullptr ; // Fill the one you return
+    json error = json{{"detail", "Unknown command"}, {"code", 2}}; // By detault no command
 
-    if (cmd == "stats") {
-        auto js = rtpmidid::commands::stats(rtpmidid, start_time);
-        return js.dump(2);
+    if (msg.method == "stats") {
+        ret = rtpmidid::commands::stats(rtpmidid, start_time);
     }
-    if (cmd == "exit" || cmd == "quit") {
-        auto js = rtpmidid::commands::exit(rtpmidid);
-        return js.dump(2);
+    if (msg.method == "exit" || msg.method == "quit") {
+        ret = rtpmidid::commands::exit(rtpmidid);
     }
-    if (cmd == "create") {
-        json js;
-        switch (command_split.size() ){
+    if (msg.method == "create") {
+        switch (msg.params.size() ){
         case 2:
-            js = rtpmidid::commands::create(rtpmidid, command_split[1], command_split[1], "5004");
+            ret = rtpmidid::commands::create(rtpmidid, msg.params[1], msg.params[1], "5004");
             break;
         case 3:
-            js = rtpmidid::commands::create(rtpmidid, command_split[1], command_split[1], command_split[2]);
+            ret = rtpmidid::commands::create(rtpmidid, msg.params[1], msg.params[1], msg.params[2]);
             break;
         case 4:
-            js = rtpmidid::commands::create(rtpmidid, command_split[1], command_split[2], command_split[3]);
+            ret = rtpmidid::commands::create(rtpmidid, msg.params[1], msg.params[2], msg.params[3]);
             break;
         default:
-            return MSG_INVALID_PARAMS;
+            error = {{"detail", "Invalid params"}, {"code", 3}};
         }
-        return js.dump(2);
     }
-    return MSG_UNKNOWN_COMMAND;
+    if (msg.method == "help") {
+        ret = json{
+            {"commands", {"help", "exit", "create", "stats"}}
+        };
+    }
+
+    json retdata = {{"id", msg.id}};
+    if (!ret.is_null()){
+        retdata["result"] = ret;
+    } else {
+        retdata["error"] = error;
+    }
+    return retdata.dump(2);
 }
