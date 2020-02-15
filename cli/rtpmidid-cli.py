@@ -16,7 +16,7 @@ class Connection:
             raise
 
     def command(self, command):
-        self.socket.send(command.encode('utf8')+b'\n')
+        self.socket.send(json.dumps(command).encode('utf8')+b'\n')
         data = self.socket.recv(1024)
         return json.loads(data)
 
@@ -29,10 +29,22 @@ def main(argv):
         print(str(e))
         sys.exit(1)
 
-    for x in argv[1:]:
-        print(">>> %s" % x, file=sys.stderr)
-        ret = conn.command(x)
+    for cmd in parse_commands(argv[1:]):
+        print(">>> %s" % json.dumps(cmd), file=sys.stderr)
+        ret = conn.command(cmd)
         print(json.dumps(ret, indent=2))
+
+
+def parse_commands(argv):
+    cmd = []
+    for x in argv:
+        if x == '.':
+            yield {"method": cmd[0], "params": cmd[1:]}
+            cmd = []
+        else:
+            cmd.append(x)
+    if cmd:
+        yield {"method": cmd[0], "params": cmd[1:]}
 
 
 if __name__ == '__main__':

@@ -17,6 +17,24 @@ parameters and a JSON answer is returned.
 
 In the future a full JSON RPC protocol might be used.
 
+## CLI
+
+There is a very basic CLI at `cli/rtpmidid-cli.py` that receives command line
+arguments and are sent as commands:
+
+```shell
+cli/rtpmidid-cli.py help
+cli/rtpmidid-cli.py stats
+cli/rtpmidid-cli.py connect Synth 192.168.1.13 3000
+```
+
+or the three in one, separate them with a single `.`:
+
+```shell
+cli/rtpmidid-cli.py help . stats . connect Synth 192.168.1.13 3000
+```
+
+
 ## Line based protocol example:
 ```shell
 $ rlwrap nc -U /tmp/rtpmidid.sock
@@ -38,6 +56,10 @@ Hint: `rlwrap` allows to use readline on any command that uses stdin, as netcat.
 If there is an error the `error` key will be present, and an optional code.
 
 # Commands
+
+## help
+
+Shows some help about supported commands.
 
 ## stats
 

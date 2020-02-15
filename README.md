@@ -108,6 +108,16 @@ Development status / plan:
 * [ ] Journal support for Program Change
 * [ ] Journal support for Pitch Bend
 
+## CLI Control
+
+There is a basic CLI that used the [Unix socket control](#unix-socket-control).
+
+Use as:
+
+```shell
+cli/rtpmidid-cli.py help
+```
+
 ## Unix socket control
 
 It is possible to change runtime parameters.
