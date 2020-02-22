@@ -36,7 +36,7 @@ namespace rtpmidid {
     int midi_socket;
     uint16_t local_base_port;
     uint16_t remote_base_port;
-    struct sockaddr_in peer_addr; // Will reuse addr, just changing the port
+    struct sockaddr_in6 peer_addr; // Will reuse addr, just changing the port
     poller_t::timer_t timer_ck;
 
     rtpclient(std::string name, const std::string &address, int16_t port);

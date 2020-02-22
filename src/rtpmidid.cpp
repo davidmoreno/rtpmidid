@@ -41,22 +41,63 @@ rtpmidid_t::rtpmidid_t(config_t *config) :
   }
 
   for (auto &connect_to: config->connect_to){
-    auto s = ::rtpmidid::split(connect_to, ':');
-    if (s.size() == 1){
-      add_rtpmidi_client(s[0], s[0], 5004);
-    }
-    else if (s.size() == 2){
-      add_rtpmidi_client(s[0], s[0], std::stoi(s[1].c_str()));
-    }
-    else if (s.size() == 3){
-      add_rtpmidi_client(s[0], s[1], std::stoi(s[2].c_str()));
-    }
-    else {
-      ERROR("Invalid remote address. Format is ip, name:ip, or name:ip:port. {}", s.size());
-      throw exception("Invalid remote address to connect to.");
+    auto res = add_rtpmidi_client(connect_to);
+    if (res == std::nullopt){
+      throw rtpmidid::exception("Invalid address to connect to. Aborting.");
     }
   }
 }
+
+std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(const std::string &connect_to) {
+  INFO("Connecting to {}", connect_to);
+  std::vector<std::string> s;
+  auto find_sbracket = connect_to.find('[');
+  if (find_sbracket != std::string::npos) {
+    if (find_sbracket != 0)
+      s.push_back(connect_to.substr(0, find_sbracket-1));
+
+    auto find_ebracket = connect_to.find(']');
+    if (!find_ebracket){
+      ERROR("Error on address. For IPV6 Address, use name:[ipv6]:port. {}", connect_to);
+      return std::nullopt;
+    }
+    s.push_back(connect_to.substr(find_sbracket+1, find_ebracket - find_sbracket - 1));
+
+    if (find_ebracket + 2 < connect_to.size())
+      s.push_back(connect_to.substr(find_ebracket+2, std::string::npos));
+  } else {
+    s = ::rtpmidid::split(connect_to, ':');
+  }
+
+  if (s.size() == 1){
+    return add_rtpmidi_client(s[0], s[0], 5004);
+  }
+  else if (s.size() == 2){
+    uint16_t port;
+    try{
+      port = std::stoi(s[1].c_str());
+    } catch (std::exception &a) {
+      ERROR("Error conecting to {}: {} Port {}.", connect_to, a.what(), s[1]);
+      return std::nullopt;
+    }
+    return add_rtpmidi_client(s[0], s[0], port);
+  }
+  else if (s.size() == 3){
+    uint16_t port;
+    try{
+      port = std::stoi(s[2].c_str());
+    } catch (std::exception &a) {
+      ERROR("Error conecting to {}: {} Port {}.", connect_to, a.what(), s[2]);
+      return std::nullopt;
+    }
+    return add_rtpmidi_client(s[0], s[1], port);
+  }
+  else {
+    ERROR("Invalid remote address. Format is host, name:host, or name:host:port. Host can be a hostname, ip4 address, or [ip6] address (ip6:[::1]:5004). {}", s.size());
+    return std::nullopt;
+  }
+}
+
 
 void rtpmidid_t::announce_rtpmidid_server(const std::string &name, uint16_t port){
   mdns_rtpmidi.announce_rtpmidi(name, port);
@@ -193,7 +234,7 @@ std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
     name, address, net_port, 0, nullptr,
   };
 
-  INFO("New alsa port: {}, connects to {}:{} ({})", aseq_port, address, net_port, name);
+  INFO("New alsa port: {}, connects to host: {}, port: {}, name: {}", aseq_port, address, net_port, name);
   known_clients[aseq_port] = std::move(peer_info);
 
   seq.on_subscribe(aseq_port, [this, aseq_port](aseq::port_t port, const std::string &name){

@@ -66,15 +66,15 @@ rtpclient::~rtpclient(){
 void rtpclient::connect_to(std::string address, uint16_t port){
   remote_base_port = port;
   try{
-    struct sockaddr_in servaddr;
+    struct sockaddr_in6 servaddr;
     control_socket = socket(AF_INET, SOCK_DGRAM, 0);
     if (control_socket < 0){
       throw rtpmidid::exception("Can not open control socket. Out of sockets?");
     }
     memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = INADDR_ANY;
-    servaddr.sin_port = htons(local_base_port);
+    servaddr.sin6_family = AF_INET;
+    servaddr.sin6_addr = in6addr_any;
+    servaddr.sin6_port = htons(local_base_port);
     if (bind(control_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
       DEBUG("Error opening control socket, port {}", port);
       throw rtpmidid::exception("Can not open control socket. Maybe address is in use?");
@@ -82,7 +82,7 @@ void rtpclient::connect_to(std::string address, uint16_t port){
     if (local_base_port == 0){
       socklen_t len = sizeof(servaddr);
       ::getsockname(control_socket, (struct sockaddr*)&servaddr, &len);
-      local_base_port = htons(servaddr.sin_port);
+      local_base_port = htons(servaddr.sin6_port);
       DEBUG("Got automatic port {} for control", local_base_port);
     }
     poller.add_fd_in(control_socket, [this](int){ this->data_ready(rtppeer::CONTROL_PORT); });
@@ -92,9 +92,9 @@ void rtpclient::connect_to(std::string address, uint16_t port){
       throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
     }
     memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = INADDR_ANY;
-    servaddr.sin_port = htons(local_base_port + 1);
+    servaddr.sin6_family = AF_INET;
+    servaddr.sin6_addr = in6addr_any;
+    servaddr.sin6_port = htons(local_base_port + 1);
     if (bind(midi_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
       DEBUG("Error opening midi socket, port {}", port);
       throw rtpmidid::exception("Can not open MIDI socket. Maybe address is in use?");
@@ -116,8 +116,8 @@ void rtpclient::connect_to(std::string address, uint16_t port){
   }
 
   memset(&peer_addr, 0, sizeof(peer_addr));
-  peer_addr.sin_family = AF_INET;
-  inet_aton(address.c_str(), &peer_addr.sin_addr);
+  peer_addr.sin6_family = AF_INET;
+  inet_pton(AF_INET6, address.c_str(), &peer_addr.sin6_addr);
 
   DEBUG("Connecting control port {} to {}:{}", local_base_port, address, port);
 
@@ -136,9 +136,9 @@ void rtpclient::connect_to(std::string address, uint16_t port){
 
 void rtpclient::sendto(const parse_buffer_t &pb, rtppeer::port_e port){
   if (port == rtppeer::MIDI_PORT)
-    peer_addr.sin_port = htons(remote_base_port + 1);
+    peer_addr.sin6_port = htons(remote_base_port + 1);
   else
-    peer_addr.sin_port = htons(remote_base_port);
+    peer_addr.sin6_port = htons(remote_base_port);
 
   auto socket = rtppeer::MIDI_PORT == port ? midi_socket : control_socket;
 
@@ -163,7 +163,7 @@ void rtpclient::reset(){
 
 void rtpclient::data_ready(rtppeer::port_e port){
   uint8_t raw[1500];
-  struct sockaddr_in cliaddr;
+  struct sockaddr_in6 cliaddr;
   unsigned int len = sizeof(cliaddr);
   auto socket = port == rtppeer::CONTROL_PORT ? control_socket : midi_socket;
   auto n = recvfrom(socket, raw, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);

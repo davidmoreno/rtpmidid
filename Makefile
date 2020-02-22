@@ -24,3 +24,10 @@ test_rtppeer: compile
 
 test_rtpserver: compile
 	valgrind $(VALGRINDFLAGS) build/tests/test_rtpserver
+
+run: build/src/rtpmidid
+	build/src/rtpmidid
+
+setup:
+	sudo mkdir /var/run/rtpmidid
+	sudo chown $(shell whoami) /var/run/rtpmidid

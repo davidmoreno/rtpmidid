@@ -31,36 +31,36 @@ rtpserver::rtpserver(std::string _name, int16_t port) : name(std::move(_name)){
   midi_port = port + 1;
 
   try{
-    struct sockaddr_in servaddr;
-    control_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    struct sockaddr_in6 servaddr;
+    control_socket = socket(AF_INET6, SOCK_DGRAM, 0);
     if (control_socket < 0){
       throw rtpmidid::exception("Can not open control socket. Out of sockets?");
     }
     memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = INADDR_ANY;
-    servaddr.sin_port = htons(control_port);
+    servaddr.sin6_family = AF_INET6;
+    servaddr.sin6_addr = in6addr_any;
+    servaddr.sin6_port = htons(control_port);
     if (bind(control_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
       throw rtpmidid::exception("Can not open control socket. Maybe address is in use?");
     }
     if (control_port == 0){
       socklen_t len = sizeof(servaddr);
       ::getsockname(control_socket, (struct sockaddr*)&servaddr, &len);
-      control_port = htons(servaddr.sin_port);
+      control_port = htons(servaddr.sin6_port);
       DEBUG("Got automatic port {} for control", control_port);
       midi_port = control_port + 1;
     }
 
     poller.add_fd_in(control_socket, [this](int){ this->data_ready(rtppeer::CONTROL_PORT); });
 
-    midi_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    midi_socket = socket(AF_INET6, SOCK_DGRAM, 0);
     if (midi_socket < 0){
       throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
     }
     memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = INADDR_ANY;
-    servaddr.sin_port = htons(midi_port);
+    servaddr.sin6_family = AF_INET6;
+    servaddr.sin6_addr = in6addr_any;
+    servaddr.sin6_port = htons(midi_port);
     if (bind(midi_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
       throw rtpmidid::exception("Can not open MIDI socket. Maybe address is in use?");
     }
@@ -148,7 +148,7 @@ std::shared_ptr<rtppeer> rtpserver::get_peer_by_ssrc(uint32_t ssrc){
 
 void rtpserver::data_ready(rtppeer::port_e port){
   uint8_t raw[1500];
-  struct sockaddr_in cliaddr;
+  struct sockaddr_in6 cliaddr;
   unsigned int len = sizeof(cliaddr);
   auto socket = (port == rtppeer::CONTROL_PORT) ? control_socket : midi_socket;
   auto n = recvfrom(socket, raw, 1500, MSG_DONTWAIT, (struct sockaddr *) &cliaddr, &len);
@@ -175,19 +175,19 @@ void rtpserver::data_ready(rtppeer::port_e port){
   }
 }
 
-void rtpserver::sendto(const parse_buffer_t &pb, rtppeer::port_e port, struct sockaddr_in *address, int remote_base_port){
+void rtpserver::sendto(const parse_buffer_t &pb, rtppeer::port_e port, struct sockaddr_in6 *address, int remote_base_port){
   if (port == rtppeer::MIDI_PORT)
-    address->sin_port = htons(remote_base_port + 1);
+    address->sin6_port = htons(remote_base_port + 1);
   else
-    address->sin_port = htons(remote_base_port);
+    address->sin6_port = htons(remote_base_port);
 
   auto socket = rtppeer::MIDI_PORT == port ? midi_socket : control_socket;
 
-  // DEBUG("Send to {}, {}, family {} {}. {} {}", port, socket, AF_INET, address->sin_family, inet_ntoa(address->sin_addr), htons(address->sin_port));
+  // DEBUG("Send to {}, {}, family {} {}. {} {}", port, socket, AF_INET6, address->sin6_family, inet_ntoa(address->sin6_addr), htons(address->sin6_port));
 
   auto res = ::sendto(
     socket, pb.start, pb.capacity(),
-    MSG_CONFIRM, (const struct sockaddr *)address, sizeof(struct sockaddr_in)
+    MSG_CONFIRM, (const struct sockaddr *)address, sizeof(struct sockaddr_in6)
   );
 
   if (res < 0 || static_cast<uint32_t>(res) != pb.capacity()){
@@ -199,12 +199,12 @@ void rtpserver::sendto(const parse_buffer_t &pb, rtppeer::port_e port, struct so
 }
 
 
-void rtpserver::create_peer_from(parse_buffer_t &buffer, struct sockaddr_in *cliaddr, rtppeer::port_e port){
+void rtpserver::create_peer_from(parse_buffer_t &buffer, struct sockaddr_in6 *cliaddr, rtppeer::port_e port){
   auto peer = std::make_shared<rtppeer>(name);
-  auto address = std::make_shared<struct sockaddr_in>();
-  ::memcpy(address.get(), cliaddr, sizeof(struct sockaddr_in));
-  auto remote_base_port = htons(cliaddr->sin_port);
-  // DEBUG("Address family {} {}. From {}", cliaddr.sin_family, address->sin_family, socket);
+  auto address = std::make_shared<struct sockaddr_in6>();
+  ::memcpy(address.get(), cliaddr, sizeof(struct sockaddr_in6));
+  auto remote_base_port = htons(cliaddr->sin6_port);
+  // DEBUG("Address family {} {}. From {}", cliaddr.sin6_family, address->sin6_family, socket);
 
   // This is the send to the proper ports
   peer->sendto = [this, address, remote_base_port](const parse_buffer_t &buff, rtppeer::port_e port){
