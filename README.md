@@ -28,6 +28,14 @@ example Behringer DeepMind12 Synthetizer has support over Wifi.
 
 On MacOS there is support included in the OS.
 
+### iPad
+
+To test I used `MIDI Network` and `MIDI Wrench`. The first to manage
+connections, the second to test.
+
+I was able to communicate exporting at rtpmidid side conneting my gadget to the
+`Network` port. Then use the `MIDI Network` on the iPad to make the connection.
+
 ### Windows
 
 * [rtpmidi](https://www.tobias-erichsen.de/software/rtpmidi.html) by Tobias
