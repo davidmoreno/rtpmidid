@@ -41,7 +41,7 @@ rtpserver::rtpserver(std::string _name, int16_t port) : name(std::move(_name)){
     servaddr.sin6_addr = in6addr_any;
     servaddr.sin6_port = htons(control_port);
     if (bind(control_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
-      throw rtpmidid::exception("Can not open control socket. Maybe address is in use?");
+      throw rtpmidid::exception("Can not open rtpmidi control socket. {}.", strerror(errno));
     }
     if (control_port == 0){
       socklen_t len = sizeof(servaddr);
@@ -65,8 +65,8 @@ rtpserver::rtpserver(std::string _name, int16_t port) : name(std::move(_name)){
       throw rtpmidid::exception("Can not open MIDI socket. Maybe address is in use?");
     }
     poller.add_fd_in(midi_socket, [this](int){ this->data_ready(rtppeer::MIDI_PORT); });
-  } catch (...){
-    ERROR("Error creating server at port {}", control_port);
+  } catch (const std::exception &e){
+    ERROR("Error creating server at port {}: {}", control_port, e.what());
     if (control_socket){
       poller.remove_fd(control_socket);
       ::close(control_socket);
