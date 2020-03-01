@@ -70,27 +70,13 @@ std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(const std::string &connect
   }
 
   if (s.size() == 1){
-    return add_rtpmidi_client(s[0], s[0], 5004);
+    return add_rtpmidi_client(s[0], s[0], "5004");
   }
   else if (s.size() == 2){
-    uint16_t port;
-    try{
-      port = std::stoi(s[1].c_str());
-    } catch (std::exception &a) {
-      ERROR("Error conecting to {}: {} Port {}.", connect_to, a.what(), s[1]);
-      return std::nullopt;
-    }
-    return add_rtpmidi_client(s[0], s[0], port);
+    return add_rtpmidi_client(s[0], s[0], s[1].c_str());
   }
   else if (s.size() == 3){
-    uint16_t port;
-    try{
-      port = std::stoi(s[2].c_str());
-    } catch (std::exception &a) {
-      ERROR("Error conecting to {}: {} Port {}.", connect_to, a.what(), s[2]);
-      return std::nullopt;
-    }
-    return add_rtpmidi_client(s[0], s[1], port);
+    return add_rtpmidi_client(s[0], s[1], s[2].c_str());
   }
   else {
     ERROR("Invalid remote address. Format is host, name:host, or name:host:port. Host can be a hostname, ip4 address, or [ip6] address (ip6:[::1]:5004). {}", s.size());
@@ -107,7 +93,7 @@ void rtpmidid_t::unannounce_rtpmidid_server(const std::string &name, uint16_t po
   mdns_rtpmidi.unannounce_rtpmidi(name, port);
 }
 
-std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::string &name, uint16_t port){
+std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::string &name, const std::string &port){
   auto rtpserver = std::make_shared<::rtpmidid::rtpserver>(name, port);
 
   announce_rtpmidid_server(name, rtpserver->control_port);
@@ -164,7 +150,7 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::str
 
 std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_export_server(
       const std::string &name, uint8_t alsaport, aseq::port_t &from){
-    auto server = std::make_shared<rtpserver>(name, 0);
+    auto server = std::make_shared<rtpserver>(name, "0");
 
     announce_rtpmidid_server(name, server->control_port);
 
@@ -206,7 +192,7 @@ void rtpmidid_t::setup_alsa_seq(){
 }
 
 void rtpmidid_t::setup_mdns(){
-  mdns_rtpmidi.on_discovery([this](const std::string &name, const std::string &address, int32_t port){
+  mdns_rtpmidi.on_discovery([this](const std::string &name, const std::string &address, const std::string &port){
     this->add_rtpmidi_client(name, address, port);
   });
 
@@ -218,7 +204,7 @@ void rtpmidid_t::setup_mdns(){
 
 
 std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
-    const std::string &name, const std::string &address, uint16_t net_port){
+    const std::string &name, const std::string &address, const std::string &net_port){
   for (auto &known: known_clients){
     if (known.second.address == address && known.second.port == net_port){
       DEBUG(

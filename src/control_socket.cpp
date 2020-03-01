@@ -153,8 +153,7 @@ namespace rtpmidid{
         }
 
         static json create(rtpmidid::rtpmidid_t &rtpmidid, const std::string &name, const std::string &host, const std::string &port){
-            uint16_t port16 = atoi(port.c_str());
-            auto alsa_port = rtpmidid.add_rtpmidi_client(name, host, port16);
+            auto alsa_port = rtpmidid.add_rtpmidi_client(name, host, port);
             if (alsa_port.has_value()){
                 return {
                     {"alsa_port", alsa_port.value()},

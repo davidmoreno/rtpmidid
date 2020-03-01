@@ -34,7 +34,7 @@ namespace rtpmidid{
     std::string name;
     std::vector<std::string> connect_to;
     // Create clients at this ports to start with. Later will see.
-    std::vector<uint16_t> ports;
+    std::vector<std::string> ports;
     std::string host;
     std::string control;
   };

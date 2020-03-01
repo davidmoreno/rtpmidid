@@ -34,7 +34,7 @@ namespace rtpmidid{
   struct client_info{
     std::string name;
     std::string address;
-    uint16_t port;
+    std::string port;
     uint16_t use_count;
     // This might be not intialized if not really connected yet.
     std::shared_ptr<::rtpmidid::rtpclient> peer;
@@ -62,7 +62,7 @@ namespace rtpmidid{
 
     // Manual connect to a server.
     std::optional<uint8_t> add_rtpmidi_client(const std::string &hostdescription);
-    std::optional<uint8_t> add_rtpmidi_client(const std::string &name, const std::string &address, uint16_t port);
+    std::optional<uint8_t> add_rtpmidi_client(const std::string &name, const std::string &address, const std::string &port);
 
     void recv_rtpmidi_event(int port, parse_buffer_t &midi_data);
     void recv_alsamidi_event(int port, snd_seq_event_t *ev);
@@ -75,7 +75,7 @@ namespace rtpmidid{
     void unannounce_rtpmidid_server(const std::string &name, uint16_t port);
 
     // An import server is one that for each discovered connection, creates the alsa ports
-    std::shared_ptr<rtpserver> add_rtpmidid_import_server(const std::string &name, uint16_t port);
+    std::shared_ptr<rtpserver> add_rtpmidid_import_server(const std::string &name, const std::string &port);
 
     // An export server is one that exports a local ALSA seq port. It is announced with the
     // aseq port name and so on. There is one per connection to the "Network"

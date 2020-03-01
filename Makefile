@@ -21,6 +21,7 @@ clean:
 test: test_mdns test_rtppeer test_rtpserver
 
 VALGRINDFLAGS := --leak-check=full --error-exitcode=1
+RTPMIDID_ARGS := --port 10000
 
 test_mdns: compile
 	valgrind $(VALGRINDFLAGS) build/tests/test_mdns
@@ -32,7 +33,10 @@ test_rtpserver: compile
 	valgrind $(VALGRINDFLAGS) build/tests/test_rtpserver
 
 run: build/src/rtpmidid
-	build/src/rtpmidid
+	build/src/rtpmidid $(RTPMIDID_ARGS)
+
+valgrind_run: build/src/rtpmidid
+	valgrind build/src/rtpmidid $(RTPMIDID_ARGS)
 
 setup:
 	sudo mkdir /var/run/rtpmidid

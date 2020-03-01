@@ -46,7 +46,7 @@ namespace rtpmidid{
     uint16_t midi_port;
     uint16_t control_port;
 
-    rtpserver(std::string name, int16_t port);
+    rtpserver(std::string name, const std::string &port);
     ~rtpserver();
 
     // Returns the peer for that packet, or nullptr

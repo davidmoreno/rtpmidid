@@ -40,7 +40,7 @@ namespace rtpmidid {
     AvahiClient *client;
     AvahiEntryGroup *group;
     std::vector<announcement_t> announcements;
-    std::function<void(const std::string &name, const std::string &address, int32_t port)> event_discover;
+    std::function<void(const std::string &name, const std::string &address, const std::string &port)> event_discover;
     std::function<void(const std::string &name)> event_remove;
 
     mdns_rtpmidi();
@@ -49,7 +49,7 @@ namespace rtpmidid {
     void announce_rtpmidi(const std::string &name, const int32_t port);
     void unannounce_rtpmidi(const std::string &name, const int32_t port);
 
-    void on_discovery(const std::function<void(const std::string &name, const std::string &address, int32_t port)> &f) {
+    void on_discovery(const std::function<void(const std::string &name, const std::string &address, const std::string &port)> &f) {
       event_discover = f;
     };
     void on_removed(const std::function<void(const std::string &name)> &f){

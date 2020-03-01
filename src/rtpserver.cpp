@@ -16,6 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 #include "./rtpserver.hpp"
 #include "./poller.hpp"
@@ -25,31 +28,60 @@
 
 using namespace rtpmidid;
 
-rtpserver::rtpserver(std::string _name, int16_t port) : name(std::move(_name)){
+rtpserver::rtpserver(std::string _name, const std::string &port) : name(std::move(_name)){
   control_socket = midi_socket = 0;
-  control_port = port;
-  midi_port = port + 1;
+  control_port = 0;
+  midi_port = 0;
+  struct addrinfo *sockaddress_list = nullptr;
 
   try{
-    struct sockaddr_in6 servaddr;
-    control_socket = socket(AF_INET6, SOCK_DGRAM, 0);
-    if (control_socket < 0){
-      throw rtpmidid::exception("Can not open control socket. Out of sockets?");
+    struct addrinfo hints;
+
+    int res;
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_flags = AI_PASSIVE;
+
+    res = getaddrinfo("::", port.c_str(), &hints, &sockaddress_list);
+    if (res < 0) {
+      DEBUG("Error resolving address {}:{}", "::", port);
+      throw rtpmidid::exception("Can not resolve address {}:{}. {}", "::", port, strerror(errno));
     }
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin6_family = AF_INET6;
-    servaddr.sin6_addr = in6addr_any;
-    servaddr.sin6_port = htons(control_port);
-    if (bind(control_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
+    // Get addr info may return several options, try them in order.
+    // we asusme that if the ocntrol success to be created the midi will too.
+    char host[NI_MAXHOST], service[NI_MAXSERV];
+    socklen_t peer_addr_len = NI_MAXHOST;
+    auto listenaddr = sockaddress_list;
+    for(; listenaddr != nullptr; listenaddr = listenaddr->ai_next) {
+      getnameinfo(
+        listenaddr->ai_addr,
+        peer_addr_len, host, NI_MAXHOST,
+        service, NI_MAXSERV, NI_NUMERICSERV
+      );
+      DEBUG("Try listen at {}:{}", host, service);
+
+      control_socket = socket(listenaddr->ai_family, listenaddr->ai_socktype, listenaddr->ai_protocol);
+      if (control_socket < 0){
+        continue; // Bad socket. Try next.
+      }
+      if (bind(control_socket, listenaddr->ai_addr, listenaddr->ai_addrlen) == 0){
+        break;
+      }
+      close(control_socket);
+    }
+    if (!listenaddr){
       throw rtpmidid::exception("Can not open rtpmidi control socket. {}.", strerror(errno));
     }
-    if (control_port == 0){
-      socklen_t len = sizeof(servaddr);
-      ::getsockname(control_socket, (struct sockaddr*)&servaddr, &len);
-      control_port = htons(servaddr.sin6_port);
-      DEBUG("Got automatic port {} for control", control_port);
-      midi_port = control_port + 1;
+    auto servstruct = getservbyname(service, nullptr);
+
+    if (servstruct){
+      control_port = servstruct->s_port;
+    } else {
+      control_port = std::stoi(service);
     }
+    DEBUG("Control port at {}:{}", host, control_port);
+    midi_port = control_port + 1;
 
     poller.add_fd_in(control_socket, [this](int){ this->data_ready(rtppeer::CONTROL_PORT); });
 
@@ -57,12 +89,10 @@ rtpserver::rtpserver(std::string _name, int16_t port) : name(std::move(_name)){
     if (midi_socket < 0){
       throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
     }
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin6_family = AF_INET6;
-    servaddr.sin6_addr = in6addr_any;
-    servaddr.sin6_port = htons(midi_port);
-    if (bind(midi_socket, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
-      throw rtpmidid::exception("Can not open MIDI socket. Maybe address is in use?");
+    // Reuse listenaddr, just on next port
+    ((sockaddr_in*)listenaddr->ai_addr)->sin_port = htons( ntohs(((sockaddr_in*)listenaddr->ai_addr)->sin_port) +1 );
+    if (bind(midi_socket, listenaddr->ai_addr, listenaddr->ai_addrlen) < 0){
+      throw rtpmidid::exception("Can not open MIDI socket. {}.", strerror(errno));
     }
     poller.add_fd_in(midi_socket, [this](int){ this->data_ready(rtppeer::MIDI_PORT); });
   } catch (const std::exception &e){
@@ -77,7 +107,13 @@ rtpserver::rtpserver(std::string _name, int16_t port) : name(std::move(_name)){
       ::close(midi_socket);
       midi_socket = 0;
     }
+    if (sockaddress_list){
+      freeaddrinfo(sockaddress_list);
+    }
     throw;
+  }
+  if (sockaddress_list){
+    freeaddrinfo(sockaddress_list);
   }
 
   INFO("Listening RTP MIDI connections at 0.0.0.0:{}, with name: '{}'",

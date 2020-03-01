@@ -250,7 +250,7 @@ static void resolve_callback(
               !!(flags & AVAHI_LOOKUP_RESULT_CACHED));
 
       //FIXME: address is not correct for interface (!), so is not unique, how to make unique? or filter on interface?
-      mr->event_discover(name, a, port);
+      mr->event_discover(name, a, std::to_string(port));
 
       avahi_free(t);
     }

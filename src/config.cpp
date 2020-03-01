@@ -110,7 +110,7 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv){
           INFO("Set RTP MIDI listen host to {}", opts.host);
           break;
         case ARG_PORT:
-          opts.ports.push_back(atoi(argv[i]));
+          opts.ports.push_back(argv[i]);
           break;
         case ARG_CONTROL:
           opts.control = argv[i];
@@ -127,7 +127,7 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv){
   }
 
   if (opts.ports.size() == 0){
-    opts.ports.push_back(5004);
+    opts.ports.push_back("5004");
   }
 
   return opts;
