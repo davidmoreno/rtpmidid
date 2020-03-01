@@ -1,4 +1,10 @@
-all: compile
+help:
+	@echo "Makefile for rtpmidid"
+	@echo
+	@echo "compile -- Creates the build directory and compiles the rtpmidid"
+	@echo "run     -- Compiles and runs the daemon"
+	@echo "setup   -- Creates the socket control file"
+	@echo
 
 compile: build/bin/rtpmidid
 
