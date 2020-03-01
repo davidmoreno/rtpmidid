@@ -187,6 +187,9 @@ std::string rtpmidid::control_socket_t::parse_command(const std::string &command
         auto command_split = rtpmidid::split(command);
         msg.method = command_split[0];
         std::vector<json> params;
+        for (auto i=1; i<command_split.size(); i++) {
+            params.push_back(command_split[i]);
+        }
         msg.params = params;
     }
     json ret = nullptr ; // Fill the one you return
@@ -200,14 +203,14 @@ std::string rtpmidid::control_socket_t::parse_command(const std::string &command
     }
     if (msg.method == "create") {
         switch (msg.params.size() ){
+        case 1:
+            ret = rtpmidid::commands::create(rtpmidid, msg.params[0], msg.params[0], "5004");
+            break;
         case 2:
-            ret = rtpmidid::commands::create(rtpmidid, msg.params[1], msg.params[1], "5004");
+            ret = rtpmidid::commands::create(rtpmidid, msg.params[0], msg.params[0], msg.params[1]);
             break;
         case 3:
-            ret = rtpmidid::commands::create(rtpmidid, msg.params[1], msg.params[1], msg.params[2]);
-            break;
-        case 4:
-            ret = rtpmidid::commands::create(rtpmidid, msg.params[1], msg.params[2], msg.params[3]);
+            ret = rtpmidid::commands::create(rtpmidid, msg.params[0], msg.params[1], msg.params[2]);
             break;
         default:
             error = {{"detail", "Invalid params"}, {"code", 3}};
