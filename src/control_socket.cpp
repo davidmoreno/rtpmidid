@@ -29,6 +29,7 @@
 #include "stringpp.hpp"
 #include "config.hpp"
 #include "rtpmidid.hpp"
+#include "rtpserver.hpp"
 #include "control_socket.hpp"
 #include "exceptions.hpp"
 
@@ -132,13 +133,25 @@ namespace rtpmidid{
             }
             js["clients"] = clients;
 
-            std::vector<json> servers;
+            std::vector<json> connections;
             for(auto port_client: rtpmidid.known_servers_connections){
                 auto client = port_client.second;
                 json cl = {
                     {"name", client.name},
                 };
                 clients.push_back(cl);
+            }
+            js["connections"] = connections;
+
+            std::vector<json> servers;
+            for (auto server: rtpmidid.servers){
+              json data = {
+                {"name", server->name},
+                {"port", server->midi_port},
+                {"connect_listeners", server->connected_events.size()},
+                {"midi_listeners", server->midi_event_events.size()},
+              };
+              servers.push_back(data);
             }
             js["servers"] = servers;
 
