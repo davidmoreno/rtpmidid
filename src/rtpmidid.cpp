@@ -196,9 +196,9 @@ void rtpmidid_t::setup_mdns(){
     this->add_rtpmidi_client(name, address, port);
   });
 
-  mdns_rtpmidi.on_removed([](const std::string &name){
+  mdns_rtpmidi.on_removed([this](const std::string &name){
     // TODO : remove client / alsa sessions
-    WARNING("NOT IMPLEMENTED : network browser removed client {} ", name);
+    this->remove_rtpmidi_client(name);
   });
 }
 
@@ -252,6 +252,19 @@ std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
   return aseq_port;
 }
 
+void rtpmidid_t::remove_rtpmidi_client(const std::string &name){
+  INFO("Removing rtp midi client {}", name);
+
+  for (auto I=known_clients.begin(), endI=known_clients.end(); I!=endI; ++I){
+    if ((*I).second.name == name){
+      auto &known = *I;
+      DEBUG("Found client to delete: alsa port {}. IP {}:{}.", known.first, known.second.address, known.second.port);
+      remove_client(known.first);
+      return;
+    }
+  }
+  WARNING("Service is not currently known to delete: {}", name);
+}
 
 void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data){
   uint8_t current_command =  0;
@@ -404,4 +417,5 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &s
 void rtpmidid_t::remove_client(uint8_t port){
   DEBUG("Removing peer from known peers list.");
   known_clients.erase(port);
+  seq.remove_port(port);
 }
