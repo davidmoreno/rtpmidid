@@ -150,7 +150,7 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::str
 
 std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_export_server(
       const std::string &name, uint8_t alsaport, aseq::port_t &from){
-    auto server = std::make_shared<rtpserver>(name, "0");
+    auto server = std::make_shared<rtpserver>(name, "");
 
     announce_rtpmidid_server(name, server->control_port);
 

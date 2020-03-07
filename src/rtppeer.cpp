@@ -138,16 +138,19 @@ void rtppeer::parse_command_ok(parse_buffer_t &buffer, port_e port){
   }
 
   INFO(
-    "Got confirmation from {}, initiator_id: {} ({}) ssrc: {}, name: {}",
-    remote_name, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name
+    "Got confirmation from {}, initiator_id: {} ({}) ssrc: {}, name: {}, port: {}",
+    remote_name, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name,
+    port == CONTROL_PORT ? "Control" : port == MIDI_PORT ? "MIDI" : "Unknown"
   );
-  if (port == MIDI_PORT)
+  if (port == MIDI_PORT) {
     status = status_e(int(status) | int(MIDI_CONNECTED));
-  if (port == CONTROL_PORT){
+  } else if (port == CONTROL_PORT){
     status = status_e(int(status) | int(CONTROL_CONNECTED));
     for (auto &ec: event_connect_control) {
       ec(remote_name);
     }
+  } else {
+    ERROR("Got data on unknown PORT! {}", port);
   }
 
   if (status == CONNECTED){
@@ -202,6 +205,7 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port){
     status = status_e(int(status) | int(CONTROL_CONNECTED));
 
   if (status == CONNECTED){
+    INFO("Connected.");
     for (auto &ec: event_connect) {
       ec(remote_name);
     }

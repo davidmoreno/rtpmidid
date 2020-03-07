@@ -126,7 +126,8 @@ void rtpclient::connect_to(std::string address, std::string port){
       throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
     }
     // Reuse servaddr, just on next port
-    ((sockaddr_in*)serveraddr->ai_addr)->sin_port = htons( ntohs(((sockaddr_in*)serveraddr->ai_addr)->sin_port) +1 );
+    remote_base_port = ntohs(((sockaddr_in*)serveraddr->ai_addr)->sin_port);
+    ((sockaddr_in*)serveraddr->ai_addr)->sin_port = htons( remote_base_port + 1 );
 
     if (connect(midi_socket, serveraddr->ai_addr, serveraddr->ai_addrlen) < 0){
       DEBUG("Error opening midi socket, port {}", port);
@@ -160,15 +161,15 @@ void rtpclient::connect_to(std::string address, std::string port){
 
   // If not connected, connect now the MIDI port
   peer.on_connect_control([this, address, port](const std::string &name) {
-    // DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address, port + 1);
+    DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address, remote_base_port + 1);
     peer.connect_to(rtppeer::MIDI_PORT);
   });
-
-  peer.connect_to(rtppeer::CONTROL_PORT);
 
   peer.on_connect([this](const std::string &){
     start_ck_1min_sync();
   });
+
+  peer.connect_to(rtppeer::CONTROL_PORT);
 }
 
 void rtpclient::sendto(const parse_buffer_t &pb, rtppeer::port_e port){

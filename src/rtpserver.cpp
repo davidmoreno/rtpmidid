@@ -43,7 +43,9 @@ rtpserver::rtpserver(std::string _name, const std::string &port) : name(std::mov
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE;
 
-    res = getaddrinfo("::", port.c_str(), &hints, &sockaddress_list);
+    const char *cport = (port == "") ? nullptr : port.c_str();
+
+    res = getaddrinfo("::", cport, &hints, &sockaddress_list);
     if (res < 0) {
       DEBUG("Error resolving address {}:{}", "::", port);
       throw rtpmidid::exception("Can not resolve address {}:{}. {}", "::", port, strerror(errno));
@@ -73,13 +75,14 @@ rtpserver::rtpserver(std::string _name, const std::string &port) : name(std::mov
     if (!listenaddr){
       throw rtpmidid::exception("Can not open rtpmidi control socket. {}.", strerror(errno));
     }
-    auto servstruct = getservbyname(service, nullptr);
-
-    if (servstruct){
-      control_port = servstruct->s_port;
-    } else {
-      control_port = std::stoi(service);
+    struct sockaddr_in6 addr;
+    unsigned int len = sizeof(addr);
+    res = ::getsockname(control_socket, (sockaddr*)&addr, &len);
+    if (res < 0){
+      throw rtpmidid::exception("Error getting info the newly created midi socket. Can not create server.");
     }
+    control_port = ntohs(addr.sin6_port);
+
     DEBUG("Control port at {}:{}", host, control_port);
     midi_port = control_port + 1;
 
@@ -90,7 +93,7 @@ rtpserver::rtpserver(std::string _name, const std::string &port) : name(std::mov
       throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
     }
     // Reuse listenaddr, just on next port
-    ((sockaddr_in*)listenaddr->ai_addr)->sin_port = htons( ntohs(((sockaddr_in*)listenaddr->ai_addr)->sin_port) +1 );
+    ((sockaddr_in*)listenaddr->ai_addr)->sin_port = htons( midi_port );
     if (bind(midi_socket, listenaddr->ai_addr, listenaddr->ai_addrlen) < 0){
       throw rtpmidid::exception("Can not open MIDI socket. {}.", strerror(errno));
     }
