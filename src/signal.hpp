@@ -18,12 +18,13 @@
 #pragma once
 
 #include <functional>
-#include <vector>
+#include <map>
+#include "logger.hpp"
 
 template<typename... Args>
 class signal_t {
 public:
-    int connect(std::function<void(Args...)> const &f) {
+    int connect(std::function<void(Args...)> const &&f) {
         auto cid = max_id++;
         slots[cid]=std::move(f);
         return cid;
@@ -35,7 +36,7 @@ public:
 
     void operator()(Args... args){
         for (auto const &f: slots){
-            f(std::forward<Args>(args)...);
+            f.second(std::forward<Args>(args)...);
         }
     }
 
@@ -43,6 +44,6 @@ public:
         return slots.size();
     }
 private:
-    int max_id = 0;
-    std::vector<std::function<void(Args...)>> slots;
+    uint32_t max_id = 0;
+    std::map<uint32_t, std::function<void(Args...)>> slots;
 };
