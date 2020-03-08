@@ -93,7 +93,7 @@ void rtpmidid::control_socket_t::connection_ready(){
 
 void rtpmidid::control_socket_t::data_ready(int fd){
     char buf[1024];
-    int l = recv(fd, buf, sizeof(buf), 0);
+    auto l = recv(fd, buf, sizeof(buf), 0);
     if (l <= 0){
         close(fd);
         DEBUG("Closed control connection: {}", fd);
