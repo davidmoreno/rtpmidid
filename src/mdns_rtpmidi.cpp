@@ -250,7 +250,7 @@ static void resolve_callback(
               !!(flags & AVAHI_LOOKUP_RESULT_CACHED));
 
       //FIXME: address is not correct for interface (!), so is not unique, how to make unique? or filter on interface?
-      mr->event_discover(name, a, std::to_string(port));
+      mr->discover_event(name, a, std::to_string(port));
 
       avahi_free(t);
     }
@@ -287,7 +287,7 @@ static void browse_callback(
       break;
     case AVAHI_BROWSER_REMOVE:
       INFO("(Browser) REMOVE: service '{}' of type '{}' in domain '{}'", name, type, domain);
-      mr->event_remove(name);
+      mr->remove_event(name);
       break;
     case AVAHI_BROWSER_ALL_FOR_NOW:
     case AVAHI_BROWSER_CACHE_EXHAUSTED:

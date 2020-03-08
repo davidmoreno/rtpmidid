@@ -38,6 +38,10 @@ public:
             f(std::forward<Args>(args)...);
         }
     }
+
+    size_t count(){
+        return slots.size();
+    }
 private:
     int max_id = 0;
     std::vector<std::function<void(Args...)>> slots;

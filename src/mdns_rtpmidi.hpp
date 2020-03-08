@@ -23,6 +23,8 @@
 #include <vector>
 #include <functional>
 
+#include "signal.hpp"
+
 struct AvahiClient;
 typedef struct AvahiClient AvahiClient;
 typedef struct AvahiPoll AvahiPoll;
@@ -40,20 +42,15 @@ namespace rtpmidid {
     AvahiClient *client;
     AvahiEntryGroup *group;
     std::vector<announcement_t> announcements;
-    std::function<void(const std::string &name, const std::string &address, const std::string &port)> event_discover;
-    std::function<void(const std::string &name)> event_remove;
+    // name, address, port
+    signal_t<const std::string &, const std::string &, const std::string &>
+       discover_event;
+    signal_t<const std::string &> remove_event;
 
     mdns_rtpmidi();
     ~mdns_rtpmidi();
     void announce_all();
     void announce_rtpmidi(const std::string &name, const int32_t port);
     void unannounce_rtpmidi(const std::string &name, const int32_t port);
-
-    void on_discovery(const std::function<void(const std::string &name, const std::string &address, const std::string &port)> &f) {
-      event_discover = f;
-    };
-    void on_removed(const std::function<void(const std::string &name)> &f){
-      event_remove = f;
-    }
   };
 }

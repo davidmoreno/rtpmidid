@@ -192,11 +192,11 @@ void rtpmidid_t::setup_alsa_seq(){
 }
 
 void rtpmidid_t::setup_mdns(){
-  mdns_rtpmidi.on_discovery([this](const std::string &name, const std::string &address, const std::string &port){
+  mdns_rtpmidi.discover_event.connect([this](const std::string &name, const std::string &address, const std::string &port){
     this->add_rtpmidi_client(name, address, port);
   });
 
-  mdns_rtpmidi.on_removed([this](const std::string &name){
+  mdns_rtpmidi.remove_event.connect([this](const std::string &name){
     // TODO : remove client / alsa sessions
     this->remove_rtpmidi_client(name);
   });
