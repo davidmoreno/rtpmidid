@@ -99,7 +99,7 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::str
   announce_rtpmidid_server(name, rtpserver->control_port);
 
   auto wrtpserver = std::weak_ptr(rtpserver);
-  rtpserver->on_connected([this, wrtpserver, port](std::shared_ptr<::rtpmidid::rtppeer> peer){
+  rtpserver->connected_event.connect([this, wrtpserver, port](std::shared_ptr<::rtpmidid::rtppeer> peer){
     if (wrtpserver.expired()){
       return;
     }
@@ -171,7 +171,7 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_export_server(
       alsa_to_server.erase(from);
     });
 
-    server->on_midi_event_on_any_peer([this, alsaport](parse_buffer_t &buffer){
+    server->midi_event.connect([this, alsaport](parse_buffer_t &buffer){
       this->recv_rtpmidi_event(alsaport, buffer);
     });
 
