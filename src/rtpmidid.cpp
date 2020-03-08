@@ -108,7 +108,7 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::str
     INFO("Remote client connects to local server at port {}. Name: {}", port, peer->remote_name);
     auto aseq_port = seq.create_port(peer->remote_name);
 
-    peer->on_midi([this, aseq_port](parse_buffer_t &pb){
+    peer->midi_event.connect([this, aseq_port](parse_buffer_t &pb){
       this->recv_rtpmidi_event(aseq_port, pb);
     });
     seq.on_midi_event(aseq_port, [this, aseq_port](snd_seq_event_t *ev){
@@ -131,7 +131,7 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::str
       // And send
       conn->peer->send_midi(stream);
     });
-    peer->on_disconnect([this, aseq_port]{
+    peer->disconnect_event.connect([this, aseq_port]{
       seq.remove_port(aseq_port);
       known_servers_connections.erase(aseq_port);
     });
@@ -228,7 +228,7 @@ std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
     auto peer_info = &known_clients[aseq_port];
     if (!peer_info->peer){
       peer_info->peer = std::make_shared<rtpclient>(name, peer_info->address, peer_info->port);
-      peer_info->peer->on_midi([this, aseq_port](parse_buffer_t &pb){
+      peer_info->peer->peer.midi_event.connect([this, aseq_port](parse_buffer_t &pb){
         this->recv_rtpmidi_event(aseq_port, pb);
       });
       peer_info->use_count++;
@@ -352,7 +352,7 @@ void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev){
   stream.position = stream.start;
 
   // And send
-  peer_info->peer->send_midi(stream);
+  peer_info->peer->peer.midi_event(stream);
 }
 
 void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &stream){

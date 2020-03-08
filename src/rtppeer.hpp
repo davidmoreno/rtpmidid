@@ -20,6 +20,7 @@
 #include <string>
 #include <functional>
 #include <arpa/inet.h>
+#include "signal.hpp"
 
 namespace rtpmidid {
   struct parse_buffer_t;
@@ -57,33 +58,17 @@ namespace rtpmidid {
     uint16_t remote_seq_nr;
     uint64_t timestamp_start; // Time in ms
     uint64_t latency;
-    std::function<void(parse_buffer_t &)> event_midi;
-    std::vector<std::function<void(const std::string &)>> event_connect_control;
-    std::vector<std::function<void(const std::string &)>> event_connect;
-    std::function<void(const parse_buffer_t &, port_e)> sendto;
-    std::function<void(void)> event_disconnect;
+
+    signal_t<parse_buffer_t&> midi_event;
+    signal_t<const std::string &, status_e> connected_event;
+    signal_t<parse_buffer_t &&, port_e> send_event;
+    signal_t<> disconnect_event;
 
     static bool is_command(parse_buffer_t &);
     static bool is_feedback(parse_buffer_t &);
 
     rtppeer(std::string _name);
     ~rtppeer();
-
-    void on_midi(std::function<void(parse_buffer_t &)> f){
-      event_midi = f;
-    }
-    void on_connect(std::function<void(const std::string &)> f){
-      event_connect.push_back(f);
-    }
-    void on_connect_control(std::function<void(const std::string &)> f){
-      event_connect_control.push_back(f);
-    }
-    void on_disconnect(std::function<void()> f){
-      event_disconnect = f;
-    }
-    void on_send(std::function<void(const parse_buffer_t &, port_e)> f){
-      sendto = f;
-    }
 
     bool is_connected(){
       return status == CONNECTED;

@@ -42,9 +42,9 @@ rtpclient::rtpclient(std::string name, const std::string &address, const std::st
   control_socket = -1;
   midi_socket = -1;
   peer.initiator_id = rand();
-  peer.sendto = [this](const parse_buffer_t &data, rtppeer::port_e port){
+  peer.send_event.connect([this](const parse_buffer_t &data, rtppeer::port_e port){
     this->sendto(data, port);
-  };
+  });
 
   connect_to(address, port);
 }
@@ -160,13 +160,14 @@ void rtpclient::connect_to(std::string address, std::string port){
   DEBUG("Connecting control port {} to {}:{}", local_base_port, host, service);
 
   // If not connected, connect now the MIDI port
-  peer.on_connect_control([this, address, port](const std::string &name) {
-    DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address, remote_base_port + 1);
-    peer.connect_to(rtppeer::MIDI_PORT);
-  });
+  peer.connected_event.connect([this, address, port](const std::string &name, rtppeer::status_e status) {
+    if (status == rtppeer::CONTROL_CONNECTED) {
+      DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address, remote_base_port + 1);
+      peer.connect_to(rtppeer::MIDI_PORT);
+    } else if (status == rtppeer::CONNECTED){
+      start_ck_1min_sync();
 
-  peer.on_connect([this](const std::string &){
-    start_ck_1min_sync();
+    }
   });
 
   peer.connect_to(rtppeer::CONTROL_PORT);

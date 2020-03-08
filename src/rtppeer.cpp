@@ -146,18 +146,10 @@ void rtppeer::parse_command_ok(parse_buffer_t &buffer, port_e port){
     status = status_e(int(status) | int(MIDI_CONNECTED));
   } else if (port == CONTROL_PORT){
     status = status_e(int(status) | int(CONTROL_CONNECTED));
-    for (auto &ec: event_connect_control) {
-      ec(remote_name);
-    }
   } else {
     ERROR("Got data on unknown PORT! {}", port);
   }
-
-  if (status == CONNECTED){
-    for (auto &ec: event_connect) {
-      ec(remote_name);
-    }
-  }
+  connected_event(remote_name, status);
 }
 
 
@@ -197,19 +189,14 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port){
   response_buffer.write_uint32(local_ssrc);
   response_buffer.write_str0(local_name);
 
-  sendto(response_buffer, port);
+  send_event(std::move(response_buffer), port);
 
   if (port == MIDI_PORT)
     status = status_e(int(status) | int(MIDI_CONNECTED));
   if (port == CONTROL_PORT)
     status = status_e(int(status) | int(CONTROL_CONNECTED));
 
-  if (status == CONNECTED){
-    INFO("Connected.");
-    for (auto &ec: event_connect) {
-      ec(remote_name);
-    }
-  }
+  connected_event(remote_name, status);
 }
 
 
@@ -230,10 +217,7 @@ void rtppeer::parse_command_by(parse_buffer_t &buffer, port_e port){
   status = (status_e) (((int)status) & ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
   INFO("Disconnect from {}, {} port. Status {:X}", remote_name, port == MIDI_PORT ? "MIDI" : "Control", (int)status);
 
-  // Normally this will schedule removal of peer.
-  if (event_disconnect){
-    event_disconnect();
-  }
+  disconnect_event();
 }
 
 void rtppeer::parse_command_no(parse_buffer_t &buffer, port_e port){
@@ -249,10 +233,7 @@ void rtppeer::parse_command_no(parse_buffer_t &buffer, port_e port){
   WARNING("Invitation Rejected (NO) : remote ssrc {:X}",remote_ssrc);
   INFO("Disconnect from {}, {} port. Status {:X}", remote_name, port == MIDI_PORT ? "MIDI" : "Control", (int)status);
 
-  // Normally this will schedule removal of peer.
-  if (event_disconnect){
-    event_disconnect();
-  }
+  disconnect_event();
 }
 
 void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port){
@@ -320,7 +301,7 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port){
   // DEBUG("Send packet CK");
   // retbuffer.print_hex();
 
-  sendto(retbuffer, port);
+  send_event(std::move(retbuffer), port);
 }
 
 void rtppeer::send_ck0(){
@@ -348,7 +329,7 @@ void rtppeer::send_ck0(){
   // DEBUG("Send packet CK");
   // retbuffer.print_hex();
 
-  sendto(retbuffer, MIDI_PORT);
+  send_event(std::move(retbuffer), MIDI_PORT);
 }
 
 void rtppeer::parse_feedback(parse_buffer_t &buffer){
@@ -389,8 +370,8 @@ void rtppeer::parse_midi(parse_buffer_t &buffer){
   buffer.check_enought(length);
 
   parse_buffer_t midi_data(buffer.position, length);
-  if (event_midi)
-    event_midi(midi_data);
+
+  midi_event(midi_data);
 }
 
 /**
@@ -432,7 +413,7 @@ void rtppeer::send_midi(parse_buffer_t &events){
   // events.print_hex();
   // buffer.print_hex();
 
-  sendto(buffer, MIDI_PORT);
+  send_event(std::move(buffer), MIDI_PORT);
 }
 
 void rtppeer::send_goodbye(port_e to_port){
@@ -445,19 +426,18 @@ void rtppeer::send_goodbye(port_e to_port){
   buffer.write_uint32(initiator_id);
   buffer.write_uint32(local_ssrc);
 
-  sendto(buffer, to_port);
+  send_event(std::move(buffer), to_port);
 
   status = status_e(int(status) & ~int(to_port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED));
 
-  if (status == NOT_CONNECTED && event_disconnect){
-    event_disconnect();
+  if (status == NOT_CONNECTED){
+    disconnect_event();
   }
 }
 
 void rtppeer::connect_to(port_e rtp_port){
   uint8_t packet[1500];
   auto buffer = parse_buffer_t(packet, 1500);
-
 
   auto signature = 0xFFFF;
   auto command = rtppeer::IN;
@@ -474,5 +454,5 @@ void rtppeer::connect_to(port_e rtp_port){
   // DEBUG("Send packet:");
   // buffer.print_hex();
 
-  sendto(buffer, rtp_port);
+  send_event(std::move(buffer), rtp_port);
 }

@@ -40,9 +40,11 @@ void test_connect_disconnect(){
   ASSERT_EQUAL(peer.is_connected(), false);
 
   bool connected = false;
-  peer.on_connect([&connected](const std::string &_name){ connected = true; });
-  peer.on_disconnect([&connected](){ connected = false; });
-  peer.on_send([](const rtpmidid::parse_buffer_t &data, rtpmidid::rtppeer::port_e port){
+  peer.connected_event.connect([&connected](const std::string &_name, rtpmidid::rtppeer::status_e st){ 
+    connected = true; 
+  });
+  peer.disconnect_event.connect([&connected](){ connected = false; });
+  peer.send_event.connect([](const rtpmidid::parse_buffer_t &data, rtpmidid::rtppeer::port_e port){
       DEBUG("Send to {}:", port == rtpmidid::rtppeer::CONTROL_PORT ? "Control" : "MIDI");
       data.print_hex();
   });
@@ -71,9 +73,11 @@ void test_connect_disconnect_reverse_order(){
   ASSERT_EQUAL(peer.is_connected(), false);
 
   bool connected = false;
-  peer.on_connect([&connected](const std::string &_name){ connected = true; });
-  peer.on_disconnect([&connected](){ connected = false; });
-  peer.on_send([](const rtpmidid::parse_buffer_t &data, rtpmidid::rtppeer::port_e port){
+  peer.connected_event.connect([&connected](const std::string &_name, rtpmidid::rtppeer::status_e st){ 
+    connected = true; 
+  });
+  peer.disconnect_event.connect([&connected](){ connected = false; });
+  peer.send_event.connect([](const rtpmidid::parse_buffer_t &data, rtpmidid::rtppeer::port_e port){
       DEBUG("Send to {}:", port == rtpmidid::rtppeer::CONTROL_PORT ? "Control" : "MIDI");
       data.print_hex();
   });
@@ -101,11 +105,11 @@ void test_connect_disconnect_reverse_order(){
 void test_send_some_midi(){
   rtpmidid::rtppeer peer("test");
   bool connected = false;
-  peer.on_connect([&connected](const std::string &_name){ connected = true; });
-  peer.on_disconnect([&connected](){ connected = false; });
+  peer.connected_event.connect([&connected](const std::string &_name, rtpmidid::rtppeer::status_e st){ connected = true; });
+  peer.disconnect_event.connect([&connected](){ connected = false; });
 
   bool sent_midi = false;
-  peer.on_send([&connected, &sent_midi](const rtpmidid::parse_buffer_t &data, rtpmidid::rtppeer::port_e port){
+  peer.send_event.connect([&connected, &sent_midi](const rtpmidid::parse_buffer_t &data, rtpmidid::rtppeer::port_e port){
     if (connected){
       data.print_hex();
 
@@ -130,17 +134,19 @@ void test_send_some_midi(){
 void test_recv_some_midi(){
   rtpmidid::rtppeer peer("test");
   bool connected = false;
-  peer.on_connect([&connected](const std::string &_name){ connected = true; });
-  peer.on_disconnect([&connected](){ connected = false; });
+  peer.connected_event.connect([&connected](const std::string &_name, rtpmidid::rtppeer::status_e st){ 
+    connected = true; 
+  });
+  peer.disconnect_event.connect([&connected](){ connected = false; });
 
   bool got_midi = false;
 
-  peer.on_send([](const rtpmidid::parse_buffer_t &data, rtpmidid::rtppeer::port_e port){
+  peer.send_event.connect([](const rtpmidid::parse_buffer_t &data, rtpmidid::rtppeer::port_e port){
     // Nothing
   });
 
   // This will be called when I get some midi data.
-  peer.on_midi([&connected, &got_midi](rtpmidid::parse_buffer_t &data){
+  peer.midi_event.connect([&connected, &got_midi](rtpmidid::parse_buffer_t &data){
     ASSERT_EQUAL(connected, true);
     data.print_hex(true);
     got_midi = true;

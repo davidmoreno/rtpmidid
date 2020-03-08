@@ -246,9 +246,9 @@ void rtpserver::create_peer_from(parse_buffer_t &buffer, struct sockaddr_in6 *cl
   // DEBUG("Address family {} {}. From {}", cliaddr.sin6_family, address->sin6_family, socket);
 
   // This is the send to the proper ports
-  peer->sendto = [this, address, remote_base_port](const parse_buffer_t &buff, rtppeer::port_e port){
+  peer->send_event.connect([this, address, remote_base_port](const parse_buffer_t &buff, rtppeer::port_e port){
     this->sendto(buff, port, address.get(), remote_base_port);
-  };
+  });
 
   peer->data_ready(buffer, port);
 
@@ -257,7 +257,9 @@ void rtpserver::create_peer_from(parse_buffer_t &buffer, struct sockaddr_in6 *cl
 
   // Setup some callbacks
   auto wpeer = std::weak_ptr(peer);
-  peer->on_connect([this, wpeer](const std::string &name){
+  peer->connected_event.connect([this, wpeer](const std::string &name, rtppeer::status_e st){
+    if (st != rtppeer::CONNECTED)
+      return;
     if (wpeer.expired())
       return;
     auto peer = wpeer.lock();
@@ -266,7 +268,7 @@ void rtpserver::create_peer_from(parse_buffer_t &buffer, struct sockaddr_in6 *cl
     }
   });
 
-  peer->on_midi([this](parse_buffer_t &data){
+  peer->midi_event.connect([this](parse_buffer_t &data){
     // DEBUG("Got MIDI from the remote peer into this server.");
     for (auto &f: midi_event_events){
       f(data);
