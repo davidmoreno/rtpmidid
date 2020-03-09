@@ -418,4 +418,7 @@ void rtpmidid_t::remove_client(uint8_t port){
   DEBUG("Removing peer from known peers list.");
   known_clients.erase(port);
   seq.remove_port(port);
+  seq.subscribe_event[port].disconnect_all();
+  seq.unsubscribe_event[port].disconnect_all();
+  seq.midi_event[port].disconnect_all();
 }

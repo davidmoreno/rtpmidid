@@ -34,6 +34,10 @@ public:
         slots.erase(id);
     }
 
+    void disconnect_all(){
+        slots.clear();
+    }
+
     void operator()(Args... args){
         for (auto const &f: slots){
             f.second(std::forward<Args>(args)...);
