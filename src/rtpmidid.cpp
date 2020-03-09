@@ -352,7 +352,7 @@ void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev){
   stream.position = stream.start;
 
   // And send
-  peer_info->peer->peer.midi_event(stream);
+  peer_info->peer->peer.send_midi(stream);
 }
 
 void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &stream){
