@@ -37,7 +37,7 @@ auto connect_msg2 = hex_to_bin(
 
 void test_several_connect_to_server(){
   // random port
-  rtpmidid::rtpserver server("test", 0);
+  rtpmidid::rtpserver server("test", "0");
 
   DEBUG("Server port is {}", server.control_port);
 
