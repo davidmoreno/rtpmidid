@@ -148,8 +148,8 @@ namespace rtpmidid{
               json data = {
                 {"name", server->name},
                 {"port", server->midi_port},
-                {"connect_listeners", server->connected_events.size()},
-                {"midi_listeners", server->midi_event_events.size()},
+                {"connect_listeners", server->connected_event.count()},
+                {"midi_listeners", server->midi_event.count()},
               };
               servers.push_back(data);
             }

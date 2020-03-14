@@ -35,8 +35,8 @@ namespace rtpmidid{
     std::map<uint32_t, std::shared_ptr<rtppeer>> ssrc_to_peer;
 
     // Callbacks to call when new connections
-    std::vector<std::function<void(std::shared_ptr<rtppeer>)>> connected_events;
-    std::vector<std::function<void(parse_buffer_t &)>> midi_event_events;
+    signal_t<std::shared_ptr<rtppeer>> connected_event;
+    signal_t<parse_buffer_t &> midi_event;
 
     std::string name;
 
@@ -58,12 +58,5 @@ namespace rtpmidid{
 
     void data_ready(rtppeer::port_e port);
     void sendto(const parse_buffer_t &b, rtppeer::port_e port, struct sockaddr_in6 *, int remote_base_port);
-
-    void on_connected(std::function<void(std::shared_ptr<rtppeer>)> f){
-      connected_events.push_back(f);
-    }
-    void on_midi_event_on_any_peer(std::function<void(parse_buffer_t &)> f){
-      midi_event_events.push_back(f);
-    }
   };
 }

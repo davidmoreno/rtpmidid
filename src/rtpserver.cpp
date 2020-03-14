@@ -263,16 +263,12 @@ void rtpserver::create_peer_from(parse_buffer_t &buffer, struct sockaddr_in6 *cl
     if (wpeer.expired())
       return;
     auto peer = wpeer.lock();
-    for(auto &f: connected_events){
-      f(peer);
-    }
+    connected_event(peer);
   });
 
   peer->midi_event.connect([this](parse_buffer_t &data){
     // DEBUG("Got MIDI from the remote peer into this server.");
-    for (auto &f: midi_event_events){
-      f(data);
-    }
+    midi_event(data);
   });
 }
 

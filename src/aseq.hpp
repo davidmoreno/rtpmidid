@@ -23,6 +23,8 @@
 #include <map>
 #include <alsa/asoundlib.h>
 
+#include "signal.hpp"
+
 namespace rtpmidid {
   class aseq {
   public:
@@ -40,9 +42,9 @@ namespace rtpmidid {
     std::string name;
     snd_seq_t *seq;
     std::vector<int> fds; // Normally 1?
-    std::map<int, std::vector<std::function<void(port_t, const std::string &name)>>> subscribe_callbacks;
-    std::map<int, std::vector<std::function<void(port_t)>>> unsubscribe_callbacks;
-    std::map<int, std::vector<std::function<void(snd_seq_event_t *)>>> midi_event_callbacks;
+    std::map<int, signal_t<port_t, const std::string &>> subscribe_event;
+    std::map<int, signal_t<port_t>> unsubscribe_event;
+    std::map<int, signal_t<snd_seq_event_t *>> midi_event;
     uint8_t client_id;
 
     aseq(std::string name);
@@ -53,10 +55,6 @@ namespace rtpmidid {
 
     uint8_t create_port(const std::string &name);
     void remove_port(uint8_t port);
-
-    void on_subscribe(int port, std::function<void(port_t, const std::string &name)> f);
-    void on_unsubscribe(int port, std::function<void(port_t)> f);
-    void on_midi_event(int port, std::function<void(snd_seq_event_t *)> f);
   };
 
   std::vector<std::string> get_ports(aseq *);

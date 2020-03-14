@@ -99,7 +99,7 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::str
   announce_rtpmidid_server(name, rtpserver->control_port);
 
   auto wrtpserver = std::weak_ptr(rtpserver);
-  rtpserver->on_connected([this, wrtpserver, port](std::shared_ptr<::rtpmidid::rtppeer> peer){
+  rtpserver->connected_event.connect([this, wrtpserver, port](std::shared_ptr<::rtpmidid::rtppeer> peer){
     if (wrtpserver.expired()){
       return;
     }
@@ -111,7 +111,7 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::str
     peer->midi_event.connect([this, aseq_port](parse_buffer_t &pb){
       this->recv_rtpmidi_event(aseq_port, pb);
     });
-    seq.on_midi_event(aseq_port, [this, aseq_port](snd_seq_event_t *ev){
+    seq.midi_event[aseq_port].connect([this, aseq_port](snd_seq_event_t *ev){
       auto peer_it = known_servers_connections.find(aseq_port);
       if (peer_it == std::end(known_servers_connections)){
         WARNING("Got MIDI event in an non existing anymore peer.");
@@ -154,7 +154,7 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_export_server(
 
     announce_rtpmidid_server(name, server->control_port);
 
-    seq.on_midi_event(alsaport, [this, server](snd_seq_event_t *ev){
+    seq.midi_event[alsaport].connect([this, server](snd_seq_event_t *ev){
       uint8_t tmp[128];
       parse_buffer_t buffer(tmp, sizeof(tmp));
       alsamidi_to_midiprotocol(ev, buffer);
@@ -164,14 +164,14 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_export_server(
       server->send_midi_to_all_peers(buffer);
     });
 
-    seq.on_unsubscribe(alsaport, [this, name, server](aseq::port_t from){
+    seq.unsubscribe_event[alsaport].connect([this, name, server](aseq::port_t from){
       // This should destroy the server.
       unannounce_rtpmidid_server(name, server->control_port);
       // TODO: disconnect from on_midi_event.
       alsa_to_server.erase(from);
     });
 
-    server->on_midi_event_on_any_peer([this, alsaport](parse_buffer_t &buffer){
+    server->midi_event.connect([this, alsaport](parse_buffer_t &buffer){
       this->recv_rtpmidi_event(alsaport, buffer);
     });
 
@@ -184,7 +184,7 @@ void rtpmidid_t::setup_alsa_seq(){
   // Export only one, but all data that is conencted to it.
   // add_export_port();
   auto alsaport = seq.create_port("Network");
-  seq.on_subscribe(alsaport, [this, alsaport](aseq::port_t from, const std::string &name){
+  seq.subscribe_event[alsaport].connect([this, alsaport](aseq::port_t from, const std::string &name){
     DEBUG("Connected to network port. Create server for this alsa data.");
 
     add_rtpmidid_export_server(fmt::format("{}/{}", this->name, name), alsaport, from);
@@ -192,11 +192,11 @@ void rtpmidid_t::setup_alsa_seq(){
 }
 
 void rtpmidid_t::setup_mdns(){
-  mdns_rtpmidi.on_discovery([this](const std::string &name, const std::string &address, const std::string &port){
+  mdns_rtpmidi.discover_event.connect([this](const std::string &name, const std::string &address, const std::string &port){
     this->add_rtpmidi_client(name, address, port);
   });
 
-  mdns_rtpmidi.on_removed([this](const std::string &name){
+  mdns_rtpmidi.remove_event.connect([this](const std::string &name){
     // TODO : remove client / alsa sessions
     this->remove_rtpmidi_client(name);
   });
@@ -223,7 +223,7 @@ std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
   INFO("New alsa port: {}, connects to host: {}, port: {}, name: {}", aseq_port, address, net_port, name);
   known_clients[aseq_port] = std::move(peer_info);
 
-  seq.on_subscribe(aseq_port, [this, aseq_port](aseq::port_t port, const std::string &name){
+  seq.subscribe_event[aseq_port].connect([this, aseq_port](aseq::port_t port, const std::string &name){
     DEBUG("Callback on subscribe at rtpmidid: {}", name);
     auto peer_info = &known_clients[aseq_port];
     if (!peer_info->peer){
@@ -237,7 +237,7 @@ std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
       DEBUG("Already connected.");
     }
   });
-  seq.on_unsubscribe(aseq_port, [this, aseq_port](aseq::port_t port){
+  seq.unsubscribe_event[aseq_port].connect([this, aseq_port](aseq::port_t port){
     DEBUG("Callback on unsubscribe at rtpmidid");
     auto peer_info = &known_clients[aseq_port];
     peer_info->use_count--;
@@ -245,7 +245,7 @@ std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
       peer_info->peer = nullptr;
     }
   });
-  seq.on_midi_event(aseq_port, [this, aseq_port](snd_seq_event_t *ev){
+  seq.midi_event[aseq_port].connect([this, aseq_port](snd_seq_event_t *ev){
     this->recv_alsamidi_event(aseq_port, ev);
   });
 
@@ -352,7 +352,7 @@ void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev){
   stream.position = stream.start;
 
   // And send
-  peer_info->peer->peer.midi_event(stream);
+  peer_info->peer->peer.send_midi(stream);
 }
 
 void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &stream){
@@ -418,4 +418,7 @@ void rtpmidid_t::remove_client(uint8_t port){
   DEBUG("Removing peer from known peers list.");
   known_clients.erase(port);
   seq.remove_port(port);
+  seq.subscribe_event[port].disconnect_all();
+  seq.unsubscribe_event[port].disconnect_all();
+  seq.midi_event[port].disconnect_all();
 }

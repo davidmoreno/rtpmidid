@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 
 #include <string.h>
 #include <fmt/format.h>
@@ -115,7 +116,7 @@ void rtpclient::connect_to(std::string address, std::string port){
     struct sockaddr_in6 servaddr;
     socklen_t len = sizeof(servaddr);
     ::getsockname(control_socket, (struct sockaddr*)&servaddr, &len);
-    local_base_port = htons(servaddr.sin6_port);
+    local_base_port = ntohs(servaddr.sin6_port);
 
     DEBUG("Control port, local: {}, remote at {}:{}", local_base_port, host, service);
 
@@ -129,11 +130,20 @@ void rtpclient::connect_to(std::string address, std::string port){
     remote_base_port = ntohs(((sockaddr_in*)serveraddr->ai_addr)->sin_port);
     ((sockaddr_in*)serveraddr->ai_addr)->sin_port = htons( remote_base_port + 1 );
 
+    servaddr.sin6_port = htons( local_base_port + 1);
+    auto ret = bind(midi_socket, (struct sockaddr*)&servaddr, len);
+    if (ret < 0) {
+      throw rtpmidid::exception("Could not bind to local port");
+    }
+
     if (connect(midi_socket, serveraddr->ai_addr, serveraddr->ai_addrlen) < 0){
       DEBUG("Error opening midi socket, port {}", port);
       throw rtpmidid::exception("Can not open remote rtpmidi MIDI socket. {}", strerror(errno));
     }
     memcpy(&midi_addr, serveraddr->ai_addr, sizeof(midi_addr));
+    ::getsockname(control_socket, (struct sockaddr*)&servaddr, &len);
+    auto midi_port = htons(servaddr.sin6_port);
+    DEBUG("MIDI PORT at port {}", midi_port);
 
     poller.add_fd_in(midi_socket, [this](int){ this->data_ready(rtppeer::MIDI_PORT); });
   } catch (const std::exception &excp) {
@@ -166,7 +176,6 @@ void rtpclient::connect_to(std::string address, std::string port){
       peer.connect_to(rtppeer::MIDI_PORT);
     } else if (status == rtppeer::CONNECTED){
       start_ck_1min_sync();
-
     }
   });
 

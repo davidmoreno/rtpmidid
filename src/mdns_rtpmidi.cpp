@@ -226,31 +226,31 @@ static void resolve_callback(
         return;
       }
       char a[AVAHI_ADDRESS_STR_MAX], *t;
-      DEBUG("Service '{}' of type '{}' in domain '{}'", name, type, domain);
+      DEBUG("Discovered service '{}' of type '{}' in domain '{}'", name, type, domain);
       avahi_address_snprint(a, sizeof(a), address);
       t = avahi_string_list_to_string(txt);
-      DEBUG(
-              "\t{}:{} ({})\n"
-              "\tinterface={}\n"
-              "\tTXT={}\n"
-              "\tcookie is {}\n"
-              "\tis_local: {}\n"
-              "\tour_own: {}\n"
-              "\twide_area: {}\n"
-              "\tmulticast: {}\n"
-              "\tcached: {}",
-              host_name, port, a,
-              interface,
-              t,
-              avahi_string_list_get_service_cookie(txt),
-              !!(flags & AVAHI_LOOKUP_RESULT_WIDE_AREA),
-              !!(flags & AVAHI_LOOKUP_RESULT_LOCAL),
-              !!(flags & AVAHI_LOOKUP_RESULT_OUR_OWN),
-              !!(flags & AVAHI_LOOKUP_RESULT_MULTICAST),
-              !!(flags & AVAHI_LOOKUP_RESULT_CACHED));
+      // DEBUG(
+      //         "\t{}:{} ({})\n"
+      //         "\tinterface={}\n"
+      //         "\tTXT={}\n"
+      //         "\tcookie is {}\n"
+      //         "\tis_local: {}\n"
+      //         "\tour_own: {}\n"
+      //         "\twide_area: {}\n"
+      //         "\tmulticast: {}\n"
+      //         "\tcached: {}",
+      //         host_name, port, a,
+      //         interface,
+      //         t,
+      //         avahi_string_list_get_service_cookie(txt),
+      //         !!(flags & AVAHI_LOOKUP_RESULT_WIDE_AREA),
+      //         !!(flags & AVAHI_LOOKUP_RESULT_LOCAL),
+      //         !!(flags & AVAHI_LOOKUP_RESULT_OUR_OWN),
+      //         !!(flags & AVAHI_LOOKUP_RESULT_MULTICAST),
+      //         !!(flags & AVAHI_LOOKUP_RESULT_CACHED));
 
       //FIXME: address is not correct for interface (!), so is not unique, how to make unique? or filter on interface?
-      mr->event_discover(name, a, std::to_string(port));
+      mr->discover_event(name, a, std::to_string(port));
 
       avahi_free(t);
     }
@@ -287,7 +287,7 @@ static void browse_callback(
       break;
     case AVAHI_BROWSER_REMOVE:
       INFO("(Browser) REMOVE: service '{}' of type '{}' in domain '{}'", name, type, domain);
-      mr->event_remove(name);
+      mr->remove_event(name);
       break;
     case AVAHI_BROWSER_ALL_FOR_NOW:
     case AVAHI_BROWSER_CACHE_EXHAUSTED:

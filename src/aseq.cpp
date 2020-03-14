@@ -85,16 +85,6 @@ namespace rtpmidid{
     snd_config_update_free_global();
   }
 
-  void aseq::on_subscribe(int port, std::function<void(port_t from, const std::string &name)> f){
-    subscribe_callbacks[port].push_back(f);
-  }
-  void aseq::on_unsubscribe(int port, std::function<void(port_t from)> f){
-    unsubscribe_callbacks[port].push_back(f);
-  }
-  void aseq::on_midi_event(int port, std::function<void(snd_seq_event_t *)> f){
-    midi_event_callbacks[port].push_back(f);
-  }
-
   /**
    * @short data is ready at the sequencer to read
    *
@@ -126,17 +116,13 @@ namespace rtpmidid{
           auto myport = ev->dest.port;
           INFO("New ALSA connection from port {} ({}:{})", name, client, port);
 
-          for (auto &f: subscribe_callbacks[myport]){
-            f(port_t(client, port), name);
-          }
+          subscribe_event[myport](port_t(client, port), name);
         }
         break;
         case SND_SEQ_EVENT_PORT_UNSUBSCRIBED:{
           auto addr = &ev->data.addr;
           auto myport = ev->dest.port;
-          for (auto &f: unsubscribe_callbacks[myport]){
-            f(port_t(addr->client, addr->port));
-          }
+          unsubscribe_event[myport](port_t(addr->client, addr->port));
           DEBUG("Disconnected");
         }
         break;
@@ -152,9 +138,9 @@ namespace rtpmidid{
         case SND_SEQ_EVENT_SENSING:
         {
           auto myport = ev->dest.port;
-          for (auto &f: midi_event_callbacks[myport]){
-            f(ev);
-          }
+          auto me = midi_event.find(myport);
+          if (me != midi_event.end())
+            me->second(ev);
         }
         break;
         default:
