@@ -93,7 +93,7 @@ void rtpmidid::control_socket_t::connection_ready(){
 
 void rtpmidid::control_socket_t::data_ready(int fd){
     char buf[1024];
-    int l = recv(fd, buf, sizeof(buf), 0);
+    size_t l = recv(fd, buf, sizeof(buf), 0);
     if (l <= 0){
         close(fd);
         DEBUG("Closed control connection: {}", fd);
@@ -199,7 +199,7 @@ std::string rtpmidid::control_socket_t::parse_command(const std::string &command
         auto command_split = rtpmidid::split(command);
         msg.method = command_split[0];
         std::vector<json> params;
-        for (auto i=1; i<command_split.size(); i++) {
+        for (size_t i=1; i<command_split.size(); i++) {
             params.push_back(command_split[i]);
         }
         msg.params = params;
