@@ -24,30 +24,30 @@
 template<typename... Args>
 class signal_t {
 public:
-    int connect(std::function<void(Args...)> const &&f) {
-        auto cid = max_id++;
-        slots[cid]=std::move(f);
-        return cid;
-    }
+  int connect(std::function<void(Args...)> const &&f) {
+    auto cid = max_id++;
+    slots[cid]=std::move(f);
+    return cid;
+  }
 
-    void disconnect(int id){
-        slots.erase(id);
-    }
+  void disconnect(int id){
+    slots.erase(id);
+  }
 
-    void disconnect_all(){
-        slots.clear();
-    }
+  void disconnect_all(){
+    slots.clear();
+  }
 
-    void operator()(Args... args){
-        for (auto const &f: slots){
-            f.second(std::forward<Args>(args)...);
-        }
+  void operator()(Args... args){
+    for (auto const &f: slots){
+      f.second(std::forward<Args>(args)...);
     }
+  }
 
-    size_t count(){
-        return slots.size();
-    }
+  size_t count(){
+    return slots.size();
+  }
 private:
-    uint32_t max_id = 0;
-    std::map<uint32_t, std::function<void(Args...)>> slots;
+  uint32_t max_id = 0;
+  std::map<uint32_t, std::function<void(Args...)>> slots;
 };
