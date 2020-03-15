@@ -240,5 +240,5 @@ std::string rtpmidid::control_socket_t::parse_command(const std::string &command
     } else {
         retdata["error"] = error;
     }
-    return retdata.dump(2);
+    return retdata.dump();
 }
