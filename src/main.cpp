@@ -27,11 +27,21 @@
 #include "./config.hpp"
 #include "./control_socket.hpp"
 
+static bool exiting = false;
+
 void sigterm_f(int){
+  if (exiting){
+    exit(1);
+  }
+  exiting = true;
   INFO("SIGTERM received. Closing.");
   rtpmidid::poller.close();
 }
 void sigint_f(int){
+  if (exiting){
+    exit(1);
+  }
+  exiting = true;
   INFO("SIGINT received. Closing.");
   rtpmidid::poller.close();
 }
