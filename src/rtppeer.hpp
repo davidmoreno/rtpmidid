@@ -46,6 +46,12 @@ namespace rtpmidid {
       MIDI_PORT,
       CONTROL_PORT,
     };
+    enum disconnect_reason_e {
+      CANT_CONNECT,
+      PEER_DISCONNECTED,
+      CONNECTION_REJECTED,
+      DISCONNECT,
+    };
 
     status_e status;
     uint32_t initiator_id;
@@ -62,7 +68,7 @@ namespace rtpmidid {
     signal_t<parse_buffer_t&> midi_event;
     signal_t<const std::string &, status_e> connected_event;
     signal_t<parse_buffer_t &&, port_e> send_event;
-    signal_t<> disconnect_event;
+    signal_t<disconnect_reason_e> disconnect_event;
 
     static bool is_command(parse_buffer_t &);
     static bool is_feedback(parse_buffer_t &);

@@ -131,7 +131,7 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::str
       // And send
       conn->peer->send_midi(stream);
     });
-    peer->disconnect_event.connect([this, aseq_port]{
+    peer->disconnect_event.connect([this, aseq_port](auto reason){
       seq.remove_port(aseq_port);
       known_servers_connections.erase(aseq_port);
     });
@@ -206,18 +206,19 @@ void rtpmidid_t::setup_mdns(){
 std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
     const std::string &name, const std::string &address, const std::string &net_port){
   for (auto &known: known_clients){
-    if (known.second.address == address && known.second.port == net_port){
-      DEBUG(
-          "Trying to add again rtpmidi {}:{} server. Quite probably mDNS re announce. "
-          "Maybe somebody ask, or just periodically.", address, net_port
-      );
+    if (known.second.name == name){
+      // DEBUG(
+      //     "Trying to add again rtpmidi {}:{} server. Quite probably mDNS re announce. "
+      //     "Maybe somebody ask, or just periodically.", address, net_port
+      // );
+      known.second.addresses.push_back({address, net_port});
       return std::nullopt;
     }
   }
 
   auto aseq_port = seq.create_port(name);
   auto peer_info = ::rtpmidid::client_info{
-    name, address, net_port, 0, nullptr,
+    name, {{address, net_port}}, 0,  0, nullptr,
   };
 
   INFO("New alsa port: {}, connects to host: {}, port: {}, name: {}", aseq_port, address, net_port, name);
@@ -225,17 +226,7 @@ std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
 
   seq.subscribe_event[aseq_port].connect([this, aseq_port](aseq::port_t port, const std::string &name){
     DEBUG("Callback on subscribe at rtpmidid: {}", name);
-    auto peer_info = &known_clients[aseq_port];
-    if (!peer_info->peer){
-      peer_info->peer = std::make_shared<rtpclient>(name, peer_info->address, peer_info->port);
-      peer_info->peer->peer.midi_event.connect([this, aseq_port](parse_buffer_t &pb){
-        this->recv_rtpmidi_event(aseq_port, pb);
-      });
-      peer_info->use_count++;
-    }
-    else {
-      DEBUG("Already connected.");
-    }
+    connect_client(aseq_port);
   });
   seq.unsubscribe_event[aseq_port].connect([this, aseq_port](aseq::port_t port){
     DEBUG("Callback on unsubscribe at rtpmidid");
@@ -258,12 +249,52 @@ void rtpmidid_t::remove_rtpmidi_client(const std::string &name){
   for (auto I=known_clients.begin(), endI=known_clients.end(); I!=endI; ++I){
     if ((*I).second.name == name){
       auto &known = *I;
-      DEBUG("Found client to delete: alsa port {}. IP {}:{}.", known.first, known.second.address, known.second.port);
+      DEBUG("Found client to delete: alsa port {}. Deletes all known addreses.", known.first);
       remove_client(known.first);
       return;
     }
   }
-  WARNING("Service is not currently known to delete: {}", name);
+  // WARNING("Service is not currently known to delete: {}", name);
+}
+
+void rtpmidid_t::connect_client(int aseq_port) {
+  auto peer_info = &known_clients[aseq_port];
+  if (peer_info->peer) {
+    if (peer_info->peer->peer.status == rtppeer::CONNECTED) {
+      DEBUG("Already connected.");
+    } else {
+      DEBUG("Already connecting.");
+    }
+    return;
+  }
+
+  if (!peer_info->peer){
+    auto &address = peer_info->addresses[peer_info->addr_idx];
+    peer_info->peer = std::make_shared<rtpclient>(name);
+    peer_info->peer->peer.midi_event.connect([this, aseq_port](parse_buffer_t &pb){
+      this->recv_rtpmidi_event(aseq_port, pb);
+    });
+    peer_info->peer->peer.disconnect_event.connect(
+      [peer_info](rtppeer::disconnect_reason_e reason){
+        DEBUG("Disconnect signal: {}", reason);
+        if (reason == rtppeer::disconnect_reason_e::CANT_CONNECT) {
+          peer_info->addr_idx = (peer_info->addr_idx + 1 ) % peer_info->addresses.size();
+          DEBUG(
+            "Try connect next in list. Idx {}/{}", 
+            peer_info->addr_idx, 
+            peer_info->addresses.size()
+          );
+          // Try next
+          auto &address = peer_info->addresses[peer_info->addr_idx];
+          peer_info->peer->connect_to(address.address, address.port);
+        }
+    });
+    peer_info->use_count++;
+
+    peer_info->peer->connect_to(address.address, address.port);
+  } else {
+    DEBUG("Already connected.");
+  }
 }
 
 void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data){

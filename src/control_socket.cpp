@@ -125,10 +125,17 @@ namespace rtpmidid{
                 auto client = port_client.second;
                 json cl = {
                     {"name", client.name},
-                    {"address", client.address},
                     {"use_count", client.use_count},
                     {"alsa_port", port_client.first}
                 };
+                std::vector<json> addresses;
+                for (auto &address: client.addresses){
+                    addresses.push_back({
+                        {"host", address.address}, 
+                        {"port", address.port}
+                    });
+                }
+                cl["addresses"] = addresses;
                 clients.push_back(cl);
             }
             js["clients"] = clients;

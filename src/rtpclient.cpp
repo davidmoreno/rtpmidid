@@ -36,7 +36,7 @@
 
 using namespace rtpmidid;
 
-rtpclient::rtpclient(std::string name, const std::string &address, const std::string &port)
+rtpclient::rtpclient(std::string name)
     : peer(std::move(name)) {
   local_base_port = 0;
   remote_base_port = -1; // Not defined
@@ -46,8 +46,6 @@ rtpclient::rtpclient(std::string name, const std::string &address, const std::st
   peer.send_event.connect([this](const parse_buffer_t &data, rtppeer::port_e port){
     this->sendto(data, port);
   });
-
-  connect_to(address, port);
 }
 
 rtpclient::~rtpclient(){
@@ -66,11 +64,16 @@ rtpclient::~rtpclient(){
   }
 }
 
-void rtpclient::connect_to(std::string address, std::string port){
+void rtpclient::connect_to(const std::string &address, const std::string &port){
   struct addrinfo hints;
   struct addrinfo *sockaddress_list = nullptr;
   char host[NI_MAXHOST], service[NI_MAXSERV];
   socklen_t peer_addr_len = NI_MAXHOST;
+
+  control_socket = 0;
+  midi_socket = 0;
+
+  DEBUG("Try connect to service at {}:{}", address, port);
 
   try{
     int res;
@@ -94,7 +97,7 @@ void rtpclient::connect_to(std::string address, std::string port){
         peer_addr_len, host, NI_MAXHOST,
         service, NI_MAXSERV, NI_NUMERICSERV
       );
-      DEBUG("Try connect to service: {}:{}", host, service);
+      DEBUG("Try connect to resolved name: {}:{}", host, service);
       // remote_base_port = service;
 
       control_socket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -108,9 +111,10 @@ void rtpclient::connect_to(std::string address, std::string port){
     }
     if (!serveraddr){
       DEBUG("Error opening control socket, port {}", port);
+      control_socket = 0;
       throw rtpmidid::exception("Can not open remote rtpmidi control socket. {}", strerror(errno));
     }
-    DEBUG("Connected to service: {}:{}", host, service);
+    DEBUG("Connected to resolved name: {}:{}", host, service);
     memcpy(&control_addr, serveraddr->ai_addr, sizeof(control_addr));
 
     struct sockaddr_in6 servaddr;
@@ -124,6 +128,7 @@ void rtpclient::connect_to(std::string address, std::string port){
 
     midi_socket = socket(AF_INET, SOCK_DGRAM, 0);
     if (midi_socket < 0){
+      midi_socket = 0;
       throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
     }
     // Reuse servaddr, just on next port
@@ -161,7 +166,8 @@ void rtpclient::connect_to(std::string address, std::string port){
     if (sockaddress_list){
       freeaddrinfo(sockaddress_list);
     }
-    throw;
+    peer.disconnect_event(rtppeer::disconnect_reason_e::CANT_CONNECT);
+    return;
   }
   if (sockaddress_list){
     freeaddrinfo(sockaddress_list);

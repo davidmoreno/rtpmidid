@@ -21,8 +21,14 @@
 #include <string>
 #include "./rtppeer.hpp"
 #include "./poller.hpp"
+#include "./signal.hpp"
 
 namespace rtpmidid {
+  struct address_port_t {
+    std::string address;
+    std::string port;
+  };
+
   /**
    * @short A RTP Client
    *
@@ -32,6 +38,9 @@ namespace rtpmidid {
   class rtpclient{
   public:
     rtppeer peer;
+    signal_t<> connect_failed_event;
+    poller_t::timer_t connect_timer;
+
     int control_socket;
     int midi_socket;
     struct sockaddr control_addr;
@@ -41,12 +50,12 @@ namespace rtpmidid {
     uint16_t remote_base_port;
     poller_t::timer_t timer_ck;
 
-    rtpclient(std::string name, const std::string &address, const std::string &port);
+    rtpclient(std::string name);
     ~rtpclient();
     void reset();
     void sendto(const parse_buffer_t &pb, rtppeer::port_e port);
 
-    void connect_to(std::string address, std::string port);
+    void connect_to(const std::string &address, const std::string &port);
     void start_ck_1min_sync();
 
     void data_ready(rtppeer::port_e port);

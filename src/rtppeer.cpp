@@ -217,7 +217,7 @@ void rtppeer::parse_command_by(parse_buffer_t &buffer, port_e port){
   status = (status_e) (((int)status) & ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
   INFO("Disconnect from {}, {} port. Status {:X}", remote_name, port == MIDI_PORT ? "MIDI" : "Control", (int)status);
 
-  disconnect_event();
+  disconnect_event(PEER_DISCONNECTED);
 }
 
 void rtppeer::parse_command_no(parse_buffer_t &buffer, port_e port){
@@ -233,7 +233,7 @@ void rtppeer::parse_command_no(parse_buffer_t &buffer, port_e port){
   WARNING("Invitation Rejected (NO) : remote ssrc {:X}",remote_ssrc);
   INFO("Disconnect from {}, {} port. Status {:X}", remote_name, port == MIDI_PORT ? "MIDI" : "Control", (int)status);
 
-  disconnect_event();
+  disconnect_event(CONNECTION_REJECTED);
 }
 
 void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port){
@@ -431,7 +431,7 @@ void rtppeer::send_goodbye(port_e to_port){
   status = status_e(int(status) & ~int(to_port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED));
 
   if (status == NOT_CONNECTED){
-    disconnect_event();
+    disconnect_event(DISCONNECT);
   }
 }
 

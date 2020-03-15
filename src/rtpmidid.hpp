@@ -30,11 +30,15 @@ namespace rtpmidid{
   class rtpclient;
   class rtppeer;
   struct parse_buffer_t;
+  struct address_t{
+    std::string address;
+    std::string port;
+  };
 
   struct client_info{
     std::string name;
-    std::string address;
-    std::string port;
+    std::vector<address_t> addresses;
+    int addr_idx; // Current try address, if any.
     uint16_t use_count;
     // This might be not intialized if not really connected yet.
     std::shared_ptr<::rtpmidid::rtpclient> peer;
@@ -74,6 +78,7 @@ namespace rtpmidid{
     void setup_mdns();
     void announce_rtpmidid_server(const std::string &name, uint16_t port);
     void unannounce_rtpmidid_server(const std::string &name, uint16_t port);
+    void connect_client(int aseqport);
 
     // An import server is one that for each discovered connection, creates the alsa ports
     std::shared_ptr<rtpserver> add_rtpmidid_import_server(const std::string &name, const std::string &port);
