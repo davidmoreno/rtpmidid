@@ -150,6 +150,15 @@ std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_import_server(const std::str
 
 std::shared_ptr<rtpserver> rtpmidid_t::add_rtpmidid_export_server(
       const std::string &name, uint8_t alsaport, aseq::port_t &from){
+
+    for(auto &alsa_server: alsa_to_server){
+      auto server = alsa_server.second;
+      if (server->name == name){
+        INFO("Already a rtpserver for this ALSA name at {}:{} / {}. RTPMidi port: {}", from.client, from.port, name, server->control_port);
+        return server;
+      }
+    }
+
     auto server = std::make_shared<rtpserver>(name, "");
 
     announce_rtpmidid_server(name, server->control_port);
@@ -185,7 +194,7 @@ void rtpmidid_t::setup_alsa_seq(){
   // add_export_port();
   auto alsaport = seq.create_port("Network");
   seq.subscribe_event[alsaport].connect([this, alsaport](aseq::port_t from, const std::string &name){
-    DEBUG("Connected to network port. Create server for this alsa data.");
+    DEBUG("Connected to ALSA port {}:{}. Create network server for this alsa data.", from.client, from.port);
 
     add_rtpmidid_export_server(fmt::format("{}/{}", this->name, name), alsaport, from);
   });
