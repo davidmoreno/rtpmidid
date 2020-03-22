@@ -22,6 +22,7 @@
 #include <set>
 #include <memory>
 #include "./aseq.hpp"
+#include "./poller.hpp"
 #include "./mdns_rtpmidi.hpp"
 
 namespace rtpmidid{
@@ -42,6 +43,8 @@ namespace rtpmidid{
     uint16_t use_count;
     // This might be not intialized if not really connected yet.
     std::shared_ptr<::rtpmidid::rtpclient> peer;
+    uint8_t aseq_port;
+    uint connect_attempts = 0;
   };
   struct server_conn_info{
     std::string name;

@@ -38,8 +38,9 @@ namespace rtpmidid {
   class rtpclient{
   public:
     rtppeer peer;
-    signal_t<> connect_failed_event;
+    // signal_t<> connect_failed_event;
     poller_t::timer_t connect_timer;
+    int connect_count = 3;  // how many times we tried to connect, after 3, final fail.
 
     int control_socket;
     int midi_socket;

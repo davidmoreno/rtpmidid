@@ -55,6 +55,9 @@ namespace rtpmidid {
 
     uint8_t create_port(const std::string &name);
     void remove_port(uint8_t port);
+
+    /// Disconencts everything from this port
+    void disconnect_port(uint8_t port);
   };
 
   std::vector<std::string> get_ports(aseq *);

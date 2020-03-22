@@ -20,6 +20,7 @@
 #include "./exceptions.hpp"
 #include "./poller.hpp"
 #include "./rtpclient.hpp"
+#include <alsa/seq.h>
 #include <fmt/format.h>
 #include <stdio.h>
 
@@ -146,7 +147,7 @@ namespace rtpmidid{
         default:
         static bool warning_raised[SND_SEQ_EVENT_NONE+1];
         if(!warning_raised[ev->type]) {
-          warning_raised[ev->type]=true; 
+          warning_raised[ev->type]=true;
           WARNING("This event type {} is not managed yet", ev->type);
         }
         break;
@@ -223,4 +224,49 @@ namespace rtpmidid{
     return fmt::format("{}-{}", client_name, port_name);
   }
 
+  void aseq::disconnect_port(uint8_t port){
+    DEBUG("Disconnect ALSA port {}", port);
+    snd_seq_query_subscribe_t *query;
+    snd_seq_port_subscribe_t *portsubs;
+    snd_seq_port_info_t *portinfo;
+	  snd_seq_port_info_alloca(&portinfo);
+    if (snd_seq_get_any_port_info(seq, client_id, port, portinfo) < 0){
+      throw rtpmidid::exception("Error getting port info");
+    }
+
+    snd_seq_query_subscribe_alloca(&query);
+    snd_seq_query_subscribe_set_root(query, snd_seq_port_info_get_addr(portinfo));
+	  snd_seq_query_subscribe_set_type(query, (snd_seq_query_subs_type_t)(SND_SEQ_QUERY_SUBS_READ | SND_SEQ_QUERY_SUBS_WRITE));
+    snd_seq_port_subscribe_alloca(&portsubs);
+
+    snd_seq_query_subscribe_set_index(query, 0);
+    while (snd_seq_query_port_subscribers(seq, query) >= 0){
+      auto type = snd_seq_query_subscribe_get_type(query);
+      const snd_seq_addr_t *sender;
+      const snd_seq_addr_t *dest;
+      if (type == SND_SEQ_QUERY_SUBS_READ){
+        sender = snd_seq_query_subscribe_get_root(query);
+        dest = snd_seq_query_subscribe_get_addr(query);
+      } else {
+        dest = snd_seq_query_subscribe_get_root(query);
+        sender = snd_seq_query_subscribe_get_addr(query);
+      }
+      DEBUG("Disconect connection {}:{} {}:{}", sender->client, sender->port, dest->client, dest->port);
+
+      if (snd_seq_get_any_port_info(seq, dest->client, dest->port, portinfo) < 0 ||
+          !(snd_seq_port_info_get_capability(portinfo) & SND_SEQ_PORT_CAP_SUBS_WRITE) ||
+          (snd_seq_port_info_get_capability(portinfo) & SND_SEQ_PORT_CAP_NO_EXPORT)) {
+        snd_seq_query_subscribe_set_index(query, snd_seq_query_subscribe_get_index(query) + 1);
+        continue;
+      }
+      snd_seq_port_subscribe_set_queue(portsubs, snd_seq_query_subscribe_get_queue(query));
+      snd_seq_port_subscribe_set_sender(portsubs, sender);
+      snd_seq_port_subscribe_set_dest(portsubs, dest);
+      if (snd_seq_unsubscribe_port(seq, portsubs) < 0) {
+        snd_seq_query_subscribe_set_index(query, snd_seq_query_subscribe_get_index(query) + 1);
+      }
+
+      snd_seq_query_subscribe_set_index(query, snd_seq_query_subscribe_get_index(query) + 1);
+    }
+  }
 }

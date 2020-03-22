@@ -216,9 +216,9 @@ std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
     }
   }
 
-  auto aseq_port = seq.create_port(name);
+  uint8_t aseq_port = seq.create_port(name);
   auto peer_info = ::rtpmidid::client_info{
-    name, {{address, net_port}}, 0,  0, nullptr,
+    name, {{address, net_port}}, 0,  0, nullptr, aseq_port,
   };
 
   INFO("New alsa port: {}, connects to host: {}, port: {}, name: {}", aseq_port, address, net_port, name);
@@ -275,18 +275,32 @@ void rtpmidid_t::connect_client(int aseq_port) {
       this->recv_rtpmidi_event(aseq_port, pb);
     });
     peer_info->peer->peer.disconnect_event.connect(
-      [peer_info](rtppeer::disconnect_reason_e reason){
+      [this, peer_info](rtppeer::disconnect_reason_e reason){
         DEBUG("Disconnect signal: {}", reason);
-        if (reason == rtppeer::disconnect_reason_e::CANT_CONNECT) {
-          peer_info->addr_idx = (peer_info->addr_idx + 1 ) % peer_info->addresses.size();
-          DEBUG(
-            "Try connect next in list. Idx {}/{}", 
-            peer_info->addr_idx, 
-            peer_info->addresses.size()
-          );
-          // Try next
-          auto &address = peer_info->addresses[peer_info->addr_idx];
-          peer_info->peer->connect_to(address.address, address.port);
+        // If cant connec t(network problem) or rejected, try again in next address.
+        if (reason == rtppeer::disconnect_reason_e::CANT_CONNECT || reason == rtppeer::disconnect_reason_e::CONNECTION_REJECTED) {
+          if (peer_info->connect_attempts >= (3 * peer_info->addresses.size())){
+            ERROR("Too many attempts to connect. Not trying again. Attempted {} times.", peer_info->connect_attempts);
+            seq.disconnect_port(peer_info->aseq_port);
+            // Remove peer, to signal not trying to conenct or anything. Quite probably delete/free it.
+            peer_info->peer = nullptr;
+            // Back to... try if you want.
+            peer_info->connect_attempts = 0;
+            return;
+          }
+          peer_info->connect_attempts += 1;
+
+          peer_info->peer->connect_timer = poller.add_timer_event(1, [peer_info]{
+            peer_info->addr_idx = (peer_info->addr_idx + 1 ) % peer_info->addresses.size();
+            DEBUG(
+              "Try connect next in list. Idx {}/{}",
+              peer_info->addr_idx,
+              peer_info->addresses.size()
+            );
+            // Try next
+            auto &address = peer_info->addresses[peer_info->addr_idx];
+            peer_info->peer->connect_to(address.address, address.port);
+          });
         }
     });
     peer_info->use_count++;
