@@ -224,49 +224,50 @@ namespace rtpmidid{
     return fmt::format("{}-{}", client_name, port_name);
   }
 
+  static void disconnect_port_at_subs(snd_seq_t *seq, snd_seq_query_subscribe_t *subs, uint8_t port) {
+  	snd_seq_port_subscribe_t *port_sub;
+    snd_seq_port_subscribe_alloca(&port_sub);
+
+    for (auto type: {SND_SEQ_QUERY_SUBS_READ, SND_SEQ_QUERY_SUBS_WRITE}){
+      snd_seq_query_subscribe_set_type(subs, type);
+      snd_seq_query_subscribe_set_index(subs, 0);
+      while (snd_seq_query_port_subscribers(seq, subs) >= 0) {
+        const snd_seq_addr_t *addr;
+        const snd_seq_addr_t *root;
+        if (snd_seq_query_subscribe_get_type(subs) == SND_SEQ_QUERY_SUBS_READ){
+          addr = snd_seq_query_subscribe_get_addr(subs);
+          root = snd_seq_query_subscribe_get_root(subs);
+        } else {
+          root = snd_seq_query_subscribe_get_addr(subs);
+          addr = snd_seq_query_subscribe_get_root(subs);
+        }
+
+        DEBUG("Disconnect {}:{} -> {}:{}", root->client, root->port, addr->client, addr->port);
+
+        snd_seq_port_subscribe_set_sender(port_sub, root);
+        snd_seq_port_subscribe_set_dest(port_sub, addr);
+        if (snd_seq_unsubscribe_port(seq, port_sub) < 0) {
+          ERROR("Could not disconenct ALSA seq ports: {}:{} -> {}:{}", root->client, root->port, addr->client, addr->port);
+        }
+
+        snd_seq_query_subscribe_set_index(subs, snd_seq_query_subscribe_get_index(subs) + 1);
+      }
+    }
+  }
+
   void aseq::disconnect_port(uint8_t port){
-    DEBUG("Disconnect ALSA port {}", port);
-    snd_seq_query_subscribe_t *query;
-    snd_seq_port_subscribe_t *portsubs;
+    DEBUG("Disconnect alsa port {}", port);
+    snd_seq_query_subscribe_t *subs;
     snd_seq_port_info_t *portinfo;
-	  snd_seq_port_info_alloca(&portinfo);
-    if (snd_seq_get_any_port_info(seq, client_id, port, portinfo) < 0){
+
+    snd_seq_port_info_alloca(&portinfo);
+    if (snd_seq_get_port_info(seq, port, portinfo) < 0){
       throw rtpmidid::exception("Error getting port info");
     }
 
-    snd_seq_query_subscribe_alloca(&query);
-    snd_seq_query_subscribe_set_root(query, snd_seq_port_info_get_addr(portinfo));
-	  snd_seq_query_subscribe_set_type(query, (snd_seq_query_subs_type_t)(SND_SEQ_QUERY_SUBS_READ | SND_SEQ_QUERY_SUBS_WRITE));
-    snd_seq_port_subscribe_alloca(&portsubs);
+    snd_seq_query_subscribe_alloca(&subs);
+    snd_seq_query_subscribe_set_root(subs, snd_seq_port_info_get_addr(portinfo));
 
-    snd_seq_query_subscribe_set_index(query, 0);
-    while (snd_seq_query_port_subscribers(seq, query) >= 0){
-      auto type = snd_seq_query_subscribe_get_type(query);
-      const snd_seq_addr_t *sender;
-      const snd_seq_addr_t *dest;
-      if (type == SND_SEQ_QUERY_SUBS_READ){
-        sender = snd_seq_query_subscribe_get_root(query);
-        dest = snd_seq_query_subscribe_get_addr(query);
-      } else {
-        dest = snd_seq_query_subscribe_get_root(query);
-        sender = snd_seq_query_subscribe_get_addr(query);
-      }
-      DEBUG("Disconect connection {}:{} {}:{}", sender->client, sender->port, dest->client, dest->port);
-
-      if (snd_seq_get_any_port_info(seq, dest->client, dest->port, portinfo) < 0 ||
-          !(snd_seq_port_info_get_capability(portinfo) & SND_SEQ_PORT_CAP_SUBS_WRITE) ||
-          (snd_seq_port_info_get_capability(portinfo) & SND_SEQ_PORT_CAP_NO_EXPORT)) {
-        snd_seq_query_subscribe_set_index(query, snd_seq_query_subscribe_get_index(query) + 1);
-        continue;
-      }
-      snd_seq_port_subscribe_set_queue(portsubs, snd_seq_query_subscribe_get_queue(query));
-      snd_seq_port_subscribe_set_sender(portsubs, sender);
-      snd_seq_port_subscribe_set_dest(portsubs, dest);
-      if (snd_seq_unsubscribe_port(seq, portsubs) < 0) {
-        snd_seq_query_subscribe_set_index(query, snd_seq_query_subscribe_get_index(query) + 1);
-      }
-
-      snd_seq_query_subscribe_set_index(query, snd_seq_query_subscribe_get_index(query) + 1);
-    }
+    disconnect_port_at_subs(seq, subs, port);
   }
 }
