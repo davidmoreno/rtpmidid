@@ -69,6 +69,7 @@ namespace rtpmidid {
     timer_t(timer_t &&);
     ~timer_t();
     timer_t &operator=(timer_t &&other);
+    void disable();
 
     // No copying
     timer_t(const timer_t &) = delete;
