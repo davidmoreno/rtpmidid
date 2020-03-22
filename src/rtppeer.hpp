@@ -51,6 +51,7 @@ namespace rtpmidid {
       PEER_DISCONNECTED,
       CONNECTION_REJECTED,
       DISCONNECT,
+      CONNECT_TIMEOUT,
     };
 
     status_e status;

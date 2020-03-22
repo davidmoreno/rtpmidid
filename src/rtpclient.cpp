@@ -176,16 +176,22 @@ void rtpclient::connect_to(const std::string &address, const std::string &port){
   DEBUG("Connecting control port {} to {}:{}", local_base_port, host, service);
 
   // If not connected, connect now the MIDI port
-  peer.connected_event.connect([this, address, port](const std::string &name, rtppeer::status_e status) {
+  auto conn_event = peer.connected_event.connect([this, address, port](const std::string &name, rtppeer::status_e status) {
     if (status == rtppeer::CONTROL_CONNECTED) {
       DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address, remote_base_port + 1);
       peer.connect_to(rtppeer::MIDI_PORT);
     } else if (status == rtppeer::CONNECTED){
+      connect_timer.disable();
       start_ck_1min_sync();
     }
   });
 
   peer.connect_to(rtppeer::CONTROL_PORT);
+
+  connect_timer = poller.add_timer_event(5, [this, conn_event]{
+    peer.connected_event.disconnect(conn_event);
+    peer.disconnect_event(rtppeer::CONNECT_TIMEOUT);
+  });
 }
 
 void rtpclient::sendto(const parse_buffer_t &pb, rtppeer::port_e port){
