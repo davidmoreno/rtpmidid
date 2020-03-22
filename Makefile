@@ -39,5 +39,5 @@ valgrind_run: build/src/rtpmidid
 	valgrind build/src/rtpmidid $(RTPMIDID_ARGS)
 
 setup:
-	sudo mkdir /var/run/rtpmidid
+	sudo mkdir -p /var/run/rtpmidid
 	sudo chown $(shell whoami) /var/run/rtpmidid
