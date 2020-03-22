@@ -301,6 +301,14 @@ void rtpmidid_t::connect_client(int aseq_port) {
             auto &address = peer_info->addresses[peer_info->addr_idx];
             peer_info->peer->connect_to(address.address, address.port);
           });
+        } else if (reason == rtppeer::disconnect_reason_e::CONNECT_TIMEOUT) {
+            ERROR("Timeout. Not trying again.");
+            seq.disconnect_port(peer_info->aseq_port);
+            // Remove peer, to signal not trying to conenct or anything. Quite probably delete/free it.
+            peer_info->peer = nullptr;
+            // Back to... try if you want.
+            peer_info->connect_attempts = 0;
+            return;
         }
     });
     peer_info->use_count++;
