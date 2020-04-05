@@ -29,7 +29,7 @@ def main(argv):
         print(str(e))
         sys.exit(1)
 
-    for cmd in parse_commands(argv[1:]):
+    for cmd in parse_commands(argv[1:] or ["help"]):
         print(">>> %s" % json.dumps(cmd), file=sys.stderr)
         ret = conn.command(cmd)
         print(json.dumps(ret, indent=2))

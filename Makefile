@@ -2,14 +2,15 @@
 help:
 	@echo "Makefile for rtpmidid"
 	@echo
-	@echo "compile -- Creates the build directory and compiles the rtpmidid"
-	@echo "run     -- Compiles and runs the daemon"
+	@echo "build   -- Creates the build directory and builds the rtpmidid"
+	@echo "run     -- builds and runs the daemon"
 	@echo "setup   -- Creates the socket control file"
 	@echo "clean   -- Cleans project"
+	@echo "deb     -- Generate deb package"
 	@echo
 
-.PHONY: compile
-compile: build/bin/rtpmidid
+.PHONY: build
+build: build/bin/rtpmidid
 
 build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 	mkdir -p build
@@ -38,12 +39,31 @@ setup:
 .PHONY: test test_mdns test_rtppeer test_rtpserver
 test: test_mdns test_rtppeer test_rtpserver
 
-test_mdns: compile
+test_mdns: build
 	valgrind $(VALGRINDFLAGS) build/tests/test_mdns
 
-test_rtppeer: compile
+test_rtppeer: build
 	valgrind $(VALGRINDFLAGS) build/tests/test_rtppeer
 
-test_rtpserver: compile
+test_rtpserver: build
 	valgrind $(VALGRINDFLAGS) build/tests/test_rtpserver
+
+.PHONY: deb
+deb:
+	debuild
+
+ifeq ($(PREFIX),)
+    PREFIX := /usr/local
+endif
+.PHONY: install
+install: build
+	mkdir -p $(PREFIX)/usr/bin/
+	cp build/src/rtpmidid $(PREFIX)/usr/bin/
+	cp cli/rtpmidid-cli.py $(PREFIX)/usr/bin/rtpmidid-cli
+	mkdir -p $(PREFIX)/etc/systemd/system/
+	cp debian/rtpmidid.service $(PREFIX)/etc/systemd/system/
+	mkdir -p $(PREFIX)/usr/share/doc/rtpmidid/
+	cp README.md $(PREFIX)/usr/share/doc/rtpmidid/
+	cp LICENSE $(PREFIX)/usr/share/doc/rtpmidid/
+
 

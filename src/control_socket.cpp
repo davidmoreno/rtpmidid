@@ -17,6 +17,7 @@
  */
 
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 #include <errno.h>
@@ -66,6 +67,7 @@ rtpmidid::control_socket_t::control_socket_t(rtpmidid::rtpmidid_t &rtpmidid, con
         return;
     }
     listen(listen_socket, 20);
+    ::chmod(socketfile.c_str(), 0777);
     rtpmidid::poller.add_fd_in(listen_socket, [this](int fd) {
         this->connection_ready();
     });
@@ -114,7 +116,7 @@ void rtpmidid::control_socket_t::data_ready(int fd){
 namespace rtpmidid{
     namespace commands {
         // Commands
-        static json stats(rtpmidid::rtpmidid_t &rtpmidid, time_t start_time){
+        static json status(rtpmidid::rtpmidid_t &rtpmidid, time_t start_time){
             auto js = json{
                 {"version", rtpmidid::VERSION},
                 {"uptime", time(NULL) - start_time}
@@ -131,7 +133,7 @@ namespace rtpmidid{
                 std::vector<json> addresses;
                 for (auto &address: client.addresses){
                     addresses.push_back({
-                        {"host", address.address}, 
+                        {"host", address.address},
                         {"port", address.port}
                     });
                 }
@@ -214,8 +216,8 @@ std::string rtpmidid::control_socket_t::parse_command(const std::string &command
     json ret = nullptr ; // Fill the one you return
     json error = json{{"detail", "Unknown command"}, {"code", 2}}; // By detault no command
 
-    if (msg.method == "stats") {
-        ret = rtpmidid::commands::stats(rtpmidid, start_time);
+    if (msg.method == "status") {
+        ret = rtpmidid::commands::status(rtpmidid, start_time);
     }
     if (msg.method == "exit" || msg.method == "quit") {
         ret = rtpmidid::commands::exit(rtpmidid);
@@ -237,7 +239,7 @@ std::string rtpmidid::control_socket_t::parse_command(const std::string &command
     }
     if (msg.method == "help") {
         ret = json{
-            {"commands", {"help", "exit", "create", "stats"}}
+            {"commands", {"help", "exit", "create", "status"}}
         };
     }
 
