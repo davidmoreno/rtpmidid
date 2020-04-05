@@ -167,6 +167,7 @@ namespace rtpmidid{
 
   void aseq::remove_port(uint8_t port){
     snd_seq_delete_port(seq, port);
+    midi_event.erase(port);
   }
 
 
