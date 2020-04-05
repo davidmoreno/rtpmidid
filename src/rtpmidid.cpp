@@ -458,21 +458,21 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev, parse_buffer_t &s
       stream.write_uint8(0xFE);
     break;
     case SND_SEQ_EVENT_SYSEX: {
-      unsigned len = ev->data.ext.len, sz = stream.size();
+      ssize_t len = ev->data.ext.len, sz = stream.size();
       if (len <= sz) {
-	unsigned char *data = (unsigned char*)ev->data.ext.ptr;
-	for (unsigned i = 0; i < len; i++) {
-	  stream.write_uint8(data[i]);
-	}
+        uint8_t *data = (unsigned char*)ev->data.ext.ptr;
+        for (ssize_t i = 0; i < len; i++) {
+          stream.write_uint8(data[i]);
+        }
       } else {
-	WARNING("Sysex buffer overflow! Not sending. ({} bytes needed)", len);
+        WARNING("Sysex buffer overflow! Not sending. ({} bytes needed)", len);
       }
     }
     break;
     default:
       WARNING("Event type not yet implemented! Not sending. {}", ev->type);
       return;
-      break;
+    break;
   }
 }
 
