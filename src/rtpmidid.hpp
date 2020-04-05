@@ -81,7 +81,7 @@ namespace rtpmidid{
     void setup_mdns();
     void announce_rtpmidid_server(const std::string &name, uint16_t port);
     void unannounce_rtpmidid_server(const std::string &name, uint16_t port);
-    void connect_client(int aseqport);
+    void connect_client(const std::string &name, int aseqport);
 
     // An import server is one that for each discovered connection, creates the alsa ports
     std::shared_ptr<rtpserver> add_rtpmidid_import_server(const std::string &name, const std::string &port);

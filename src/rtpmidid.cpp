@@ -235,7 +235,7 @@ std::optional<uint8_t> rtpmidid_t::add_rtpmidi_client(
 
   seq.subscribe_event[aseq_port].connect([this, aseq_port](aseq::port_t port, const std::string &name){
     DEBUG("Callback on subscribe at rtpmidid: {}", name);
-    connect_client(aseq_port);
+    connect_client(fmt::format("{}/{}", this->name, name), aseq_port);
   });
   seq.unsubscribe_event[aseq_port].connect([this, aseq_port](aseq::port_t port){
     DEBUG("Callback on unsubscribe at rtpmidid");
@@ -266,7 +266,7 @@ void rtpmidid_t::remove_rtpmidi_client(const std::string &name){
   // WARNING("Service is not currently known to delete: {}", name);
 }
 
-void rtpmidid_t::connect_client(int aseq_port) {
+void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
   auto peer_info = &known_clients[aseq_port];
   if (peer_info->peer) {
     if (peer_info->peer->peer.status == rtppeer::CONNECTED) {

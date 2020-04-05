@@ -25,10 +25,10 @@ VALGRINDFLAGS := --leak-check=full --error-exitcode=1
 RTPMIDID_ARGS := --port 10000
 
 .PHONY: run run-valgrind
-run: build/src/rtpmidid
+run: build
 	build/src/rtpmidid $(RTPMIDID_ARGS)
 
-run-valgrind: build/src/rtpmidid
+run-valgrind: build
 	valgrind --leak-check=full --show-leak-kinds=all build/src/rtpmidid $(RTPMIDID_ARGS)
 
 .PHONY: setup
