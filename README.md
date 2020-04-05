@@ -52,8 +52,34 @@ support. I will try to list them as I find them:
 
 ## How to use `rtpmidid`
 
+recomended use is via debian packages, at https://github.com/davidmoreno/rtpmidid/releases
+
 `rtpmidid` provides two modes of operation, one focused on importing another on
 exporting.
+
+```
+Real Time Protocol Music Instrument Digital Interface Daemon - 20.04.5
+(C) 2019 David Moreno Montero <dmoreno@coralbits.com>
+Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.
+
+rtpmidi allows to use rtpmidi protocol to communicate with MIDI equipement
+using network equipiment. Recomended use is via ethernet cabling as with WiFi
+there is a lot more latency. Internet use has not been tested, but may also
+deliver high latency.
+
+Options:
+  --version           Show version
+  --help              Show this help
+  --name <name>       Forces a rtpmidi name
+  --host <address>    My default IP. Needed to answer mDNS. Normally guessed but may be attached to another ip.
+  --port <port>       Opens local port as server. Default 5400. Can set several.
+  --connect <address> Connects the given address. This is default, no need for --connect
+  --control <path>    Creates a control socket. Check CONTROL.md. Default `/var/run/rtpmidid/control.sock`
+  address for connect:
+  hostname            Connects to hostname:5400 port using rtpmidi
+  hostname:port       Connects to a hostname on a given port
+  name:hostname:port  Connects to a hostname on a given port and forces a name for alsaseq
+```
 
 ### Importing
 
@@ -63,9 +89,9 @@ alsa seq ports which provide the events on those endpoints.
 For mDNS discovered endpoints, the connection is delayed until the alsa seq
 connection.
 
-Also it can connect to other endpoints by ip and port. Right now it is only
-possible at but in the future via some other running mechanism, as watching for
-a config file changes.
+Also it can connect to other endpoints by ip and port. It's possible to create
+new connection via command line with `rtpmidid-cli connect NAME IP PORT`. There
+are variations to connect that skip the name and port.
 
 ### Exporting
 
@@ -81,13 +107,26 @@ from all exported services. Normally this is not the desired behaviour, so it is
 recomended to export output ports, not input ones. This will be fixed in the
 future.
 
+## Install and Build
+
+There are Debian packages at https://github.com/davidmoreno/rtpmidid/releases .
+They are available for Ubuntu 18.04 x64 and Raspbian 32bits, but may work
+also on other systems.
+
+To easy build there is a simple makefile, which can be invoked to compile with
+`make build`. Use `make` or `make help` to get help on commands.
+
+Its possible to create a debian / ubuntu package with `make deb`
+
+Requires C++17 (Ubuntu 18.04+), and libfmt-dev, libasound2-dev, libavahi-client-dev.
+
 ## Goals
 
 * [x] Daemon, no need for UI
 * [x] ALSA MIDI -- Inputs as ALSA MIDI inputs, outputs a ALSA MIDI outputs
 * [x] Autoconfigurable for mDNS Endpoints
 
-## Features and status
+## Roadmap: Features and status
 
 Development status / plan:
 
@@ -116,6 +155,11 @@ Development status / plan:
 * [ ] Journal support for Program Change
 * [ ] Journal support for Pitch Bend
 
+Currently there is no journal. This is **normally** not a problem on local
+networks, as the thernet protocol already has packet error and detection, but
+packets may arrive out of order. Anyway **its not production ready** just for
+this missing feature.
+
 ## CLI Control
 
 There is a basic CLI that used the [Unix socket control](#unix-socket-control).
@@ -125,53 +169,6 @@ Use as:
 ```shell
 cli/rtpmidid-cli.py help
 ```
-
-## Unix socket control
-
-It is possible to change runtime parameters.
-
-To do it there is an optional control socket that could be use in the future by
-a GUI.
-
-By the moment, only direct connection works. Check [CONTROL.md](CONTROL.md) file
-for more information, but as a teaser, the following command creates a new ALSA
-port that connects to this IP and port:
-
-```shell
-echo "create DEEPMIND12 192.168.1.17 5004" | nc -U /var/run/rtpmidid/control.sock"
-```
-
-## Compile
-
-Requires C++17 (Ubuntu 18.04+), and libfmt-dev, libasound2-dev, libavahi-client-dev.
-
-To compile and run, execute:
-
-```shell
-make
-build/src/rtpmidid
-```
-
-There are some command line options:
-
-```
-Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.
-
-rtpmidi allows to use rtpmidi protocol to communicate with MIDI equipement
-using network equipiment. Recomended use is via ethernet cabling as with WiFi
-there is a lot more latency. Internet use has not been tested, but may also
-deliver high latency.
-
-Options:
-  -v                  Show version
-  -h                  Show this help
-  -n name             Forces a rtpmidi name
-  -p port             Opens local port as server. Default 5400. Can set several.
-  hostname            Connects to hostname:5400 port using rtpmidi
-  hostname:port       Connects to a hostname on a given port
-  name:hostname:port  Connects to a hostname on a given port and forces a name for alsaseq
-```
-
 
 ## License
 
