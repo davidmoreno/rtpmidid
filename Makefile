@@ -50,7 +50,7 @@ test_rtpserver: build
 
 .PHONY: deb
 deb:
-	debuild
+	dpkg-buildpackage --no-sign
 
 ifeq ($(PREFIX),)
     PREFIX := /usr/local
