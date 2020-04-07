@@ -72,11 +72,11 @@ Options:
   --help              Show this help
   --name <name>       Forces a rtpmidi name
   --host <address>    My default IP. Needed to answer mDNS. Normally guessed but may be attached to another ip.
-  --port <port>       Opens local port as server. Default 5400. Can set several.
+  --port <port>       Opens local port as server. Default 5004. Can set several.
   --connect <address> Connects the given address. This is default, no need for --connect
   --control <path>    Creates a control socket. Check CONTROL.md. Default `/var/run/rtpmidid/control.sock`
   address for connect:
-  hostname            Connects to hostname:5400 port using rtpmidi
+  hostname            Connects to hostname:5004 port using rtpmidi
   hostname:port       Connects to a hostname on a given port
   name:hostname:port  Connects to a hostname on a given port and forces a name for alsaseq
 ```
@@ -181,3 +181,12 @@ This includes embeded software uses (anti
 If you think the license does not fit your use case, please contact me at
 dmoreno@coralbits.com for alternative licensing options. I'm a freelancer
 looking for new projects.
+
+## Resources
+
+* https://developer.apple.com/library/archive/documentation/Audio/Conceptual/MIDINetworkDriverProtocol/MIDI/MIDI.html
+* https://www.tobias-erichsen.de/software/rtpmidi.html
+* https://en.wikipedia.org/wiki/RTP-MIDI
+* https://tools.ietf.org/html/rfc6295
+* http://www.rfc-editor.org/rfc/rfc4696.txt
+* http://john-lazzaro.github.io//rtpmidi/
