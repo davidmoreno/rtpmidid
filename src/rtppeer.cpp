@@ -341,30 +341,42 @@ void rtppeer::parse_feedback(parse_buffer_t &buffer){
 
 void rtppeer::parse_midi(parse_buffer_t &buffer){
   // auto _headers =
-  buffer.read_uint8();
+  buffer.read_uint8();          // Ignore RTP header flags (Byte 0)
   auto rtpmidi_id = buffer.read_uint8();
-  if (rtpmidi_id != 0x61){
+  if (rtpmidi_id != 0x61){      // next Byte: Payload type
     WARNING("Received packet which is not RTP MIDI. Ignoring.");
     return;
   }
-  remote_seq_nr = buffer.read_uint16();
+  remote_seq_nr = buffer.read_uint16();   // Ignore RTP sequence no.
   // TODO In the future we may use a journal.
   // auto _remote_timestamp =
-  buffer.read_uint32();
-  auto remote_ssrc = buffer.read_uint32();
+  buffer.read_uint32();                   // Ignore timestamp
+  auto remote_ssrc = buffer.read_uint32();// SSRC
   if (remote_ssrc != this->remote_ssrc){
     WARNING("Got message for unknown remote SSRC on this port. (from {:04X}, I'm {:04X})", remote_ssrc, this->remote_ssrc);
     return;
   }
 
-
+  // RFC 6295 RTP-MIDI _header
+  // The Flags are:
+  // B = has long header
+  // J = has journal
+  // Z = delta time on first MIDI-command present
+  // P = no status byte in original midi command
   auto header = buffer.read_uint8();
   if ((header & 0x80) != 0){
+    WARNING("This RTP MIDI  has long header. Not implemented yet. Ignoring.");
+    return;
+  }
+  if ((header & 0x40) != 0){
     WARNING("This RTP MIDI header has journal. Not implemented yet. Ignoring.");
   }
-  if ((header & 0xB0) != 0){
-    WARNING("This RTP MIDI header is too complex. Not implemented yet. Ignoring.");
-    return;
+  if ((header & 0x20) != 0){
+    WARNING("This RTP MIDI payload has delta time for the first command. Ignoring.");
+    buffer.read_uint8();
+  }
+  if ((header & 0x10) != 0){
+    WARNING("There was no status byte in original MIDI command. Ignoring.");
   }
   int16_t length = header & 0x0F;
   buffer.check_enought(length);

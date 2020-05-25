@@ -392,6 +392,10 @@ void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data){
     snd_seq_ev_set_subs(&ev);
     snd_seq_ev_set_direct(&ev);
     snd_seq_event_output_direct(seq.seq, &ev);
+    // There is one delta time byte following, if there are multiple commands in one frame.
+    // We ignore this
+    if (midi_data.position < midi_data.end)
+      midi_data.read_uint8();;
   }
 
 }
