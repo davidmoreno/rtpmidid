@@ -17,48 +17,48 @@
  */
 
 #pragma once
-#include <string>
-#include <vector>
+#include <alsa/asoundlib.h>
 #include <functional>
 #include <map>
-#include <alsa/asoundlib.h>
+#include <string>
+#include <vector>
 
 #include "signal.hpp"
 
 namespace rtpmidid {
-  class aseq {
-  public:
-    struct port_t {
-      uint8_t client;
-      uint8_t port;
+class aseq {
+public:
+  struct port_t {
+    uint8_t client;
+    uint8_t port;
 
-      port_t(uint8_t a, uint8_t b) : client(a), port(b) {}
+    port_t(uint8_t a, uint8_t b) : client(a), port(b) {}
 
-      bool operator<(const port_t &other) const{
-        return client < other.client && port < other.port;
-      }
-    };
-
-    std::string name;
-    snd_seq_t *seq;
-    std::vector<int> fds; // Normally 1?
-    std::map<int, signal_t<port_t, const std::string &>> subscribe_event;
-    std::map<int, signal_t<port_t>> unsubscribe_event;
-    std::map<int, signal_t<snd_seq_event_t *>> midi_event;
-    uint8_t client_id;
-
-    aseq(std::string name);
-    ~aseq();
-
-    void read_ready();
-    std::string get_client_name(snd_seq_addr_t *addr);
-
-    uint8_t create_port(const std::string &name);
-    void remove_port(uint8_t port);
-
-    /// Disconencts everything from this port
-    void disconnect_port(uint8_t port);
+    bool operator<(const port_t &other) const {
+      return client < other.client && port < other.port;
+    }
   };
 
-  std::vector<std::string> get_ports(aseq *);
-}
+  std::string name;
+  snd_seq_t *seq;
+  std::vector<int> fds; // Normally 1?
+  std::map<int, signal_t<port_t, const std::string &>> subscribe_event;
+  std::map<int, signal_t<port_t>> unsubscribe_event;
+  std::map<int, signal_t<snd_seq_event_t *>> midi_event;
+  uint8_t client_id;
+
+  aseq(std::string name);
+  ~aseq();
+
+  void read_ready();
+  std::string get_client_name(snd_seq_addr_t *addr);
+
+  uint8_t create_port(const std::string &name);
+  void remove_port(uint8_t port);
+
+  /// Disconencts everything from this port
+  void disconnect_port(uint8_t port);
+};
+
+std::vector<std::string> get_ports(aseq *);
+} // namespace rtpmidid

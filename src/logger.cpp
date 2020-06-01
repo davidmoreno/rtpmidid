@@ -15,74 +15,68 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+#include "logger.hpp"
+#include <fmt/ostream.h>
 #include <stdio.h>
 #include <string>
 #include <string_view>
-#include <fmt/ostream.h>
-#include "logger.hpp"
 
-namespace logger{
-  logger __logger;
+namespace logger {
+logger __logger;
 
-  enum Color{
-    RED=31,
-    GREEN=32,
-    YELLOW=33,
-    BLUE=34,
-    PURPLE=35,
-    ORANGE=36,
-    WHITE=37,
-  };
+enum Color {
+  RED = 31,
+  GREEN = 32,
+  YELLOW = 33,
+  BLUE = 34,
+  PURPLE = 35,
+  ORANGE = 36,
+  WHITE = 37,
+};
 
-  std::string color(const std::string_view &str, Color color, bool highlight=false){
-    int hl = highlight ? 1 : 0;
-    return fmt::format("\033[{};{}m{}\033[0m", hl, color, str);
-  }
-  std::string color(const std::string_view &str, Color color, Color bgcolor, bool highlight=false){
-    int hl = highlight ? 1 : 0;
-    return fmt::format("\033[{};{};{}m{}\033[0m", hl, color, bgcolor, str);
-  }
-
-
-  logger::logger(){
-
-  }
-  logger::~logger(){
-
-  }
-  void logger::log(const char *filename, int lineno, LogLevel loglevel, const std::string &msg){
-    time_t now;
-    time(&now);
-    char timestamp[sizeof "2011-10-08T07:07:09Z"];
-    strftime(timestamp, sizeof timestamp, "%FT%TZ", gmtime(&now));
-
-    auto my_color = WHITE;
-    switch(loglevel){
-      case DEBUG:
-        my_color = BLUE;
-      break;
-      case WARNING:
-        my_color = YELLOW;
-      break;
-      case ERROR:
-        my_color = RED;
-      break;
-      case INFO:
-        my_color = WHITE;
-      break;
-      case SUCCESS:
-        my_color = GREEN;
-      break;
-    }
-
-    fmt::print("{} {}\n", color(
-      fmt::format("[{}] [{}:{}]",
-        timestamp, filename, lineno
-      ), my_color),
-      msg
-    ); //color("msg"), RED);
-  }
-  void logger::flush(){
-    ::fflush(::stderr);
-  }
+std::string color(const std::string_view &str, Color color,
+                  bool highlight = false) {
+  int hl = highlight ? 1 : 0;
+  return fmt::format("\033[{};{}m{}\033[0m", hl, color, str);
 }
+std::string color(const std::string_view &str, Color color, Color bgcolor,
+                  bool highlight = false) {
+  int hl = highlight ? 1 : 0;
+  return fmt::format("\033[{};{};{}m{}\033[0m", hl, color, bgcolor, str);
+}
+
+logger::logger() {}
+logger::~logger() {}
+void logger::log(const char *filename, int lineno, LogLevel loglevel,
+                 const std::string &msg) {
+  time_t now;
+  time(&now);
+  char timestamp[sizeof "2011-10-08T07:07:09Z"];
+  strftime(timestamp, sizeof timestamp, "%FT%TZ", gmtime(&now));
+
+  auto my_color = WHITE;
+  switch (loglevel) {
+  case DEBUG:
+    my_color = BLUE;
+    break;
+  case WARNING:
+    my_color = YELLOW;
+    break;
+  case ERROR:
+    my_color = RED;
+    break;
+  case INFO:
+    my_color = WHITE;
+    break;
+  case SUCCESS:
+    my_color = GREEN;
+    break;
+  }
+
+  fmt::print(
+      "{} {}\n",
+      color(fmt::format("[{}] [{}:{}]", timestamp, filename, lineno), my_color),
+      msg); // color("msg"), RED);
+}
+void logger::flush() { ::fflush(::stderr); }
+} // namespace logger

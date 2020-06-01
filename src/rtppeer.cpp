@@ -17,11 +17,11 @@
  */
 #include <time.h>
 
-#include "./logger.hpp"
-#include "./rtppeer.hpp"
 #include "./exceptions.hpp"
-#include "./poller.hpp"
+#include "./logger.hpp"
 #include "./netutils.hpp"
+#include "./poller.hpp"
+#include "./rtppeer.hpp"
 
 using namespace rtpmidid;
 
@@ -34,8 +34,7 @@ using namespace rtpmidid;
  * BUGS: It needs two consecutive ports for client, but just ask a random and
  *       expects next to be free. It almost always is, but can fail.
  */
-rtppeer::rtppeer(std::string _name) : local_name(std::move(_name))
-{
+rtppeer::rtppeer(std::string _name) : local_name(std::move(_name)) {
   status = NOT_CONNECTED;
   remote_ssrc = 0;
   local_ssrc = rand() & 0x0FFFF;
@@ -46,64 +45,49 @@ rtppeer::rtppeer(std::string _name) : local_name(std::move(_name))
   initiator_id = 0;
 }
 
-rtppeer::~rtppeer()
-{
+rtppeer::~rtppeer() {
   DEBUG("~rtppeer '{}' (local) <-> '{}' (remote)", local_name, remote_name);
 }
 
-void rtppeer::reset()
-{
+void rtppeer::reset() {
   status = NOT_CONNECTED;
   remote_name = "";
   remote_ssrc = 0;
   initiator_id = 0;
 }
 
-void rtppeer::data_ready(parse_buffer_t &buffer, port_e port)
-{
-  if (port == CONTROL_PORT)
-  {
-    if (is_command(buffer))
-    {
+void rtppeer::data_ready(parse_buffer_t &buffer, port_e port) {
+  if (port == CONTROL_PORT) {
+    if (is_command(buffer)) {
       parse_command(buffer, port);
-    }
-    else if (is_feedback(buffer))
-    {
+    } else if (is_feedback(buffer)) {
       parse_feedback(buffer);
-    }
-    else
-    {
+    } else {
       buffer.print_hex(true);
     }
-  }
-  else
-  {
-    if (is_command(buffer))
-    {
+  } else {
+    if (is_command(buffer)) {
       parse_command(buffer, port);
-    }
-    else
-    {
+    } else {
       parse_midi(buffer);
     }
   }
 }
 
-bool rtppeer::is_command(parse_buffer_t &pb)
-{
-  // DEBUG("Is command? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF, pb.start[1] == 0xFF);
+bool rtppeer::is_command(parse_buffer_t &pb) {
+  // DEBUG("Is command? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF,
+  // pb.start[1] == 0xFF);
   return (pb.size() >= 16 && pb.start[0] == 0xFF && pb.start[1] == 0xFF);
 }
-bool rtppeer::is_feedback(parse_buffer_t &pb)
-{
-  // DEBUG("Is feedback? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF, pb.start[1] == 0xFF);
-  return (pb.size() >= 12 && pb.start[0] == 0xFF && pb.start[1] == 0xFF && pb.start[2] == 0x52 && pb.start[3] == 0x53);
+bool rtppeer::is_feedback(parse_buffer_t &pb) {
+  // DEBUG("Is feedback? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF,
+  // pb.start[1] == 0xFF);
+  return (pb.size() >= 12 && pb.start[0] == 0xFF && pb.start[1] == 0xFF &&
+          pb.start[2] == 0x52 && pb.start[3] == 0x53);
 }
 
-void rtppeer::parse_command(parse_buffer_t &buffer, port_e port)
-{
-  if (buffer.size() < 16)
-  {
+void rtppeer::parse_command(parse_buffer_t &buffer, port_e port) {
+  if (buffer.size() < 16) {
     // This should never be reachable, but should help to smart compilers for
     // further size checks
     throw exception("Invalid command packet.");
@@ -113,8 +97,7 @@ void rtppeer::parse_command(parse_buffer_t &buffer, port_e port)
   auto command = buffer.read_uint16();
   // DEBUG("Got command type {:X}", command);
 
-  switch (command)
-  {
+  switch (command) {
   case rtppeer::OK:
     parse_command_ok(buffer, port);
     break;
@@ -141,40 +124,38 @@ void rtppeer::parse_command(parse_buffer_t &buffer, port_e port)
  *
  * I already sent before the IN message, the server sent me OK
  */
-void rtppeer::parse_command_ok(parse_buffer_t &buffer, port_e port)
-{
-  if (status == CONNECTED)
-  {
-    WARNING("This peer is already connected. Need to disconnect to connect again.");
+void rtppeer::parse_command_ok(parse_buffer_t &buffer, port_e port) {
+  if (status == CONNECTED) {
+    WARNING(
+        "This peer is already connected. Need to disconnect to connect again.");
     return;
   }
   auto protocol = buffer.read_uint32();
   auto initiator_id = buffer.read_uint32();
   remote_ssrc = buffer.read_uint32();
   remote_name = buffer.read_str0();
-  if (protocol != 2)
-  {
-    throw exception("rtpmidid only understands RTP MIDI protocol 2. Fill an issue at https://github.com/davidmoreno/rtpmidid/. Got protocol {}", protocol);
+  if (protocol != 2) {
+    throw exception(
+        "rtpmidid only understands RTP MIDI protocol 2. Fill an issue at "
+        "https://github.com/davidmoreno/rtpmidid/. Got protocol {}",
+        protocol);
   }
-  if (initiator_id != this->initiator_id)
-  {
-    throw exception("Response to connect from an unknown initiator. Not connecting.");
+  if (initiator_id != this->initiator_id) {
+    throw exception(
+        "Response to connect from an unknown initiator. Not connecting.");
   }
 
-  INFO(
-      "Got confirmation from {}, initiator_id: {} ({}) ssrc: {}, name: {}, port: {}",
-      remote_name, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name,
-      port == CONTROL_PORT ? "Control" : port == MIDI_PORT ? "MIDI" : "Unknown");
-  if (port == MIDI_PORT)
-  {
+  INFO("Got confirmation from {}, initiator_id: {} ({}) ssrc: {}, name: {}, "
+       "port: {}",
+       remote_name, initiator_id, this->initiator_id == initiator_id,
+       remote_ssrc, remote_name,
+       port == CONTROL_PORT ? "Control"
+                            : port == MIDI_PORT ? "MIDI" : "Unknown");
+  if (port == MIDI_PORT) {
     status = status_e(int(status) | int(MIDI_CONNECTED));
-  }
-  else if (port == CONTROL_PORT)
-  {
+  } else if (port == CONTROL_PORT) {
     status = status_e(int(status) | int(CONTROL_CONNECTED));
-  }
-  else
-  {
+  } else {
     ERROR("Got data on unknown PORT! {}", port);
   }
   connected_event(remote_name, status);
@@ -188,11 +169,10 @@ void rtppeer::parse_command_ok(parse_buffer_t &buffer, port_e port)
  * TODO It would be super nice to be able to have several clients
  * connected to me.
  */
-void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port)
-{
-  if (status == CONNECTED)
-  {
-    WARNING("This peer is already connected. Need to disconnect to connect again.");
+void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port) {
+  if (status == CONNECTED) {
+    WARNING(
+        "This peer is already connected. Need to disconnect to connect again.");
     return;
   }
   auto protocol = buffer.read_uint32();
@@ -200,14 +180,17 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port)
   remote_ssrc = buffer.read_uint32();
   remote_name = buffer.read_str0();
 
-  if (protocol != 2)
-  {
-    throw exception("rtpmidid only understands RTP MIDI protocol 2. Fill an issue at https://github.com/davidmoreno/rtpmidid/. Got protocol {}", protocol);
+  if (protocol != 2) {
+    throw exception(
+        "rtpmidid only understands RTP MIDI protocol 2. Fill an issue at "
+        "https://github.com/davidmoreno/rtpmidid/. Got protocol {}",
+        protocol);
   }
 
-  INFO(
-      "Got connection request from {}, initiator_id: {:X} ({}) ssrc: {:X}, name: {}, at control? {}",
-      remote_name, initiator_id, this->initiator_id == initiator_id, remote_ssrc, remote_name, port == CONTROL_PORT);
+  INFO("Got connection request from {}, initiator_id: {:X} ({}) ssrc: {:X}, "
+       "name: {}, at control? {}",
+       remote_name, initiator_id, this->initiator_id == initiator_id,
+       remote_ssrc, remote_name, port == CONTROL_PORT);
 
   uint8_t response[128];
   parse_buffer_t response_buffer(response, sizeof(response));
@@ -228,49 +211,55 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port)
   connected_event(remote_name, status);
 }
 
-void rtppeer::parse_command_by(parse_buffer_t &buffer, port_e port)
-{
+void rtppeer::parse_command_by(parse_buffer_t &buffer, port_e port) {
   auto protocol = buffer.read_uint32();
   initiator_id = buffer.read_uint32();
   auto remote_ssrc = buffer.read_uint32();
 
-  if (protocol != 2)
-  {
-    throw exception("rtpmidid only understands RTP MIDI protocol 2. Fill an issue at https://github.com/davidmoreno/rtpmidid/. Got protocol {}", protocol);
+  if (protocol != 2) {
+    throw exception(
+        "rtpmidid only understands RTP MIDI protocol 2. Fill an issue at "
+        "https://github.com/davidmoreno/rtpmidid/. Got protocol {}",
+        protocol);
   }
 
-  if (remote_ssrc != this->remote_ssrc)
-  {
+  if (remote_ssrc != this->remote_ssrc) {
     WARNING("Trying to disconnect from the wrong rtpmidi peer (bad port)");
     return;
   }
 
-  status = (status_e)(((int)status) & ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
-  INFO("Disconnect from {}, {} port. Status {:X}", remote_name, port == MIDI_PORT ? "MIDI" : "Control", (int)status);
+  status = (status_e)(
+      ((int)status) &
+      ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
+  INFO("Disconnect from {}, {} port. Status {:X}", remote_name,
+       port == MIDI_PORT ? "MIDI" : "Control", (int)status);
 
   disconnect_event(PEER_DISCONNECTED);
 }
 
-void rtppeer::parse_command_no(parse_buffer_t &buffer, port_e port)
-{
+void rtppeer::parse_command_no(parse_buffer_t &buffer, port_e port) {
   auto protocol = buffer.read_uint32();
   initiator_id = buffer.read_uint32();
   auto remote_ssrc = buffer.read_uint32();
 
-  if (protocol != 2)
-  {
-    throw exception("rtpmidid only understands RTP MIDI protocol 2. Fill an issue at https://github.com/davidmoreno/rtpmidid/. Got protocol {}", protocol);
+  if (protocol != 2) {
+    throw exception(
+        "rtpmidid only understands RTP MIDI protocol 2. Fill an issue at "
+        "https://github.com/davidmoreno/rtpmidid/. Got protocol {}",
+        protocol);
   }
 
-  status = (status_e)(((int)status) & ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
+  status = (status_e)(
+      ((int)status) &
+      ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
   WARNING("Invitation Rejected (NO) : remote ssrc {:X}", remote_ssrc);
-  INFO("Disconnect from {}, {} port. Status {:X}", remote_name, port == MIDI_PORT ? "MIDI" : "Control", (int)status);
+  INFO("Disconnect from {}, {} port. Status {:X}", remote_name,
+       port == MIDI_PORT ? "MIDI" : "Control", (int)status);
 
   disconnect_event(CONNECTION_REJECTED);
 }
 
-void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port)
-{
+void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port) {
   // auto ssrc =
   buffer.read_uint32();
   auto count = buffer.read_uint8();
@@ -282,27 +271,21 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port)
   uint64_t ck2 = 0;
   uint64_t ck3 = 0;
 
-  switch (count)
-  {
-  case 0:
-  {
+  switch (count) {
+  case 0: {
     // Send my timestamp. I will use it later when I receive 2.
     ck2 = get_timestamp();
     count = 1;
-  }
-  break;
-  case 1:
-  {
+  } break;
+  case 1: {
     // Send my timestamp. I will use it when get answer with 3.
     ck2 = buffer.read_uint64();
     ck3 = get_timestamp();
     count = 2;
     latency = ck3 - ck1;
     DEBUG("Latency {}: {:.2f} ms (client / 2)", remote_name, latency / 10.0);
-  }
-  break;
-  case 2:
-  {
+  } break;
+  case 2: {
     // Receive the other side CK, I can calculate latency
     ck2 = buffer.read_uint64();
     // ck3 = buffer.read_uint64();
@@ -339,8 +322,7 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port)
   send_event(std::move(retbuffer), port);
 }
 
-void rtppeer::send_ck0()
-{
+void rtppeer::send_ck0() {
   uint64_t ck1 = get_timestamp();
   uint64_t ck2 = 0;
   uint64_t ck3 = 0;
@@ -368,21 +350,19 @@ void rtppeer::send_ck0()
   send_event(std::move(retbuffer), MIDI_PORT);
 }
 
-void rtppeer::parse_feedback(parse_buffer_t &buffer)
-{
+void rtppeer::parse_feedback(parse_buffer_t &buffer) {
   buffer.position = buffer.start + 8;
   seq_nr_ack = buffer.read_uint16();
 
-  DEBUG("Got feedback until package {} / {}. No journal, so ignoring.", seq_nr_ack, seq_nr);
+  DEBUG("Got feedback until package {} / {}. No journal, so ignoring.",
+        seq_nr_ack, seq_nr);
 }
 
-void rtppeer::parse_midi(parse_buffer_t &buffer)
-{
+void rtppeer::parse_midi(parse_buffer_t &buffer) {
   // auto _headers =
   buffer.read_uint8(); // Ignore RTP header flags (Byte 0)
   auto rtpmidi_id = buffer.read_uint8();
-  if (rtpmidi_id != 0x61)
-  { // next Byte: Payload type
+  if (rtpmidi_id != 0x61) { // next Byte: Payload type
     WARNING("Received packet which is not RTP MIDI. Ignoring.");
     return;
   }
@@ -391,9 +371,10 @@ void rtppeer::parse_midi(parse_buffer_t &buffer)
   // auto _remote_timestamp =
   buffer.read_uint32();                    // Ignore timestamp
   auto remote_ssrc = buffer.read_uint32(); // SSRC
-  if (remote_ssrc != this->remote_ssrc)
-  {
-    WARNING("Got message for unknown remote SSRC on this port. (from {:04X}, I'm {:04X})", remote_ssrc, this->remote_ssrc);
+  if (remote_ssrc != this->remote_ssrc) {
+    WARNING("Got message for unknown remote SSRC on this port. (from {:04X}, "
+            "I'm {:04X})",
+            remote_ssrc, this->remote_ssrc);
     return;
   }
 
@@ -404,22 +385,19 @@ void rtppeer::parse_midi(parse_buffer_t &buffer)
   // Z = delta time on first MIDI-command present
   // P = no status byte in original midi command
   auto header = buffer.read_uint8();
-  if ((header & 0x80) != 0)
-  {
+  if ((header & 0x80) != 0) {
     WARNING("This RTP MIDI  has long header. Not implemented yet. Ignoring.");
     return;
   }
-  if ((header & 0x40) != 0)
-  {
+  if ((header & 0x40) != 0) {
     WARNING("This RTP MIDI header has journal. Not implemented yet. Ignoring.");
   }
-  if ((header & 0x20) != 0)
-  {
-    WARNING("This RTP MIDI payload has delta time for the first command. Ignoring.");
+  if ((header & 0x20) != 0) {
+    WARNING("This RTP MIDI payload has delta time for the first command. "
+            "Ignoring.");
     buffer.read_uint8();
   }
-  if ((header & 0x10) != 0)
-  {
+  if ((header & 0x10) != 0) {
     WARNING("There was no status byte in original MIDI command. Ignoring.");
   }
   int16_t length = header & 0x0F;
@@ -435,8 +413,7 @@ void rtppeer::parse_midi(parse_buffer_t &buffer)
  *
  * 10 ts = 1ms, 10000 ts = 1s. 1ms = 0.1ts
  */
-uint64_t rtppeer::get_timestamp()
-{
+uint64_t rtppeer::get_timestamp() {
   struct timespec spec;
 
   clock_gettime(CLOCK_REALTIME, &spec);
@@ -445,11 +422,10 @@ uint64_t rtppeer::get_timestamp()
   return uint32_t(now - timestamp_start);
 }
 
-void rtppeer::send_midi(parse_buffer_t &events)
-{
-  if (!is_connected())
-  { // Not connected yet.
-    DEBUG("Can not send MIDI data to {} yet, not connected ({:X}).", remote_name, (int)status);
+void rtppeer::send_midi(parse_buffer_t &events) {
+  if (!is_connected()) { // Not connected yet.
+    DEBUG("Can not send MIDI data to {} yet, not connected ({:X}).",
+          remote_name, (int)status);
     return;
   }
 
@@ -475,8 +451,7 @@ void rtppeer::send_midi(parse_buffer_t &events)
   send_event(std::move(buffer), MIDI_PORT);
 }
 
-void rtppeer::send_goodbye(port_e to_port)
-{
+void rtppeer::send_goodbye(port_e to_port) {
   uint8_t data[64];
   parse_buffer_t buffer(data, sizeof(data));
 
@@ -488,16 +463,16 @@ void rtppeer::send_goodbye(port_e to_port)
 
   send_event(std::move(buffer), to_port);
 
-  status = status_e(int(status) & ~int(to_port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED));
+  status =
+      status_e(int(status) &
+               ~int(to_port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED));
 
-  if (status == NOT_CONNECTED)
-  {
+  if (status == NOT_CONNECTED) {
     disconnect_event(DISCONNECT);
   }
 }
 
-void rtppeer::connect_to(port_e rtp_port)
-{
+void rtppeer::connect_to(port_e rtp_port) {
   uint8_t packet[1500];
   auto buffer = parse_buffer_t(packet, 1500);
 

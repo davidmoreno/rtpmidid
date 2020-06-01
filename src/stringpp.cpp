@@ -18,14 +18,15 @@
 
 #include "./stringpp.hpp"
 
-std::vector<std::string> rtpmidid::split(std::string const &str, const char delim){
+std::vector<std::string> rtpmidid::split(std::string const &str,
+                                         const char delim) {
   std::vector<std::string> ret;
-	size_t I;
-	size_t endI = 0;
+  size_t I;
+  size_t endI = 0;
 
-	while ((I = str.find_first_not_of(delim, endI)) != std::string::npos) {
-		endI = str.find(delim, I);
-		ret.push_back(str.substr(I, endI - I));
-	}
+  while ((I = str.find_first_not_of(delim, endI)) != std::string::npos) {
+    endI = str.find(delim, I);
+    ret.push_back(str.substr(I, endI - I));
+  }
   return ret;
 }

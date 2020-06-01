@@ -17,26 +17,26 @@
  */
 #pragma once
 #include <exception>
+#include <fmt/format.h>
 #include <string>
 #include <vector>
-#include <fmt/format.h>
 
-namespace rtpmidid{
-  extern const char *VERSION;
+namespace rtpmidid {
+extern const char *VERSION;
 
-  /**
-   * @short All rtpmidi options in a nice struct to pass around
-   *
-   * This allows easy read config and parse command line and generate the
-   * rtpmidid object.
-   */
-  struct config_t {
-    std::string name;
-    std::vector<std::string> connect_to;
-    // Create clients at this ports to start with. Later will see.
-    std::vector<std::string> ports;
-    std::string host;
-    std::string control;
-  };
-  config_t parse_cmd_args(int argc, char **argv);
-}
+/**
+ * @short All rtpmidi options in a nice struct to pass around
+ *
+ * This allows easy read config and parse command line and generate the
+ * rtpmidid object.
+ */
+struct config_t {
+  std::string name;
+  std::vector<std::string> connect_to;
+  // Create clients at this ports to start with. Later will see.
+  std::vector<std::string> ports;
+  std::string host;
+  std::string control;
+};
+config_t parse_cmd_args(int argc, char **argv);
+} // namespace rtpmidid

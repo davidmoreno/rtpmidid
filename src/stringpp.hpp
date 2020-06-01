@@ -17,85 +17,86 @@
  */
 
 #pragma once
-#include <vector>
+#include <algorithm>
+#include <sstream>
 #include <string>
 #include <string_view>
-#include <sstream>
-#include <algorithm>
+#include <vector>
 
 // Some functions to allow to_stirng to almost everything
-namespace std{
-  template<typename T>
-  std::string to_string(const std::vector<T> &list){
-    std::stringstream ss;
-    bool first = true;
-    ss<<"[";
-    for(auto &item: list){
-      if (!first)
-        ss<<", ";
-      else
-        first = false;
-      ss<<to_string(item);
-    }
-    ss<<"]";
-    return ss.str();
+namespace std {
+template <typename T> std::string to_string(const std::vector<T> &list) {
+  std::stringstream ss;
+  bool first = true;
+  ss << "[";
+  for (auto &item : list) {
+    if (!first)
+      ss << ", ";
+    else
+      first = false;
+    ss << to_string(item);
   }
-
-  inline std::string to_string(const std::string &str){
-    return str;
-  }
-
-  inline bool startswith(const std::string_view &str, const std::string_view &maybe_start){
-    if (str.length() < maybe_start.length())
-      return false;
-    return std::equal(std::begin(maybe_start), std::end(maybe_start), std::begin(str));
-  }
-  inline bool endswith(const std::string_view &str, const std::string_view &maybe_end){
-    auto pos = str.length() - maybe_end.length();
-    if (pos < 0)
-      return false;
-    return std::equal(std::begin(str) + pos, std::end(str), std::begin(maybe_end));
-  }
+  ss << "]";
+  return ss.str();
 }
-namespace rtpmidid{
-  std::vector<std::string> split(const std::string &str, char delim=' ');
 
-  // https://stackoverflow.com/questions/216823/whats-the-best-way-to-trim-stdstring
-  // trim from start (in place)
-  static inline void ltrim(std::string &s) {
-      s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](int ch) {
-          return !std::isspace(ch);
-      }));
-  }
+inline std::string to_string(const std::string &str) { return str; }
 
-  // trim from end (in place)
-  static inline void rtrim(std::string &s) {
-      s.erase(std::find_if(s.rbegin(), s.rend(), [](int ch) {
-          return !std::isspace(ch);
-      }).base(), s.end());
-  }
-
-  // trim from both ends (in place)
-  static inline void trim(std::string &s) {
-      ltrim(s);
-      rtrim(s);
-  }
-
-  // trim from start (copying)
-  static inline std::string ltrim_copy(std::string s) {
-      ltrim(s);
-      return s;
-  }
-
-  // trim from end (copying)
-  static inline std::string rtrim_copy(std::string s) {
-      rtrim(s);
-      return s;
-  }
-
-  // trim from both ends (copying)
-  static inline std::string trim_copy(std::string s) {
-      trim(s);
-      return s;
-  }
+inline bool startswith(const std::string_view &str,
+                       const std::string_view &maybe_start) {
+  if (str.length() < maybe_start.length())
+    return false;
+  return std::equal(std::begin(maybe_start), std::end(maybe_start),
+                    std::begin(str));
 }
+inline bool endswith(const std::string_view &str,
+                     const std::string_view &maybe_end) {
+  auto pos = str.length() - maybe_end.length();
+  if (pos < 0)
+    return false;
+  return std::equal(std::begin(str) + pos, std::end(str),
+                    std::begin(maybe_end));
+}
+} // namespace std
+namespace rtpmidid {
+std::vector<std::string> split(const std::string &str, char delim = ' ');
+
+// https://stackoverflow.com/questions/216823/whats-the-best-way-to-trim-stdstring
+// trim from start (in place)
+static inline void ltrim(std::string &s) {
+  s.erase(s.begin(), std::find_if(s.begin(), s.end(),
+                                  [](int ch) { return !std::isspace(ch); }));
+}
+
+// trim from end (in place)
+static inline void rtrim(std::string &s) {
+  s.erase(std::find_if(s.rbegin(), s.rend(),
+                       [](int ch) { return !std::isspace(ch); })
+              .base(),
+          s.end());
+}
+
+// trim from both ends (in place)
+static inline void trim(std::string &s) {
+  ltrim(s);
+  rtrim(s);
+}
+
+// trim from start (copying)
+static inline std::string ltrim_copy(std::string s) {
+  ltrim(s);
+  return s;
+}
+
+// trim from end (copying)
+static inline std::string rtrim_copy(std::string s) {
+  rtrim(s);
+  return s;
+}
+
+// trim from both ends (copying)
+static inline std::string trim_copy(std::string s) {
+  trim(s);
+  return s;
+}
+} // namespace rtpmidid

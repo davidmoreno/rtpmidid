@@ -18,10 +18,10 @@
 
 #pragma once
 
-#include <string>
-#include <memory>
-#include <vector>
 #include <functional>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "signal.hpp"
 
@@ -31,26 +31,26 @@ typedef struct AvahiPoll AvahiPoll;
 typedef struct AvahiEntryGroup AvahiEntryGroup;
 
 namespace rtpmidid {
-  struct announcement_t {
-    std::string name;
-    int port;
-  };
+struct announcement_t {
+  std::string name;
+  int port;
+};
 
-  class mdns_rtpmidi {
-  public:
-    std::unique_ptr<AvahiPoll> poller_adapter;
-    AvahiClient *client;
-    AvahiEntryGroup *group;
-    std::vector<announcement_t> announcements;
-    // name, address, port
-    signal_t<const std::string &, const std::string &, const std::string &>
-       discover_event;
-    signal_t<const std::string &> remove_event;
+class mdns_rtpmidi {
+public:
+  std::unique_ptr<AvahiPoll> poller_adapter;
+  AvahiClient *client;
+  AvahiEntryGroup *group;
+  std::vector<announcement_t> announcements;
+  // name, address, port
+  signal_t<const std::string &, const std::string &, const std::string &>
+      discover_event;
+  signal_t<const std::string &> remove_event;
 
-    mdns_rtpmidi();
-    ~mdns_rtpmidi();
-    void announce_all();
-    void announce_rtpmidi(const std::string &name, const int32_t port);
-    void unannounce_rtpmidi(const std::string &name, const int32_t port);
-  };
-}
+  mdns_rtpmidi();
+  ~mdns_rtpmidi();
+  void announce_all();
+  void announce_rtpmidi(const std::string &name, const int32_t port);
+  void unannounce_rtpmidi(const std::string &name, const int32_t port);
+};
+} // namespace rtpmidid

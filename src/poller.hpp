@@ -17,64 +17,65 @@
  */
 
 #pragma once
-#include <map>
-#include <functional>
 #include <ctime>
+#include <functional>
+#include <map>
 
 namespace rtpmidid {
-  /**
-   * Simplified fd poller
-   *
-   * Internally uses epoll, it is level triggered, so data must be read or
-   * will retrigger.
-   */
-  class poller_t{
-    int epollfd;
-    std::map<int, std::function<void(int)>> fd_events;
-    std::vector<std::tuple<std::time_t, int, std::function<void(void)>>> timer_events;
-    std::vector<std::function<void(void)>> later_events;
-    int max_timer_id = 0;
-  public:
-    class timer_t;
+/**
+ * Simplified fd poller
+ *
+ * Internally uses epoll, it is level triggered, so data must be read or
+ * will retrigger.
+ */
+class poller_t {
+  int epollfd;
+  std::map<int, std::function<void(int)>> fd_events;
+  std::vector<std::tuple<std::time_t, int, std::function<void(void)>>>
+      timer_events;
+  std::vector<std::function<void(void)>> later_events;
+  int max_timer_id = 0;
 
-    poller_t();
-    ~poller_t();
+public:
+  class timer_t;
 
-    // Call this function in X seconds
-    timer_t add_timer_event(std::time_t in_secs, std::function<void(void)> event_f);
-    void remove_timer(timer_t &tid);
+  poller_t();
+  ~poller_t();
 
-    // Just call it later. after finishing current round of event loop
-    void call_later(std::function<void(void)> later_f);
+  // Call this function in X seconds
+  timer_t add_timer_event(std::time_t in_secs,
+                          std::function<void(void)> event_f);
+  void remove_timer(timer_t &tid);
 
-    void add_fd_in(int fd, std::function<void(int)> event_f);
-    void add_fd_out(int fd, std::function<void(int)> event_f);
-    void add_fd_inout(int fd, std::function<void(int)> event_f);
-    void remove_fd(int fd);
+  // Just call it later. after finishing current round of event loop
+  void call_later(std::function<void(void)> later_f);
 
-    void wait();
+  void add_fd_in(int fd, std::function<void(int)> event_f);
+  void add_fd_out(int fd, std::function<void(int)> event_f);
+  void add_fd_inout(int fd, std::function<void(int)> event_f);
+  void remove_fd(int fd);
 
-    void close();
-    bool is_open(){
-      return epollfd > 0;
-    }
-  };
+  void wait();
 
-  class poller_t::timer_t{
-  public:
-    int id;
+  void close();
+  bool is_open() { return epollfd > 0; }
+};
 
-    timer_t();
-    timer_t(int id_);
-    timer_t(timer_t &&);
-    ~timer_t();
-    timer_t &operator=(timer_t &&other);
-    void disable();
+class poller_t::timer_t {
+public:
+  int id;
 
-    // No copying
-    timer_t(const timer_t &) = delete;
-  };
+  timer_t();
+  timer_t(int id_);
+  timer_t(timer_t &&);
+  ~timer_t();
+  timer_t &operator=(timer_t &&other);
+  void disable();
 
-  // Singleton for all events on the system.
-  extern poller_t poller;
-}
+  // No copying
+  timer_t(const timer_t &) = delete;
+};
+
+// Singleton for all events on the system.
+extern poller_t poller;
+} // namespace rtpmidid

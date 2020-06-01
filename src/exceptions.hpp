@@ -17,26 +17,22 @@
  */
 #pragma once
 #include <exception>
-#include <string>
 #include <fmt/format.h>
+#include <string>
 
-namespace rtpmidid{
-  class exception : public std::exception {
-    std::string msg;
-  public:
-    template<typename... Args>
-    exception(Args... args) {
-      msg = fmt::format(args...);
-    }
-    const char *what() const noexcept{
-      return msg.c_str();
-    }
-  };
+namespace rtpmidid {
+class exception : public std::exception {
+  std::string msg;
 
-  class not_implemented : public std::exception {
-  public:
-    const char *what() const noexcept{
-      return "Not Implemented";
-    }
-  };
-}
+public:
+  template <typename... Args> exception(Args... args) {
+    msg = fmt::format(args...);
+  }
+  const char *what() const noexcept { return msg.c_str(); }
+};
+
+class not_implemented : public std::exception {
+public:
+  const char *what() const noexcept { return "Not Implemented"; }
+};
+} // namespace rtpmidid
