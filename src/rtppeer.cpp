@@ -417,7 +417,9 @@ uint64_t rtppeer::get_timestamp() {
   struct timespec spec;
 
   clock_gettime(CLOCK_REALTIME, &spec);
-  uint64_t now = spec.tv_sec * 1000 + spec.tv_nsec / 1.0e7;
+  // ns is 1e-9s. I need 1e-4s, so / 1e5
+  uint64_t now = spec.tv_sec * 10000 + spec.tv_nsec / 1.0e5;
+  // DEBUG("{}s {}ns", spec.tv_sec, spec.tv_nsec);
 
   return uint32_t(now - timestamp_start);
 }
