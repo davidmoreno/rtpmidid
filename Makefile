@@ -14,8 +14,14 @@ build: build/bin/rtpmidid
 
 build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 	mkdir -p build
-	cd build &&	cmake ..
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release
 	cd build && make -j
+
+build-dev: 
+	mkdir -p build
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug
+	cd build && make -j
+
 
 .PHONY: clean
 clean:
@@ -24,9 +30,12 @@ clean:
 VALGRINDFLAGS := --leak-check=full --error-exitcode=1
 RTPMIDID_ARGS := --port 10000
 
-.PHONY: run run-valgrind
+.PHONY: run run-valgrind gdb
 run: build
 	build/src/rtpmidid $(RTPMIDID_ARGS)
+
+gdb: build-dev
+	gdb build/src/rtpmidid -ex=r --args build/src/rtpmidid  $(RTPMIDID_ARGS)
 
 run-valgrind: build
 	valgrind --leak-check=full --show-leak-kinds=all build/src/rtpmidid $(RTPMIDID_ARGS)

@@ -310,53 +310,66 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
           this->recv_rtpmidi_event(aseq_port, pb);
         });
     peer_info->peer->peer.disconnect_event.connect(
-        [this, peer_info](rtppeer::disconnect_reason_e reason) {
-          DEBUG("Disconnect signal: {}", reason);
-          // If cant connec t(network problem) or rejected, try again in next
-          // address.
-          if (reason == rtppeer::disconnect_reason_e::CANT_CONNECT ||
-              reason == rtppeer::disconnect_reason_e::CONNECTION_REJECTED) {
-            if (peer_info->connect_attempts >=
-                (3 * peer_info->addresses.size())) {
-              ERROR("Too many attempts to connect. Not trying again. Attempted "
-                    "{} times.",
-                    peer_info->connect_attempts);
-              seq.disconnect_port(peer_info->aseq_port);
-              // Remove peer, to signal not trying to conenct or anything. Quite
-              // probably delete/free it.
-              peer_info->peer = nullptr;
-              // Back to... try if you want.
-              peer_info->connect_attempts = 0;
-              return;
-            }
-            peer_info->connect_attempts += 1;
-
-            peer_info->peer->connect_timer =
-                poller.add_timer_event(1, [peer_info] {
-                  peer_info->addr_idx =
-                      (peer_info->addr_idx + 1) % peer_info->addresses.size();
-                  DEBUG("Try connect next in list. Idx {}/{}",
-                        peer_info->addr_idx, peer_info->addresses.size());
-                  // Try next
-                  auto &address = peer_info->addresses[peer_info->addr_idx];
-                  peer_info->peer->connect_to(address.address, address.port);
-                });
-          } else if (reason == rtppeer::disconnect_reason_e::CONNECT_TIMEOUT) {
-            ERROR("Timeout. Not trying again.");
-            seq.disconnect_port(peer_info->aseq_port);
-            // Remove peer, to signal not trying to conenct or anything. Quite
-            // probably delete/free it.
-            peer_info->peer = nullptr;
-            // Back to... try if you want.
-            peer_info->connect_attempts = 0;
-            return;
-          }
+        [this, aseq_port](rtppeer::disconnect_reason_e reason) {
+          this->disconnect_client(aseq_port, reason);
         });
     peer_info->use_count++;
 
     peer_info->peer->connect_to(address.address, address.port);
   } else {
     DEBUG("Already connected.");
+  }
+}
+
+void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
+  auto peer_info = &known_clients[aseq_port];
+  auto reason = static_cast<rtppeer::disconnect_reason_e>(reasoni);
+
+  DEBUG("Disconnect signal: {}", reason);
+  // If cant connec t(network problem) or rejected, try again in next
+  // address.
+  switch (reason) {
+  case rtppeer::disconnect_reason_e::CANT_CONNECT:
+  case rtppeer::disconnect_reason_e::CONNECTION_REJECTED:
+    if (peer_info->connect_attempts >= (3 * peer_info->addresses.size())) {
+      ERROR("Too many attempts to connect. Not trying again. Attempted "
+            "{} times.",
+            peer_info->connect_attempts);
+      remove_client(peer_info->aseq_port);
+      return;
+    }
+
+    peer_info->connect_attempts += 1;
+    peer_info->peer->connect_timer = poller.add_timer_event(1, [peer_info] {
+      peer_info->addr_idx =
+          (peer_info->addr_idx + 1) % peer_info->addresses.size();
+      DEBUG("Try connect next in list. Idx {}/{}", peer_info->addr_idx,
+            peer_info->addresses.size());
+      // Try next
+      auto &address = peer_info->addresses[peer_info->addr_idx];
+      peer_info->peer->connect_to(address.address, address.port);
+    });
+    break;
+
+  case rtppeer::disconnect_reason_e::CONNECT_TIMEOUT:
+  case rtppeer::disconnect_reason_e::CK_TIMEOUT:
+    WARNING("Timeout. Not trying again.");
+    remove_client(peer_info->aseq_port);
+    return;
+    break;
+
+  case rtppeer::disconnect_reason_e::PEER_DISCONNECTED:
+    WARNING("Peer disconnected.");
+    remove_client(peer_info->aseq_port);
+    break;
+
+  case rtppeer::disconnect_reason_e::DISCONNECT:
+    // Do nothing, another client may connect
+    break;
+
+  default:
+    ERROR("Other reason: {}", reason);
+    remove_client(peer_info->aseq_port);
   }
 }
 
@@ -519,10 +532,21 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
 }
 
 void rtpmidid_t::remove_client(uint8_t port) {
-  DEBUG("Removing peer from known peers list.");
-  known_clients.erase(port);
-  seq.remove_port(port);
-  seq.subscribe_event[port].disconnect_all();
-  seq.unsubscribe_event[port].disconnect_all();
-  seq.midi_event[port].disconnect_all();
+  // We add it to the poller queue as as GC, as the peer
+  // might be further used at this call point.
+  poller.call_later([this, port] {
+    if (known_clients.find(port) == known_clients.end()) {
+      DEBUG("Removing peer already removed from known peers list. Port {}",
+            port);
+      return;
+    }
+    DEBUG("Removing peer from known peers list. Port {}", port);
+    seq.remove_port(port);
+    seq.subscribe_event[port].disconnect_all();
+    seq.unsubscribe_event[port].disconnect_all();
+    seq.midi_event[port].disconnect_all();
+
+    // Last as may be used in the shutdown of the client.
+    known_clients.erase(port);
+  });
 }

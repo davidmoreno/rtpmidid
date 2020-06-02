@@ -43,6 +43,7 @@ rtppeer::rtppeer(std::string _name) : local_name(std::move(_name)) {
   timestamp_start = 0;
   timestamp_start = get_timestamp();
   initiator_id = 0;
+  waiting_ck = false;
 }
 
 rtppeer::~rtppeer() {
