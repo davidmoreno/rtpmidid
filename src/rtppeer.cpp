@@ -283,14 +283,15 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port) {
     ck3 = get_timestamp();
     count = 2;
     latency = ck3 - ck1;
-    DEBUG("Latency {}: {:.2f} ms (client / 2)", remote_name, latency / 10.0);
+    waiting_ck = false;
+    INFO("Latency {}: {:.2f} ms (client / 2)", remote_name, latency / 10.0);
   } break;
   case 2: {
     // Receive the other side CK, I can calculate latency
     ck2 = buffer.read_uint64();
     // ck3 = buffer.read_uint64();
     latency = get_timestamp() - ck2;
-    DEBUG("Latency {}: {:.2f} ms (server / 3)", remote_name, latency / 10.0);
+    INFO("Latency {}: {:.2f} ms (server / 3)", remote_name, latency / 10.0);
     // No need to send message
     return;
   }
@@ -323,6 +324,7 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port) {
 }
 
 void rtppeer::send_ck0() {
+  waiting_ck = true;
   uint64_t ck1 = get_timestamp();
   uint64_t ck2 = 0;
   uint64_t ck3 = 0;
@@ -340,6 +342,8 @@ void rtppeer::send_ck0() {
   retbuffer.write_uint64(ck1);
   retbuffer.write_uint64(ck2);
   retbuffer.write_uint64(ck3);
+
+  DEBUG("Send CK0 to {}", remote_name);
 
   // DEBUG("Got packet CK");
   // buffer.print_hex(true);

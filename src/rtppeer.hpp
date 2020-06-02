@@ -52,6 +52,7 @@ public:
     CONNECTION_REJECTED,
     DISCONNECT,
     CONNECT_TIMEOUT,
+    CK_TIMEOUT,
   };
 
   status_e status;
@@ -65,6 +66,7 @@ public:
   uint16_t remote_seq_nr;
   uint64_t timestamp_start; // Time in ms
   uint64_t latency;
+  bool waiting_ck;
 
   signal_t<parse_buffer_t &> midi_event;
   signal_t<const std::string &, status_e> connected_event;

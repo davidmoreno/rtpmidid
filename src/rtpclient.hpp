@@ -58,7 +58,7 @@ public:
   void sendto(const parse_buffer_t &pb, rtppeer::port_e port);
 
   void connect_to(const std::string &address, const std::string &port);
-  void start_ck_1min_sync();
+  void start_ck_sync();
 
   void data_ready(rtppeer::port_e port);
 };

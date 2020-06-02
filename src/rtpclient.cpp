@@ -190,7 +190,7 @@ void rtpclient::connect_to(const std::string &address,
           peer.connect_to(rtppeer::MIDI_PORT);
         } else if (status == rtppeer::CONNECTED) {
           connect_timer.disable();
-          start_ck_1min_sync();
+          start_ck_sync();
         }
       });
 
@@ -239,11 +239,16 @@ void rtpclient::data_ready(rtppeer::port_e port) {
 }
 
 /**
- * Every 60 seconds, do a ck sync.
+ * Every 20 seconds, do a ck sync.
  *
  * TODO If not answered in some time, asume disconnection.
  */
-void rtpclient::start_ck_1min_sync() {
+void rtpclient::start_ck_sync() {
+  if (peer.waiting_ck) {
+    INFO("Timeout waiting for CK signal. Disconnect from {}", peer.remote_name);
+    peer.disconnect_event(rtppeer::disconnect_reason_e::CK_TIMEOUT);
+    return;
+  }
   peer.send_ck0();
-  timer_ck = poller.add_timer_event(60, [this] { start_ck_1min_sync(); });
+  timer_ck = poller.add_timer_event(20, [this] { start_ck_sync(); });
 }
