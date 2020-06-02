@@ -82,7 +82,10 @@ rtpmidid::control_socket_t::control_socket_t(rtpmidid::rtpmidid_t &rtpmidid,
 
 rtpmidid::control_socket_t::~control_socket_t() {
   for (auto fd : clients) {
-    write(fd, MSG_CLOSE_CONN, strlen(MSG_CLOSE_CONN));
+    auto n = write(fd, MSG_CLOSE_CONN, strlen(MSG_CLOSE_CONN));
+    if (n < 0) {
+      DEBUG("Could not send goodbye packet to control.");
+    }
     close(fd);
   }
   close(listen_socket);
@@ -107,13 +110,24 @@ void rtpmidid::control_socket_t::data_ready(int fd) {
     return;
   }
   if (l >= sizeof(buf) - 1) {
-    write(fd, MSG_TOO_LONG, strlen(MSG_TOO_LONG));
+    auto w = write(fd, MSG_TOO_LONG, strlen(MSG_TOO_LONG));
+    if (w < 0) {
+      ERROR(
+          "Could not send msg too long to control socket! Closing connection.");
+      ::close(fd);
+      fd = -1;
+    }
     return;
   }
   buf[l] = 0;
   auto ret = parse_command(rtpmidid::trim_copy(buf));
   ret += "\n";
-  write(fd, ret.c_str(), ret.length());
+  auto w = write(fd, ret.c_str(), ret.length());
+  if (w < 0) {
+    ERROR("Could not send msg to control socket! Closing Connection.");
+    ::close(fd);
+    fd = -1;
+  }
   fsync(fd);
 }
 
