@@ -36,6 +36,7 @@ struct address_port_t {
  * and emits midi events or on_disconnect if not valid.
  */
 class rtpclient {
+
 public:
   rtppeer peer;
   // signal_t<> connect_failed_event;
@@ -51,6 +52,9 @@ public:
   uint16_t local_base_port;
   uint16_t remote_base_port;
   poller_t::timer_t timer_ck;
+  /// A simple state machine. We need to send 6 CK one after another, and then
+  /// every 10 secs.
+  uint8_t timerstate;
 
   rtpclient(std::string name);
   ~rtpclient();
@@ -58,7 +62,7 @@ public:
   void sendto(const parse_buffer_t &pb, rtppeer::port_e port);
 
   void connect_to(const std::string &address, const std::string &port);
-  void start_ck_sync();
+  void connected();
 
   void data_ready(rtppeer::port_e port);
 };

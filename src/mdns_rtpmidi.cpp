@@ -147,8 +147,9 @@ AvahiTimeout *poller_adapter_timeout_new(const AvahiPoll *api,
   ret->callback = callback;
   ret->timer_id = 0;
   if (tv) {
-    ret->timer_id = poller.add_timer_event(
-        tv->tv_sec, [ret] { ret->callback(ret, ret->userdata); });
+    ret->timer_id =
+        poller.add_timer_event(std::chrono::seconds(tv->tv_sec),
+                               [ret] { ret->callback(ret, ret->userdata); });
   }
   return ret;
 }
@@ -159,8 +160,9 @@ void poller_adapter_timeout_update(AvahiTimeout *to, const struct timeval *tv) {
   poller.remove_timer(to->timer_id);
   to->timer_id = 0;
   if (tv) {
-    to->timer_id = poller.add_timer_event(
-        tv->tv_sec, [to] { to->callback(to, to->userdata); });
+    to->timer_id =
+        poller.add_timer_event(std::chrono::seconds(tv->tv_sec),
+                               [to] { to->callback(to, to->userdata); });
   }
 }
 

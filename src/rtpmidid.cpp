@@ -28,6 +28,7 @@
 #include "./stringpp.hpp"
 
 using namespace rtpmidid;
+using namespace std::chrono_literals;
 
 rtpmidid_t::rtpmidid_t(config_t *config)
     : name(config->name), seq(fmt::format("rtpmidi {}", name)) {
@@ -340,7 +341,7 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
     }
 
     peer_info->connect_attempts += 1;
-    peer_info->peer->connect_timer = poller.add_timer_event(1, [peer_info] {
+    peer_info->peer->connect_timer = poller.add_timer_event(1s, [peer_info] {
       peer_info->addr_idx =
           (peer_info->addr_idx + 1) % peer_info->addresses.size();
       DEBUG("Try connect next in list. Idx {}/{}", peer_info->addr_idx,

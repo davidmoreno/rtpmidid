@@ -83,16 +83,18 @@ void poller_t::add_fd_out(int fd, std::function<void(int)> f) {
   }
 }
 
-poller_t::timer_t poller_t::add_timer_event(std::time_t in_secs,
+poller_t::timer_t poller_t::add_timer_event(std::chrono::milliseconds ms,
                                             std::function<void(void)> f) {
-  auto now = std::time(nullptr);
   auto timer_id = max_timer_id++;
-  timer_events.push_back(std::make_tuple(now + in_secs, timer_id, f));
+  auto when = std::chrono::steady_clock::now() + ms;
+
+  timer_events.push_back(std::make_tuple(when, timer_id, f));
   std::sort(std::begin(timer_events), std::end(timer_events),
             [](const auto &a, const auto &b) {
               return std::get<0>(a) > std::get<0>(b);
             });
-  // DEBUG("Added timer {}. {} s ({} pending)", timer_id, in_secs,
+
+  // DEBUG("Added timer {}. {} s ({} pending)", timer_id, in_ms,
   // timer_events.size());
   return poller_t::timer_t(timer_id);
 }
@@ -132,8 +134,10 @@ void poller_t::wait() {
   auto wait_ms = -1;
 
   if (!timer_events.empty()) {
-    auto now = std::time(nullptr);
-    wait_ms = (std::get<0>(timer_events[0]) - now) * 1000;
+    auto now = std::chrono::steady_clock::now();
+    wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::get<0>(timer_events[0]) - now)
+                  .count();
     // DEBUG("Timer event in {}ms", wait_ms);
     wait_ms = std::max(wait_ms, 0); // min wait 0ms.
   }

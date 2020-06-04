@@ -34,6 +34,7 @@
 #include "./poller.hpp"
 #include "./rtpclient.hpp"
 
+using namespace std::chrono_literals;
 using namespace rtpmidid;
 
 rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
@@ -189,17 +190,37 @@ void rtpclient::connect_to(const std::string &address,
                 address, remote_base_port + 1);
           peer.connect_to(rtppeer::MIDI_PORT);
         } else if (status == rtppeer::CONNECTED) {
-          connect_timer.disable();
-          start_ck_sync();
+          connected();
         }
       });
 
   peer.connect_to(rtppeer::CONTROL_PORT);
 
-  connect_timer = poller.add_timer_event(5, [this, conn_event] {
+  connect_timer = poller.add_timer_event(5s, [this, conn_event] {
     peer.connected_event.disconnect(conn_event);
     peer.disconnect_event(rtppeer::CONNECT_TIMEOUT);
   });
+}
+
+/**
+ * Send the periodic latency and connection checks
+ *
+ * At first six times as received confirmation from other end. Then Every 10
+ * secs. Check connected() function for actuall recall code.
+ *
+ * This just checks timeout and sends the ck.
+ */
+void rtpclient::connected() {
+  connect_timer.disable();
+  peer.ck_event.connect([this](float ms) {
+    if (timerstate < 6) {
+      timer_ck = poller.add_timer_event(1500ms, [this] { peer.send_ck0(); });
+      timerstate++;
+    } else {
+      timer_ck = poller.add_timer_event(10s, [this] { peer.send_ck0(); });
+    }
+  });
+  peer.send_ck0();
 }
 
 void rtpclient::sendto(const parse_buffer_t &pb, rtppeer::port_e port) {
@@ -236,19 +257,4 @@ void rtpclient::data_ready(rtppeer::port_e port) {
 
   auto buffer = parse_buffer_t(raw, n);
   peer.data_ready(buffer, port);
-}
-
-/**
- * Every 20 seconds, do a ck sync.
- *
- * TODO If not answered in some time, asume disconnection.
- */
-void rtpclient::start_ck_sync() {
-  if (peer.waiting_ck) {
-    INFO("Timeout waiting for CK signal. Disconnect from {}", peer.remote_name);
-    peer.disconnect_event(rtppeer::disconnect_reason_e::CK_TIMEOUT);
-    return;
-  }
-  peer.send_ck0();
-  timer_ck = poller.add_timer_event(20, [this] { start_ck_sync(); });
 }

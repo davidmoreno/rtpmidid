@@ -17,6 +17,7 @@
  */
 
 #pragma once
+#include <chrono>
 #include <ctime>
 #include <functional>
 #include <map>
@@ -29,9 +30,11 @@ namespace rtpmidid {
  * will retrigger.
  */
 class poller_t {
+
   int epollfd;
   std::map<int, std::function<void(int)>> fd_events;
-  std::vector<std::tuple<std::time_t, int, std::function<void(void)>>>
+  std::vector<std::tuple<std::chrono::steady_clock::time_point, int,
+                         std::function<void(void)>>>
       timer_events;
   std::vector<std::function<void(void)>> later_events;
   int max_timer_id = 0;
@@ -43,7 +46,7 @@ public:
   ~poller_t();
 
   // Call this function in X seconds
-  timer_t add_timer_event(std::time_t in_secs,
+  timer_t add_timer_event(std::chrono::milliseconds ms,
                           std::function<void(void)> event_f);
   void remove_timer(timer_t &tid);
 

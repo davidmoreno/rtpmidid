@@ -36,6 +36,7 @@ const bool debug0 = false;
 // #define DEBUG0 DEBUG
 
 using namespace rtpmidid;
+using namespace std::chrono_literals;
 
 static rtpmidid::ip4_t route_get_ip_for_route(struct in_addr);
 static rtpmidid::ip4_t guess_default_ip();
@@ -208,7 +209,7 @@ void mdns::announce(std::unique_ptr<service> service, bool broadcast) {
 
 void mdns::reannounce_later(service *srv) {
   // DEBUG("Will reannounce in {}s", srv->ttl);
-  auto timer_id = poller.add_timer_event(srv->ttl, [this, srv] {
+  auto timer_id = poller.add_timer_event(srv->ttl * 1s, [this, srv] {
     INFO("Reannounce srv: {}", srv->to_string());
     send_response(*srv);
     reannounce_later(srv);

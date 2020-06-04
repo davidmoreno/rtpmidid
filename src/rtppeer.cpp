@@ -24,6 +24,7 @@
 #include "./rtppeer.hpp"
 
 using namespace rtpmidid;
+using namespace std::chrono_literals;
 
 /**
  * @short Generic peer constructor
@@ -286,6 +287,8 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port) {
     latency = ck3 - ck1;
     waiting_ck = false;
     INFO("Latency {}: {:.2f} ms (client / 2)", remote_name, latency / 10.0);
+    ck_timeout.disable();
+    ck_event(latency / 10.0);
   } break;
   case 2: {
     // Receive the other side CK, I can calculate latency
@@ -294,6 +297,7 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port) {
     latency = get_timestamp() - ck2;
     INFO("Latency {}: {:.2f} ms (server / 3)", remote_name, latency / 10.0);
     // No need to send message
+    ck_event(latency / 10.0);
     return;
   }
   default:
@@ -353,6 +357,9 @@ void rtppeer::send_ck0() {
   // retbuffer.print_hex();
 
   send_event(std::move(retbuffer), MIDI_PORT);
+
+  ck_timeout =
+      poller.add_timer_event(5s, [this] { disconnect_event(CK_TIMEOUT); });
 }
 
 void rtppeer::parse_feedback(parse_buffer_t &buffer) {
