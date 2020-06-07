@@ -76,3 +76,17 @@ install: build
 	cp LICENSE $(PREFIX)/usr/share/doc/rtpmidid/
 
 
+ETH = $(shell route | awk '$$1 == "default" { print $$8 }')
+PORT = 5004
+
+PORT1 = $(shell echo | awk '{print ${PORT} + 1}')
+
+.PHONY: dump
+dump:
+	@echo
+	@echo "Set ETH port or PORT with: make dump ETH=eth0 PORT=5004"
+	@echo
+	rm -f dump.${PORT}
+	tcpdump '(port ${PORT}) or (port ${PORT1})' -s 65536 -w dump.${PORT} -i ${ETH} -v
+
+
