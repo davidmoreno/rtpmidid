@@ -59,6 +59,11 @@ test_rtpserver: build
 
 .PHONY: deb
 deb:
+	$(eval VERSION := $(shell git describe --match "v[0-9]*" --tags --abbrev=5 HEAD | sed 's/^v//g'))
+	$(eval DATE := $(shell date -R))
+	sed -i "1s/.*/rtpmidid (${VERSION}) unstable; urgency=medium/" debian/changelog
+	sed -i "5s/.*/ -- David Moreno <dmoreno@coralbits.com>  ${DATE}/" debian/changelog
+
 	dpkg-buildpackage --no-sign
 
 ifeq ($(PREFIX),)
