@@ -30,7 +30,9 @@
 #include "exceptions.hpp"
 #include "logger.hpp"
 #include "poller.hpp"
+#include "rtpclient.hpp"
 #include "rtpmidid.hpp"
+#include "rtppeer.hpp"
 #include "rtpserver.hpp"
 #include "stringpp.hpp"
 
@@ -149,6 +151,9 @@ static json status(rtpmidid::rtpmidid_t &rtpmidid, time_t start_time) {
       addresses.push_back({{"host", address.address}, {"port", address.port}});
     }
     cl["addresses"] = addresses;
+    if (client.peer) {
+      cl["latency_ms"] = client.peer->peer.latency / 10.0;
+    }
     clients.push_back(cl);
   }
   js["clients"] = clients;
