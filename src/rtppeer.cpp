@@ -41,6 +41,7 @@ rtppeer::rtppeer(std::string _name) : local_name(std::move(_name)) {
   local_ssrc = rand() & 0x0FFFF;
   seq_nr = rand() & 0x0FFFF;
   seq_nr_ack = seq_nr;
+  remote_seq_nr = 0; // Just not radom memory data
   timestamp_start = 0;
   timestamp_start = get_timestamp();
   initiator_id = 0;

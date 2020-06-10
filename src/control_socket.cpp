@@ -152,7 +152,11 @@ static json status(rtpmidid::rtpmidid_t &rtpmidid, time_t start_time) {
     }
     cl["addresses"] = addresses;
     if (client.peer) {
-      cl["latency_ms"] = client.peer->peer.latency / 10.0;
+      auto peer = client.peer;
+      cl["latency_ms"] = peer->peer.latency / 10.0;
+      cl["sequence_number"] = peer->peer.seq_nr;
+      cl["sequence_number_ack"] = peer->peer.seq_nr_ack;
+      cl["sequence_remote"] = peer->peer.remote_seq_nr;
     }
     clients.push_back(cl);
   }
