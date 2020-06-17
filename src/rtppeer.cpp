@@ -398,9 +398,11 @@ void rtppeer::parse_midi(parse_buffer_t &buffer) {
   // Z = delta time on first MIDI-command present
   // P = no status byte in original midi command
   auto header = buffer.read_uint8();
+  int16_t length = header & 0x0F;
   if ((header & 0x80) != 0) {
-    WARNING("This RTP MIDI  has long header. Not implemented yet. Ignoring.");
-    return;
+    length <<= 8;
+    length += buffer.read_uint8();
+    DEBUG("Long header, {} bytes long", length);
   }
   if ((header & 0x40) != 0) {
     WARNING("This RTP MIDI header has journal. Not implemented yet. Ignoring.");
@@ -413,7 +415,7 @@ void rtppeer::parse_midi(parse_buffer_t &buffer) {
   if ((header & 0x10) != 0) {
     WARNING("There was no status byte in original MIDI command. Ignoring.");
   }
-  int16_t length = header & 0x0F;
+
   buffer.check_enough(length);
 
   parse_buffer_t midi_data(buffer.position, length);
