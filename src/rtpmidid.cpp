@@ -428,12 +428,27 @@ void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data) {
       // DEBUG("Pitch bend received {}", pitch_bend);
       snd_seq_ev_set_pitchbend(&ev, current_command & 0x0F, pitch_bend);
     } break;
-    case 0xFE: // active sense
-      snd_seq_ev_clear(&ev);
-      snd_seq_ev_set_fixed(&ev);
-      ev.type = SND_SEQ_EVENT_SENSING;
-      break;
-    // XXXTODO: sysex
+    case 0xF0: {
+      //System messages
+      switch ( current_command )
+      {
+      // case 0xF0: //SysEx event
+        // break;
+      case 0xF1: //MTC Quarter Frame package
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.data.control.value = midi_data.read_uint8();
+        ev.type = SND_SEQ_EVENT_QFRAME;
+        break;
+      case 0xFE: //Active sense
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_SENSING;
+        break;
+      default:
+        break;
+      }
+    } break;
     default:
       WARNING("MIDI command type {:02X} not implemented yet", type);
       return;
@@ -525,6 +540,10 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
       WARNING("Sysex buffer overflow! Not sending. ({} bytes needed)", len);
     }
   } break;
+  case SND_SEQ_EVENT_QFRAME:
+    stream.write_uint8(0xF1);
+    stream.write_uint8(ev->data.control.value & 0x0FF);
+    break;
   default:
     WARNING("Event type not yet implemented! Not sending. {}", ev->type);
     return;
