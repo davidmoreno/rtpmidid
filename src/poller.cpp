@@ -20,8 +20,8 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 
+#include "../lib/logger.hpp"
 #include "./exceptions.hpp"
-#include "./logger.hpp"
 #include "./poller.hpp"
 
 using namespace rtpmidid;

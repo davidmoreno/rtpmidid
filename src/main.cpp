@@ -21,9 +21,9 @@
 #include <signal.h>
 #include <unistd.h>
 
+#include "../lib/logger.hpp"
 #include "./config.hpp"
 #include "./control_socket.hpp"
-#include "./logger.hpp"
 #include "./poller.hpp"
 #include "./rtpmidid.hpp"
 

@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "signal.hpp"
+#include "../lib/signal.hpp"
 
 namespace rtpmidid {
 class aseq {

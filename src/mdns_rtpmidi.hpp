@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "signal.hpp"
+#include "../lib/signal.hpp"
 
 struct AvahiClient;
 typedef struct AvahiClient AvahiClient;

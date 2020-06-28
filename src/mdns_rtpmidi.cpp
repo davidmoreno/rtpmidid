@@ -17,7 +17,7 @@
  */
 
 #include "./mdns_rtpmidi.hpp"
-#include "./logger.hpp"
+#include "../lib/logger.hpp"
 #include "./poller.hpp"
 
 #include <avahi-client/client.h>

@@ -19,18 +19,18 @@
 
 #include <vector>
 
-#include "../src/netutils.hpp"
+#include "../lib/netutils.hpp"
 
 class managed_parse_buffer_t {
 public:
   std::vector<uint8_t> data;
   rtpmidid::parse_buffer_t buffer;
 
-  managed_parse_buffer_t(int size) : data(size), buffer(nullptr, 0){
+  managed_parse_buffer_t(int size) : data(size), buffer(nullptr, 0) {
     buffer = rtpmidid::parse_buffer_t(data.data(), size);
   }
 
-  rtpmidid::parse_buffer_t &operator*(){
+  rtpmidid::parse_buffer_t &operator*() {
     buffer.position = buffer.start; // rewind
     return buffer;
   }

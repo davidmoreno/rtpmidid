@@ -9,5 +9,6 @@ set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-point
 include_directories(${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/core)
 enable_testing()
 
+add_subdirectory(lib)
 add_subdirectory(src)
 add_subdirectory(tests)
