@@ -21,11 +21,11 @@
 #include <signal.h>
 #include <unistd.h>
 
-#include "../lib/logger.hpp"
 #include "./config.hpp"
 #include "./control_socket.hpp"
-#include "./poller.hpp"
 #include "./rtpmidid.hpp"
+#include <rtpmidid/logger.hpp>
+#include <rtpmidid/poller.hpp>
 
 static bool exiting = false;
 

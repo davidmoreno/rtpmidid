@@ -15,11 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#include "../lib/logger.hpp"
-#include "../lib/netutils.hpp"
 #include "./test_case.hpp"
 #include "./test_utils.hpp"
 #include <cstdint>
+#include <rtpmidid/logger.hpp>
+#include <rtpmidid/netutils.hpp>
 
 auto packet_dns = hex_to_bin("00 00 84 00" // DNS header and flags
                              "00 00 00 01" // 1 question

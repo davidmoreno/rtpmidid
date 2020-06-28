@@ -25,16 +25,16 @@
 
 #include "../third_party/nlohmann/json.hpp"
 
-#include "../lib/logger.hpp"
-#include "../lib/rtpclient.hpp"
-#include "../lib/rtppeer.hpp"
-#include "../lib/rtpserver.hpp"
+#include "./rtpmidid.hpp"
 #include "config.hpp"
 #include "control_socket.hpp"
-#include "exceptions.hpp"
-#include "poller.hpp"
-#include "rtpmidid.hpp"
 #include "stringpp.hpp"
+#include <rtpmidid/exceptions.hpp>
+#include <rtpmidid/logger.hpp>
+#include <rtpmidid/poller.hpp>
+#include <rtpmidid/rtpclient.hpp>
+#include <rtpmidid/rtppeer.hpp>
+#include <rtpmidid/rtpserver.hpp>
 
 using json = nlohmann::json;
 

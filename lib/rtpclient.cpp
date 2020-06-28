@@ -29,10 +29,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "./logger.hpp"
-#include "./netutils.hpp"
-#include "./poller.hpp"
-#include "./rtpclient.hpp"
+#include <rtpmidid/logger.hpp>
+#include <rtpmidid/netutils.hpp>
+#include <rtpmidid/poller.hpp>
+#include <rtpmidid/rtpclient.hpp>
 
 using namespace std::chrono_literals;
 using namespace rtpmidid;

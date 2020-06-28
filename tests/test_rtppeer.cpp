@@ -16,11 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "../lib/netutils.hpp"
-#include "../lib/rtppeer.hpp"
 #include "../tests/test_utils.hpp"
 #include "./test_case.hpp"
 #include <memory>
+#include <rtpmidid/netutils.hpp>
+#include <rtpmidid/rtppeer.hpp>
 
 auto connect_msg = hex_to_bin("FF FF 'IN'"
                               "0000 0002"

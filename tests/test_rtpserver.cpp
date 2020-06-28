@@ -16,10 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "../lib/rtpserver.hpp"
-#include "../src/poller.hpp"
 #include "../tests/test_case.hpp"
 #include "../tests/test_utils.hpp"
+#include <rtpmidid/poller.hpp>
+#include <rtpmidid/rtpserver.hpp>
 
 auto connect_msg = hex_to_bin("FF FF 'IN'"
                               "0000 0002"

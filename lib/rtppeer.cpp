@@ -17,11 +17,11 @@
  */
 #include <time.h>
 
-#include "./exceptions.hpp"
-#include "./logger.hpp"
-#include "./netutils.hpp"
-#include "./poller.hpp"
-#include "./rtppeer.hpp"
+#include <rtpmidid/exceptions.hpp>
+#include <rtpmidid/logger.hpp>
+#include <rtpmidid/netutils.hpp>
+#include <rtpmidid/poller.hpp>
+#include <rtpmidid/rtppeer.hpp>
 
 using namespace rtpmidid;
 using namespace std::chrono_literals;

@@ -17,8 +17,8 @@
  */
 #pragma once
 
-#include "../lib/logger.hpp"
 #include <functional>
+#include <rtpmidid/logger.hpp>
 #include <string>
 
 #define TEST(fn)                                                               \

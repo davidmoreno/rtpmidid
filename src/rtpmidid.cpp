@@ -18,14 +18,14 @@
 #include <stdlib.h>
 #include <string>
 
-#include "../lib/logger.hpp"
-#include "../lib/netutils.hpp"
-#include "../lib/rtpclient.hpp"
-#include "../lib/rtpserver.hpp"
 #include "./aseq.hpp"
 #include "./config.hpp"
 #include "./rtpmidid.hpp"
 #include "./stringpp.hpp"
+#include <rtpmidid/logger.hpp>
+#include <rtpmidid/netutils.hpp>
+#include <rtpmidid/rtpclient.hpp>
+#include <rtpmidid/rtpserver.hpp>
 
 using namespace rtpmidid;
 using namespace std::chrono_literals;

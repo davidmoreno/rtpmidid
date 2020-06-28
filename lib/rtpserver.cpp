@@ -20,11 +20,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "./exceptions.hpp"
-#include "./logger.hpp"
-#include "./netutils.hpp"
-#include "./poller.hpp"
-#include "./rtpserver.hpp"
+#include <rtpmidid/exceptions.hpp>
+#include <rtpmidid/logger.hpp>
+#include <rtpmidid/netutils.hpp>
+#include <rtpmidid/poller.hpp>
+#include <rtpmidid/rtpserver.hpp>
 
 using namespace rtpmidid;
 

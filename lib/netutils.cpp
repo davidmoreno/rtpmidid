@@ -16,8 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "./netutils.hpp"
 #include <ctype.h>
+#include <rtpmidid/netutils.hpp>
 #include <stdio.h>
 
 namespace rtpmidid {

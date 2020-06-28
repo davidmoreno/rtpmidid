@@ -17,8 +17,8 @@
  */
 
 #pragma once
-#include "../lib/logger.hpp"
 #include "./exceptions.hpp"
+#include "logger.hpp"
 #include <cstdint>
 #include <string_view>
 

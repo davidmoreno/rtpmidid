@@ -17,9 +17,9 @@
  */
 #include <unistd.h>
 
-#include "../lib/logger.hpp"
 #include "./config.hpp"
 #include "./stringpp.hpp"
+#include <rtpmidid/logger.hpp>
 
 using namespace rtpmidid;
 
