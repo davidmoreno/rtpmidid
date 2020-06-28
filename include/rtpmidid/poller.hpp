@@ -31,14 +31,7 @@ namespace rtpmidid {
  * will retrigger.
  */
 class poller_t {
-
-  int epollfd;
-  std::map<int, std::function<void(int)>> fd_events;
-  std::vector<std::tuple<std::chrono::steady_clock::time_point, int,
-                         std::function<void(void)>>>
-      timer_events;
-  std::vector<std::function<void(void)>> later_events;
-  int max_timer_id = 0;
+  void *private_data;
 
 public:
   class timer_t;
@@ -62,7 +55,7 @@ public:
   void wait();
 
   void close();
-  bool is_open() { return epollfd > 0; }
+  bool is_open();
 };
 
 class poller_t::timer_t {
