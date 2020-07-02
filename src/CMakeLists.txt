@@ -5,6 +5,6 @@ add_executable(
   control_socket.cpp
 )
 
-target_link_libraries(rtpmidid-daemon rtpmidid -lasound -lfmt -lavahi-common -lavahi-client)
+target_link_libraries(rtpmidid-daemon rtpmidid-static -lasound -lfmt -lavahi-common -lavahi-client)
 
 set_target_properties(rtpmidid-daemon PROPERTIES OUTPUT_NAME rtpmidid)

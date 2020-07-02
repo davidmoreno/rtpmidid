@@ -78,7 +78,7 @@ install: build
 	cp debian/rtpmidid.service $(PREFIX)/etc/systemd/system/
 	mkdir -p $(PREFIX)/usr/share/doc/rtpmidid/
 	cp README.md $(PREFIX)/usr/share/doc/rtpmidid/
-	cp LICENSE $(PREFIX)/usr/share/doc/rtpmidid/
+	cp LICENSE* $(PREFIX)/usr/share/doc/rtpmidid/
 
 
 ETH = $(shell route | awk '$$1 == "default" { print $$8 }')

@@ -1,8 +1,8 @@
-rtpmidid (20.04.5~19~g3fc2b) unstable; urgency=medium
+rtpmidid (20.04.5~24~gb9a12) unstable; urgency=medium
 
   * Rolling release
 
- -- David Moreno <dmoreno@coralbits.com>  Sun, 28 Jun 2020 13:07:02 +0200
+ -- David Moreno <dmoreno@coralbits.com>  Thu, 02 Jul 2020 22:48:13 +0200
 
 
 rtpmidid (20.04.5) unstable; urgency=medium
