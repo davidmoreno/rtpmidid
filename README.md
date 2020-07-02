@@ -11,6 +11,11 @@ MIDI, and import other network shared RTP MIDI devices.
 (also known as Zeroconf, Avahi, and multicast DNS) it exposes this ALSA
 sequencer port.
 
+## librtpmidid
+
+For information about librtpmidid and how to use it, read
+[README.librtpmidid.md](README.librtpmidid.md).
+
 ## Other implementations
 
 There is many hardware with RTP MIDI support, normally controllers, but for
@@ -18,9 +23,9 @@ example Behringer DeepMind12 Synthetizer has support over Wifi.
 
 ### Linux
 
-* [raveloxmidi](https://github.com/ravelox/pimidi) - Intended to be used
+- [raveloxmidi](https://github.com/ravelox/pimidi) - Intended to be used
   directly with hardware devices or emulate midi over FIFO.
-* [rtpmidi](https://mclarenlabs.com/rtpmidi/) from [McLaren
+- [rtpmidi](https://mclarenlabs.com/rtpmidi/) from [McLaren
   Labs](https://mclarenlabs.com/). It is a feature complete, GUI driven,
   Comercial implementation. Very similar to Tobias Erichsen's rtpmidi.
 
@@ -38,7 +43,7 @@ I was able to communicate exporting at rtpmidid side conneting my gadget to the
 
 ### Windows
 
-* [rtpmidi](https://www.tobias-erichsen.de/software/rtpmidi.html) by Tobias
+- [rtpmidi](https://www.tobias-erichsen.de/software/rtpmidi.html) by Tobias
   Erichsen.
 
 ### Mobile / Tablet
@@ -48,7 +53,7 @@ support. I will try to list them as I find them:
 
 #### Android
 
-* [TouchDAW](https://www.humatic.de/htools/touchdaw/).
+- [TouchDAW](https://www.humatic.de/htools/touchdaw/).
 
 ## How to use `rtpmidid`
 
@@ -122,38 +127,38 @@ Requires C++17 (Ubuntu 18.04+), and libfmt-dev, libasound2-dev, libavahi-client-
 
 ## Goals
 
-* [x] Daemon, no need for UI
-* [x] ALSA MIDI -- Inputs as ALSA MIDI inputs, outputs a ALSA MIDI outputs
-* [x] Autoconfigurable for mDNS Endpoints
+- [x] Daemon, no need for UI
+- [x] ALSA MIDI -- Inputs as ALSA MIDI inputs, outputs a ALSA MIDI outputs
+- [x] Autoconfigurable for mDNS Endpoints
 
 ## Roadmap: Features and status
 
 Development status / plan:
 
-* [x] mDNS client/server
-* [x] Async framework (epoll with callbacks based code)
-* [x] mDNS publish and learn when there are rtpmidi running on the network
-* [x] Create the alsa ports for found rtpmidi servers in the network
-* [x] When there is any connection to the alsa sequencer port `rtpmidid` creates
+- [x] mDNS client/server
+- [x] Async framework (epoll with callbacks based code)
+- [x] mDNS publish and learn when there are rtpmidi running on the network
+- [x] Create the alsa ports for found rtpmidi servers in the network
+- [x] When there is any connection to the alsa sequencer port `rtpmidid` creates
       the rtpmidi connection
-* [x] Any message from alsa seq is sent to the MIDI rtp extreme
-* [x] Any message from rtpmidi is replayed on the alsa seq
-* [x] Can export local ports, with user deciding which ones to export.
-* [x] Server mode at a known port, when remote side request connections, create
+- [x] Any message from alsa seq is sent to the MIDI rtp extreme
+- [x] Any message from rtpmidi is replayed on the alsa seq
+- [x] Can export local ports, with user deciding which ones to export.
+- [x] Server mode at a known port, when remote side request connections, create
       the alsa seq virtual port for that connection and connect both ports.
-* [x] Allow several connections on the server port. Each its own aseq port.
-* [x] Send all MIDI events to rtpmidi
-* [x] Receive all MIDI events from rtpmidi
-* [ ] Periodic check all peers are still on, no new peers
-* [x] Remove ports when peer dissapears
-* [x] Client send CK every minute
-* [x] Can be controlled via Unix socket, but not required.
-* [ ] Jack MIDI support instead of ALSA seq
-* [ ] Use rtp midi timestamps
-* [ ] Journal support for note off
-* [ ] Journal support for CC
-* [ ] Journal support for Program Change
-* [ ] Journal support for Pitch Bend
+- [x] Allow several connections on the server port. Each its own aseq port.
+- [x] Send all MIDI events to rtpmidi
+- [x] Receive all MIDI events from rtpmidi
+- [ ] Periodic check all peers are still on, no new peers
+- [x] Remove ports when peer dissapears
+- [x] Client send CK every minute
+- [x] Can be controlled via Unix socket, but not required.
+- [ ] Jack MIDI support instead of ALSA seq
+- [ ] Use rtp midi timestamps
+- [ ] Journal support for note off
+- [ ] Journal support for CC
+- [ ] Journal support for Program Change
+- [ ] Journal support for Pitch Bend
 
 Currently there is no journal. This is **normally** not a problem on local
 networks, as the thernet protocol already has packet error and detection, but
@@ -184,9 +189,9 @@ looking for new projects.
 
 ## Resources
 
-* https://developer.apple.com/library/archive/documentation/Audio/Conceptual/MIDINetworkDriverProtocol/MIDI/MIDI.html
-* https://www.tobias-erichsen.de/software/rtpmidi.html
-* https://en.wikipedia.org/wiki/RTP-MIDI
-* https://tools.ietf.org/html/rfc6295
-* http://www.rfc-editor.org/rfc/rfc4696.txt
-* http://john-lazzaro.github.io//rtpmidi/
+- https://developer.apple.com/library/archive/documentation/Audio/Conceptual/MIDINetworkDriverProtocol/MIDI/MIDI.html
+- https://www.tobias-erichsen.de/software/rtpmidi.html
+- https://en.wikipedia.org/wiki/RTP-MIDI
+- https://tools.ietf.org/html/rfc6295
+- http://www.rfc-editor.org/rfc/rfc4696.txt
+- http://john-lazzaro.github.io//rtpmidi/
