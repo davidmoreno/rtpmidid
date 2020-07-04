@@ -46,10 +46,7 @@ setup:
 	sudo chown $(shell whoami) /var/run/rtpmidid
 
 .PHONY: test test_mdns test_rtppeer test_rtpserver
-test: test_mdns test_rtppeer test_rtpserver
-
-test_mdns: build
-	valgrind $(VALGRINDFLAGS) build/tests/test_mdns
+test: test_rtppeer test_rtpserver
 
 test_rtppeer: build
 	valgrind $(VALGRINDFLAGS) build/tests/test_rtppeer
