@@ -21,7 +21,7 @@
 
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/logger.hpp>
-#include <rtpmidid/netutils.hpp>
+#include <rtpmidid/parse_buffer.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtppeer.hpp>
 

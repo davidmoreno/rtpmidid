@@ -31,7 +31,7 @@
 #include <unistd.h>
 
 #include <rtpmidid/logger.hpp>
-#include <rtpmidid/netutils.hpp>
+#include <rtpmidid/parse_buffer.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtpclient.hpp>
 

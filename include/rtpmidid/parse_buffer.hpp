@@ -24,6 +24,16 @@
 #include <string_view>
 
 namespace rtpmidid {
+/**
+ * @short Parse and write to buffers to simplify safe network operations
+ *
+ * All data read and written to network is throug thse helper that know
+ * how to convert data, move the pointer over the read data, and are
+ * safe to do not do buffer overflows.
+ *
+ * It is inline in this file to give the compilers a change to properly
+ * inline it, which in most cases it should.
+ */
 struct parse_buffer_t {
   uint8_t *start;
   uint8_t *end;
@@ -189,7 +199,4 @@ struct parse_buffer_t {
   }
 };
 
-uint8_t *raw_write_uint16(uint8_t *data, uint16_t n);
-void read_label(parse_buffer_t &buffer, parse_buffer_t &label);
-void write_label(parse_buffer_t &data, const std::string_view &name);
 } // namespace rtpmidid

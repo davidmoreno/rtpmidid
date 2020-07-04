@@ -19,7 +19,7 @@
 
 #include <vector>
 
-#include <rtpmidid/netutils.hpp>
+#include <rtpmidid/parse_buffer.hpp>
 
 class managed_parse_buffer_t {
 public:
