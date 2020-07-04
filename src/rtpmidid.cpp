@@ -20,12 +20,12 @@
 
 #include "./aseq.hpp"
 #include "./config.hpp"
-#include "./logger.hpp"
-#include "./netutils.hpp"
-#include "./rtpclient.hpp"
 #include "./rtpmidid.hpp"
-#include "./rtpserver.hpp"
 #include "./stringpp.hpp"
+#include <rtpmidid/logger.hpp>
+#include <rtpmidid/netutils.hpp>
+#include <rtpmidid/rtpclient.hpp>
+#include <rtpmidid/rtpserver.hpp>
 
 using namespace rtpmidid;
 using namespace std::chrono_literals;
@@ -429,18 +429,17 @@ void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data) {
       snd_seq_ev_set_pitchbend(&ev, current_command & 0x0F, pitch_bend);
     } break;
     case 0xF0: {
-      //System messages
-      switch ( current_command )
-      {
+      // System messages
+      switch (current_command) {
       // case 0xF0: //SysEx event
-        // break;
-      case 0xF1: //MTC Quarter Frame package
+      // break;
+      case 0xF1: // MTC Quarter Frame package
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.data.control.value = midi_data.read_uint8();
         ev.type = SND_SEQ_EVENT_QFRAME;
         break;
-      case 0xFE: //Active sense
+      case 0xFE: // Active sense
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_SENSING;

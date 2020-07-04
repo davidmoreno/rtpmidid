@@ -16,26 +16,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "../src/rtpserver.hpp"
-#include "../src/poller.hpp"
 #include "../tests/test_case.hpp"
 #include "../tests/test_utils.hpp"
+#include <rtpmidid/poller.hpp>
+#include <rtpmidid/rtpserver.hpp>
 
-auto connect_msg = hex_to_bin(
-  "FF FF 'IN'"
-  "0000 0002"
-  "'fast' 'beef'"
-  "'first' 00"
-);
+auto connect_msg = hex_to_bin("FF FF 'IN'"
+                              "0000 0002"
+                              "'fast' 'beef'"
+                              "'first' 00");
 
-auto connect_msg2 = hex_to_bin(
-  "FF FF 'IN'"
-  "0000 0002"
-  "'slow' 'deer'"
-  "'second' 00"
-);
+auto connect_msg2 = hex_to_bin("FF FF 'IN'"
+                               "0000 0002"
+                               "'slow' 'deer'"
+                               "'second' 00");
 
-void test_several_connect_to_server(){
+void test_several_connect_to_server() {
   // random port
   rtpmidid::rtpserver server("test", 0);
 
@@ -64,17 +60,16 @@ void test_several_connect_to_server(){
 
   ASSERT_EQUAL(server.initiator_to_peer.size(), 2);
 
-  for(auto &peer: server.initiator_to_peer){
+  for (auto &peer : server.initiator_to_peer) {
     ASSERT_TRUE(peer.second->is_connected());
   }
 
   rtpmidid::poller.close();
 }
 
-
-int main(void){
+int main(void) {
   test_case_t testcase{
-    TEST(test_several_connect_to_server),
+      TEST(test_several_connect_to_server),
   };
 
   testcase.run();

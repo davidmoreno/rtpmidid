@@ -17,8 +17,8 @@
  */
 
 #include "./mdns_rtpmidi.hpp"
-#include "./logger.hpp"
-#include "./poller.hpp"
+#include <rtpmidid/logger.hpp>
+#include <rtpmidid/poller.hpp>
 
 #include <avahi-client/client.h>
 #include <avahi-client/lookup.h>

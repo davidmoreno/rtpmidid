@@ -20,8 +20,8 @@
 
 #include "./aseq.hpp"
 #include "./mdns_rtpmidi.hpp"
-#include "./poller.hpp"
 #include <memory>
+#include <rtpmidid/poller.hpp>
 #include <set>
 #include <string>
 

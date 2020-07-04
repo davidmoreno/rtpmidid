@@ -1,14 +1,10 @@
-add_library(
-  rtpmididlib
-  STATIC
-  logger.cpp poller.cpp mdns_rtpmidi.cpp aseq.cpp netutils.cpp stringpp.cpp
-  rtppeer.cpp rtpclient.cpp rtpserver.cpp
+add_executable(
+  rtpmidid-daemon  
+  mdns_rtpmidi.cpp aseq.cpp stringpp.cpp
+  main.cpp config.cpp rtpmidid.cpp
   control_socket.cpp
 )
 
-add_executable(
-  rtpmidid
-  main.cpp config.cpp rtpmidid.cpp
-)
+target_link_libraries(rtpmidid-daemon rtpmidid-static -lasound -lfmt -lavahi-common -lavahi-client)
 
-target_link_libraries(rtpmidid rtpmididlib -lasound -lfmt -lavahi-common -lavahi-client)
+set_target_properties(rtpmidid-daemon PROPERTIES OUTPUT_NAME rtpmidid)

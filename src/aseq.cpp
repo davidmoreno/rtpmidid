@@ -16,12 +16,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "./aseq.hpp"
-#include "./exceptions.hpp"
-#include "./logger.hpp"
-#include "./poller.hpp"
-#include "./rtpclient.hpp"
 #include <alsa/seq.h>
 #include <fmt/format.h>
+#include <rtpmidid/exceptions.hpp>
+#include <rtpmidid/logger.hpp>
+#include <rtpmidid/poller.hpp>
+#include <rtpmidid/rtpclient.hpp>
 #include <stdio.h>
 
 namespace rtpmidid {

@@ -18,8 +18,8 @@
 #include <unistd.h>
 
 #include "./config.hpp"
-#include "./logger.hpp"
 #include "./stringpp.hpp"
+#include <rtpmidid/logger.hpp>
 
 using namespace rtpmidid;
 

@@ -23,9 +23,9 @@
 
 #include "./config.hpp"
 #include "./control_socket.hpp"
-#include "./logger.hpp"
-#include "./poller.hpp"
 #include "./rtpmidid.hpp"
+#include <rtpmidid/logger.hpp>
+#include <rtpmidid/poller.hpp>
 
 static bool exiting = false;
 
