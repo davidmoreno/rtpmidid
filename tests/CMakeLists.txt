@@ -1,7 +1,3 @@
-add_executable(test_mdns test_mdns.cpp test_utils.cpp)
-target_link_libraries(test_mdns rtpmidid -lfmt)
-add_test(NAME test_mdns COMMAND test_mdns)
-
 add_executable(test_rtppeer test_rtppeer.cpp test_utils.cpp)
 target_link_libraries(test_rtppeer rtpmidid -lfmt)
 add_test(NAME test_rtppeer COMMAND test_rtppeer)
