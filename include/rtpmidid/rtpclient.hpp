@@ -42,6 +42,7 @@ public:
   rtppeer peer;
   // signal_t<> connect_failed_event;
   poller_t::timer_t connect_timer;
+  poller_t::timer_t ck_timeout;
   int connect_count =
       3; // how many times we tried to connect, after 3, final fail.
 
@@ -64,6 +65,7 @@ public:
 
   void connect_to(const std::string &address, const std::string &port);
   void connected();
+  void send_ck0_with_timeout();
 
   void data_ready(rtppeer::port_e port);
 };

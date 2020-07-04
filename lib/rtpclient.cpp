@@ -213,15 +213,26 @@ void rtpclient::connect_to(const std::string &address,
  */
 void rtpclient::connected() {
   connect_timer.disable();
+
   peer.ck_event.connect([this](float ms) {
+    ck_timeout.disable();
     if (timerstate < 6) {
-      timer_ck = poller.add_timer_event(1500ms, [this] { peer.send_ck0(); });
+      timer_ck =
+          poller.add_timer_event(1500ms, [this] { send_ck0_with_timeout(); });
       timerstate++;
     } else {
-      timer_ck = poller.add_timer_event(10s, [this] { peer.send_ck0(); });
+      timer_ck =
+          poller.add_timer_event(10s, [this] { send_ck0_with_timeout(); });
     }
   });
+  send_ck0_with_timeout();
+}
+
+void rtpclient::send_ck0_with_timeout() {
   peer.send_ck0();
+  ck_timeout = poller.add_timer_event(5s, [this] {
+    peer.disconnect_event(rtppeer::disconnect_reason_e::CK_TIMEOUT);
+  });
 }
 
 void rtpclient::sendto(const parse_buffer_t &pb, rtppeer::port_e port) {

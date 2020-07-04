@@ -18,7 +18,6 @@
  */
 
 #pragma once
-#include "poller.hpp"
 #include "signal.hpp"
 #include <arpa/inet.h>
 #include <functional>
@@ -76,9 +75,6 @@ public:
   signal_t<disconnect_reason_e> disconnect_event;
   // Clock latency check received. in ms
   signal_t<float> ck_event;
-
-  /// Used when send ck0, to check answered in a reasonable time
-  poller_t::timer_t ck_timeout;
 
   static bool is_command(parse_buffer_t &);
   static bool is_feedback(parse_buffer_t &);
