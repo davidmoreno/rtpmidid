@@ -2,19 +2,17 @@ name: C/C++ CI
 
 on:
   push:
-    branches: [ master, setup-ci ]
+    branches: [master, setup-ci]
   pull_request:
-    branches: [ master, setup-ci ]
+    branches: [master, setup-ci]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Install dependencies
-      run: sudo apt install -f libfmt-dev
-    - name: make test
-      run: make test
-    
+      - uses: actions/checkout@v2
+      - name: Install dependencies
+        run: sudo apt install -f libfmt-dev libasound2-dev
+      - name: make test
+        run: make test
