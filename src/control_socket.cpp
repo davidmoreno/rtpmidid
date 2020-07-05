@@ -259,6 +259,10 @@ rtpmidid::control_socket_t::parse_command(const std::string &command) {
       error = {{"detail", "Invalid params"}, {"code", 3}};
     }
   }
+  if (msg.method == "update-mdns") {
+    rtpmidid.mdns_rtpmidi.setup_mdns_browser();
+    ret = {{"detail", "mDNS update requested"}};
+  }
   if (msg.method == "help") {
     ret = json{{"commands", {"help", "exit", "create", "status"}}};
   }

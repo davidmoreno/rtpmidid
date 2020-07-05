@@ -29,6 +29,7 @@ struct AvahiClient;
 typedef struct AvahiClient AvahiClient;
 typedef struct AvahiPoll AvahiPoll;
 typedef struct AvahiEntryGroup AvahiEntryGroup;
+typedef struct AvahiServiceBrowser AvahiServiceBrowser;
 
 namespace rtpmidid {
 struct announcement_t {
@@ -41,6 +42,7 @@ public:
   std::unique_ptr<AvahiPoll> poller_adapter;
   AvahiClient *client;
   AvahiEntryGroup *group;
+  AvahiServiceBrowser *service_browser;
   std::vector<announcement_t> announcements;
   // name, address, port
   signal_t<const std::string &, const std::string &, const std::string &>
@@ -49,6 +51,7 @@ public:
 
   mdns_rtpmidi();
   ~mdns_rtpmidi();
+  void setup_mdns_browser();
   void announce_all();
   void announce_rtpmidi(const std::string &name, const int32_t port);
   void unannounce_rtpmidi(const std::string &name, const int32_t port);

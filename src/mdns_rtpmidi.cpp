@@ -326,12 +326,21 @@ mdns_rtpmidi::mdns_rtpmidi() {
     ERROR("Error creating avahi client: {} {}", error, avahi_strerror(error));
   }
 
-  AvahiServiceBrowser *sb;
-  if (!(sb = avahi_service_browser_new(
-            client, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, "_apple-midi._udp",
-            NULL, (AvahiLookupFlags)0, browse_callback, this))) {
+  service_browser = nullptr;
+  setup_mdns_browser();
+}
+
+/// Asks the network mdns for entries.
+void mdns_rtpmidi::setup_mdns_browser() {
+  if (service_browser)
+    avahi_service_browser_free(service_browser);
+  service_browser = avahi_service_browser_new(
+      client, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, "_apple-midi._udp", NULL,
+      (AvahiLookupFlags)0, browse_callback, this);
+  if (!service_browser) {
     ERROR("Failed to create service browser: {}",
           avahi_strerror(avahi_client_errno(client)));
+    return;
   }
 }
 

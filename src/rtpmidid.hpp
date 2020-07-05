@@ -57,7 +57,7 @@ class rtpmidid_t {
 public:
   std::string name;
   ::rtpmidid::aseq seq;
-  ::rtpmidid::mdns_rtpmidi mdns_rtpmidi;
+  ::rtpmidid::mdns_rtpmidi;
   // Local port id to client_info for connections
   std::map<uint8_t, client_info> known_clients;
   std::map<uint8_t, server_conn_info> known_servers_connections;
