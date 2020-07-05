@@ -67,15 +67,35 @@ ifeq ($(PREFIX),)
     PREFIX := /usr/local
 endif
 .PHONY: install
-install: build
-	mkdir -p $(PREFIX)/usr/bin/
+
+install: install-rtpmidid install-librtpmidid0 install-librtpmidid0-dev
+
+install-rtpmidid: build
+	mkdir -p $(PREFIX)/usr/bin/ 
 	cp build/src/rtpmidid $(PREFIX)/usr/bin/
 	cp cli/rtpmidid-cli.py $(PREFIX)/usr/bin/rtpmidid-cli
 	mkdir -p $(PREFIX)/etc/systemd/system/
 	cp debian/rtpmidid.service $(PREFIX)/etc/systemd/system/
 	mkdir -p $(PREFIX)/usr/share/doc/rtpmidid/
 	cp README.md $(PREFIX)/usr/share/doc/rtpmidid/
-	cp LICENSE* $(PREFIX)/usr/share/doc/rtpmidid/
+	cp LICENSE-daemon.txt $(PREFIX)/usr/share/doc/rtpmidid/LICENSE.txt
+
+install-librtpmidid0: build
+	mkdir -p $(PREFIX)/usr/lib/ 
+	cp -a build/lib/lib*so* $(PREFIX)/usr/lib/
+	mkdir -p $(PREFIX)/usr/share/doc/librtpmidid0/
+	cp README.md $(PREFIX)/usr/share/doc/librtpmidid0/
+	cp README.librtpmidid.md $(PREFIX)/usr/share/doc/librtpmidid0/
+	cp LICENSE-lib.txt $(PREFIX)/usr/share/doc/librtpmidid0/LICENSE.txt
+
+install-librtpmidid0-dev: build
+	mkdir -p $(PREFIX)/usr/lib/ $(PREFIX)/usr/include/
+	cp -a build/lib/lib*.a $(PREFIX)/usr/lib/
+	cp -a include/rtpmidid $(PREFIX)/usr/include/
+	mkdir -p $(PREFIX)/usr/share/doc/librtpmidid0-dev/
+	cp README.md $(PREFIX)/usr/share/doc/librtpmidid0-dev/
+	cp README.librtpmidid.md $(PREFIX)/usr/share/doc/librtpmidid0-dev/
+	cp LICENSE-lib.txt $(PREFIX)/usr/share/doc/librtpmidid0-dev/LICENSE.txt
 
 
 ETH = $(shell route | awk '$$1 == "default" { print $$8 }')
