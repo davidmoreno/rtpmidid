@@ -12,8 +12,10 @@ ExecStart=/usr/bin/rtpmidid
 Restart=on-failure
 RuntimeDirectory=rtpmidid
 RuntimeDirectoryMode=0755
-CPUSchedulingPolicy=fifo # realtime, so more precise
-CPUSchedulingPriority=10 # no need for max priority (20)
+# realtime, so more precise
+CPUSchedulingPolicy=fifo 
+# no need for max priority (20)
+CPUSchedulingPriority=10 
 
 [Install]
 WantedBy=multi-user.target
