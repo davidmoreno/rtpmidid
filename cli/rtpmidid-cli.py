@@ -5,6 +5,7 @@ import sys
 import json
 import os
 
+
 class Connection:
     def __init__(self, filename):
         self.filename = filename
@@ -17,10 +18,13 @@ class Connection:
 
     def command(self, command):
         self.socket.send(json.dumps(command).encode('utf8')+b'\n')
-        data = self.socket.recv(1024)
+        data = self.socket.recv(1024*1024)  # load all you can. 1MB cool!
         return json.loads(data)
 
-socketpath = os.environ.get("RTPMIDID_SOCKET") or "/var/run/rtpmidid/control.sock"
+
+socketpath = os.environ.get(
+    "RTPMIDID_SOCKET") or "/var/run/rtpmidid/control.sock"
+
 
 def main(argv):
     try:
