@@ -141,6 +141,7 @@ rtpmidid_t::add_rtpmidid_import_server(const std::string &name,
               conn->peer->send_midi(stream);
             });
         peer->disconnect_event.connect([this, aseq_port](auto reason) {
+          DEBUG("Remove aseq port {}", aseq_port);
           seq.remove_port(aseq_port);
           known_servers_connections.erase(aseq_port);
         });
@@ -300,10 +301,7 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
     } else {
       DEBUG("Already connecting.");
     }
-    return;
-  }
-
-  if (!peer_info->peer) {
+  } else {
     auto &address = peer_info->addresses[peer_info->addr_idx];
     peer_info->peer = std::make_shared<rtpclient>(name);
     peer_info->peer->peer.midi_event.connect(
@@ -317,8 +315,6 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
     peer_info->use_count++;
 
     peer_info->peer->connect_to(address.address, address.port);
-  } else {
-    DEBUG("Already connected.");
   }
 }
 
@@ -360,8 +356,21 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
     break;
 
   case rtppeer::disconnect_reason_e::PEER_DISCONNECTED:
-    WARNING("Peer disconnected.");
-    remove_client(peer_info->aseq_port);
+    WARNING("Peer disconnected. Aseq disconnect.");
+    seq.disconnect_port(peer_info->aseq_port);
+    if (peer_info->use_count > 0)
+      peer_info->use_count--;
+    // Delete it, but later as we are here because of a call inside the peer
+    if (peer_info->use_count == 0) {
+      poller.call_later([this, aseq_port] {
+        auto peer_info = &known_clients[aseq_port];
+        if (peer_info)
+          peer_info->peer = nullptr;
+      });
+    }
+    // peer_info->peer = nullptr;
+    // peer_info->use_count = 0;
+    // remove_client(peer_info->aseq_port);
     break;
 
   case rtppeer::disconnect_reason_e::DISCONNECT:
