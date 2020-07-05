@@ -23,7 +23,6 @@
 #include <sys/types.h>
 
 #include <arpa/inet.h>
-#include <fmt/format.h>
 #include <netinet/in.h>
 #include <string.h>
 #include <sys/socket.h>

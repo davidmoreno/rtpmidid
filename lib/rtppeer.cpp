@@ -17,8 +17,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#include <time.h>
-
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/parse_buffer.hpp>
