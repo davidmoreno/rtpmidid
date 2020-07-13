@@ -53,27 +53,46 @@ public:
 
   test_case_t(const std::initializer_list<test_t> &tests_) { tests = tests_; }
 
-  bool run() {
+  bool string_in_argv(const std::vector<std::string> &args,
+                      const std::string &name) {
+    if (args.size() == 0)
+      return true;
+
+    for (auto &item : args) {
+      if (name.find(item) != name.npos)
+        return true;
+    }
+    return false;
+  }
+
+  bool run(int argc = 0, char **argv = nullptr) {
+    std::vector<std::string> args;
+    for (auto i = 1; i < argc; i++) {
+      args.push_back(argv[i]);
+    }
+
     int errors = 0;
     int total = tests.size();
     int count = 0;
     for (auto &tcase : tests) {
       count += 1;
-      INFO("");
+      INFO("*******************************************************************"
+           "**************************");
       INFO("Test ({}/{}) {} Run", count, total, tcase.name);
-      try {
-        tcase.fn();
-        SUCCESS("Test {} OK", tcase.name);
-      } catch (const test_exception &e) {
-        logger::log(e.filename, e.line, logger::ERROR, e.error);
-        errors += 1;
-      } catch (const std::exception &e) {
-        ERROR("{}", e.what());
-        errors += 1;
-      } catch (...) {
-        ERROR("Unknown exception");
-        errors += 1;
-      }
+      if (string_in_argv(args, tcase.name))
+        try {
+          tcase.fn();
+          SUCCESS("Test {} OK", tcase.name);
+        } catch (const test_exception &e) {
+          logger::log(e.filename, e.line, logger::ERROR, e.error);
+          errors += 1;
+        } catch (const std::exception &e) {
+          ERROR("{}", e.what());
+          errors += 1;
+        } catch (...) {
+          ERROR("Unknown exception");
+          errors += 1;
+        }
     }
     if (errors == 0) {
       INFO("No errors.");
