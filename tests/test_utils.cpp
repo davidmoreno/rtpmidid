@@ -17,48 +17,76 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include "./test_utils.hpp"
 #include "./test_case.hpp"
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
-static int char_to_nibble(char c){
-  if (c >= '0' && c <= '9'){
+static int char_to_nibble(char c) {
+  if (c >= '0' && c <= '9') {
     return c - '0';
   }
-  if (c >= 'A' && c <= 'F'){
+  if (c >= 'A' && c <= 'F') {
     return 10 + c - 'A';
   }
   ERROR("{} is not an HEX number", c);
   throw std::exception();
 }
 
-managed_parse_buffer_t hex_to_bin(const std::string &str){
+/**
+ * @short Simple hex to bin
+ *
+ * Allows easy to understand hex to be converted to bin. Allows strings, binary
+ * files and hex digits:
+ *
+ * Example:
+ *
+ * hex_to_bin(
+ *  "[1000 0001] [0110 0001] 'SQ'"
+ *  "00 00 00 00" // Timestamp
+ *  "'BEEF'" // SSRC
+ * );
+ *
+ * Bin must be 8 bits.
+ */
+managed_parse_buffer_t hex_to_bin(const std::string &str) {
   managed_parse_buffer_t buffer(str.length()); // max size. Normally around 1/2
 
-  // A state machine that alternates between most significant nibble, and least significant nibble
+  // A state machine that alternates between most significant nibble, and least
+  // significant nibble
   bool msn = false;
   bool quote = false;
+  bool sqbr = false;
   int lastd = 0;
-  for (char c: str){
-    if (quote){
-      if (c == '\''){
+  uint8_t n = 0;
+  for (char c : str) {
+    if (quote) {
+      if (c == '\'') {
         quote = false;
       } else {
         buffer.buffer.write_uint8(c);
       }
-    }
-    else if (c == '\''){
+    } else if (sqbr) {
+      if (c == ']') {
+        sqbr = false;
+        buffer.buffer.write_uint8(n);
+      } else if (c == '0' || c == '1') {
+        n <<= 1;
+        n |= (c == '1');
+      }
+
+    } else if (c == '\'') {
       quote = true;
-    }
-    else if (!isalnum(c)) {
+    } else if (c == '[') {
+      sqbr = true;
+      n = 0;
+    } else if (!isalnum(c)) {
       // skip non alnum
       continue;
-    }
-    else if (!msn){
+    } else if (!msn) {
       lastd = char_to_nibble(c) << 4;
       msn = true;
     } else {
@@ -77,8 +105,7 @@ managed_parse_buffer_t hex_to_bin(const std::string &str){
   return buffer;
 }
 
-
-test_client_t::test_client_t(int local_port, int remote_port){
+test_client_t::test_client_t(int local_port, int remote_port) {
   sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
   struct sockaddr_in servaddr;
@@ -86,18 +113,19 @@ test_client_t::test_client_t(int local_port, int remote_port){
   servaddr.sin_family = AF_INET;
   servaddr.sin_addr.s_addr = INADDR_ANY;
   servaddr.sin_port = htons(local_port);
-  if (bind(sockfd, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
-    throw rtpmidid::exception("Can not open control socket. Maybe address is in use?");
+  if (bind(sockfd, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+    throw rtpmidid::exception(
+        "Can not open control socket. Maybe address is in use?");
   }
   socklen_t len = sizeof(servaddr);
-  ::getsockname(sockfd, (struct sockaddr*)&servaddr, &len);
+  ::getsockname(sockfd, (struct sockaddr *)&servaddr, &len);
   this->local_port = htons(servaddr.sin_port);
   this->remote_port = remote_port;
 
   DEBUG("Test client port {}", this->local_port);
 }
 
-void test_client_t::send(rtpmidid::parse_buffer_t &msg){
+void test_client_t::send(rtpmidid::parse_buffer_t &msg) {
   struct sockaddr_in servaddr;
   memset(&servaddr, 0, sizeof(servaddr));
   servaddr.sin_family = AF_INET;
@@ -105,13 +133,14 @@ void test_client_t::send(rtpmidid::parse_buffer_t &msg){
   servaddr.sin_port = htons(remote_port);
   inet_aton("127.0.0.1", &servaddr.sin_addr);
 
-  auto len = ::sendto(sockfd, msg.start, msg.size(), 0, (struct sockaddr *)&servaddr, sizeof(servaddr));
+  auto len = ::sendto(sockfd, msg.start, msg.size(), 0,
+                      (struct sockaddr *)&servaddr, sizeof(servaddr));
 
-  ASSERT_GTE(len,0);
+  ASSERT_GTE(len, 0);
   ASSERT_EQUAL(static_cast<uint32_t>(len), msg.size());
 }
 
-void test_client_t::recv(rtpmidid::parse_buffer_t &msg){
+void test_client_t::recv(rtpmidid::parse_buffer_t &msg) {
   auto len = ::recv(sockfd, msg.start, msg.capacity(), 0);
   msg.end = msg.start + len;
   msg.position = msg.start;

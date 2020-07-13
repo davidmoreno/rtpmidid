@@ -23,11 +23,11 @@
 #include <rtpmidid/parse_buffer.hpp>
 #include <rtpmidid/rtppeer.hpp>
 
-auto connect_msg = hex_to_bin("FF FF 'IN'"
+auto CONNECT_MSG = hex_to_bin("FF FF 'IN'"
                               "0000 0002"
                               "'FA57' 'BEEF'"
                               "'testing' 00");
-auto disconnect_msg = hex_to_bin("FF FF 'BY'"
+auto DISCONNECT_MSG = hex_to_bin("FF FF 'BY'"
                                  "0000 0002"
                                  "'FA57' 'BEEF'");
 
@@ -57,14 +57,14 @@ void test_connect_disconnect() {
   ASSERT_EQUAL(connected, rtpmidid::rtppeer::status_e::NOT_CONNECTED);
 
   // Control connect
-  peer.data_ready(*connect_msg, rtpmidid::rtppeer::CONTROL_PORT);
+  peer.data_ready(*CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
   ASSERT_EQUAL(connected, rtpmidid::rtppeer::status_e::CONTROL_CONNECTED);
 
   // MIDI connect. Same all.
-  peer.data_ready(*connect_msg, rtpmidid::rtppeer::MIDI_PORT);
+  peer.data_ready(*CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
   ASSERT_EQUAL(connected, rtpmidid::rtppeer::status_e::CONNECTED);
 
-  peer.data_ready(*disconnect_msg, rtpmidid::rtppeer::CONTROL_PORT);
+  peer.data_ready(*DISCONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
 
   ASSERT_EQUAL(connected, false);
   ASSERT_EQUAL(peer.is_connected(), false);
@@ -95,16 +95,16 @@ void test_connect_disconnect_reverse_order() {
   // Normally should be control first, but network is a B*** and sometimes is in
   // the other order Also I'm liberal on clients as they should not send the
   // midi conenct until they get the control connect. But I do it myself.
-  peer.data_ready(*connect_msg, rtpmidid::rtppeer::MIDI_PORT);
+  peer.data_ready(*CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
   ASSERT_EQUAL(connected, rtpmidid::rtppeer::status_e::MIDI_CONNECTED);
   ASSERT_EQUAL(peer.is_connected(), false);
 
   // Control connect. Same all.
-  peer.data_ready(*connect_msg, rtpmidid::rtppeer::CONTROL_PORT);
+  peer.data_ready(*CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
   ASSERT_EQUAL(connected, rtpmidid::rtppeer::status_e::CONNECTED);
   ASSERT_EQUAL(peer.is_connected(), true);
 
-  peer.data_ready(*disconnect_msg, rtpmidid::rtppeer::CONTROL_PORT);
+  peer.data_ready(*DISCONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
 
   ASSERT_EQUAL(connected, rtpmidid::rtppeer::status_e::NOT_CONNECTED);
   ASSERT_EQUAL(peer.is_connected(), false);
@@ -127,8 +127,8 @@ void test_send_some_midi() {
     }
   });
 
-  peer.data_ready(*connect_msg, rtpmidid::rtppeer::CONTROL_PORT);
-  peer.data_ready(*connect_msg, rtpmidid::rtppeer::MIDI_PORT);
+  peer.data_ready(*CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
+  peer.data_ready(*CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
 
   peer.send_midi(*hex_to_bin("90 64 7F 68 7F 71 7F"));
 
@@ -149,12 +149,12 @@ void test_recv_some_midi() {
     ASSERT_TRUE(data.compare(*hex_to_bin("90 64 7F 68 7F 71 7F")));
   });
 
-  peer.data_ready(*connect_msg, rtpmidid::rtppeer::CONTROL_PORT);
-  peer.data_ready(*connect_msg, rtpmidid::rtppeer::MIDI_PORT);
+  peer.data_ready(*CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
+  peer.data_ready(*CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
 
   peer.data_ready(
       *hex_to_bin(
-          "81 61 'SQ'"
+          "[1000 0001] [0110 0001] 'SQ'"
           "00 00 00 00"
           "'BEEF'"
           "07 90 64 7F 68 7F 71 7F" // No Journal, 7 bytes, Three note ons
@@ -164,15 +164,48 @@ void test_recv_some_midi() {
   ASSERT_TRUE(got_midi);
 }
 
-int main(void) {
+void test_journal() {
+  rtpmidid::rtppeer peer("test");
+
+  peer.data_ready(*CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
+  peer.data_ready(*CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
+
+  // I send seq 0, no notes, just to set the sequence
+  peer.data_ready(*hex_to_bin("[1000 0001] [0110 0001] "
+                              "00 00"       // Sequence 0
+                              "00 00 00 00" // Timestamp
+                              "'BEEF'"      // SSRC
+                              "[0000 0000]" // No MIDI data, empty packet
+                              ),
+                  rtpmidid::rtppeer::MIDI_PORT);
+
+  DEBUG("Send journal");
+  peer.data_ready(*hex_to_bin("[1000 0001] [0110 0001] "
+                              "00 02"       // Sequence 2 -- where is? Lost!
+                              "00 00 00 00" // Timestamp
+                              "'BEEF'"      // SSRC
+                              "[0100 "      // Only send journal
+                              " 0000]"      // No midi notes
+                              // journal here
+                              "[1010"  // SyAh
+                              " 0001]" // TOTCHAN
+                              "00 00"  // SEQNO
+                              ),
+                  rtpmidid::rtppeer::MIDI_PORT);
+
+  ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
+}
+
+int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_connect_disconnect),
       TEST(test_connect_disconnect_reverse_order),
       TEST(test_send_some_midi),
       TEST(test_recv_some_midi),
+      TEST(test_journal),
   };
 
-  testcase.run();
+  testcase.run(argc, argv);
 
   return testcase.exit_code();
 }

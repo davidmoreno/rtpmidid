@@ -111,20 +111,30 @@ struct parse_buffer_t {
     return ret;
   }
 
-  void print_hex(bool to_end = false) const {
+  void print_hex(bool to_end = true) const {
     auto data = start;
     auto n = (to_end ? end : position) - data;
+    printf("\033[1;34m");
     for (int i = 0; i < n; i++) {
-      printf("%02X ", data[i] & 0x0FF);
+      if (data == position) {
+        printf("\033[0m");
+      }
+      printf("%02X ", (*data) & 0x0FF);
       if (i % 4 == 3)
         printf(" ");
       if (i % 16 == 15)
         printf("\n");
+      ++data;
     }
     printf("\n");
+    printf("\033[1;34m");
+    data = start;
     for (int i = 0; i < n; i++) {
-      if (isprint(data[i])) {
-        printf("%c", data[i]);
+      if (data == position) {
+        printf("\033[0m");
+      }
+      if (isprint(*data)) {
+        printf("%c", *data);
       } else {
         printf(".");
       }
@@ -132,10 +142,10 @@ struct parse_buffer_t {
         printf(" ");
       if (i % 16 == 15)
         printf("\n");
+      ++data;
     }
     printf("\n");
   }
-
   void write_uint8(uint16_t n) {
     check_enough(1);
     *position++ = (n & 0x0FF);
@@ -197,6 +207,6 @@ struct parse_buffer_t {
     }
     return true;
   }
-};
+}; // namespace rtpmidid
 
 } // namespace rtpmidid

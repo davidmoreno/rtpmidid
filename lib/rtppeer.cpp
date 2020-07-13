@@ -399,7 +399,13 @@ void rtppeer::parse_midi(parse_buffer_t &buffer) {
     DEBUG("Long header, {} bytes long", length);
   }
   if ((header & 0x40) != 0) {
-    WARNING("This RTP MIDI header has journal. Not implemented yet. Ignoring.");
+    // I actually parse the journal BEFORE the current message as it is
+    // for events before the event.
+    WARNING("This RTP MIDI header has journal. WIP.");
+    parse_buffer_t journal_data = buffer;
+    journal_data.position += length;
+
+    parse_journal(journal_data);
   }
   if ((header & 0x20) != 0) {
     WARNING("This RTP MIDI payload has delta time for the first command. "
@@ -409,12 +415,33 @@ void rtppeer::parse_midi(parse_buffer_t &buffer) {
   if ((header & 0x10) != 0) {
     WARNING("There was no status byte in original MIDI command. Ignoring.");
   }
-
   buffer.check_enough(length);
 
   parse_buffer_t midi_data(buffer.position, length);
 
   midi_event(midi_data);
+}
+
+void rtppeer::parse_journal(parse_buffer_t &journal_data) {
+  journal_data.print_hex();
+
+  uint8_t header = journal_data.read_uint8();
+
+  // bool S = header & 0x80; // Single packet loss
+  // bool Y = header & 0x40; // System journal
+  bool A = header & 0x20; // Channel journal
+  // bool H = header & 0x10; // Enhanced chapter C encoding
+  uint8_t totchan = header & 0x0F;
+
+  uint16_t seqnum = journal_data.read_uint16();
+
+  DEBUG("I got data from seqnum {}. {} channels.", seqnum, totchan);
+
+  if (A) {
+    for (auto i = 0; i < totchan; i++) {
+      DEBUG("Parse channel pkg {}", i);
+    }
+  }
 }
 
 /**
