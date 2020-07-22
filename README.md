@@ -183,6 +183,9 @@ modify and share it, given that you share your modifications with your users.
 This includes embeded software uses (anti
 [tivoization](https://en.wikipedia.org/wiki/Tivoization) clause of the GPLv3).
 
+The librtpmidid library is LGPL 2.1 license, so it can be embedded freely
+on free and commercial software.
+
 If you think the license does not fit your use case, please contact me at
 dmoreno@coralbits.com for alternative licensing options. I'm a freelancer
 looking for new projects.
