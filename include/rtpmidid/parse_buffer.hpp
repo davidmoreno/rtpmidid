@@ -59,12 +59,23 @@ struct parse_buffer_t {
     if (position > end)
       throw exception("Invalid buffer position {}", position - start);
   }
+  void skip(int nbytes) {
+    position += nbytes;
+    assert_valid_position();
+  }
+  void rewind() { position = start; }
 
   // This is used for writing to it, says current length
   uint32_t capacity() const { return position - start; }
 
   // This is the total size, from start to end
   uint32_t size() const { return end - start; }
+
+  // Converts a write buffer into a read one.
+  void switch_to_read() {
+    end = position;
+    position = 0;
+  }
 
   uint32_t read_uint32() {
     check_enough(4);

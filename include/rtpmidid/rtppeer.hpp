@@ -94,12 +94,16 @@ public:
   void parse_command_by(parse_buffer_t &, port_e port);
   void parse_command_no(parse_buffer_t &, port_e port);
   void parse_midi(parse_buffer_t &);
-  void parse_journal(parse_buffer_t &);
 
   void send_midi(parse_buffer_t &buffer);
   void send_goodbye(port_e to_port);
   void connect_to(port_e rtp_port);
   void send_ck0();
   uint64_t get_timestamp();
+
+  // Journal
+  void parse_journal(parse_buffer_t &);
+  void parse_journal_chapter(parse_buffer_t &);
+  void parse_journal_chapter_N(uint8_t channel, parse_buffer_t &);
 };
 } // namespace rtpmidid

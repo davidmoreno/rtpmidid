@@ -32,6 +32,9 @@ static int char_to_nibble(char c) {
   if (c >= 'A' && c <= 'F') {
     return 10 + c - 'A';
   }
+  if (c >= 'a' && c <= 'f') {
+    return 10 + c - 'a';
+  }
   ERROR("{} is not an HEX number", c);
   throw std::exception();
 }

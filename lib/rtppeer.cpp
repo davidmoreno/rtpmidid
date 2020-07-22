@@ -422,28 +422,6 @@ void rtppeer::parse_midi(parse_buffer_t &buffer) {
   midi_event(midi_data);
 }
 
-void rtppeer::parse_journal(parse_buffer_t &journal_data) {
-  journal_data.print_hex();
-
-  uint8_t header = journal_data.read_uint8();
-
-  // bool S = header & 0x80; // Single packet loss
-  // bool Y = header & 0x40; // System journal
-  bool A = header & 0x20; // Channel journal
-  // bool H = header & 0x10; // Enhanced chapter C encoding
-  uint8_t totchan = header & 0x0F;
-
-  uint16_t seqnum = journal_data.read_uint16();
-
-  DEBUG("I got data from seqnum {}. {} channels.", seqnum, totchan);
-
-  if (A) {
-    for (auto i = 0; i < totchan; i++) {
-      DEBUG("Parse channel pkg {}", i);
-    }
-  }
-}
-
 /**
  * Returns the times since start of this object in 100 us (1e-4) / 0.1 ms
  *
@@ -530,4 +508,101 @@ void rtppeer::connect_to(port_e rtp_port) {
   // buffer.print_hex();
 
   send_event(std::move(buffer), rtp_port);
+}
+
+void rtppeer::parse_journal(parse_buffer_t &journal_data) {
+  journal_data.print_hex();
+
+  uint8_t header = journal_data.read_uint8();
+
+  // bool S = header & 0x80; // Single packet loss
+  // bool Y = header & 0x40; // System journal
+  bool A = header & 0x20; // Channel journal
+  // bool H = header & 0x10; // Enhanced chapter C encoding
+  uint8_t totchan = header & 0x0F;
+
+  uint16_t seqnum = journal_data.read_uint16();
+
+  DEBUG("I got data from seqnum {}. {} channels.", seqnum, totchan);
+
+  if (A) {
+    for (auto i = 0; i < totchan; i++) {
+      DEBUG("Parse channel pkg {}", i);
+      parse_journal_chapter(journal_data);
+    }
+  }
+  // TODO Send ACK for journal data? Set seqnum?
+}
+
+void rtppeer::parse_journal_chapter(parse_buffer_t &journal_data) {
+  auto head = journal_data.read_uint8();
+  // bool S = head & 0x80;
+  // bool H = head & 0x08;
+
+  auto length = ((head & 0x07) << 8) | journal_data.read_uint8();
+  auto channel = (head & 0x70) >> 4;
+  auto chapters = journal_data.read_uint8();
+
+  DEBUG("Chapters: {:08b}", chapters);
+
+  // Although maybe I dont know how to parse them.. I need to at least skip them
+  if (chapters & 0xF0) {
+    WARNING("There are some PCMW chapters and I dont even know how to skip "
+            "them. Sorry journal invalid.");
+    journal_data.skip(length);
+  }
+  if (chapters & 0x08) {
+    parse_journal_chapter_N(channel, journal_data);
+  }
+}
+
+void rtppeer::parse_journal_chapter_N(uint8_t channel,
+                                      parse_buffer_t &journal_data) {
+  DEBUG("Parse chapter N, channel {}", channel);
+
+  auto curr = journal_data.read_uint8();
+  // bool S = head & 0x80;
+  auto nnoteon = curr & 0x7f;
+  curr = journal_data.read_uint8();
+  auto low = (curr >> 4) & 0x0f;
+  auto high = curr & 0x0f;
+
+  DEBUG("{} note on count, {} noteoff count", nnoteon, high - low + 1);
+
+  // Prepare some struct, will overwrite mem data and write as midi event
+  uint8_t tmp[3];
+  parse_buffer_t event_tmp(tmp, 3);
+
+  for (auto i = 0; i < nnoteon; i++) {
+    auto notenum = journal_data.read_uint8();
+    auto notevel = journal_data.read_uint8();
+
+    // bool B = (notenum&0x80); // S functionality Appendix A.1
+
+    bool Y =
+        (notevel &
+         0x80); // If true, must play on, if not better skip, might be stale
+    if (Y) {
+      tmp[0] = 0x90 | channel;
+      tmp[1] = notenum & 0x7f;
+      tmp[2] = notevel & 0x7f;
+      midi_event(event_tmp);
+      event_tmp.rewind();
+    }
+  }
+
+  tmp[0] = 0x80 | channel;
+  for (auto i = low; i <= high; i++) {
+    auto bitmap = journal_data.read_uint8();
+    auto minnote = i * 8;
+    for (auto j = 0; j < 8; j++) {
+      if (bitmap & (0x80 >> j)) {
+        tmp[1] = minnote;
+        tmp[2] = 0;
+        midi_event(event_tmp);
+
+        event_tmp.rewind();
+      }
+    }
+  }
 }
