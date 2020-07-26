@@ -69,10 +69,15 @@ public:
   uint64_t latency;
   bool waiting_ck;
 
-  signal_t<parse_buffer_t &> midi_event;
+  /// Event for connected
   signal_t<const std::string &, status_e> connected_event;
-  signal_t<parse_buffer_t &&, port_e> send_event;
+  /// Event for disconnect
   signal_t<disconnect_reason_e> disconnect_event;
+  /// Event for send MIDI
+  signal_t<parse_buffer_t &> midi_event;
+  /// Event for send data to network
+  signal_t<parse_buffer_t &&, port_e> send_event;
+
   // Clock latency check received. in ms
   signal_t<float> ck_event;
 
