@@ -19,22 +19,7 @@
 
 #include <vector>
 
-#include <rtpmidid/parse_buffer.hpp>
-
-class managed_parse_buffer_t {
-public:
-  std::vector<uint8_t> data;
-  rtpmidid::parse_buffer_t buffer;
-
-  managed_parse_buffer_t(int size) : data(size), buffer(nullptr, 0) {
-    buffer = rtpmidid::parse_buffer_t(data.data(), size);
-  }
-
-  rtpmidid::parse_buffer_t &operator*() {
-    buffer.position = buffer.start; // rewind
-    return buffer;
-  }
-};
+#include <rtpmidid/iobytes.hpp>
 
 class test_client_t {
 public:
@@ -43,8 +28,8 @@ public:
   int remote_port;
   // UDP connection to this "localhost":port
   test_client_t(int local_port, int remote_port);
-  void send(rtpmidid::parse_buffer_t &data);
-  void recv(rtpmidid::parse_buffer_t &data);
+  void send(rtpmidid::io_bytes_reader &&data);
+  void recv(rtpmidid::io_bytes_reader &&data);
 };
 
-managed_parse_buffer_t hex_to_bin(const std::string &str);
+rtpmidid::io_bytes_managed hex_to_bin(const std::string &str);

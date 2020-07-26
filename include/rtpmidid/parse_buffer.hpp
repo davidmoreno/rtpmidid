@@ -218,6 +218,6 @@ struct parse_buffer_t {
     }
     return true;
   }
-}; // namespace rtpmidid
+};
 
 } // namespace rtpmidid

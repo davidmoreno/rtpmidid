@@ -18,8 +18,8 @@
  */
 
 #include <rtpmidid/exceptions.hpp>
+#include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
-#include <rtpmidid/parse_buffer.hpp>
 #include <rtpmidid/rtppeer.hpp>
 
 using namespace rtpmidid;
@@ -57,7 +57,7 @@ void rtppeer::reset() {
   initiator_id = 0;
 }
 
-void rtppeer::data_ready(parse_buffer_t &buffer, port_e port) {
+void rtppeer::data_ready(io_bytes_reader &&buffer, port_e port) {
   if (port == CONTROL_PORT) {
     if (is_command(buffer)) {
       parse_command(buffer, port);
@@ -75,19 +75,19 @@ void rtppeer::data_ready(parse_buffer_t &buffer, port_e port) {
   }
 }
 
-bool rtppeer::is_command(parse_buffer_t &pb) {
+bool rtppeer::is_command(io_bytes_reader &pb) {
   // DEBUG("Is command? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF,
   // pb.start[1] == 0xFF);
   return (pb.size() >= 16 && pb.start[0] == 0xFF && pb.start[1] == 0xFF);
 }
-bool rtppeer::is_feedback(parse_buffer_t &pb) {
+bool rtppeer::is_feedback(io_bytes_reader &pb) {
   // DEBUG("Is feedback? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF,
   // pb.start[1] == 0xFF);
   return (pb.size() >= 12 && pb.start[0] == 0xFF && pb.start[1] == 0xFF &&
           pb.start[2] == 0x52 && pb.start[3] == 0x53);
 }
 
-void rtppeer::parse_command(parse_buffer_t &buffer, port_e port) {
+void rtppeer::parse_command(io_bytes_reader &buffer, port_e port) {
   if (buffer.size() < 16) {
     // This should never be reachable, but should help to smart compilers for
     // further size checks
@@ -125,7 +125,7 @@ void rtppeer::parse_command(parse_buffer_t &buffer, port_e port) {
  *
  * I already sent before the IN message, the server sent me OK
  */
-void rtppeer::parse_command_ok(parse_buffer_t &buffer, port_e port) {
+void rtppeer::parse_command_ok(io_bytes_reader &buffer, port_e port) {
   if (status == CONNECTED) {
     WARNING(
         "This peer is already connected. Need to disconnect to connect again.");
@@ -170,7 +170,7 @@ void rtppeer::parse_command_ok(parse_buffer_t &buffer, port_e port) {
  * TODO It would be super nice to be able to have several clients
  * connected to me.
  */
-void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port) {
+void rtppeer::parse_command_in(io_bytes_reader &buffer, port_e port) {
   if (status == CONNECTED) {
     WARNING(
         "This peer is already connected. Need to disconnect to connect again.");
@@ -193,16 +193,15 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port) {
        remote_name, initiator_id, this->initiator_id == initiator_id,
        remote_ssrc, remote_name, port == CONTROL_PORT);
 
-  uint8_t response[128];
-  parse_buffer_t response_buffer(response, sizeof(response));
-  response_buffer.write_uint16(0xFFFF);
-  response_buffer.write_uint16(OK);
-  response_buffer.write_uint32(2);
-  response_buffer.write_uint32(initiator_id);
-  response_buffer.write_uint32(local_ssrc);
-  response_buffer.write_str0(local_name);
+  io_bytes_writer_static<128> response;
+  response.write_uint16(0xFFFF);
+  response.write_uint16(OK);
+  response.write_uint32(2);
+  response.write_uint32(initiator_id);
+  response.write_uint32(local_ssrc);
+  response.write_str0(local_name);
 
-  send_event(response_buffer, port);
+  send_event(response, port);
 
   if (port == MIDI_PORT)
     status = status_e(int(status) | int(MIDI_CONNECTED));
@@ -212,7 +211,7 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port) {
   connected_event(remote_name, status);
 }
 
-void rtppeer::parse_command_by(parse_buffer_t &buffer, port_e port) {
+void rtppeer::parse_command_by(io_bytes_reader &buffer, port_e port) {
   auto protocol = buffer.read_uint32();
   initiator_id = buffer.read_uint32();
   auto remote_ssrc = buffer.read_uint32();
@@ -238,7 +237,7 @@ void rtppeer::parse_command_by(parse_buffer_t &buffer, port_e port) {
   disconnect_event(PEER_DISCONNECTED);
 }
 
-void rtppeer::parse_command_no(parse_buffer_t &buffer, port_e port) {
+void rtppeer::parse_command_no(io_bytes_reader &buffer, port_e port) {
   auto protocol = buffer.read_uint32();
   initiator_id = buffer.read_uint32();
   auto remote_ssrc = buffer.read_uint32();
@@ -260,7 +259,7 @@ void rtppeer::parse_command_no(parse_buffer_t &buffer, port_e port) {
   disconnect_event(CONNECTION_REJECTED);
 }
 
-void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port) {
+void rtppeer::parse_command_ck(io_bytes_reader &buffer, port_e port) {
   // auto ssrc =
   buffer.read_uint32();
   auto count = buffer.read_uint8();
@@ -303,27 +302,26 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port) {
     return;
   }
 
-  uint8_t ret[36];
-  parse_buffer_t retbuffer(ret, sizeof(ret));
-  retbuffer.write_uint16(0xFFFF);
-  retbuffer.write_uint16(rtppeer::CK);
-  retbuffer.write_uint32(local_ssrc);
-  retbuffer.write_uint8(count);
+  io_bytes_writer_static<36> response;
+  response.write_uint16(0xFFFF);
+  response.write_uint16(rtppeer::CK);
+  response.write_uint32(local_ssrc);
+  response.write_uint8(count);
   // padding
-  retbuffer.write_uint8(0);
-  retbuffer.write_uint16(0);
+  response.write_uint8(0);
+  response.write_uint16(0);
   // cks
-  retbuffer.write_uint64(ck1);
-  retbuffer.write_uint64(ck2);
-  retbuffer.write_uint64(ck3);
+  response.write_uint64(ck1);
+  response.write_uint64(ck2);
+  response.write_uint64(ck3);
 
   // DEBUG("Got packet CK");
-  // buffer.print_hex(true);
+  // response.print_hex(true);
   //
   // DEBUG("Send packet CK");
-  // retbuffer.print_hex();
+  // retresponse.print_hex();
 
-  send_event(retbuffer, port);
+  send_event(response, port);
 }
 
 void rtppeer::send_ck0() {
@@ -332,19 +330,18 @@ void rtppeer::send_ck0() {
   uint64_t ck2 = 0;
   uint64_t ck3 = 0;
 
-  uint8_t ret[36];
-  parse_buffer_t retbuffer(ret, sizeof(ret));
-  retbuffer.write_uint16(0xFFFF);
-  retbuffer.write_uint16(rtppeer::CK);
-  retbuffer.write_uint32(local_ssrc);
-  retbuffer.write_uint8(0);
+  io_bytes_writer_static<36> response;
+  response.write_uint16(0xFFFF);
+  response.write_uint16(rtppeer::CK);
+  response.write_uint32(local_ssrc);
+  response.write_uint8(0);
   // padding
-  retbuffer.write_uint8(0);
-  retbuffer.write_uint16(0);
+  response.write_uint8(0);
+  response.write_uint16(0);
   // cks
-  retbuffer.write_uint64(ck1);
-  retbuffer.write_uint64(ck2);
-  retbuffer.write_uint64(ck3);
+  response.write_uint64(ck1);
+  response.write_uint64(ck2);
+  response.write_uint64(ck3);
 
   DEBUG("Send CK0 to {}", remote_name);
 
@@ -354,10 +351,10 @@ void rtppeer::send_ck0() {
   // DEBUG("Send packet CK");
   // retbuffer.print_hex();
 
-  send_event(retbuffer, MIDI_PORT);
+  send_event(response, MIDI_PORT);
 }
 
-void rtppeer::parse_feedback(parse_buffer_t &buffer) {
+void rtppeer::parse_feedback(io_bytes_reader &buffer) {
   buffer.position = buffer.start + 8;
   seq_nr_ack = buffer.read_uint16();
 
@@ -365,7 +362,7 @@ void rtppeer::parse_feedback(parse_buffer_t &buffer) {
         seq_nr_ack, seq_nr);
 }
 
-void rtppeer::parse_midi(parse_buffer_t &buffer) {
+void rtppeer::parse_midi(io_bytes_reader &buffer) {
   // auto _headers =
   buffer.read_uint8(); // Ignore RTP header flags (Byte 0)
   auto rtpmidi_id = buffer.read_uint8();
@@ -402,7 +399,7 @@ void rtppeer::parse_midi(parse_buffer_t &buffer) {
     // I actually parse the journal BEFORE the current message as it is
     // for events before the event.
     WARNING("This RTP MIDI header has journal. WIP.");
-    parse_buffer_t journal_data = buffer;
+    io_bytes_reader journal_data = buffer;
     journal_data.position += length;
 
     parse_journal(journal_data);
@@ -417,9 +414,7 @@ void rtppeer::parse_midi(parse_buffer_t &buffer) {
   }
   buffer.check_enough(length);
 
-  parse_buffer_t midi_data(buffer.position, length);
-
-  midi_event(midi_data);
+  midi_event(io_bytes_reader(buffer.position, length));
 }
 
 /**
@@ -438,15 +433,14 @@ uint64_t rtppeer::get_timestamp() {
   return uint32_t(now - timestamp_start);
 }
 
-void rtppeer::send_midi(parse_buffer_t &events) {
+void rtppeer::send_midi(io_bytes_reader &&events) {
   if (!is_connected()) { // Not connected yet.
     DEBUG("Can not send MIDI data to {} yet, not connected ({:X}).",
           remote_name, (int)status);
     return;
   }
 
-  uint8_t data[512];
-  parse_buffer_t buffer(data, sizeof(data));
+  io_bytes_writer_static<512> buffer;
 
   uint32_t timestamp = get_timestamp();
   seq_nr++;
@@ -468,8 +462,7 @@ void rtppeer::send_midi(parse_buffer_t &events) {
 }
 
 void rtppeer::send_goodbye(port_e to_port) {
-  uint8_t data[64];
-  parse_buffer_t buffer(data, sizeof(data));
+  io_bytes_writer_static<64> buffer;
 
   buffer.write_uint16(0x0FFFF);
   buffer.write_uint16(::rtppeer::BY);
@@ -493,8 +486,7 @@ void rtppeer::send_feedback(uint32_t seqnum) {
 
   DEBUG("Send feedback to the other end. Journal parsed. Seqnum {}", seqnum);
   remote_seq_nr = seqnum;
-  uint8_t packet[96];
-  auto buffer = parse_buffer_t(packet, 96);
+  io_bytes_writer_static<96> buffer;
 
   buffer.write_uint16(0xFFFF);
   buffer.write_uint16(rtppeer::RS);
@@ -505,8 +497,7 @@ void rtppeer::send_feedback(uint32_t seqnum) {
 }
 
 void rtppeer::connect_to(port_e rtp_port) {
-  uint8_t packet[1500];
-  auto buffer = parse_buffer_t(packet, 1500);
+  io_bytes_writer_static<1500> buffer;
 
   auto signature = 0xFFFF;
   auto command = rtppeer::IN;
@@ -526,7 +517,7 @@ void rtppeer::connect_to(port_e rtp_port) {
   send_event(buffer, rtp_port);
 }
 
-void rtppeer::parse_journal(parse_buffer_t &journal_data) {
+void rtppeer::parse_journal(io_bytes_reader &journal_data) {
   journal_data.print_hex();
 
   uint8_t header = journal_data.read_uint8();
@@ -551,7 +542,7 @@ void rtppeer::parse_journal(parse_buffer_t &journal_data) {
   send_feedback(seqnum);
 }
 
-void rtppeer::parse_journal_chapter(parse_buffer_t &journal_data) {
+void rtppeer::parse_journal_chapter(io_bytes_reader &journal_data) {
   auto head = journal_data.read_uint8();
   // bool S = head & 0x80;
   // bool H = head & 0x08;
@@ -574,7 +565,7 @@ void rtppeer::parse_journal_chapter(parse_buffer_t &journal_data) {
 }
 
 void rtppeer::parse_journal_chapter_N(uint8_t channel,
-                                      parse_buffer_t &journal_data) {
+                                      io_bytes_reader &journal_data) {
   DEBUG("Parse chapter N, channel {}", channel);
 
   auto curr = journal_data.read_uint8();
@@ -588,7 +579,6 @@ void rtppeer::parse_journal_chapter_N(uint8_t channel,
 
   // Prepare some struct, will overwrite mem data and write as midi event
   uint8_t tmp[3];
-  parse_buffer_t event_tmp(tmp, 3);
 
   for (auto i = 0; i < nnoteon; i++) {
     auto notenum = journal_data.read_uint8();
@@ -603,8 +593,7 @@ void rtppeer::parse_journal_chapter_N(uint8_t channel,
       tmp[0] = 0x90 | channel;
       tmp[1] = notenum & 0x7f;
       tmp[2] = notevel & 0x7f;
-      midi_event(event_tmp);
-      event_tmp.rewind();
+      midi_event(io_bytes_reader(tmp, 3));
     }
   }
 
@@ -616,9 +605,7 @@ void rtppeer::parse_journal_chapter_N(uint8_t channel,
       if (bitmap & (0x80 >> j)) {
         tmp[1] = minnote;
         tmp[2] = 0;
-        midi_event(event_tmp);
-
-        event_tmp.rewind();
+        midi_event(io_bytes_reader(tmp, 3));
       }
     }
   }

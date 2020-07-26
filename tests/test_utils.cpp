@@ -19,6 +19,7 @@
 
 #include "./test_utils.hpp"
 #include "./test_case.hpp"
+#include "rtpmidid/iobytes.hpp"
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -55,8 +56,10 @@ static int char_to_nibble(char c) {
  *
  * Bin must be 8 bits.
  */
-managed_parse_buffer_t hex_to_bin(const std::string &str) {
-  managed_parse_buffer_t buffer(str.length()); // max size. Normally around 1/2
+rtpmidid::io_bytes_managed hex_to_bin(const std::string &str) {
+  rtpmidid::io_bytes_managed buffer(
+      str.length()); // max size. Normally around 1/2
+  auto writer = rtpmidid::io_bytes_writer(buffer);
 
   // A state machine that alternates between most significant nibble, and least
   // significant nibble
@@ -70,12 +73,12 @@ managed_parse_buffer_t hex_to_bin(const std::string &str) {
       if (c == '\'') {
         quote = false;
       } else {
-        buffer.buffer.write_uint8(c);
+        writer.write_uint8(c);
       }
     } else if (sqbr) {
       if (c == ']') {
         sqbr = false;
-        buffer.buffer.write_uint8(n);
+        writer.write_uint8(n);
       } else if (c == '0' || c == '1') {
         n <<= 1;
         n |= (c == '1');
@@ -94,16 +97,10 @@ managed_parse_buffer_t hex_to_bin(const std::string &str) {
       msn = true;
     } else {
       lastd |= char_to_nibble(c);
-      buffer.buffer.write_uint8(lastd);
+      writer.write_uint8(lastd);
       msn = false;
     }
   }
-
-  // Revert to read mode
-  buffer.buffer.end = buffer.buffer.position;
-  buffer.buffer.position = buffer.buffer.start;
-
-  // buffer.buffer.print_hex(true);
 
   return buffer;
 }
@@ -128,7 +125,7 @@ test_client_t::test_client_t(int local_port, int remote_port) {
   DEBUG("Test client port {}", this->local_port);
 }
 
-void test_client_t::send(rtpmidid::parse_buffer_t &msg) {
+void test_client_t::send(rtpmidid::io_bytes_reader &&msg) {
   struct sockaddr_in servaddr;
   memset(&servaddr, 0, sizeof(servaddr));
   servaddr.sin_family = AF_INET;
@@ -143,8 +140,8 @@ void test_client_t::send(rtpmidid::parse_buffer_t &msg) {
   ASSERT_EQUAL(static_cast<uint32_t>(len), msg.size());
 }
 
-void test_client_t::recv(rtpmidid::parse_buffer_t &msg) {
-  auto len = ::recv(sockfd, msg.start, msg.capacity(), 0);
+void test_client_t::recv(rtpmidid::io_bytes_reader &&msg) {
+  auto len = ::recv(sockfd, msg.start, msg.size(), 0);
   msg.end = msg.start + len;
   msg.position = msg.start;
 }
