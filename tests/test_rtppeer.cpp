@@ -120,9 +120,9 @@ void test_send_some_midi() {
     if (peer.is_connected()) {
       data.print_hex();
 
-      auto midi_data =
+      auto midi_buffer =
           rtpmidid::parse_buffer_t(data.start + 12, data.capacity() - 12);
-      ASSERT_TRUE(midi_data.compare(*hex_to_bin("07 90 64 7F 68 7F 71 7F")));
+      ASSERT_TRUE(midi_buffer.compare(*hex_to_bin("07 90 64 7F 68 7F 71 7F")));
       sent_midi = true;
     }
   });
@@ -170,10 +170,18 @@ void test_journal() {
   peer.data_ready(*CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
   peer.data_ready(*CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
 
-  uint8_t tmp[256];
-  rtpmidid::parse_buffer_t test_data(tmp, sizeof(tmp));
-  peer.midi_event.connect(
-      [&test_data](rtpmidid::parse_buffer_t &pb) { test_data.copy_from(pb); });
+  uint8_t midi_bytes[256];
+  uint8_t network_bytes[256];
+  rtpmidid::parse_buffer_t midi_buffer(midi_bytes, sizeof(midi_bytes));
+  rtpmidid::parse_buffer_t network_buffer(network_bytes, sizeof(network_bytes));
+  peer.midi_event.connect([&midi_buffer](rtpmidid::parse_buffer_t &pb) {
+    midi_buffer.copy_from(pb);
+  });
+  peer.send_event.connect([&network_buffer](rtpmidid::parse_buffer_t &pb,
+                                            rtpmidid::rtppeer::port_e port) {
+    DEBUG("Write to network: {} bytes", pb.capacity());
+    network_buffer.copy_from(pb);
+  });
 
   // I send seq 0, no notes, just to set the sequence
   peer.data_ready(*hex_to_bin("[1000 0001] [0110 0001] "
@@ -195,7 +203,7 @@ void test_journal() {
                   // journal here
                   "[1010"  // SyAh
                   " 0001]" // TOTCHAN
-                  "00 00"  // SEQNO
+                  "00 02"  // SEQNO
                   // chan1 journal
                   "[0 000 0 000]"      // S0, chan0, H0, len MSB
                   "00"                 // length LSB
@@ -212,7 +220,7 @@ void test_journal() {
   // Assume Ack, and lost packet so send the note off some time later
   peer.data_ready(
       *hex_to_bin("[1000 0001] [0110 0001] "
-                  "00 02"       // Sequence 4 -- where is seq 3? Lost too!
+                  "00 04"       // Sequence 4 -- where is seq 3? Lost too!
                   "00 00 00 20" // Timestamp
                   "'BEEF'"      // SSRC
                   "[0100 "      // Only send journal
@@ -220,7 +228,7 @@ void test_journal() {
                   // journal here
                   "[1010"  // SyAh
                   " 0001]" // TOTCHAN
-                  "00 00"  // SEQNO
+                  "00 04"  // SEQNO
                   // chan1 journal
                   "[0 000 0 000]"      // S0, chan0, H0, len MSB
                   "00"                 // length LSB
@@ -235,17 +243,23 @@ void test_journal() {
 
   ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
 
-  test_data.switch_to_read();
-  DEBUG("MIDI DATA");
-  test_data.print_hex();
+  midi_buffer.switch_to_read();
+  DEBUG("MIDI DATA. {} bytes", midi_buffer.size());
+  midi_buffer.print_hex();
 
-  ASSERT_EQUAL(tmp[0], 0x90);
-  ASSERT_EQUAL(tmp[1], 0x48);
-  ASSERT_EQUAL(tmp[2], 0x7f);
+  midi_buffer.switch_to_read();
+  DEBUG("NETWORK DATA, {} bytes", network_buffer.size());
+  midi_buffer.print_hex();
+  // Tehre should be some data at network_buffer
+  ASSERT_NOT_EQUAL(network_buffer.capacity(), 0);
 
-  ASSERT_EQUAL(tmp[3], 0x80);
-  ASSERT_EQUAL(tmp[4], 0x48);
-  ASSERT_EQUAL(tmp[5], 0x00);
+  ASSERT_EQUAL(midi_bytes[0], 0x90);
+  ASSERT_EQUAL(midi_bytes[1], 0x48);
+  ASSERT_EQUAL(midi_bytes[2], 0x7f);
+
+  ASSERT_EQUAL(midi_bytes[3], 0x80);
+  ASSERT_EQUAL(midi_bytes[4], 0x48);
+  ASSERT_EQUAL(midi_bytes[5], 0x0);
 }
 
 int main(int argc, char **argv) {

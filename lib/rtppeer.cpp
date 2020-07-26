@@ -202,7 +202,7 @@ void rtppeer::parse_command_in(parse_buffer_t &buffer, port_e port) {
   response_buffer.write_uint32(local_ssrc);
   response_buffer.write_str0(local_name);
 
-  send_event(std::move(response_buffer), port);
+  send_event(response_buffer, port);
 
   if (port == MIDI_PORT)
     status = status_e(int(status) | int(MIDI_CONNECTED));
@@ -323,7 +323,7 @@ void rtppeer::parse_command_ck(parse_buffer_t &buffer, port_e port) {
   // DEBUG("Send packet CK");
   // retbuffer.print_hex();
 
-  send_event(std::move(retbuffer), port);
+  send_event(retbuffer, port);
 }
 
 void rtppeer::send_ck0() {
@@ -354,7 +354,7 @@ void rtppeer::send_ck0() {
   // DEBUG("Send packet CK");
   // retbuffer.print_hex();
 
-  send_event(std::move(retbuffer), MIDI_PORT);
+  send_event(retbuffer, MIDI_PORT);
 }
 
 void rtppeer::parse_feedback(parse_buffer_t &buffer) {
@@ -464,7 +464,7 @@ void rtppeer::send_midi(parse_buffer_t &events) {
   // events.print_hex();
   // buffer.print_hex();
 
-  send_event(std::move(buffer), MIDI_PORT);
+  send_event(buffer, MIDI_PORT);
 }
 
 void rtppeer::send_goodbye(port_e to_port) {
@@ -477,7 +477,7 @@ void rtppeer::send_goodbye(port_e to_port) {
   buffer.write_uint32(initiator_id);
   buffer.write_uint32(local_ssrc);
 
-  send_event(std::move(buffer), to_port);
+  send_event(buffer, to_port);
 
   status =
       status_e(int(status) &
@@ -486,6 +486,22 @@ void rtppeer::send_goodbye(port_e to_port) {
   if (status == NOT_CONNECTED) {
     disconnect_event(DISCONNECT);
   }
+}
+
+void rtppeer::send_feedback(uint32_t seqnum) {
+  // uint8_t packet[256];
+
+  DEBUG("Send feedback to the other end. Journal parsed. Seqnum {}", seqnum);
+  remote_seq_nr = seqnum;
+  uint8_t packet[96];
+  auto buffer = parse_buffer_t(packet, 96);
+
+  buffer.write_uint16(0xFFFF);
+  buffer.write_uint16(rtppeer::RS);
+  buffer.write_uint32(local_ssrc);
+  buffer.write_uint32(seqnum);
+
+  send_event(buffer, CONTROL_PORT);
 }
 
 void rtppeer::connect_to(port_e rtp_port) {
@@ -507,7 +523,7 @@ void rtppeer::connect_to(port_e rtp_port) {
   // DEBUG("Send packet:");
   // buffer.print_hex();
 
-  send_event(std::move(buffer), rtp_port);
+  send_event(buffer, rtp_port);
 }
 
 void rtppeer::parse_journal(parse_buffer_t &journal_data) {
@@ -532,6 +548,7 @@ void rtppeer::parse_journal(parse_buffer_t &journal_data) {
     }
   }
   // TODO Send ACK for journal data? Set seqnum?
+  send_feedback(seqnum);
 }
 
 void rtppeer::parse_journal_chapter(parse_buffer_t &journal_data) {

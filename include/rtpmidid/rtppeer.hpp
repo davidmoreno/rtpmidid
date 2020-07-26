@@ -75,8 +75,8 @@ public:
   signal_t<disconnect_reason_e> disconnect_event;
   /// Event for send MIDI
   signal_t<parse_buffer_t &> midi_event;
-  /// Event for send data to network
-  signal_t<parse_buffer_t &&, port_e> send_event;
+  /// Event for send data to network.
+  signal_t<parse_buffer_t &, port_e> send_event;
 
   // Clock latency check received. in ms
   signal_t<float> ck_event;
@@ -102,6 +102,7 @@ public:
 
   void send_midi(parse_buffer_t &buffer);
   void send_goodbye(port_e to_port);
+  void send_feedback(uint32_t seqnum);
   void connect_to(port_e rtp_port);
   void send_ck0();
   uint64_t get_timestamp();
