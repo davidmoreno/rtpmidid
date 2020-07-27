@@ -62,7 +62,7 @@ public:
   rtpclient(std::string name);
   ~rtpclient();
   void reset();
-  void sendto(const io_bytes_reader &pb, rtppeer::port_e port);
+  void sendto(const io_bytes &pb, rtppeer::port_e port);
 
   void connect_to(const std::string &address, const std::string &port);
   void connected();

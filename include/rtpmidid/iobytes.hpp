@@ -54,6 +54,7 @@ public:
     this->end = other.end;
     this->position = other.position;
   }
+  io_bytes(io_bytes_writer &other);
 
   io_bytes(uint8_t *start, uint32_t size) {
     this->start = start;
@@ -81,7 +82,7 @@ public:
   size_t size() const { return end - start; }
   size_t pos() const { return position - start; }
 
-  bool compare(const io_bytes &other) {
+  bool compare(const io_bytes &other) const {
     if (size() != other.size())
       return false;
     uint32_t i = 0;
@@ -182,15 +183,28 @@ public:
   }
 
   /// Copies from position to the end
-  void copy_from(io_bytes &from) { copy_from(from, from.end - from.position); }
+  void copy_from_and_consume(io_bytes &from) {
+    copy_from(from, from.end - from.position);
+  }
 
-  void copy_from(io_bytes &from, uint32_t count) {
+  void copy_from_and_consume(io_bytes &from, uint32_t count) {
     check_enough(count);
     from.check_enough(count);
     memcpy(position, from.position, count);
     position += count;
     from.position += count;
   }
+
+  void copy_from(const io_bytes &from) {
+    copy_from(from, from.end - from.position);
+  }
+  void copy_from(const io_bytes &from, uint32_t count) {
+    check_enough(count);
+    from.check_enough(count);
+    memcpy(position, from.position, count);
+    position += count;
+  }
+
   void copy_from(uint8_t *data, uint32_t count) {
     check_enough(count);
     memcpy(position, data, count);
@@ -288,7 +302,9 @@ public:
 template <size_t Size> class io_bytes_writer_static : public io_bytes_writer {
 public:
   uint8_t data[Size];
-  io_bytes_writer_static() : io_bytes_writer(&data[0], Size) {}
+  io_bytes_writer_static() : io_bytes_writer(&data[0], Size) {
+    memset(data, 0, Size);
+  }
 };
 
 class io_bytes_managed : public io_bytes {
@@ -299,6 +315,13 @@ public:
     start = data.data();
     end = data.data() + size;
     position = start;
+  }
+
+  io_bytes_managed(io_bytes_managed &&other) {
+    data = std::move(other.data);
+    start = other.start;
+    end = other.end;
+    position = other.position;
   }
 };
 

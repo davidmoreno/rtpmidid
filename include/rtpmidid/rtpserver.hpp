@@ -37,7 +37,7 @@ public:
 
   // Callbacks to call when new connections
   signal_t<std::shared_ptr<rtppeer>> connected_event;
-  signal_t<io_bytes_reader &&> midi_event;
+  signal_t<const io_bytes_reader &> midi_event;
 
   std::string name;
 
@@ -57,7 +57,7 @@ public:
   void create_peer_from(io_bytes_reader &&buffer, struct sockaddr_in6 *cliaddr,
                         rtppeer::port_e port);
 
-  void send_midi_to_all_peers(io_bytes_reader &&bufer);
+  void send_midi_to_all_peers(const io_bytes_reader &bufer);
 
   void data_ready(rtppeer::port_e port);
   void sendto(const io_bytes_reader &b, rtppeer::port_e port,

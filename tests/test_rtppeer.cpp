@@ -21,7 +21,6 @@
 #include <memory>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
-#include <rtpmidid/parse_buffer.hpp>
 #include <rtpmidid/rtppeer.hpp>
 
 auto CONNECT_MSG = hex_to_bin("FF FF 'IN'"
@@ -48,7 +47,7 @@ void test_connect_disconnect() {
     DEBUG("Disconnected. Reason: {}", reason);
     connected = rtpmidid::rtppeer::status_e::NOT_CONNECTED;
   });
-  peer.send_event.connect([](const rtpmidid::io_bytes_reader &&data,
+  peer.send_event.connect([](const rtpmidid::io_bytes_reader &data,
                              rtpmidid::rtppeer::port_e port) {
     DEBUG("Send to {}:",
           port == rtpmidid::rtppeer::CONTROL_PORT ? "Control" : "MIDI");
@@ -84,7 +83,7 @@ void test_connect_disconnect_reverse_order() {
   peer.disconnect_event.connect([&connected](auto reason) {
     connected = rtpmidid::rtppeer::status_e::NOT_CONNECTED;
   });
-  peer.send_event.connect([](const rtpmidid::io_bytes_reader &&data,
+  peer.send_event.connect([](const rtpmidid::io_bytes_reader &data,
                              rtpmidid::rtppeer::port_e port) {
     DEBUG("Send to {}:",
           port == rtpmidid::rtppeer::CONTROL_PORT ? "Control" : "MIDI");
@@ -116,7 +115,7 @@ void test_send_some_midi() {
 
   bool sent_midi = false;
   peer.send_event.connect([&peer,
-                           &sent_midi](const rtpmidid::io_bytes_reader &&data,
+                           &sent_midi](const rtpmidid::io_bytes_reader &data,
                                        rtpmidid::rtppeer::port_e port) {
     if (peer.is_connected()) {
       data.print_hex();
@@ -142,13 +141,14 @@ void test_recv_some_midi() {
   bool got_midi = false;
 
   // This will be called when I get some midi data.
-  peer.midi_event.connect([&peer, &got_midi](rtpmidid::io_bytes_reader &&data) {
-    ASSERT_TRUE(peer.is_connected());
-    ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
-    data.print_hex(true);
-    got_midi = true;
-    ASSERT_TRUE(data.compare(hex_to_bin("90 64 7F 68 7F 71 7F")));
-  });
+  peer.midi_event.connect(
+      [&peer, &got_midi](const rtpmidid::io_bytes_reader &data) {
+        ASSERT_TRUE(peer.is_connected());
+        ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
+        data.print_hex(true);
+        got_midi = true;
+        ASSERT_TRUE(data.compare(hex_to_bin("90 64 7F 68 7F 71 7F")));
+      });
 
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
@@ -171,19 +171,16 @@ void test_journal() {
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
 
-  auto midi_io = rtpmidid::io_bytes_static<16>();
-  auto midi_io_writer = rtpmidid::io_bytes_writer(midi_io);
+  rtpmidid::io_bytes_writer_static<16> midi_io;
+  rtpmidid::io_bytes_writer_static<256> network_io;
 
-  auto network_io = rtpmidid::io_bytes_static<32>();
-  auto network_io_writer = rtpmidid::io_bytes_writer(network_io);
-
-  peer.midi_event.connect([&midi_io_writer](rtpmidid::io_bytes_reader &&pb) {
-    midi_io_writer.copy_from(pb.start, pb.size());
+  peer.midi_event.connect([&midi_io](const rtpmidid::io_bytes &pb) {
+    midi_io.copy_from(pb.start, pb.size());
   });
-  peer.send_event.connect([&network_io_writer](rtpmidid::io_bytes_reader &&pb,
-                                               rtpmidid::rtppeer::port_e port) {
+  peer.send_event.connect([&network_io](const rtpmidid::io_bytes &pb,
+                                        rtpmidid::rtppeer::port_e port) {
     DEBUG("Write to network: {} bytes", pb.size());
-    network_io_writer.copy_from(pb.start, pb.size());
+    network_io.copy_from(pb.start, pb.size());
   });
 
   // I send seq 0, no notes, just to set the sequence
@@ -195,7 +192,7 @@ void test_journal() {
                              ),
                   rtpmidid::rtppeer::MIDI_PORT);
 
-  DEBUG("Send journal");
+  DEBUG("Send 2nd packet. First lost. Note On.");
   peer.data_ready(
       hex_to_bin("[1000 0001] [0110 0001] "
                  "00 02"       // Sequence 2 -- where is seq 1? Lost!
@@ -219,6 +216,8 @@ void test_journal() {
                  "48 ff" // C4 vel 127. S0 Y1 - Y1 means play, Y0 skip
                  ),
       rtpmidid::rtppeer::MIDI_PORT);
+
+  DEBUG("Send 4th packet. Second lost too. Note Off.");
 
   // Assume Ack, and lost packet so send the note off some time later
   peer.data_ready(
@@ -246,13 +245,13 @@ void test_journal() {
 
   ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
 
-  DEBUG("MIDI DATA. {} bytes", midi_io_writer.pos());
-  midi_io_writer.print_hex();
+  DEBUG("MIDI DATA. {} bytes", midi_io.pos());
+  midi_io.print_hex();
 
-  DEBUG("NETWORK DATA, {} bytes", network_io_writer.pos());
-  network_io_writer.print_hex();
+  DEBUG("NETWORK DATA, {} bytes", network_io.pos());
+  network_io.print_hex();
   // There should be some data at network_buffer
-  ASSERT_NOT_EQUAL(network_io_writer.pos(), 0);
+  ASSERT_NOT_EQUAL(network_io.pos(), 0);
 
   ASSERT_EQUAL(midi_io.data[0], 0x90);
   ASSERT_EQUAL(midi_io.data[1], 0x48);

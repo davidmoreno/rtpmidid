@@ -414,7 +414,8 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
   }
   buffer.check_enough(length);
 
-  midi_event(io_bytes_reader(buffer.position, length));
+  io_bytes midi(buffer.position, length);
+  midi_event(midi);
 }
 
 /**
@@ -433,7 +434,7 @@ uint64_t rtppeer::get_timestamp() {
   return uint32_t(now - timestamp_start);
 }
 
-void rtppeer::send_midi(io_bytes_reader &&events) {
+void rtppeer::send_midi(const io_bytes_reader &events) {
   if (!is_connected()) { // Not connected yet.
     DEBUG("Can not send MIDI data to {} yet, not connected ({:X}).",
           remote_name, (int)status);
@@ -593,7 +594,8 @@ void rtppeer::parse_journal_chapter_N(uint8_t channel,
       tmp[0] = 0x90 | channel;
       tmp[1] = notenum & 0x7f;
       tmp[2] = notevel & 0x7f;
-      midi_event(io_bytes_reader(tmp, 3));
+      io_bytes event(tmp, 3);
+      midi_event(event);
     }
   }
 
@@ -605,7 +607,8 @@ void rtppeer::parse_journal_chapter_N(uint8_t channel,
       if (bitmap & (0x80 >> j)) {
         tmp[1] = minnote;
         tmp[2] = 0;
-        midi_event(io_bytes_reader(tmp, 3));
+        io_bytes event(tmp, 3);
+        midi_event(event);
       }
     }
   }

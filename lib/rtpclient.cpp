@@ -43,10 +43,9 @@ rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
   control_socket = -1;
   midi_socket = -1;
   peer.initiator_id = rand();
-  peer.send_event.connect(
-      [this](const io_bytes_reader &data, rtppeer::port_e port) {
-        this->sendto(data, port);
-      });
+  peer.send_event.connect([this](const io_bytes &data, rtppeer::port_e port) {
+    this->sendto(data, port);
+  });
 }
 
 rtpclient::~rtpclient() {
@@ -234,7 +233,7 @@ void rtpclient::send_ck0_with_timeout() {
   });
 }
 
-void rtpclient::sendto(const io_bytes_reader &pb, rtppeer::port_e port) {
+void rtpclient::sendto(const io_bytes &pb, rtppeer::port_e port) {
   auto peer_addr = (port == rtppeer::MIDI_PORT) ? midi_addr : control_addr;
 
   auto socket = rtppeer::MIDI_PORT == port ? midi_socket : control_socket;

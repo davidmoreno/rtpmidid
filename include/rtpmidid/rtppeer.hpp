@@ -24,7 +24,8 @@
 #include <string>
 
 namespace rtpmidid {
-struct io_bytes_reader;
+class io_bytes_reader;
+class io_bytes;
 
 class rtppeer {
 public:
@@ -73,10 +74,17 @@ public:
   signal_t<const std::string &, status_e> connected_event;
   /// Event for disconnect
   signal_t<disconnect_reason_e> disconnect_event;
-  /// Event for send MIDI
-  signal_t<io_bytes_reader &&> midi_event;
+  /// Event for send MIDI.
+  // It is const & to make automatic conversion from io_bytes_writer. Need the
+  // const or the compiler thinks you are stupid and why give a object to
+  // modify when you will not use it. At least it should be a value or a lvalue.
+  // But what we need is the conversion. Actually you can force the non-const
+  // reader and conversion at connect:
+  // `midi_event.connect([](io_bytes_reader reader){})`
+  // And everybody happy.
+  signal_t<const io_bytes_reader &> midi_event;
   /// Event for send data to network.
-  signal_t<io_bytes_reader &&, port_e> send_event;
+  signal_t<const io_bytes_reader &, port_e> send_event;
 
   // Clock latency check received. in ms
   signal_t<float> ck_event;
@@ -100,7 +108,7 @@ public:
   void parse_command_no(io_bytes_reader &, port_e port);
   void parse_midi(io_bytes_reader &);
 
-  void send_midi(io_bytes_reader &&buffer);
+  void send_midi(const io_bytes_reader &buffer);
   void send_goodbye(port_e to_port);
   void send_feedback(uint32_t seqnum);
   void connect_to(port_e rtp_port);

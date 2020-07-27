@@ -284,14 +284,14 @@ void rtpserver::create_peer_from(io_bytes_reader &&buffer,
         connected_event(peer);
       });
 
-  peer->midi_event.connect([this](io_bytes_reader &&data) {
+  peer->midi_event.connect([this](const io_bytes_reader &data) {
     // DEBUG("Got MIDI from the remote peer into this server.");
-    midi_event(std::move(data));
+    midi_event(data);
   });
 }
 
-void rtpserver::send_midi_to_all_peers(io_bytes_reader &&buffer) {
+void rtpserver::send_midi_to_all_peers(const io_bytes_reader &buffer) {
   for (auto &speers : ssrc_to_peer) {
-    speers.second->send_midi(io_bytes_reader(buffer));
+    speers.second->send_midi(buffer);
   }
 }
