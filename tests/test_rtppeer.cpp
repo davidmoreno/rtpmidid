@@ -167,6 +167,7 @@ void test_recv_some_midi() {
 
 void test_journal() {
   rtpmidid::rtppeer peer("test");
+  peer.journal = rtpmidid::journal_t(); // Activate journal
 
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
@@ -260,6 +261,28 @@ void test_journal() {
   ASSERT_EQUAL(midi_io.data[3], 0x80);
   ASSERT_EQUAL(midi_io.data[4], 0x48);
   ASSERT_EQUAL(midi_io.data[5], 0x0);
+
+  // The other side, we send something, have no reply after some time
+  network_io.truncate();
+  midi_io.truncate();
+  midi_io.write_uint8(0x80);
+  midi_io.write_uint8(64);
+  midi_io.write_uint8(23);
+  peer.send_midi(midi_io);
+  auto length_wo_journal = network_io.pos();
+
+  // Something else, so we need the journal
+  network_io.truncate();
+  midi_io.truncate();
+  midi_io.write_uint8(0x80);
+  midi_io.write_uint8(62);
+  midi_io.write_uint8(23);
+  peer.send_midi(midi_io);
+
+  // Only one packet, should have journal for Note
+  network_io.print_hex();
+  // Should, for one, be larger
+  ASSERT_LT(length_wo_journal, network_io.pos());
 }
 
 int main(int argc, char **argv) {

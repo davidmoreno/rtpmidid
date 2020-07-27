@@ -210,6 +210,8 @@ public:
     memcpy(position, data, count);
     position += count;
   }
+
+  void truncate() { position = start; }
 };
 
 class io_bytes_reader : public io_bytes {
@@ -287,6 +289,8 @@ public:
     position++;
     return ret;
   }
+
+  bool eof() { return position >= end; }
 };
 
 template <size_t Size> class io_bytes_static : public io_bytes {

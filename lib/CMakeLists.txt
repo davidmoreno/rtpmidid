@@ -3,6 +3,7 @@ add_library(
   SHARED
   rtppeer.cpp rtpclient.cpp rtpserver.cpp
   logger.cpp poller.cpp
+  journal.cpp
 )
 
 add_library(
@@ -10,6 +11,7 @@ add_library(
   STATIC
   rtppeer.cpp rtpclient.cpp rtpserver.cpp
   logger.cpp poller.cpp
+  journal.cpp
 )
 
 set_target_properties(rtpmidid-static PROPERTIES OUTPUT_NAME rtpmididstatic)

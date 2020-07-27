@@ -460,6 +460,9 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
   // buffer.print_hex();
 
   send_event(buffer, MIDI_PORT);
+  if (journal) {
+    journal->midi_in(seq_nr, events);
+  }
 }
 
 void rtppeer::send_goodbye(port_e to_port) {

@@ -18,9 +18,11 @@
  */
 
 #pragma once
+#include "journal.hpp"
 #include "signal.hpp"
 #include <arpa/inet.h>
 #include <functional>
+#include <optional>
 #include <string>
 
 namespace rtpmidid {
@@ -69,6 +71,7 @@ public:
   uint64_t timestamp_start; // Time in ms
   uint64_t latency;
   bool waiting_ck;
+  std::optional<journal_t> journal;
 
   /// Event for connected
   signal_t<const std::string &, status_e> connected_event;
