@@ -23,8 +23,8 @@
 #include <unistd.h>
 
 #include <rtpmidid/exceptions.hpp>
+#include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
-#include <rtpmidid/parse_buffer.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtpserver.hpp>
 
@@ -142,7 +142,7 @@ rtpserver::~rtpserver() {
   }
 }
 
-std::shared_ptr<rtppeer> rtpserver::get_peer_by_packet(parse_buffer_t &buffer,
+std::shared_ptr<rtppeer> rtpserver::get_peer_by_packet(io_bytes_reader &buffer,
                                                        rtppeer::port_e port) {
   // Commands may be by SSRC or initiator_id
   auto command =
@@ -207,18 +207,18 @@ void rtpserver::data_ready(rtppeer::port_e port) {
     throw exception("Error reading from server 0.0.0.0:{}", netport);
   }
 
-  auto buffer = parse_buffer_t(raw, n);
+  auto buffer = io_bytes_reader(raw, n);
 
   auto peer = get_peer_by_packet(buffer, port);
   if (peer) {
-    peer->data_ready(buffer, port);
+    peer->data_ready(std::move(buffer), port);
   } else {
     // If I dont know the other peer I'm only interested in IN, ignore others
     // If it is not a CONTROL PORT the messages come in the wrong order. The
     // first IN should create the peer.
     if (rtppeer::is_command(buffer) && buffer.start[2] == 'I' &&
         buffer.start[3] == 'N') {
-      create_peer_from(buffer, &cliaddr, port);
+      create_peer_from(std::move(buffer), &cliaddr, port);
     } else {
       DEBUG("Unknown peer, and not connect on control. Ignoring. {} port.",
             port == rtppeer::MIDI_PORT ? "MIDI" : "Control");
@@ -227,7 +227,7 @@ void rtpserver::data_ready(rtppeer::port_e port) {
   }
 }
 
-void rtpserver::sendto(const parse_buffer_t &pb, rtppeer::port_e port,
+void rtpserver::sendto(const io_bytes_reader &pb, rtppeer::port_e port,
                        struct sockaddr_in6 *address, int remote_base_port) {
   if (port == rtppeer::MIDI_PORT)
     address->sin6_port = htons(remote_base_port + 1);
@@ -241,16 +241,16 @@ void rtpserver::sendto(const parse_buffer_t &pb, rtppeer::port_e port,
   // htons(address->sin6_port));
 
   auto res =
-      ::sendto(socket, pb.start, pb.capacity(), MSG_CONFIRM,
+      ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
                (const struct sockaddr *)address, sizeof(struct sockaddr_in6));
 
-  if (res < 0 || static_cast<uint32_t>(res) != pb.capacity()) {
+  if (res < 0 || static_cast<uint32_t>(res) != pb.size()) {
     throw exception("Could not send all data. Sent {}. {}", res,
                     strerror(errno));
   }
 }
 
-void rtpserver::create_peer_from(parse_buffer_t &buffer,
+void rtpserver::create_peer_from(io_bytes_reader &&buffer,
                                  struct sockaddr_in6 *cliaddr,
                                  rtppeer::port_e port) {
   auto peer = std::make_shared<rtppeer>(name);
@@ -262,12 +262,12 @@ void rtpserver::create_peer_from(parse_buffer_t &buffer,
 
   // This is the send to the proper ports
   peer->send_event.connect(
-      [this, address, remote_base_port](const parse_buffer_t &buff,
+      [this, address, remote_base_port](const io_bytes_reader &buff,
                                         rtppeer::port_e port) {
         this->sendto(buff, port, address.get(), remote_base_port);
       });
 
-  peer->data_ready(buffer, port);
+  peer->data_ready(std::move(buffer), port);
 
   // After read the first packet I know the initiator_id
   initiator_to_peer[peer->initiator_id] = peer;
@@ -284,13 +284,13 @@ void rtpserver::create_peer_from(parse_buffer_t &buffer,
         connected_event(peer);
       });
 
-  peer->midi_event.connect([this](parse_buffer_t &data) {
+  peer->midi_event.connect([this](const io_bytes_reader &data) {
     // DEBUG("Got MIDI from the remote peer into this server.");
     midi_event(data);
   });
 }
 
-void rtpserver::send_midi_to_all_peers(parse_buffer_t &buffer) {
+void rtpserver::send_midi_to_all_peers(const io_bytes_reader &buffer) {
   for (auto &speers : ssrc_to_peer) {
     speers.second->send_midi(buffer);
   }

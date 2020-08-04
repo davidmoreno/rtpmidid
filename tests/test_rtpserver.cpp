@@ -40,8 +40,8 @@ void test_several_connect_to_server() {
   test_client_t control_client(0, server.control_port);
   test_client_t midi_client(control_client.local_port + 1, server.midi_port);
 
-  control_client.send(*connect_msg);
-  midi_client.send(*connect_msg);
+  control_client.send(connect_msg);
+  midi_client.send(connect_msg);
 
   // Nothing yet. Need to do some poller cycles.
   ASSERT_EQUAL(server.initiator_to_peer.size(), 0);
@@ -53,9 +53,9 @@ void test_several_connect_to_server() {
   test_client_t control_client2(0, server.control_port);
   test_client_t midi_client2(control_client2.local_port + 1, server.midi_port);
 
-  midi_client2.send(*connect_msg2);
+  midi_client2.send(connect_msg2);
   rtpmidid::poller.wait();
-  control_client2.send(*connect_msg2);
+  control_client2.send(connect_msg2);
   rtpmidid::poller.wait();
 
   ASSERT_EQUAL(server.initiator_to_peer.size(), 2);

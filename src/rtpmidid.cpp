@@ -22,8 +22,8 @@
 #include "./config.hpp"
 #include "./rtpmidid.hpp"
 #include "./stringpp.hpp"
+#include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
-#include <rtpmidid/parse_buffer.hpp>
 #include <rtpmidid/rtpclient.hpp>
 #include <rtpmidid/rtpserver.hpp>
 
@@ -116,7 +116,7 @@ rtpmidid_t::add_rtpmidid_import_server(const std::string &name,
              port, peer->remote_name);
         auto aseq_port = seq.create_port(peer->remote_name);
 
-        peer->midi_event.connect([this, aseq_port](parse_buffer_t &pb) {
+        peer->midi_event.connect([this, aseq_port](io_bytes_reader pb) {
           this->recv_rtpmidi_event(aseq_port, pb);
         });
         seq.midi_event[aseq_port].connect(
@@ -128,16 +128,8 @@ rtpmidid_t::add_rtpmidid_import_server(const std::string &name,
               }
               auto conn = &peer_it->second;
 
-              uint8_t data[128];
-              parse_buffer_t stream(data, sizeof(data));
-
+              io_bytes_writer_static<128> stream;
               alsamidi_to_midiprotocol(ev, stream);
-
-              // Reset
-              stream.end = stream.position;
-              stream.position = stream.start;
-
-              // And send
               conn->peer->send_midi(stream);
             });
         peer->disconnect_event.connect([this, aseq_port](auto reason) {
@@ -177,12 +169,8 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
   announce_rtpmidid_server(name, server->control_port);
 
   seq.midi_event[alsaport].connect([this, server](snd_seq_event_t *ev) {
-    uint8_t tmp[128];
-    parse_buffer_t buffer(tmp, sizeof(tmp));
+    io_bytes_writer_static<128> buffer;
     alsamidi_to_midiprotocol(ev, buffer);
-    buffer.end = buffer.position;
-    buffer.position = buffer.start;
-
     server->send_midi_to_all_peers(buffer);
   });
 
@@ -194,7 +182,7 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
         alsa_to_server.erase(from);
       });
 
-  server->midi_event.connect([this, alsaport](parse_buffer_t &buffer) {
+  server->midi_event.connect([this, alsaport](io_bytes_reader buffer) {
     this->recv_rtpmidi_event(alsaport, buffer);
   });
 
@@ -305,7 +293,7 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
     auto &address = peer_info->addresses[peer_info->addr_idx];
     peer_info->peer = std::make_shared<rtpclient>(name);
     peer_info->peer->peer.midi_event.connect(
-        [this, aseq_port](parse_buffer_t &pb) {
+        [this, aseq_port](io_bytes_reader pb) {
           this->recv_rtpmidi_event(aseq_port, pb);
         });
     peer_info->peer->peer.disconnect_event.connect(
@@ -383,7 +371,7 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
   }
 }
 
-void rtpmidid_t::recv_rtpmidi_event(int port, parse_buffer_t &midi_data) {
+void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
   uint8_t current_command = 0;
   snd_seq_event_t ev;
 
@@ -483,21 +471,14 @@ void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev) {
           aseq_port);
     return;
   }
-  uint8_t data[128];
-  parse_buffer_t stream(data, sizeof(data));
 
+  io_bytes_writer_static<128> stream;
   alsamidi_to_midiprotocol(ev, stream);
-
-  // Reset
-  stream.end = stream.position;
-  stream.position = stream.start;
-
-  // And send
   peer_info->peer->peer.send_midi(stream);
 }
 
 void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
-                                          parse_buffer_t &stream) {
+                                          io_bytes_writer &stream) {
   switch (ev->type) {
   // case SND_SEQ_EVENT_NOTE:
   case SND_SEQ_EVENT_NOTEON:

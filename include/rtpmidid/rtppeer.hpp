@@ -24,7 +24,8 @@
 #include <string>
 
 namespace rtpmidid {
-struct parse_buffer_t;
+class io_bytes_reader;
+class io_bytes;
 
 class rtppeer {
 public:
@@ -69,36 +70,54 @@ public:
   uint64_t latency;
   bool waiting_ck;
 
-  signal_t<parse_buffer_t &> midi_event;
+  /// Event for connected
   signal_t<const std::string &, status_e> connected_event;
-  signal_t<parse_buffer_t &&, port_e> send_event;
+  /// Event for disconnect
   signal_t<disconnect_reason_e> disconnect_event;
+  /// Event for send MIDI.
+  // It is const & to make automatic conversion from io_bytes_writer. Need the
+  // const or the compiler thinks you are stupid and why give a object to
+  // modify when you will not use it. At least it should be a value or a lvalue.
+  // But what we need is the conversion. Actually you can force the non-const
+  // reader and conversion at connect:
+  // `midi_event.connect([](io_bytes_reader reader){})`
+  // And everybody happy.
+  signal_t<const io_bytes_reader &> midi_event;
+  /// Event for send data to network.
+  signal_t<const io_bytes_reader &, port_e> send_event;
+
   // Clock latency check received. in ms
   signal_t<float> ck_event;
 
-  static bool is_command(parse_buffer_t &);
-  static bool is_feedback(parse_buffer_t &);
+  static bool is_command(io_bytes_reader &);
+  static bool is_feedback(io_bytes_reader &);
 
   rtppeer(std::string _name);
   ~rtppeer();
 
   bool is_connected() { return status == CONNECTED; }
   void reset();
-  void data_ready(parse_buffer_t &, port_e port);
+  void data_ready(io_bytes_reader &&, port_e port);
 
-  void parse_command(parse_buffer_t &, port_e port);
-  void parse_feedback(parse_buffer_t &);
-  void parse_command_ok(parse_buffer_t &, port_e port);
-  void parse_command_in(parse_buffer_t &, port_e port);
-  void parse_command_ck(parse_buffer_t &, port_e port);
-  void parse_command_by(parse_buffer_t &, port_e port);
-  void parse_command_no(parse_buffer_t &, port_e port);
-  void parse_midi(parse_buffer_t &);
+  void parse_command(io_bytes_reader &, port_e port);
+  void parse_feedback(io_bytes_reader &);
+  void parse_command_ok(io_bytes_reader &, port_e port);
+  void parse_command_in(io_bytes_reader &, port_e port);
+  void parse_command_ck(io_bytes_reader &, port_e port);
+  void parse_command_by(io_bytes_reader &, port_e port);
+  void parse_command_no(io_bytes_reader &, port_e port);
+  void parse_midi(io_bytes_reader &);
 
-  void send_midi(parse_buffer_t &buffer);
+  void send_midi(const io_bytes_reader &buffer);
   void send_goodbye(port_e to_port);
+  void send_feedback(uint32_t seqnum);
   void connect_to(port_e rtp_port);
   void send_ck0();
   uint64_t get_timestamp();
+
+  // Journal
+  void parse_journal(io_bytes_reader &);
+  void parse_journal_chapter(io_bytes_reader &);
+  void parse_journal_chapter_N(uint8_t channel, io_bytes_reader &);
 };
 } // namespace rtpmidid

@@ -29,8 +29,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
-#include <rtpmidid/parse_buffer.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtpclient.hpp>
 
@@ -43,10 +43,9 @@ rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
   control_socket = -1;
   midi_socket = -1;
   peer.initiator_id = rand();
-  peer.send_event.connect(
-      [this](const parse_buffer_t &data, rtppeer::port_e port) {
-        this->sendto(data, port);
-      });
+  peer.send_event.connect([this](const io_bytes &data, rtppeer::port_e port) {
+    this->sendto(data, port);
+  });
 }
 
 rtpclient::~rtpclient() {
@@ -234,15 +233,15 @@ void rtpclient::send_ck0_with_timeout() {
   });
 }
 
-void rtpclient::sendto(const parse_buffer_t &pb, rtppeer::port_e port) {
+void rtpclient::sendto(const io_bytes &pb, rtppeer::port_e port) {
   auto peer_addr = (port == rtppeer::MIDI_PORT) ? midi_addr : control_addr;
 
   auto socket = rtppeer::MIDI_PORT == port ? midi_socket : control_socket;
 
-  auto res = ::sendto(socket, pb.start, pb.capacity(), MSG_CONFIRM,
+  auto res = ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
                       (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
 
-  if (res < 0 || static_cast<uint32_t>(res) != pb.capacity()) {
+  if (res < 0 || static_cast<uint32_t>(res) != pb.size()) {
     throw exception("Could not send all data to {}:{}. Sent {}. {}",
                     peer.remote_name, remote_base_port, res, strerror(errno));
   }
@@ -266,6 +265,6 @@ void rtpclient::data_ready(rtppeer::port_e port) {
                     remote_base_port);
   }
 
-  auto buffer = parse_buffer_t(raw, n);
-  peer.data_ready(buffer, port);
+  auto buffer = io_bytes_reader(raw, n);
+  peer.data_ready(std::move(buffer), port);
 }
