@@ -1,3 +1,0 @@
--std=c++17
--Isrc/core/
--Isrc/
