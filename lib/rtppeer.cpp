@@ -446,15 +446,32 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
   uint32_t timestamp = get_timestamp();
   seq_nr++;
 
+  uint8_t has_journal_bit = journal->has_journal ? 0x40 : 0;
   buffer.write_uint8(0x80);
   buffer.write_uint8(0x61);
   buffer.write_uint16(seq_nr);
   buffer.write_uint32(timestamp);
   buffer.write_uint32(local_ssrc);
 
+  auto size = events.size();
+  if (size > 4095) {
+    throw rtpmidid::exception("MIDI packet too big. Max size is 4096 bytes.");
+  }
+  if (size < 16) {
+    buffer.write_uint8(size | has_journal_bit);
+
+  } else {
+    uint8_t sizeh = size << 8;
+    uint8_t sizel = size & 0xFF;
+    buffer.write_uint8(sizeh | has_journal_bit | 0x80); // mark long midi packet
+    buffer.write_uint8(sizel);
+  }
   // Now midi
-  buffer.write_uint8(events.size());
   buffer.copy_from(events);
+
+  // Now journal
+  if (has_journal_bit)
+    journal->write_journal(buffer);
 
   // events.print_hex();
   // buffer.print_hex();

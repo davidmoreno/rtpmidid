@@ -25,7 +25,14 @@ class journal_t {
 public:
   journal_t();
   void midi_in(uint16_t seq_nr, const io_bytes_reader &midi_in);
-  void journal(io_bytes_writer &packet);
+  void write_journal(io_bytes_writer &packet);
+
+  bool has_journal;
+  void set_has_journal() {
+    if (!has_journal)
+      has_journal = true;
+  }
+
   struct {
     struct {
       // Last seq that set that noteoff

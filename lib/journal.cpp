@@ -21,7 +21,10 @@
 #include <rtpmidid/journal.hpp>
 
 using namespace rtpmidid;
-journal_t::journal_t() { memset(&channel[0], 0, sizeof(channel)); }
+journal_t::journal_t() {
+  memset(&channel[0], 0, sizeof(channel));
+  has_journal = false;
+}
 
 void journal_t::midi_in(uint16_t seqnr, const io_bytes_reader &cmidi_in) {
   DEBUG("JOURNAL MIDI IN");
@@ -35,21 +38,27 @@ void journal_t::midi_in(uint16_t seqnr, const io_bytes_reader &cmidi_in) {
     case 0x80: {
       DEBUG("JOURNAL NOTE ON");
       auto ch = command & 0x0F;
-      auto note = midi_in.read_uint8();
+      auto note = midi_in.read_uint8() & 0x07F; // Range check
       auto vel = midi_in.read_uint8();
       channel[ch].chapter_n.noteon_seqn[note] = seqnr;
       channel[ch].chapter_n.noteon_vel[note] = vel;
+      set_has_journal();
       break;
     }
     case 0x90: {
       DEBUG("JOURNAL NOTE OFF");
       auto ch = command & 0x0F;
-      auto note = midi_in.read_uint8();
+      auto note = midi_in.read_uint8() & 0x07F; // Range check
       auto vel = midi_in.read_uint8();
       channel[ch].chapter_n.noteoff_seqn[note] = seqnr;
       channel[ch].chapter_n.noteon_vel[note] = vel;
+      set_has_journal();
       break;
     }
     }
   }
+}
+
+void journal_t::write_journal(rtpmidid::io_bytes_writer &packet) {
+  DEBUG("Write journal!");
 }
