@@ -61,8 +61,6 @@ void rtppeer::data_ready(io_bytes_reader &&buffer, port_e port) {
   if (port == CONTROL_PORT) {
     if (is_command(buffer)) {
       parse_command(buffer, port);
-    } else if (is_feedback(buffer)) {
-      parse_feedback(buffer);
     } else {
       buffer.print_hex(true);
     }
@@ -79,12 +77,6 @@ bool rtppeer::is_command(io_bytes_reader &pb) {
   // DEBUG("Is command? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF,
   // pb.start[1] == 0xFF);
   return (pb.size() >= 16 && pb.start[0] == 0xFF && pb.start[1] == 0xFF);
-}
-bool rtppeer::is_feedback(io_bytes_reader &pb) {
-  // DEBUG("Is feedback? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF,
-  // pb.start[1] == 0xFF);
-  return (pb.size() >= 12 && pb.start[0] == 0xFF && pb.start[1] == 0xFF &&
-          pb.start[2] == 0x52 && pb.start[3] == 0x53);
 }
 
 void rtppeer::parse_command(io_bytes_reader &buffer, port_e port) {
@@ -113,6 +105,9 @@ void rtppeer::parse_command(io_bytes_reader &buffer, port_e port) {
     break;
   case rtppeer::NO:
     parse_command_no(buffer, port);
+    break;
+  case rtppeer::RS:
+    parse_command_rs(buffer, port);
     break;
   default:
     buffer.print_hex(true);
@@ -354,12 +349,12 @@ void rtppeer::send_ck0() {
   send_event(response, MIDI_PORT);
 }
 
-void rtppeer::parse_feedback(io_bytes_reader &buffer) {
-  buffer.position = buffer.start + 8;
-  seq_nr_ack = buffer.read_uint16();
-
-  DEBUG("Got feedback until package {} / {}. No journal, so ignoring.",
-        seq_nr_ack, seq_nr);
+void rtppeer::parse_command_rs(io_bytes_reader &buffer, port_e port) {
+  buffer.read_uint32(); // Ignore SSRC
+  auto seqn = buffer.read_uint32();
+  if (journal) {
+    journal->seq_confirmed = seqn;
+  }
 }
 
 void rtppeer::parse_midi(io_bytes_reader &buffer) {
@@ -514,6 +509,27 @@ void rtppeer::send_feedback(uint32_t seqnum) {
   buffer.write_uint32(local_ssrc);
   buffer.write_uint32(seqnum);
 
+  send_event(buffer, CONTROL_PORT);
+}
+
+/// Sends a packet with ONLY the journal, no MIDI data
+void rtppeer::send_journal() {
+  if (!journal)
+    return;
+
+  io_bytes_writer_static<512> buffer;
+  uint32_t timestamp = get_timestamp();
+  seq_nr++;
+
+  buffer.write_uint8(0x81);
+  buffer.write_uint8(0x61);
+  buffer.write_uint16(seq_nr);
+  buffer.write_uint32(timestamp);
+  buffer.write_uint32(local_ssrc);
+  buffer.write_uint8(0x40); // Only journal bit
+  journal->write_journal(buffer);
+
+  DEBUG("Journal packet ready: {} bytes", buffer.pos());
   send_event(buffer, CONTROL_PORT);
 }
 

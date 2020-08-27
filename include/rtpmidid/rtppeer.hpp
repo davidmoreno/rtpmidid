@@ -93,7 +93,6 @@ public:
   signal_t<float> ck_event;
 
   static bool is_command(io_bytes_reader &);
-  static bool is_feedback(io_bytes_reader &);
 
   rtppeer(std::string _name);
   ~rtppeer();
@@ -103,17 +102,18 @@ public:
   void data_ready(io_bytes_reader &&, port_e port);
 
   void parse_command(io_bytes_reader &, port_e port);
-  void parse_feedback(io_bytes_reader &);
   void parse_command_ok(io_bytes_reader &, port_e port);
   void parse_command_in(io_bytes_reader &, port_e port);
   void parse_command_ck(io_bytes_reader &, port_e port);
   void parse_command_by(io_bytes_reader &, port_e port);
   void parse_command_no(io_bytes_reader &, port_e port);
+  void parse_command_rs(io_bytes_reader &, port_e port);
   void parse_midi(io_bytes_reader &);
 
   void send_midi(const io_bytes_reader &buffer);
   void send_goodbye(port_e to_port);
   void send_feedback(uint32_t seqnum);
+  void send_journal();
   void connect_to(port_e rtp_port);
   void send_ck0();
   uint64_t get_timestamp();

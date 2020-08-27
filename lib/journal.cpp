@@ -17,16 +17,19 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <bits/stdint-uintn.h>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/journal.hpp>
 
 using namespace rtpmidid;
 journal_t::journal_t() {
   memset(&channel[0], 0, sizeof(channel));
+  seq_confirmed = 0;
+  seq_sent = 0;
   has_journal = false;
 }
 
-void journal_t::midi_in(uint16_t seqnr, const io_bytes_reader &cmidi_in) {
+void journal_t::midi_in(uint32_t seqnr, const io_bytes_reader &cmidi_in) {
   DEBUG("JOURNAL MIDI IN");
 
   io_bytes_reader midi_in(cmidi_in);
@@ -57,8 +60,89 @@ void journal_t::midi_in(uint16_t seqnr, const io_bytes_reader &cmidi_in) {
     }
     }
   }
+  seq_sent = seqnr;
 }
 
 void journal_t::write_journal(rtpmidid::io_bytes_writer &packet) {
-  DEBUG("Write journal!");
+  // keep header, to overwrite it later
+  uint8_t *headerp = packet.position;
+  packet.write_uint8(0);
+  uint8_t header = 0;
+
+  for (int chan = 0; chan < 16; chan++) {
+    if (write_channel_n(chan, packet)) {
+      header |= header_chapter_journal_e::N_NOTE_ON_OFF;
+    }
+  }
+
+  *headerp = header;
+}
+
+bool journal_t::write_channel_n(int8_t chan, io_bytes_writer &packet) {
+  auto noteon_count = 0;
+  auto noteoff_count = 0;
+  auto noteoff_low = 127;
+  auto noteoff_high = 0;
+  auto noteon_seqn = channel[chan].chapter_n.noteon_seqn;
+  for (auto noten = 0; noten < 128; noten++) {
+    auto seqn = noteon_seqn[noten];
+    if (seqn > seq_confirmed) {
+      noteon_count++;
+    }
+  }
+  auto noteoff_seqn = channel[chan].chapter_n.noteoff_seqn;
+  for (int noten = 0; noten < 127; noten++) {
+    auto seqn = noteoff_seqn[noten];
+    if (seqn > seq_confirmed) {
+      noteoff_count++;
+      noteoff_low = std::min(noteoff_low, noten);
+      noteoff_high = std::max(noteoff_high, noten);
+    }
+  }
+
+  if (!noteon_count && !noteoff_count)
+    return false;
+
+  auto *header = packet.position;
+  packet.write_uint16(0);
+
+  DEBUG("Chapter N. Channel: {}, Has noteon: {}, has note off: {}", chan,
+        noteon_count, noteoff_count);
+
+  if (noteon_count) {
+    // TODO S bit to 1 always. But called B bit here.
+    header[0] = 0x80 | noteon_count;
+    auto noteon_vel = channel[chan].chapter_n.noteon_vel;
+    for (int noten = 0; noten < 128; noten++) {
+      auto seqn = noteon_seqn[noten];
+      if (seqn > seq_confirmed) {
+        // TODO: Figure out whet is S bit. It looks it must be 1 except in some
+        // cases. So always 1
+        packet.write_uint8(0x80 | noten);
+        // TODO: Encode Y -- Whether to recomend playing or skip this noteon.
+        // Now always go for it.
+        packet.write_uint8(0x80 | noteon_vel[noten]);
+      }
+    }
+  }
+  if (noteoff_count) {
+    noteoff_low >>= 4;
+    noteoff_high >>= 4;
+    // noten is the minimum note to store at the journal
+    auto noten = noteoff_low << 4;
+    // which is properly in the format needed here.
+    header[1] = noten | noteoff_high;
+    for (auto notenb = noteoff_low; notenb <= noteoff_high; notenb++) {
+      uint8_t bitset = 0;
+      for (int i = 0; i < 8; i++) {
+        if (noteoff_seqn[noten] > seq_confirmed) {
+          bitset |= 1 << i;
+        }
+        noten++;
+      }
+      packet.write_uint8(bitset);
+    }
+  }
+
+  return true;
 }

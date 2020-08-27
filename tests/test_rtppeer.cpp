@@ -18,6 +18,7 @@
 
 #include "../tests/test_utils.hpp"
 #include "./test_case.hpp"
+#include "rtpmidid/journal.hpp"
 #include <memory>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
@@ -271,7 +272,7 @@ void test_journal() {
   peer.send_midi(midi_io);
   auto length_wo_journal = network_io.pos();
 
-  // Something else, so we need the journal
+  // Something else, first not confirmed, so we need the journal
   network_io.truncate();
   midi_io.truncate();
   midi_io.write_uint8(0x80);
@@ -283,6 +284,18 @@ void test_journal() {
   network_io.print_hex();
   // Should, for one, be larger
   ASSERT_LT(length_wo_journal, network_io.pos());
+
+  // Confirm first packet
+  peer.data_ready(hex_to_bin("FF FF 'RS'"
+                             "'BEEF'" // SSRC
+                             "00 00 00 01"),
+                  rtpmidid::rtppeer::MIDI_PORT);
+  network_io.truncate();
+  DEBUG("Send Only Journal");
+  peer.send_journal();
+  DEBUG("Packet with journal");
+  network_io.print_hex(true);
+  ASSERT_EQUAL(network_io.pos(), 20);
 }
 
 int main(int argc, char **argv) {
