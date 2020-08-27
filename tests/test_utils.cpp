@@ -102,6 +102,7 @@ rtpmidid::io_bytes_managed hex_to_bin(const std::string &str) {
     }
   }
 
+  buffer.end = writer.position;
   return buffer;
 }
 
