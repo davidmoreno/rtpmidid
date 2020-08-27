@@ -117,10 +117,5 @@ public:
   void connect_to(port_e rtp_port);
   void send_ck0();
   uint64_t get_timestamp();
-
-  // Journal
-  void parse_journal(io_bytes_reader &);
-  void parse_journal_chapter(io_bytes_reader &);
-  void parse_journal_chapter_N(uint8_t channel, io_bytes_reader &);
 };
 } // namespace rtpmidid

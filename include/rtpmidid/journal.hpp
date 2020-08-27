@@ -19,6 +19,7 @@
 
 #pragma once
 #include "iobytes.hpp"
+#include "rtpmidid/signal.hpp"
 
 namespace rtpmidid {
 class journal_t {
@@ -41,18 +42,7 @@ class journal_t {
   } header_chapter_journal_e;
 
 public:
-  journal_t();
-  void midi_in(uint32_t seq_nr, const io_bytes_reader &midi_in);
-  void write_journal(io_bytes_writer &packet);
-
-  bool write_channel_n(int8_t channel, io_bytes_writer &packet);
-
   bool has_journal;
-  void set_has_journal() {
-    if (!has_journal)
-      has_journal = true;
-  }
-
   uint32_t seq_sent;
   uint32_t seq_confirmed;
   struct {
@@ -65,5 +55,20 @@ public:
       uint8_t noteon_vel[128];
     } chapter_n;
   } channel[16];
+
+  journal_t();
+  void midi_in(uint32_t seq_nr, const io_bytes_reader &midi_in);
+
+  // Write journal
+  void write_journal(io_bytes_writer &packet);
+  bool write_channel_n(int8_t channel, io_bytes_writer &packet);
+
+  // Parse
+  void parse_journal(io_bytes_reader &,
+                     signal_t<const io_bytes_reader &> &midi_event);
+  void parse_journal_chapter(io_bytes_reader &,
+                             signal_t<const io_bytes_reader &> &midi_event);
+  void parse_journal_chapter_N(uint8_t channel, io_bytes_reader &,
+                               signal_t<const io_bytes_reader &> &midi_event);
 };
 } // namespace rtpmidid
