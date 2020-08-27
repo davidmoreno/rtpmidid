@@ -47,7 +47,7 @@ continuous lag of a specific length.
 
 | Bit    | pos | description                                                                                                      |
 | ------ | :-: | ---------------------------------------------------------------------------------------------------------------- |
-| B      |  0  | Length is 12 bits. lenght at here is MSB, and one more byte.                                                     |
+| B      |  0  | Length is 12 bits. If true length at 4-7 is MSB, and one more byte.                                              |
 | J      |  1  | There is a journal                                                                                               |
 | Z      |  2  | First midi command as is in MIDI section. No timestamp for first command.                                        |
 | P      |  3  | Phantom MIDI command. The first command is a running command from previous stream.                               |
