@@ -5,8 +5,8 @@ meanings.
 
 ## RTP Header
 
-    0                   1                   2                   3
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     0                   1                   2                   3
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     | V |P|X|  CC   |M|     PT      |        Sequence number        |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -24,12 +24,12 @@ meanings.
 
 | Bit             |  pos  | description                                                                                                              |
 | --------------- | :---: | ------------------------------------------------------------------------------------------------------------------------ |
-| V               |  0-1  | Version. 01.                                                                                                             |
+| V               |  0-1  | Version. 2.                                                                                                              |
 | P               |   2   | Has paddding. RTP needs it for encryption. 0.                                                                            |
 | X               |   3   | Header extension. 0.                                                                                                     |
 | CC              |  4-7  | CSRC count. 0.                                                                                                           |
 | M               |   8   | Has MIDI data.                                                                                                           |
-| PT              | 9-15  | Payload type. Always 01. MIDI.                                                                                           |
+| PT              | 9-15  | Payload type. Always 0x61. MIDI.                                                                                         |
 | Sequence number | 16-31 | Starts random, increase one on each packet. (%2^16). There is an extended one with 32 bits and rollovers.                |
 | Timestamp       | 32-63 | Time this packet was generated. On Apple midi the unit is 0.1 ms. (1^-4 seconds). Real RTPMIDI is at session connection. |
 | SSRC            | 64-96 | Random unique SSRC for this sender. Same for all the session.                                                            |
@@ -39,8 +39,8 @@ continuous lag of a specific length.
 
 ## MIDI Command section
 
-    0                   1                   2                   3
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     0                   1                   2                   3
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |B|J|Z|P|LEN... |  MIDI list ...                                |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -64,8 +64,8 @@ ifconfig and on normal LAN is always zero.
 
 ## Journal Bits
 
-    0                   1                   2
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
+     0                   1                   2
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |S|Y|A|H|TOTCHAN|   Checkpoint Packet Seqnum    |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -83,39 +83,42 @@ ifconfig and on normal LAN is always zero.
 
 One for each (TOTCHAN + 1)
 
-    0                   1                   2                   3
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     0                   1                   2                   3
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |S| CHAN  |H|      LENGTH       |P|C|M|W|N|E|T|A|  Chapters ... |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-| Bit    | pos  | description                                                              |
-| ------ | :--: | ------------------------------------------------------------------------ |
-| S      |  0   | Single packet loss. To indicate only one packet is described in journal. |
-| CHAN   | 1-4  | Channel number                                                           |
-| H      |  5   | Whether contollers are Ehhanced Chapter C.                               |
-| LENGHT | 6-15 | Lenght of the journal                                                    |
-| P      |  16  | Chapter P. Program Change.                                               |
-| C      |  17  | Chapter C. Control Change.                                               |
-| M      |  18  | Chapter M. Parameter System.                                             |
-| W      |  19  | Chapter W. Pitch Wheel.                                                  |
-| N      |  20  | Chapter N. Note On/Off                                                   |
-| E      |  21  | Chapter E. Note Command Extras                                           |
-| T      |  22  | Chapter T. After Touch.                                                  |
-| A      |  23  | Chapter A. Poly Aftertouch.                                              |
+| Bit    |  pos   | description                                                              |
+| ------ | :----: | ------------------------------------------------------------------------ |
+| S      |   0    | Single packet loss. To indicate only one packet is described in journal. |
+| CHAN   |  1-4   | Channel number                                                           |
+| H      |   5    | Whether contollers are Ehhanced Chapter C.                               |
+| LENGHT |  6-15  | Lenght of the journal                                                    |
+| P      | 16 / 0 | Chapter P. Program Change.                                               |
+| C      | 17 / 1 | Chapter C. Control Change.                                               |
+| M      | 18 / 2 | Chapter M. Parameter System.                                             |
+| W      | 19 / 3 | Chapter W. Pitch Wheel.                                                  |
+| N      | 20 / 4 | Chapter N. Note On/Off                                                   |
+| E      | 21 / 5 | Chapter E. Note Command Extras                                           |
+| T      | 22 / 6 | Chapter T. After Touch.                                                  |
+| A      | 23 / 7 | Chapter A. Poly Aftertouch.                                              |
+
+I think S bit is to allow have a faster implementation fo rthe single case of
+only one packet lost.
 
 ## Chapter P
 
-    0                   1                   2
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
+     0                   1                   2
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |S|   PROGRAM   |B|   BANK-MSB  |X|  BANK-LSB   |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
 ## Chapter C
 
-    0                   1                   2                   3
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 8 0 1
+     0                   1                   2                   3
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 8 0 1
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |S|     LEN     |S|   NUMBER    |A|  VALUE/ALT  |S|   NUMBER    |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -124,8 +127,8 @@ One for each (TOTCHAN + 1)
 
 ## Chapter M
 
-    0                   1                   2                   3
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 8 0 1
+     0                   1                   2                   3
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 8 0 1
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |S|     LEN     |S|   NUMBER    |A|  VALUE/ALT  |S|   NUMBER    |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -134,16 +137,16 @@ One for each (TOTCHAN + 1)
 
 # Chapter W
 
-    0                   1
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
+     0                   1
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |S|     FIRST   |R|    SECOND   |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
 ## Chapter N
 
-    0                   1                   2                   3
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 8 0 1
+     0                   1                   2                   3
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 8 0 1
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |B|     LEN     |  LOW  | HIGH  |S|   NOTENUM   |Y|  VELOCITY   |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -151,6 +154,12 @@ One for each (TOTCHAN + 1)
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |    OFFBITS    |    OFFBITS    |     ....      |    OFFBITS    |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+| Bit |   pos   | description                          |
+| --- | :-----: | ------------------------------------ |
+| B   |    0    | S-Style functionality. By default 1. |
+| S   |   16n   | If B is 0, all S are 0.              |
+| Y   | 16n + 8 | Recomendation to play.               |
 
 ## Chapter T
 
@@ -162,8 +171,8 @@ One for each (TOTCHAN + 1)
 
 ## Chapter A
 
-    0                   1                   2                   3
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 8 0 1
+     0                   1                   2                   3
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 8 0 1
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |S|    LEN      |S|   NOTENUM   |X|  PRESSURE   |S|   NOTENUM   |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
