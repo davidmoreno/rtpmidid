@@ -453,7 +453,15 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
   buffer.write_uint32(local_ssrc);
 
   // Now midi
-  buffer.write_uint8(events.size());
+  if (events.size() < 16) {
+    // Short header, 1 octet
+    buffer.write_uint8(events.size());
+  } else {
+    // Long header, 2 octets
+    buffer.write_uint8((events.size() & 0x0f00) >> 8 | 0x80);
+    buffer.write_uint8(events.size() & 0xff);
+  }
+
   buffer.copy_from(events);
 
   // events.print_hex();

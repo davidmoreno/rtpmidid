@@ -428,8 +428,18 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
     case 0xF0: {
       // System messages
       switch (current_command) {
-      // case 0xF0: //SysEx event
-      // break;
+      case 0xF0: { //SysEx event
+        auto start = midi_data.pos() - 1;
+        auto len = 2;
+        try {
+          while (midi_data.read_uint8() != 0xf7) len++;
+        } catch (exception &e) {
+          WARNING("Malformed SysEx message in buffer has no end byte");
+          break;
+        }
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_sysex(&ev, len, &midi_data.start[start]);
+      } break;
       case 0xF1: // MTC Quarter Frame package
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
