@@ -128,7 +128,7 @@ rtpmidid_t::add_rtpmidid_import_server(const std::string &name,
               }
               auto conn = &peer_it->second;
 
-              io_bytes_writer_static<128> stream;
+              io_bytes_writer_static<4096> stream;
               alsamidi_to_midiprotocol(ev, stream);
               conn->peer->send_midi(stream);
             });
@@ -169,7 +169,7 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
   announce_rtpmidid_server(name, server->control_port);
 
   seq.midi_event[alsaport].connect([this, server](snd_seq_event_t *ev) {
-    io_bytes_writer_static<128> buffer;
+    io_bytes_writer_static<4096> buffer;
     alsamidi_to_midiprotocol(ev, buffer);
     server->send_midi_to_all_peers(buffer);
   });
@@ -482,7 +482,7 @@ void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev) {
     return;
   }
 
-  io_bytes_writer_static<128> stream;
+  io_bytes_writer_static<4096> stream;
   alsamidi_to_midiprotocol(ev, stream);
   peer_info->peer->peer.send_midi(stream);
 }

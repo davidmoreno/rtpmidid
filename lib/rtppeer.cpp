@@ -441,7 +441,7 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
     return;
   }
 
-  io_bytes_writer_static<512> buffer;
+  io_bytes_writer_static<4096 + 12> buffer;
 
   uint32_t timestamp = get_timestamp();
   seq_nr++;
