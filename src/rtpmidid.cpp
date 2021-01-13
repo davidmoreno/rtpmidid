@@ -128,7 +128,7 @@ rtpmidid_t::add_rtpmidid_import_server(const std::string &name,
               }
               auto conn = &peer_it->second;
 
-              io_bytes_writer_static<128> stream;
+              io_bytes_writer_static<4096> stream;
               alsamidi_to_midiprotocol(ev, stream);
               conn->peer->send_midi(stream);
             });
@@ -169,7 +169,7 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
   announce_rtpmidid_server(name, server->control_port);
 
   seq.midi_event[alsaport].connect([this, server](snd_seq_event_t *ev) {
-    io_bytes_writer_static<128> buffer;
+    io_bytes_writer_static<4096> buffer;
     alsamidi_to_midiprotocol(ev, buffer);
     server->send_midi_to_all_peers(buffer);
   });
@@ -428,8 +428,18 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
     case 0xF0: {
       // System messages
       switch (current_command) {
-      // case 0xF0: //SysEx event
-      // break;
+      case 0xF0: { //SysEx event
+        auto start = midi_data.pos() - 1;
+        auto len = 2;
+        try {
+          while (midi_data.read_uint8() != 0xf7) len++;
+        } catch (exception &e) {
+          WARNING("Malformed SysEx message in buffer has no end byte");
+          break;
+        }
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_sysex(&ev, len, &midi_data.start[start]);
+      } break;
       case 0xF1: // MTC Quarter Frame package
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
@@ -472,7 +482,7 @@ void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev) {
     return;
   }
 
-  io_bytes_writer_static<128> stream;
+  io_bytes_writer_static<4096> stream;
   alsamidi_to_midiprotocol(ev, stream);
   peer_info->peer->peer.send_midi(stream);
 }
