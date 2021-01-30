@@ -18,6 +18,7 @@
 
 #include "../tests/test_case.hpp"
 #include "../tests/test_utils.hpp"
+#include "rtpmidid/iobytes.hpp"
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtpserver.hpp>
 
@@ -27,11 +28,19 @@ auto connect_msg = hex_to_bin("FF FF 'IN'"
                               "00 BE EF 00"  // SSRC
                               "'first' 00"); // Name
 auto disconnect_msg = hex_to_bin("FF FF 'BY'"
-                              "0000 0002"
+                                 "0000 0002"
                                  "00 12 34 00"
                                  "00 BE EF 00"
-                              "'first' 00");
+                                 "'first' 00");
 
+// Note on 60, vel 7f
+auto midi_msg = hex_to_bin("80 61"
+                           "0000"          // seq nr
+                           "0000 0000"     // timestamp
+                           "00 BE EF 00"   // dest SSRC -- will be changed
+                           "03 90 60 7f"); // Lenght + data
+
+// Another peer
 auto connect_msg2 = hex_to_bin("FF FF 'IN'"
                                "0000 0002"
                                "00 56 78 00"
@@ -106,13 +115,48 @@ void test_several_connect_to_server() {
 
   ASSERT_EQUAL(server.initiator_to_peer.size(), 0);
   ASSERT_EQUAL(server.ssrc_to_peer.size(), 0);
+}
 
-  rtpmidid::poller.close();
+void test_connect_disconnect_send() {
+  rtpmidid::rtpserver server("test", "0");
+
+  test_client_t control_client(0, server.control_port);
+  test_client_t midi_client(control_client.local_port + 1, server.midi_port);
+
+  auto nmidievents = std::make_shared<int>(0);
+  server.midi_event.connect([&nmidievents](const rtpmidid::io_bytes_reader &) {
+    *nmidievents += 1;
+    DEBUG("Got MIDI Event");
+  });
+
+  control_client.send(connect_msg);
+  midi_client.send(connect_msg);
+
+  // Fix midi_msg destination
+  // auto peer = server.initiator_to_peer.begin()->second;
+  // DEBUG("Server's SSRC {:04X}", peer->local_ssrc);
+  // auto writer = rtpmidid::io_bytes_writer(midi_msg);
+  // writer.seek(8);
+  // writer.write_uint32(peer->local_ssrc);
+
+  // This I receive
+  midi_client.send(midi_msg);
+  DEBUG("Got {} events", *nmidievents);
+  ASSERT_EQUAL(*nmidievents, 1);
+
+  control_client.send(disconnect_msg);
+  midi_client.send(disconnect_msg);
+
+  // This should not
+  midi_client.send(midi_msg);
+
+  ASSERT_EQUAL(*nmidievents, 1);
 }
 
 int main(void) {
   test_case_t testcase{
       TEST(test_several_connect_to_server),
+      TEST(test_connect_disconnect_send),
   };
 
   testcase.run();

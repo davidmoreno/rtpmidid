@@ -184,7 +184,7 @@ std::shared_ptr<rtppeer> rtpserver::get_peer_by_packet(io_bytes_reader &buffer,
       return ssrc_to_peer[ssrc];
       ;
     }
-    DEBUG("COMMAND if {:X}", int(command));
+    DEBUG("Unknown COMMAND id {:X} / {:X}", int(command), buffer.start[1]);
     return nullptr;
   }
 }
@@ -286,7 +286,7 @@ void rtpserver::create_peer_from(io_bytes_reader &&buffer,
 
   // After read the first packet I know the initiator_id and ssrc
   initiator_to_peer[peer->initiator_id] = peer;
-  ssrc_to_peer[peer->local_ssrc] = peer;
+  ssrc_to_peer[peer->remote_ssrc] = peer;
 
   // Setup some callbacks
   auto wpeer = std::weak_ptr(peer);
@@ -312,7 +312,7 @@ void rtpserver::create_peer_from(io_bytes_reader &&buffer,
         auto peer = wpeer.lock();
 
         this->initiator_to_peer.erase(peer->initiator_id);
-        this->ssrc_to_peer.erase(peer->local_ssrc);
+        this->ssrc_to_peer.erase(peer->remote_ssrc);
       });
 }
 
