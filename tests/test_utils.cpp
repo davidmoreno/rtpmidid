@@ -20,6 +20,7 @@
 #include "./test_utils.hpp"
 #include "./test_case.hpp"
 #include "rtpmidid/iobytes.hpp"
+#include "rtpmidid/poller.hpp"
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -139,6 +140,9 @@ void test_client_t::send(rtpmidid::io_bytes_reader &&msg) {
 
   ASSERT_GTE(len, 0);
   ASSERT_EQUAL(static_cast<uint32_t>(len), msg.size());
+
+  // After each send, process it
+  rtpmidid::poller.wait();
 }
 
 void test_client_t::recv(rtpmidid::io_bytes_reader &&msg) {

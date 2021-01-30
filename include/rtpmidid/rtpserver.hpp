@@ -53,7 +53,6 @@ public:
   // Returns the peer for that packet, or nullptr
   std::shared_ptr<rtppeer> get_peer_by_packet(io_bytes_reader &b,
                                               rtppeer::port_e port);
-  std::shared_ptr<rtppeer> get_peer_by_ssrc(uint32_t ssrc);
   void create_peer_from(io_bytes_reader &&buffer, struct sockaddr_in6 *cliaddr,
                         rtppeer::port_e port);
 

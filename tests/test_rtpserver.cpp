@@ -22,14 +22,25 @@
 #include <rtpmidid/rtpserver.hpp>
 
 auto connect_msg = hex_to_bin("FF FF 'IN'"
+                              "0000 0002"    // Protocol
+                              "00 12 34 00"  // Initiator
+                              "00 BE EF 00"  // SSRC
+                              "'first' 00"); // Name
+auto disconnect_msg = hex_to_bin("FF FF 'BY'"
                               "0000 0002"
-                              "'fast' 'beef'"
+                                 "00 12 34 00"
+                                 "00 BE EF 00"
                               "'first' 00");
 
 auto connect_msg2 = hex_to_bin("FF FF 'IN'"
                                "0000 0002"
-                               "'slow' 'deer'"
+                               "00 56 78 00"
+                               "00 DE EB 00"
                                "'second' 00");
+auto disconnect_msg2 = hex_to_bin("FF FF 'BY'"
+                                  "0000 0002"
+                                  "00 56 78 00"
+                                  "00 DE EB 00");
 
 void test_several_connect_to_server() {
   // random port
@@ -43,10 +54,7 @@ void test_several_connect_to_server() {
   control_client.send(connect_msg);
   midi_client.send(connect_msg);
 
-  // Nothing yet. Need to do some poller cycles.
-  ASSERT_EQUAL(server.initiator_to_peer.size(), 0);
-
-  rtpmidid::poller.wait(); // wait 1 event loop cycle (all pending events)
+  // wait 1 event loop cycle (all pending events)
   ASSERT_EQUAL(server.initiator_to_peer.size(), 1);
 
   // And reverse order, first arrives the midi event
@@ -54,15 +62,50 @@ void test_several_connect_to_server() {
   test_client_t midi_client2(control_client2.local_port + 1, server.midi_port);
 
   midi_client2.send(connect_msg2);
-  rtpmidid::poller.wait();
   control_client2.send(connect_msg2);
-  rtpmidid::poller.wait();
 
   ASSERT_EQUAL(server.initiator_to_peer.size(), 2);
+  for (auto &x : server.initiator_to_peer) {
+    DEBUG("PEER {:#04x} - {}", x.first, (void *)&x.second);
+    DEBUG("InitID {:#04x}, SSRC local {:#04x} remote {:#04x} ",
+          x.second->initiator_id, x.second->local_ssrc, x.second->remote_ssrc);
+  }
+  ASSERT_EQUAL(server.ssrc_to_peer.size(), 2);
 
   for (auto &peer : server.initiator_to_peer) {
     ASSERT_TRUE(peer.second->is_connected());
   }
+
+  control_client.send(disconnect_msg2);
+
+  // Removed ok
+  ASSERT_EQUAL(server.initiator_to_peer.size(), 1);
+  ASSERT_EQUAL(server.ssrc_to_peer.size(), 1);
+
+  // Should do nothing, no add, no remove
+  midi_client.send(disconnect_msg2); // This may provoke a warning, but can be
+                                     // sent by remote side
+
+  DEBUG("{} {} {}", (void *)&server, server.initiator_to_peer.size(),
+        server.ssrc_to_peer.size());
+  ASSERT_EQUAL(server.initiator_to_peer.size(), 1);
+  ASSERT_EQUAL(server.ssrc_to_peer.size(), 1);
+
+  // Disconnect reverse order, same result
+  midi_client.send(disconnect_msg);
+  control_client.send(disconnect_msg); // This may provoke a warning, but can
+                                       // be sent by remote side
+
+  for (auto &x : server.initiator_to_peer) {
+    DEBUG("TIP FOR ERROR: STILL HERE? PEER {:#04x} - {}", x.first,
+          (void *)&x.second);
+    DEBUG("TIP FOR ERROR: STILL HERE? InitID {:#04x}, SSRC local {:#04x} "
+          "remote {:#04x} ",
+          x.second->initiator_id, x.second->local_ssrc, x.second->remote_ssrc);
+  }
+
+  ASSERT_EQUAL(server.initiator_to_peer.size(), 0);
+  ASSERT_EQUAL(server.ssrc_to_peer.size(), 0);
 
   rtpmidid::poller.close();
 }

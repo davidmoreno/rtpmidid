@@ -156,14 +156,19 @@ std::shared_ptr<rtppeer> rtpserver::get_peer_by_packet(io_bytes_reader &buffer,
     buffer.position = buffer.start + 8;
     auto initiator_id = buffer.read_uint32();
     buffer.position = buffer.start;
-    return initiator_to_peer[initiator_id];
+
+    auto peer = initiator_to_peer.find(initiator_id);
+    if (peer == initiator_to_peer.end()) {
+      return nullptr;
+    }
+    return peer->second;
   }
   case rtppeer::CK:
   case rtppeer::RS: {
     buffer.position = buffer.start + 4;
     auto ssrc = buffer.read_uint32();
     buffer.position = buffer.start;
-    return get_peer_by_ssrc(ssrc);
+    return ssrc_to_peer[ssrc];
   }
   default:
     if (port == rtppeer::MIDI_PORT && buffer.start[1] == 0x61) {
@@ -171,28 +176,37 @@ std::shared_ptr<rtppeer> rtpserver::get_peer_by_packet(io_bytes_reader &buffer,
       buffer.read_uint32();
       auto ssrc = buffer.read_uint32();
       buffer.position = buffer.start;
-      return get_peer_by_ssrc(ssrc);
+
+      auto peer = ssrc_to_peer.find(ssrc);
+      if (peer == ssrc_to_peer.end()) {
+        return nullptr;
+      }
+      return ssrc_to_peer[ssrc];
+      ;
     }
     DEBUG("COMMAND if {:X}", int(command));
     return nullptr;
   }
 }
 
-std::shared_ptr<rtppeer> rtpserver::get_peer_by_ssrc(uint32_t ssrc) {
-  auto peer = ssrc_to_peer[ssrc];
-  if (peer)
-    return peer;
+//   20210130 -- Always has to be at ssrc_to_peer.
+// No need, so a simple getter is more efficient
+// std::shared_ptr<rtppeer> rtpserver::get_peer_by_ssrc(uint32_t ssrc) {
+//   auto peer = ssrc_to_peer[ssrc];
+//   if (peer)
+//     return peer;
 
-  // If just connected, maybe we dont know the SSRC yet. Check all the peers to
-  // update
-  for (auto &initiator_peer : initiator_to_peer) {
-    if (initiator_peer.second->remote_ssrc == ssrc) {
-      ssrc_to_peer[ssrc] = initiator_peer.second;
-      return initiator_peer.second;
-    }
-  }
-  return nullptr;
-}
+//   // If just connected, maybe we dont know the SSRC yet. Check all the peers
+//   to
+//   // update
+//   for (auto &initiator_peer : initiator_to_peer) {
+//     if (initiator_peer.second->remote_ssrc == ssrc) {
+//       ssrc_to_peer[ssrc] = initiator_peer.second;
+//       return initiator_peer.second;
+//     }
+//   }
+//   return nullptr;
+// }
 
 void rtpserver::data_ready(rtppeer::port_e port) {
   uint8_t raw[1500];
@@ -253,6 +267,7 @@ void rtpserver::sendto(const io_bytes_reader &pb, rtppeer::port_e port,
 void rtpserver::create_peer_from(io_bytes_reader &&buffer,
                                  struct sockaddr_in6 *cliaddr,
                                  rtppeer::port_e port) {
+
   auto peer = std::make_shared<rtppeer>(name);
   auto address = std::make_shared<struct sockaddr_in6>();
   ::memcpy(address.get(), cliaddr, sizeof(struct sockaddr_in6));
@@ -269,8 +284,9 @@ void rtpserver::create_peer_from(io_bytes_reader &&buffer,
 
   peer->data_ready(std::move(buffer), port);
 
-  // After read the first packet I know the initiator_id
+  // After read the first packet I know the initiator_id and ssrc
   initiator_to_peer[peer->initiator_id] = peer;
+  ssrc_to_peer[peer->local_ssrc] = peer;
 
   // Setup some callbacks
   auto wpeer = std::weak_ptr(peer);
@@ -288,6 +304,16 @@ void rtpserver::create_peer_from(io_bytes_reader &&buffer,
     // DEBUG("Got MIDI from the remote peer into this server.");
     midi_event(data);
   });
+
+  peer->disconnect_event.connect(
+      [this, wpeer](rtpmidid::rtppeer::disconnect_reason_e dr) {
+        if (wpeer.expired())
+          return;
+        auto peer = wpeer.lock();
+
+        this->initiator_to_peer.erase(peer->initiator_id);
+        this->ssrc_to_peer.erase(peer->local_ssrc);
+      });
 }
 
 void rtpserver::send_midi_to_all_peers(const io_bytes_reader &buffer) {
