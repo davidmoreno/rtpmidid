@@ -17,6 +17,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <functional>
+
+
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
@@ -36,13 +39,14 @@ using namespace rtpmidid;
 rtppeer::rtppeer(std::string _name) : local_name(std::move(_name)) {
   status = NOT_CONNECTED;
   remote_ssrc = 0;
-  local_ssrc = rand() & 0x0FFFF;
+  local_ssrc = (rand() & 0x0FFFF) << 16 | (rand() % 0xFFFF);
+  local_ssrc = std::hash<std::string>()(_name);
   seq_nr = rand() & 0x0FFFF;
   seq_nr_ack = seq_nr;
-  remote_seq_nr = 0; // Just not radom memory data
+  remote_seq_nr = 0; // Just not random memory data
   timestamp_start = 0;
   timestamp_start = get_timestamp();
-  initiator_id = 0;
+  initiator_id = (rand() & 0x0FFFF) << 16 | (rand() % 0xFFFF);
   waiting_ck = false;
 }
 
@@ -52,9 +56,10 @@ rtppeer::~rtppeer() {
 
 void rtppeer::reset() {
   status = NOT_CONNECTED;
-  remote_name = "";
+  // Keep name active for debug messages
+  // remote_name = "";
   remote_ssrc = 0;
-  initiator_id = 0;
+  initiator_id = (rand() & 0x0FFFF) << 16 | (rand() % 0xFFFF);
 }
 
 void rtppeer::data_ready(io_bytes_reader &&buffer, port_e port) {
@@ -132,7 +137,7 @@ void rtppeer::parse_command_ok(io_bytes_reader &buffer, port_e port) {
     return;
   }
   auto protocol = buffer.read_uint32();
-  auto initiator_id = buffer.read_uint32();
+  auto ret_initiator_id = buffer.read_uint32();
   remote_ssrc = buffer.read_uint32();
   remote_name = buffer.read_str0();
   if (protocol != 2) {
@@ -141,12 +146,12 @@ void rtppeer::parse_command_ok(io_bytes_reader &buffer, port_e port) {
         "https://github.com/davidmoreno/rtpmidid/. Got protocol {}",
         protocol);
   }
-  if (initiator_id != this->initiator_id) {
-    throw exception(
-        "Response to connect from an unknown initiator. Not connecting.");
+  if (ret_initiator_id != this->initiator_id) {
+    // Not in response to this peer's request.
+    return;
   }
 
-  INFO("Got confirmation from {}, initiator_id: {} ({}) ssrc: {}, name: {}, "
+  INFO("Got confirmation from {}, initiator_id: {:X} ({}) remote ssrc: {:X}, name: {}, "
        "port: {}",
        remote_name, initiator_id, this->initiator_id == initiator_id,
        remote_ssrc, remote_name,
@@ -224,7 +229,7 @@ void rtppeer::parse_command_by(io_bytes_reader &buffer, port_e port) {
   }
 
   if (remote_ssrc != this->remote_ssrc) {
-    WARNING("Trying to disconnect from the wrong rtpmidi peer (bad port)");
+    // not meant for this peer
     return;
   }
 
@@ -239,9 +244,13 @@ void rtppeer::parse_command_by(io_bytes_reader &buffer, port_e port) {
 
 void rtppeer::parse_command_no(io_bytes_reader &buffer, port_e port) {
   auto protocol = buffer.read_uint32();
-  initiator_id = buffer.read_uint32();
-  auto remote_ssrc = buffer.read_uint32();
+  auto ret_initiator_id = buffer.read_uint32();
+  remote_ssrc = buffer.read_uint32();
 
+  if (initiator_id != ret_initiator_id) {
+    // not meant for this peer
+    return;
+  }
   if (protocol != 2) {
     throw exception(
         "rtpmidid only understands RTP MIDI protocol 2. Fill an issue at "
@@ -252,7 +261,8 @@ void rtppeer::parse_command_no(io_bytes_reader &buffer, port_e port) {
   status = (status_e)(
       ((int)status) &
       ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
-  WARNING("Invitation Rejected (NO) : remote ssrc {:X}", remote_ssrc);
+  WARNING("Invitation Rejected (NO) {} {} : remote ssrc {:X}",port == MIDI_PORT ? "midi" : "control",
+    remote_name, remote_ssrc);
   INFO("Disconnect from {}, {} port. Status {:X}", remote_name,
        port == MIDI_PORT ? "MIDI" : "Control", (int)status);
 
@@ -260,12 +270,16 @@ void rtppeer::parse_command_no(io_bytes_reader &buffer, port_e port) {
 }
 
 void rtppeer::parse_command_ck(io_bytes_reader &buffer, port_e port) {
-  // auto ssrc =
-  buffer.read_uint32();
+  auto ssrc = buffer.read_uint32();
   auto count = buffer.read_uint8();
   // padding / unused 24 bits
   buffer.read_uint8();
   buffer.read_uint16();
+
+  if (remote_ssrc != ssrc) {
+    // not meant for this peer
+    return;
+  }
 
   uint64_t ck1 = buffer.read_uint64();
   uint64_t ck2 = 0;
@@ -355,8 +369,13 @@ void rtppeer::send_ck0() {
 }
 
 void rtppeer::parse_feedback(io_bytes_reader &buffer) {
-  buffer.position = buffer.start + 8;
+  buffer.position = buffer.start + 4;
+  auto ssrc = buffer.read_uint32();
   seq_nr_ack = buffer.read_uint16();
+  if (remote_ssrc != ssrc) {
+    // not meant for this peer
+    return;
+  }
 
   DEBUG("Got feedback until package {} / {}. No journal, so ignoring.",
         seq_nr_ack, seq_nr);
@@ -375,10 +394,9 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
   // auto _remote_timestamp =
   buffer.read_uint32();                    // Ignore timestamp
   auto remote_ssrc = buffer.read_uint32(); // SSRC
+
   if (remote_ssrc != this->remote_ssrc) {
-    WARNING("Got message for unknown remote SSRC on this port. (from {:04X}, "
-            "I'm {:04X})",
-            remote_ssrc, this->remote_ssrc);
+    // not meant for this peer
     return;
   }
 
@@ -444,7 +462,7 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
   io_bytes_writer_static<4096 + 12> buffer;
 
   uint32_t timestamp = get_timestamp();
-  seq_nr++;
+  seq_nr = (seq_nr + 1) % 0xFFFF;
 
   buffer.write_uint8(0x80);
   buffer.write_uint8(0x61);
@@ -520,8 +538,8 @@ void rtppeer::connect_to(port_e rtp_port) {
   buffer.write_uint32(sender);
   buffer.write_str0(local_name);
 
-  // DEBUG("Send packet:");
-  // buffer.print_hex();
+  //DEBUG("Send packet on {} :", (rtp_port == port_e::CONTROL_PORT ? "control" : "midi"));
+  //buffer.print_hex();
 
   send_event(buffer, rtp_port);
 }

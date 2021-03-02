@@ -24,6 +24,7 @@
 #include "./rtppeer.hpp"
 #include "./signal.hpp"
 #include <string>
+#include <optional>
 
 namespace rtpmidid {
 struct address_port_t {
@@ -58,6 +59,8 @@ public:
   /// A simple state machine. We need to send 6 CK one after another, and then
   /// every 10 secs.
   uint8_t timerstate;
+
+  std::optional<int> conn_event;
 
   rtpclient(std::string name);
   ~rtpclient();

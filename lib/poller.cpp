@@ -125,7 +125,7 @@ poller_t::timer_t poller_t::add_timer_event(std::chrono::milliseconds ms,
   pd->timer_events.push_back(std::make_tuple(when, timer_id, f));
   std::sort(std::begin(pd->timer_events), std::end(pd->timer_events),
             [](const auto &a, const auto &b) {
-              return std::get<0>(a) > std::get<0>(b);
+              return std::get<0>(a) < std::get<0>(b);
             });
 
   // DEBUG("Added timer {}. {} s ({} pending)", timer_id, in_ms,
@@ -171,7 +171,7 @@ void poller_t::remove_timer(timer_t &tid) {
 void poller_t::wait() {
   auto pd = static_cast<poller_private_data_t *>(private_data);
 
-  const auto MAX_EVENTS = 10;
+  const auto MAX_EVENTS = 32;
   struct epoll_event events[MAX_EVENTS];
   auto wait_ms = -1;
 
@@ -180,7 +180,7 @@ void poller_t::wait() {
     wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                   std::get<0>(pd->timer_events[0]) - now)
                   .count();
-    // DEBUG("Timer event in {}ms", wait_ms);
+    //DEBUG("Timer event in {}ms", wait_ms);
     wait_ms = std::max(wait_ms, 0); // min wait 0ms.
   }
 
@@ -196,7 +196,7 @@ void poller_t::wait() {
       ERROR("Catched exception at poller: {}", e.what());
     }
   }
-  if (nfds == 0 && !pd->timer_events.empty()) { // This was a timeout
+  if (wait_ms == 0 && !pd->timer_events.empty()) { // This was a timeout
     // Will ensure remove via RTTI
     {
       auto firstI = pd->timer_events.begin();
