@@ -389,7 +389,7 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
     WARNING("Received packet which is not RTP MIDI. Ignoring.");
     return;
   }
-  remote_seq_nr = buffer.read_uint16(); // Ignore RTP sequence no.
+  auto local_remote_seq_nr = buffer.read_uint16(); // Ignore RTP sequence no.
   // TODO In the future we may use a journal.
   // auto _remote_timestamp =
   buffer.read_uint32();                    // Ignore timestamp
@@ -399,6 +399,8 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
     // not meant for this peer
     return;
   }
+  // copy sequence number only once we know it's for us.
+  remote_seq_nr = local_remote_seq_nr;
 
   // RFC 6295 RTP-MIDI _header
   // The Flags are:
