@@ -80,7 +80,7 @@ public:
 
   void alsamidi_to_midiprotocol(snd_seq_event_t *ev, io_bytes_writer &buffer);
 
-  void setup_alsa_seq();
+  void setup_alsa_seq(const std::string &name);
   void setup_mdns();
   void announce_rtpmidid_server(const std::string &name, uint16_t port);
   void unannounce_rtpmidid_server(const std::string &name, uint16_t port);

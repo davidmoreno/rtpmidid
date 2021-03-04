@@ -33,7 +33,7 @@ using namespace std::chrono_literals;
 rtpmidid_t::rtpmidid_t(config_t *config)
     : name(config->name), seq(fmt::format("rtpmidi {}", name)) {
   setup_mdns();
-  setup_alsa_seq();
+  setup_alsa_seq(config->export_name);
 
   for (auto &port : config->ports) {
     auto server = add_rtpmidid_import_server(config->name, port);
@@ -191,10 +191,10 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
   return server;
 }
 
-void rtpmidid_t::setup_alsa_seq() {
+void rtpmidid_t::setup_alsa_seq(const std::string &name) {
   // Export only one, but all data that is conencted to it.
   // add_export_port();
-  auto alsaport = seq.create_port("Network");
+  auto alsaport = seq.create_port(name);
   seq.subscribe_event[alsaport].connect(
       [this, alsaport](aseq::port_t from, const std::string &name) {
         DEBUG("Connected to ALSA port {}:{}. Create network server for this "

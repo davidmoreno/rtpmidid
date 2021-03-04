@@ -32,6 +32,7 @@ extern const char *VERSION;
  */
 struct config_t {
   std::string name;
+  std::string export_name;
   std::vector<std::string> connect_to;
   // Create clients at this ports to start with. Later will see.
   std::vector<std::string> ports;
