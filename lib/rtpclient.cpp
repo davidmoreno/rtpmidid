@@ -69,7 +69,8 @@ rtpclient::~rtpclient() {
 }
 
 void rtpclient::connect_to(const std::string &address,
-                           const std::string &port) {
+                           const std::string &port,
+                           int local_port) {
   struct addrinfo hints;
   struct addrinfo *sockaddress_list = nullptr;
   char host[NI_MAXHOST], service[NI_MAXSERV];
@@ -107,21 +108,23 @@ void rtpclient::connect_to(const std::string &address,
       if (control_socket <= 0) {
         continue;
       }
-      struct sockaddr_in6 servaddr;
-      bzero(&servaddr, sizeof(sockaddr_in6));
-      servaddr.sin6_family = AF_INET6;
-      servaddr.sin6_addr = in6addr_any;
-      servaddr.sin6_port = htons(50010);
       int reuse = 1;
       if (setsockopt(control_socket, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse))) {
         close(control_socket);
         control_socket = -1;
         throw rtpmidid::exception("Could not make local control port reusable");
       }
-      if (bind(control_socket, (struct sockaddr *)&servaddr, sizeof(servaddr))) {
-        close(control_socket);
-        control_socket = -1;
-        throw rtpmidid::exception("Could not bind local control port");
+      if (local_port >= 0) {
+        struct sockaddr_in6 servaddr;
+        bzero(&servaddr, sizeof(sockaddr_in6));
+        servaddr.sin6_family = AF_INET6;
+        servaddr.sin6_addr = in6addr_any;
+        servaddr.sin6_port = htons(local_port);
+        if (bind(control_socket, (struct sockaddr *)&servaddr, sizeof(servaddr))) {
+          close(control_socket);
+          control_socket = -1;
+          throw rtpmidid::exception("Could not bind local control port");
+        }
       }
 
       if (connect(control_socket, serveraddr->ai_addr,

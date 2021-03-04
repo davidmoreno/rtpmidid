@@ -67,7 +67,7 @@ public:
   void reset();
   void sendto(const io_bytes &pb, rtppeer::port_e port);
 
-  void connect_to(const std::string &address, const std::string &port);
+  void connect_to(const std::string &address, const std::string &port, int local_port = -1);
   void connected();
   void send_ck0_with_timeout();
 

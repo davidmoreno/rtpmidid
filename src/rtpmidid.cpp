@@ -302,7 +302,8 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
         });
     peer_info->use_count++;
 
-    peer_info->peer->connect_to(address.address, address.port);
+    auto local_port = 50010;
+    peer_info->peer->connect_to(address.address, address.port, local_port);
   }
 }
 
@@ -452,6 +453,26 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_SENSING;
+        break;
+      case 0xF8: // Clock
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_CLOCK;
+        break;
+      case 0xFA: // start
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_START;
+        break;
+      case 0xFC: // stop
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_STOP;
+        break;
+      case 0xFB: // continue
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_CONTINUE;
         break;
       default:
         break;
