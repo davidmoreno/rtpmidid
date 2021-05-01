@@ -131,6 +131,10 @@ void aseq::read_ready() {
       DEBUG("Disconnected");
     } break;
     // case SND_SEQ_EVENT_NOTE:
+    case SND_SEQ_EVENT_CLOCK:
+    case SND_SEQ_EVENT_START:
+    case SND_SEQ_EVENT_CONTINUE:
+    case SND_SEQ_EVENT_STOP:
     case SND_SEQ_EVENT_NOTEOFF:
     case SND_SEQ_EVENT_NOTEON:
     case SND_SEQ_EVENT_KEYPRESS:
