@@ -528,7 +528,19 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
   case SND_SEQ_EVENT_SENSING:
     stream.write_uint8(0xFE);
     break;
-  case SND_SEQ_EVENT_SYSEX: {
+  case SND_SEQ_EVENT_STOP:
+    stream.write_uint8(0xFC);
+    break;
+  case SND_SEQ_EVENT_CLOCK:
+    stream.write_uint8(0xF8);
+    break;
+  case SND_SEQ_EVENT_START:
+    stream.write_uint8(0xFA);
+    break;
+  case SND_SEQ_EVENT_CONTINUE:
+    stream.write_uint8(0xFB);
+    break;
+    case SND_SEQ_EVENT_SYSEX: {
     ssize_t len = ev->data.ext.len, sz = stream.size();
     if (len <= sz) {
       uint8_t *data = (unsigned char *)ev->data.ext.ptr;
