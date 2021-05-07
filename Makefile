@@ -7,6 +7,7 @@ help:
 	@echo "setup   -- Creates the socket control file"
 	@echo "clean   -- Cleans project"
 	@echo "deb     -- Generate deb package"
+	@echo "test    -- Runs all test"
 	@echo
 
 .PHONY: build

@@ -125,7 +125,7 @@ poller_t::timer_t poller_t::add_timer_event(std::chrono::milliseconds ms,
   pd->timer_events.push_back(std::make_tuple(when, timer_id, f));
   std::sort(std::begin(pd->timer_events), std::end(pd->timer_events),
             [](const auto &a, const auto &b) {
-              return std::get<0>(a) > std::get<0>(b);
+              return std::get<0>(a) < std::get<0>(b);
             });
 
   // DEBUG("Added timer {}. {} s ({} pending)", timer_id, in_ms,
@@ -153,6 +153,10 @@ void poller_t::remove_fd(int fd) {
 }
 
 void poller_t::remove_timer(timer_t &tid) {
+  // already invalidated
+  if (tid.id == 0) {
+    return;
+  }
   auto pd = static_cast<poller_private_data_t *>(private_data);
   pd->timer_events.erase(std::remove_if(pd->timer_events.begin(),
                                         pd->timer_events.end(),
@@ -202,12 +206,13 @@ void poller_t::wait() {
       auto firstI = pd->timer_events.begin();
       timer_t id = std::get<1>(*firstI);
       std::get<2> (*firstI)();
+      pd->timer_events.erase(firstI);
     }
-    // if (!timer_events.empty()){
-    //   auto now = std::time(nullptr);
-    //   // DEBUG("Next timer event {} in {} s. {} left.",
-    //   std::get<1>(timer_events[0]), std::get<0>(timer_events[0]) - now,
-    //   timer_events.size());
+    // if (!pd->timer_events.empty()) {
+    //   auto now = std::chrono::steady_clock::now();
+    //   DEBUG("Next timer event {} in {} s. {} left.",
+    //         std::get<1>(pd->timer_events[0]),
+    //         std::get<0>(pd->timer_events[0]) - now, pd->timer_events.size());
     // } else {
     //   DEBUG("No timer events.");
     // }

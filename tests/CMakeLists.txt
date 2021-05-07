@@ -5,3 +5,7 @@ add_test(NAME test_rtppeer COMMAND test_rtppeer)
 add_executable(test_rtpserver test_rtpserver.cpp test_utils.cpp)
 target_link_libraries(test_rtpserver rtpmidid-shared -lfmt -pthread)
 add_test(NAME test_rtpserver COMMAND test_rtpserver)
+
+add_executable(test_poller test_poller.cpp test_utils.cpp)
+target_link_libraries(test_poller rtpmidid-shared -lfmt -pthread)
+add_test(NAME test_poller COMMAND test_poller)
