@@ -93,7 +93,7 @@ One for each (TOTCHAN + 1)
 | ------ | :----: | ------------------------------------------------------------------------ |
 | S      |   0    | Single packet loss. To indicate only one packet is described in journal. |
 | CHAN   |  1-4   | Channel number                                                           |
-| H      |   5    | Whether contollers are Ehhanced Chapter C.                               |
+| H      |   5    | Whether controllers are Enhanced Chapter C.                               |
 | LENGHT |  6-15  | Lenght of the journal                                                    |
 | P      | 16 / 0 | Chapter P. Program Change.                                               |
 | C      | 17 / 1 | Chapter C. Control Change.                                               |
@@ -104,7 +104,7 @@ One for each (TOTCHAN + 1)
 | T      | 22 / 6 | Chapter T. After Touch.                                                  |
 | A      | 23 / 7 | Chapter A. Poly Aftertouch.                                              |
 
-I think S bit is to allow have a faster implementation fo rthe single case of
+I think S bit is to allow have a faster implementation fo the single case of
 only one packet lost.
 
 ## Chapter P
