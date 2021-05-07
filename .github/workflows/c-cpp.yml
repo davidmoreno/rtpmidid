@@ -13,6 +13,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Install dependencies
-        run: sudo apt install -f libfmt-dev libasound2-dev libavahi-core-dev libavahi-client-dev valgrind
+        run: sudo apt update && sudo apt install -f libfmt-dev libasound2-dev libavahi-core-dev libavahi-client-dev valgrind
       - name: make test
         run: make test
