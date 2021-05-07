@@ -19,7 +19,7 @@ For information about librtpmidid and how to use it, read
 ## Other implementations
 
 There is many hardware with RTP MIDI support, normally controllers, but for
-example Behringer DeepMind12 Synthetizer has support over Wifi.
+example Behringer DeepMind12 Synthesizer has support over Wifi.
 
 ### Linux
 
@@ -38,7 +38,7 @@ On MacOS there is support included in the OS.
 To test I used `MIDI Network` and `MIDI Wrench`. The first to manage
 connections, the second to test.
 
-I was able to communicate exporting at rtpmidid side conneting my gadget to the
+I was able to communicate exporting at rtpmidid side connecting my gadget to the
 `Network` port. Then use the `MIDI Network` on the iPad to make the connection.
 
 ### Windows
@@ -59,7 +59,7 @@ support. I will try to list them as I find them:
 
 recomended use is via debian packages, at https://github.com/davidmoreno/rtpmidid/releases
 
-`rtpmidid` provides two modes of operation, one focused on importing another on
+`rtpmidid` provides two modes of operation, one focused on importing, another on
 exporting.
 
 ```
@@ -177,7 +177,7 @@ cli/rtpmidid-cli.py help
 
 ## License
 
-RtpMidid is GPLv3 licensed. This basically meass that you are free to use,
+RtpMidid is GPLv3 licensed. This basically means that you are free to use,
 modify and share it, given that you share your modifications with your users.
 
 This includes embeded software uses (anti
