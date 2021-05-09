@@ -1,7 +1,7 @@
 # RTP MIDI daemon test cases
 
 There are not enough tests yet. I hope to increase the number in the future, but
-here are some ntoes on what we should test, and some use cases.
+here are some notes on what we should test, and some use cases.
 
 ## WIP
 
