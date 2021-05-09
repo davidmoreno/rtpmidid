@@ -6,8 +6,8 @@ commercial project.
 The main element is the class rtpmidid::rtppeer, which allows to create peers,
 be it clients or servers.
 
-The rtpserver and rtpclient are ready to use client and server as used on r
-tpmidid daemon, and do all the required IO, using the
+The rtpserver and rtpclient are ready to use client and server as used on rtpmidid 
+daemon, and do all the required IO, using the
 rtpmidid::poller_t.
 
 In all classes it tries to expose al internal state as can be needed for
@@ -25,7 +25,7 @@ recompilation from source code.
 
 The flow of a basic rtppeer can be seen on the `test_rtppeer.cpp` file.
 
-It mainly needs to be initalized and conenct both the command and control
+It mainly needs to be initialized and connect both the command and control
 ends, and then can receive the data buffers, and will call the `send_event` when
 needs to send some events, normally due to a `send_midi` call (but can be
 `send_ck0`)
@@ -55,4 +55,4 @@ At first we had a custom implementation. Bad idea. Better just use avahi.
 
 Also if the computer has several network interfaces it may return several IPS to
 connect to. Try them all. The order may be better first ehternet than Wifi, but
-just becaus eis listed does not mean it will work.
+just because is listed does not mean it will work.
