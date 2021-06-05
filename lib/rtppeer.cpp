@@ -19,7 +19,6 @@
 
 #include <functional>
 
-
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
@@ -151,7 +150,8 @@ void rtppeer::parse_command_ok(io_bytes_reader &buffer, port_e port) {
     return;
   }
 
-  INFO("Got confirmation from {}, initiator_id: {:X} ({}) remote ssrc: {:X}, name: {}, "
+  INFO("Got confirmation from {}, initiator_id: {:X} ({}) remote ssrc: {:X}, "
+       "name: {}, "
        "port: {}",
        remote_name, initiator_id, this->initiator_id == initiator_id,
        remote_ssrc, remote_name,
@@ -261,8 +261,8 @@ void rtppeer::parse_command_no(io_bytes_reader &buffer, port_e port) {
   status = (status_e)(
       ((int)status) &
       ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
-  WARNING("Invitation Rejected (NO) {} {} : remote ssrc {:X}",port == MIDI_PORT ? "midi" : "control",
-    remote_name, remote_ssrc);
+  WARNING("Invitation Rejected (NO) {} {} : remote ssrc {:X}",
+          port == MIDI_PORT ? "midi" : "control", remote_name, remote_ssrc);
   INFO("Disconnect from {}, {} port. Status {:X}", remote_name,
        port == MIDI_PORT ? "MIDI" : "Control", (int)status);
 
@@ -540,8 +540,8 @@ void rtppeer::connect_to(port_e rtp_port) {
   buffer.write_uint32(sender);
   buffer.write_str0(local_name);
 
-  //DEBUG("Send packet on {} :", (rtp_port == port_e::CONTROL_PORT ? "control" : "midi"));
-  //buffer.print_hex();
+  // DEBUG("Send packet on {} :", (rtp_port == port_e::CONTROL_PORT ? "control"
+  // : "midi")); buffer.print_hex();
 
   send_event(buffer, rtp_port);
 }

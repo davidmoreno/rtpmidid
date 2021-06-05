@@ -184,7 +184,7 @@ void poller_t::wait() {
     wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                   std::get<0>(pd->timer_events[0]) - now)
                   .count();
-    //DEBUG("Timer event in {}ms", wait_ms);
+    // DEBUG("Timer event in {}ms", wait_ms);
     wait_ms = std::max(wait_ms, 0); // min wait 0ms.
   }
 
@@ -200,7 +200,7 @@ void poller_t::wait() {
       ERROR("Catched exception at poller: {}", e.what());
     }
   }
-  if (wait_ms == 0 && !pd->timer_events.empty()) { // This was a timeout
+  if (nfds == 0 && !pd->timer_events.empty()) { // This was a timeout
     // Will ensure remove via RTTI
     {
       auto firstI = pd->timer_events.begin();

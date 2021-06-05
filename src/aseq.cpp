@@ -144,10 +144,6 @@ void aseq::read_ready() {
     case SND_SEQ_EVENT_PITCHBEND:
     case SND_SEQ_EVENT_SYSEX:
     case SND_SEQ_EVENT_QFRAME:
-    case SND_SEQ_EVENT_START:
-    case SND_SEQ_EVENT_STOP:
-    case SND_SEQ_EVENT_CONTINUE:
-    case SND_SEQ_EVENT_CLOCK:
     case SND_SEQ_EVENT_SENSING: {
       auto myport = ev->dest.port;
       auto me = midi_event.find(myport);

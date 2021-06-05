@@ -106,7 +106,7 @@ rtpmidid_t::add_rtpmidid_import_server(const std::string &name,
 
   auto wrtpserver = std::weak_ptr(rtpserver);
   rtpserver->connected_event.connect(
-      [this, wrtpserver, port] (std::shared_ptr<::rtpmidid::rtppeer> peer) {
+      [this, wrtpserver, port](std::shared_ptr<::rtpmidid::rtppeer> peer) {
         if (wrtpserver.expired()) {
           return;
         }
@@ -324,7 +324,7 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
       remove_client(peer_info->aseq_port);
       return;
     }
-    
+
     peer_info->peer->reset();
 
     peer_info->connect_attempts += 1;
@@ -431,11 +431,12 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
     case 0xF0: {
       // System messages
       switch (current_command) {
-      case 0xF0: { //SysEx event
+      case 0xF0: { // SysEx event
         auto start = midi_data.pos() - 1;
         auto len = 2;
         try {
-          while (midi_data.read_uint8() != 0xf7) len++;
+          while (midi_data.read_uint8() != 0xf7)
+            len++;
         } catch (exception &e) {
           WARNING("Malformed SysEx message in buffer has no end byte");
           break;
@@ -563,7 +564,7 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
   case SND_SEQ_EVENT_CONTINUE:
     stream.write_uint8(0xFB);
     break;
-    case SND_SEQ_EVENT_SYSEX: {
+  case SND_SEQ_EVENT_SYSEX: {
     ssize_t len = ev->data.ext.len, sz = stream.size();
     if (len <= sz) {
       uint8_t *data = (unsigned char *)ev->data.ext.ptr;
@@ -577,18 +578,6 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
   case SND_SEQ_EVENT_QFRAME:
     stream.write_uint8(0xF1);
     stream.write_uint8(ev->data.control.value & 0x0FF);
-    break;
-  case SND_SEQ_EVENT_CLOCK:
-    stream.write_uint8(0xF8);
-    break;
-  case SND_SEQ_EVENT_START:
-    stream.write_uint8(0xFA);
-    break;
-  case SND_SEQ_EVENT_STOP:
-    stream.write_uint8(0xFC);
-    break;
-  case SND_SEQ_EVENT_CONTINUE:
-    stream.write_uint8(0xFB);
     break;
   default:
     WARNING("Event type not yet implemented! Not sending. {}", ev->type);

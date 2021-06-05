@@ -24,9 +24,10 @@
 #include "./rtppeer.hpp"
 #include "./signal.hpp"
 #include <string>
-#include <optional>
 
 namespace rtpmidid {
+const int ANY_PORT = -1;
+
 struct address_port_t {
   std::string address;
   std::string port;
@@ -60,14 +61,16 @@ public:
   /// every 10 secs.
   uint8_t timerstate;
 
-  std::optional<int> conn_event;
+  // 0 is no event
+  int conn_event;
 
   rtpclient(std::string name);
   ~rtpclient();
   void reset();
   void sendto(const io_bytes &pb, rtppeer::port_e port);
 
-  void connect_to(const std::string &address, const std::string &port, int local_port = -1);
+  void connect_to(const std::string &address, const std::string &port,
+                  int local_port = ANY_PORT);
   void connected();
   void send_ck0_with_timeout();
 

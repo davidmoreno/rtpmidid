@@ -23,6 +23,8 @@
 #include <functional>
 #include <map>
 
+const int NO_EVENT = 0;
+
 template <typename... Args> class signal_t {
 public:
   int connect(std::function<void(Args...)> const &&f) {
@@ -44,6 +46,6 @@ public:
   size_t count() { return slots.size(); }
 
 private:
-  uint32_t max_id = 0;
+  uint32_t max_id = 1;
   std::map<uint32_t, std::function<void(Args...)>> slots;
 };
