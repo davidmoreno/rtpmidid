@@ -211,7 +211,7 @@ std::shared_ptr<rtppeer> rtpserver::get_peer_by_packet(io_bytes_reader &buffer,
 void rtpserver::data_ready(rtppeer::port_e port) {
   uint8_t raw[1500];
   struct sockaddr_in6 cliaddr;
-  unsigned int len = sizeof(cliaddr);
+  socklen_t len = sizeof(cliaddr);
   auto socket = (port == rtppeer::CONTROL_PORT) ? control_socket : midi_socket;
   auto n = recvfrom(socket, raw, 1500, MSG_DONTWAIT,
                     (struct sockaddr *)&cliaddr, &len);
@@ -267,7 +267,6 @@ void rtpserver::sendto(const io_bytes_reader &pb, rtppeer::port_e port,
 void rtpserver::create_peer_from(io_bytes_reader &&buffer,
                                  struct sockaddr_in6 *cliaddr,
                                  rtppeer::port_e port) {
-
   auto peer = std::make_shared<rtppeer>(name);
   auto address = std::make_shared<struct sockaddr_in6>();
   ::memcpy(address.get(), cliaddr, sizeof(struct sockaddr_in6));

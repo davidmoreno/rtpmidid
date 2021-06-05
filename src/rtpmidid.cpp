@@ -33,7 +33,7 @@ using namespace std::chrono_literals;
 rtpmidid_t::rtpmidid_t(config_t *config)
     : name(config->name), seq(fmt::format("rtpmidi {}", name)) {
   setup_mdns();
-  setup_alsa_seq();
+  setup_alsa_seq(config->export_name);
 
   for (auto &port : config->ports) {
     auto server = add_rtpmidid_import_server(config->name, port);
@@ -106,7 +106,7 @@ rtpmidid_t::add_rtpmidid_import_server(const std::string &name,
 
   auto wrtpserver = std::weak_ptr(rtpserver);
   rtpserver->connected_event.connect(
-      [this, wrtpserver, port](std::shared_ptr<::rtpmidid::rtppeer> peer) {
+      [this, wrtpserver, port] (std::shared_ptr<::rtpmidid::rtppeer> peer) {
         if (wrtpserver.expired()) {
           return;
         }
@@ -191,10 +191,10 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
   return server;
 }
 
-void rtpmidid_t::setup_alsa_seq() {
+void rtpmidid_t::setup_alsa_seq(const std::string &name) {
   // Export only one, but all data that is conencted to it.
   // add_export_port();
-  auto alsaport = seq.create_port("Network");
+  auto alsaport = seq.create_port(name);
   seq.subscribe_event[alsaport].connect(
       [this, alsaport](aseq::port_t from, const std::string &name) {
         DEBUG("Connected to ALSA port {}:{}. Create network server for this "
@@ -226,8 +226,8 @@ rtpmidid_t::add_rtpmidi_client(const std::string &name,
   for (auto &known : known_clients) {
     if (known.second.name == name) {
       // DEBUG(
-      //     "Trying to add again rtpmidi {}:{} server. Quite probably mDNS re
-      //     announce. " "Maybe somebody ask, or just periodically.", address,
+      //     "Trying to add again rtpmidi {}:{} server. Quite probably mDNS re"
+      //     "announce. " "Maybe somebody ask, or just periodically.", address,
       //     net_port
       // );
       known.second.addresses.push_back({address, net_port});
@@ -302,7 +302,8 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
         });
     peer_info->use_count++;
 
-    peer_info->peer->connect_to(address.address, address.port);
+    auto local_port = 50010;
+    peer_info->peer->connect_to(address.address, address.port, local_port);
   }
 }
 
@@ -316,16 +317,18 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
   switch (reason) {
   case rtppeer::disconnect_reason_e::CANT_CONNECT:
   case rtppeer::disconnect_reason_e::CONNECTION_REJECTED:
-    if (peer_info->connect_attempts >= (3 * peer_info->addresses.size())) {
+    if (peer_info->connect_attempts >= (8 * peer_info->addresses.size())) {
       ERROR("Too many attempts to connect. Not trying again. Attempted "
             "{} times.",
             peer_info->connect_attempts);
       remove_client(peer_info->aseq_port);
       return;
     }
+    
+    peer_info->peer->reset();
 
     peer_info->connect_attempts += 1;
-    peer_info->peer->connect_timer = poller.add_timer_event(1s, [peer_info] {
+    peer_info->peer->connect_timer = poller.add_timer_event(2s, [peer_info] {
       peer_info->addr_idx =
           (peer_info->addr_idx + 1) % peer_info->addresses.size();
       DEBUG("Try connect next in list. Idx {}/{}", peer_info->addr_idx,
@@ -451,6 +454,26 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_SENSING;
         break;
+      case 0xF8: // Clock
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_CLOCK;
+        break;
+      case 0xFA: // start
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_START;
+        break;
+      case 0xFC: // stop
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_STOP;
+        break;
+      case 0xFB: // continue
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_CONTINUE;
+        break;
       default:
         break;
       }
@@ -554,6 +577,18 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
   case SND_SEQ_EVENT_QFRAME:
     stream.write_uint8(0xF1);
     stream.write_uint8(ev->data.control.value & 0x0FF);
+    break;
+  case SND_SEQ_EVENT_CLOCK:
+    stream.write_uint8(0xF8);
+    break;
+  case SND_SEQ_EVENT_START:
+    stream.write_uint8(0xFA);
+    break;
+  case SND_SEQ_EVENT_STOP:
+    stream.write_uint8(0xFC);
+    break;
+  case SND_SEQ_EVENT_CONTINUE:
+    stream.write_uint8(0xFB);
     break;
   default:
     WARNING("Event type not yet implemented! Not sending. {}", ev->type);

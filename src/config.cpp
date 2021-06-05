@@ -40,6 +40,7 @@ const char *CMDLINE_HELP =
     "  --version           Show version\n"
     "  --help              Show this help\n"
     "  --name <name>       Forces a rtpmidi name\n"
+    "  --exportname <name> Forces a name for exporting alsa. Default is Network.\n"
     "  --host <address>    My default IP. Needed to answer mDNS. Normally "
     "guessed but may be attached to another ip.\n"
     "  --port <port>       Opens local port as server. Default 5004. Can set "
@@ -58,6 +59,7 @@ const char *CMDLINE_HELP =
 typedef enum {
   ARG_NONE = 0,
   ARG_NAME,
+  ARG_EXPORT_NAME,
   ARG_HOST,
   ARG_PORT,
   ARG_CONNECT,
@@ -88,6 +90,8 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv) {
       }
       if (argname == "--name") {
         prevopt = ARG_NAME;
+      } else if (argname == "--exportname") {
+        prevopt = ARG_EXPORT_NAME;
       } else if (argname == "--host") {
         prevopt = ARG_HOST;
       } else if (argname == "--port") {
@@ -113,6 +117,10 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv) {
         opts.name = argv[i];
         INFO("Set RTP MIDI name to {}", opts.name);
         break;
+      case ARG_EXPORT_NAME:
+        opts.export_name = argv[i];
+        INFO("Set RTP MIDI export name to {}", opts.export_name);
+        break;
       case ARG_HOST:
         opts.host = argv[i];
         INFO("Set RTP MIDI listen host to {}", opts.host);
@@ -132,6 +140,10 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv) {
     char hostname[256];
     gethostname(hostname, std::size(hostname));
     opts.name = hostname;
+  }
+  
+  if (opts.export_name.size() == 0) {
+    opts.export_name = "Network";
   }
 
   if (opts.ports.size() == 0) {
