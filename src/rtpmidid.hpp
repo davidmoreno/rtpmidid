@@ -65,6 +65,7 @@ public:
   std::vector<std::shared_ptr<::rtpmidid::rtpserver>> servers;
   std::map<aseq::port_t, std::shared_ptr<::rtpmidid::rtpserver>> alsa_to_server;
   std::set<std::string> known_mdns_peers;
+  config_t *config;
 
   rtpmidid_t(config_t *config);
 

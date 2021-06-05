@@ -30,8 +30,9 @@
 using namespace rtpmidid;
 using namespace std::chrono_literals;
 
-rtpmidid_t::rtpmidid_t(config_t *config)
-    : name(config->name), seq(fmt::format("rtpmidi {}", name)) {
+rtpmidid_t::rtpmidid_t(config_t *_config)
+    : name(_config->name), seq(fmt::format("rtpmidi {}", name)),
+      config(_config) {
   setup_mdns();
   setup_alsa_seq(config->export_name);
 
@@ -302,8 +303,8 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
         });
     peer_info->use_count++;
 
-    auto local_port = 50010;
-    peer_info->peer->connect_to(address.address, address.port, local_port);
+    peer_info->peer->connect_to(address.address, address.port,
+                                config->client_port);
   }
 }
 

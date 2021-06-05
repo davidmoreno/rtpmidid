@@ -40,11 +40,14 @@ const char *CMDLINE_HELP =
     "  --version           Show version\n"
     "  --help              Show this help\n"
     "  --name <name>       Forces a rtpmidi name\n"
-    "  --exportname <name> Forces a name for exporting alsa. Default is Network.\n"
+    "  --exportname <name> Forces a name for exporting alsa. Default is "
+    "Network.\n"
     "  --host <address>    My default IP. Needed to answer mDNS. Normally "
     "guessed but may be attached to another ip.\n"
     "  --port <port>       Opens local port as server. Default 5004. Can set "
     "several.\n"
+    "  --clientport <port> Reuses the same port as client always. Can be same "
+    "as server. Default 0, random port.\n"
     "  --connect <address> Connects the given address. This is default, no "
     "need for --connect\n"
     "  --control <path>    Creates a control socket. Check CONTROL.md. Default "
@@ -62,6 +65,7 @@ typedef enum {
   ARG_EXPORT_NAME,
   ARG_HOST,
   ARG_PORT,
+  ARG_CLIENT_PORT,
   ARG_CONNECT,
   ARG_CONTROL,
 } optnames_e;
@@ -94,6 +98,8 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv) {
         prevopt = ARG_EXPORT_NAME;
       } else if (argname == "--host") {
         prevopt = ARG_HOST;
+      } else if (argname == "--clientport") {
+        prevopt = ARG_CLIENT_PORT;
       } else if (argname == "--port") {
         prevopt = ARG_PORT;
       } else if (argname == "--connect") {
@@ -128,6 +134,10 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv) {
       case ARG_PORT:
         opts.ports.push_back(argv[i]);
         break;
+      case ARG_CLIENT_PORT:
+        opts.client_port = atoi(argv[i]);
+        INFO("Force client port to {}", opts.client_port);
+        break;
       case ARG_CONTROL:
         opts.control = argv[i];
         break;
@@ -141,7 +151,7 @@ config_t rtpmidid::parse_cmd_args(int argc, char **argv) {
     gethostname(hostname, std::size(hostname));
     opts.name = hostname;
   }
-  
+
   if (opts.export_name.size() == 0) {
     opts.export_name = "Network";
   }

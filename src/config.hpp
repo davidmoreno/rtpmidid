@@ -38,6 +38,7 @@ struct config_t {
   std::vector<std::string> ports;
   std::string host;
   std::string control;
+  int client_port;
 };
 config_t parse_cmd_args(int argc, char **argv);
 } // namespace rtpmidid
