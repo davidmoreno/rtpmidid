@@ -165,7 +165,10 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
     }
   }
 
-  auto server = std::make_shared<rtpserver>(name, "");
+  char port_name[16];
+  snprintf(port_name, sizeof(port_name), "%d", config->client_port);
+
+  auto server = std::make_shared<rtpserver>(name, port_name);
 
   announce_rtpmidid_server(name, server->control_port);
 

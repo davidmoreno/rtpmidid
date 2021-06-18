@@ -55,7 +55,7 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
                                 strerror(errno));
     }
     // Get addr info may return several options, try them in order.
-    // we asusme that if the ocntrol success to be created the midi will too.
+    // we asusme that if the control success to be created the midi will too.
     char host[NI_MAXHOST], service[NI_MAXSERV];
     socklen_t peer_addr_len = NI_MAXHOST;
     auto listenaddr = sockaddress_list;
@@ -69,6 +69,15 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
       if (control_socket < 0) {
         continue; // Bad socket. Try next.
       }
+
+      int reuse = 1;
+      if (setsockopt(control_socket, SOL_SOCKET, SO_REUSEADDR, &reuse,
+                     sizeof(reuse))) {
+        close(control_socket);
+        control_socket = -1;
+        throw rtpmidid::exception("Could not make local control port reusable");
+      }
+
       if (bind(control_socket, listenaddr->ai_addr, listenaddr->ai_addrlen) ==
           0) {
         break;
@@ -98,6 +107,14 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
     if (midi_socket < 0) {
       throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
     }
+    int reuse = 1;
+    if (setsockopt(midi_socket, SOL_SOCKET, SO_REUSEADDR, &reuse,
+                   sizeof(reuse))) {
+      close(midi_socket);
+      midi_socket = -1;
+      throw rtpmidid::exception("Could not make local control port reusable");
+    }
+
     // Reuse listenaddr, just on next port
     ((sockaddr_in *)listenaddr->ai_addr)->sin_port = htons(midi_port);
     if (bind(midi_socket, listenaddr->ai_addr, listenaddr->ai_addrlen) < 0) {

@@ -108,14 +108,16 @@ void rtpclient::connect_to(const std::string &address, const std::string &port,
       if (control_socket <= 0) {
         continue;
       }
-      int reuse = 1;
-      if (setsockopt(control_socket, SOL_SOCKET, SO_REUSEADDR, &reuse,
-                     sizeof(reuse))) {
-        close(control_socket);
-        control_socket = -1;
-        throw rtpmidid::exception("Could not make local control port reusable");
-      }
       if (local_port >= 0) {
+        DEBUG("Force local client port to {}", local_port);
+        int reuse = 1;
+        if (setsockopt(control_socket, SOL_SOCKET, SO_REUSEADDR, &reuse,
+                       sizeof(reuse))) {
+          close(control_socket);
+          control_socket = -1;
+          throw rtpmidid::exception(
+              "Could not make local control port reusable");
+        }
         struct sockaddr_in6 servaddr;
         bzero(&servaddr, sizeof(sockaddr_in6));
         servaddr.sin6_family = AF_INET6;
