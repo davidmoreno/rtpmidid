@@ -34,7 +34,7 @@ struct poller_private_data_t {
                          std::function<void(void)>>>
       timer_events;
   std::vector<std::function<void(void)>> later_events;
-  int max_timer_id = 0;
+  int max_timer_id = 1;
 };
 
 poller_t rtpmidid::poller;
@@ -206,15 +206,18 @@ void poller_t::wait() {
       auto firstI = pd->timer_events.begin();
       timer_t id = std::get<1>(*firstI);
       std::get<2> (*firstI)();
-      pd->timer_events.erase(firstI);
+
+      // There is no need for this erase, as the operator= for the timer_t
+      // ensures removal. This is this way to allow use of RTTI on more
+      // complex items.
+      // pd->timer_events.erase(firstI);
     }
     // if (!pd->timer_events.empty()) {
-    //   auto now = std::chrono::steady_clock::now();
-    //   DEBUG("Next timer event {} in {} s. {} left.",
-    //         std::get<1>(pd->timer_events[0]),
-    //         std::get<0>(pd->timer_events[0]) - now, pd->timer_events.size());
+    //   DEBUG("Next timer event {}. {} left.",
+    //   std::get<1>(pd->timer_events[0]),
+    //         pd->timer_events.size());
     // } else {
-    //   DEBUG("No timer events.");
+    //   DEBUG("No more timer events.");
     // }
   }
 
