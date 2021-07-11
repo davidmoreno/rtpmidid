@@ -8,6 +8,7 @@ help:
 	@echo "clean   -- Cleans project"
 	@echo "deb     -- Generate deb package"
 	@echo "test    -- Runs all test"
+	@echo "install -- Installs to PREFIX or DESTDIR (default /usr/local/)"
 	@echo
 
 .PHONY: build
@@ -64,8 +65,11 @@ deb:
 
 	dpkg-buildpackage --no-sign
 
+ifneq ($(DESTDIR),)
+    PREFIX := $(DESTDIR)
+endif
 ifeq ($(PREFIX),)
-    PREFIX := /usr/local
+    PREFIX := /usr/local/
 endif
 .PHONY: install
 
