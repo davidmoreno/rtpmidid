@@ -64,7 +64,7 @@ exporting.
 
 ```
 Real Time Protocol Music Instrument Digital Interface Daemon - 20.04.5
-(C) 2019 David Moreno Montero <dmoreno@coralbits.com>
+(C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
 Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.
 
 rtpmidi allows to use rtpmidi protocol to communicate with MIDI equipement
