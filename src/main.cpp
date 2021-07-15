@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
 
   INFO("Real Time Protocol Music Instrument Digital Interface Daemon - {}",
        rtpmidid::VERSION);
-  INFO("(C) 2019 David Moreno Montero <dmoreno@coralbits.com>");
+  INFO("(C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>");
 
   auto options = rtpmidid::parse_cmd_args(argc - 1, argv + 1);
 

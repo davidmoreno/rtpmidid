@@ -1,7 +1,7 @@
 
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
