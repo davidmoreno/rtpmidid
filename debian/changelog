@@ -1,8 +1,14 @@
-rtpmidid (20.07~40~gd7a17) unstable; urgency=medium
+rtpmidid (21.07) unstable; urgency=medium
+
+  * Rolling
+
+ -- David Moreno <dmoreno@coralbits.com>  Fri, 23 Jul 2021 19:51:18 +0200
+
+rtpmidid (21.07) unstable; urgency=medium
 
   * Bugfix: bad ordering of events 
   * More MIDI events
- -- David Moreno <dmoreno@coralbits.com>  Fri, 23 Jul 2021 19:46:23 +0200
+  * Bad acess initiator / ssrc
   * Bigger buffer size for sysex
 
  -- David Moreno <dmoreno@coralbits.com>  Fri, 23 Jul 2021 19:42:45 +0200
