@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "./mdns_rtpmidi.hpp"
+#include <rtpmidid/mdns_rtpmidi.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/poller.hpp>
 
