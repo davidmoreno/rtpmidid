@@ -19,7 +19,7 @@
 #pragma once
 
 #include "./aseq.hpp"
-#include "./mdns_rtpmidi.hpp"
+#include <rtpmidid/mdns_rtpmidi.hpp>
 #include <memory>
 #include <rtpmidid/poller.hpp>
 #include <set>
