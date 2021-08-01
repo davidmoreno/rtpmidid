@@ -48,9 +48,6 @@ void sigint_f(int) {
 
 int main(int argc, char **argv) {
 
-  // We dont need crypto rand, just some rand
-  srand(time(NULL));
-
   signal(SIGINT, sigint_f);
   signal(SIGTERM, sigterm_f);
 
