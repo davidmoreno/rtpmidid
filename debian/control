@@ -17,10 +17,35 @@ Description: Real Time Protocol Musical Instrument Digital Interface Daemon (RTP
  (also known as Zeroconf, Avahi, and multicast DNS) it exposes this ALSA
  sequencer port.
 
+Package: rtpmidid-dbg
+Architecture: any
+Section: debug
+Priority: extra
+Depends:
+    rtpmidid (= ${binary:Version}),
+    ${misc:Depends}
+Description: debugging symbols for rtpmidid
+ rtpmidid allows you to share ALSA sequencer devices on the network using RTP
+ MIDI, and import other network shared RTP MIDI devices.
+ .
+ This package contains the debugging symbols for rtpmidid.
+
 Package: librtpmidid0
 Section: libs
 Architecture: any
 Description: RTP MIDI library
+
+Package: librtpmidid0-dbg
+Architecture: any
+Section: debug
+Priority: extra
+Depends:
+    librtpmidid0 (= ${binary:Version}),
+    ${misc:Depends}
+Description: debugging symbols for librtpmidid0
+ RTP MIDI library
+ .
+ This package contains the debugging symbols for librtpmidid0.
 
 Package: librtpmidid0-dev
 Section: libdevel
