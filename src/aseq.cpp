@@ -84,7 +84,12 @@ aseq::aseq(std::string _name) : name(std::move(_name)) {
 
 aseq::~aseq() {
   for (auto fd : fds) {
-    poller.remove_fd(fd);
+    try {
+       poller.remove_fd(fd);
+    }
+    catch(rtpmidid::exception & e) {
+      ERROR("Error removing aseq socket: {}", e.what());
+    }
   }
   snd_seq_close(seq);
   snd_config_update_free_global();

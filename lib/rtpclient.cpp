@@ -41,6 +41,9 @@ rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
   local_base_port = 0;
   remote_base_port = -1; // Not defined
   control_socket = -1;
+  control_addr = { 0 };
+  midi_addr = { 0 };
+  timerstate = 0;
   midi_socket = -1;
   peer.initiator_id = rand();
   peer.send_event.connect([this](const io_bytes &data, rtppeer::port_e port) {
@@ -50,8 +53,18 @@ rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
 
 rtpclient::~rtpclient() {
   if (peer.is_connected()) {
-    peer.send_goodbye(rtppeer::CONTROL_PORT);
-    peer.send_goodbye(rtppeer::MIDI_PORT);
+    try {
+      peer.send_goodbye(rtppeer::CONTROL_PORT);
+    }
+    catch(rtpmidid::exception & e) {
+      ERROR("Error invoking goodby on control port: {}", e.what());
+    }
+    try {
+      peer.send_goodbye(rtppeer::MIDI_PORT);
+    }
+    catch(rtpmidid::exception & e) {
+      ERROR("Error invoking goodby on midi port: {}", e.what());
+    }
   }
 
   if (control_socket > 0) {

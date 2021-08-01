@@ -54,13 +54,16 @@ struct control_msg_t {
 rtpmidid::control_socket_t::control_socket_t(rtpmidid::rtpmidid_t &rtpmidid,
                                              const std::string &socketfile)
     : rtpmidid(rtpmidid) {
-  int ret;
-  ret = unlink(socketfile.c_str());
+  int ret = unlink(socketfile.c_str());
   if (ret >= 0) {
     INFO("Removed old control socket. Creating new one.");
   }
 
   listen_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (listen_socket == -1) {
+    ERROR("Error creating socket: {}", strerror(errno));
+    return;
+  }
   struct sockaddr_un addr;
   memset(&addr, 0, sizeof(struct sockaddr_un));
   addr.sun_family = AF_UNIX;
@@ -69,12 +72,17 @@ rtpmidid::control_socket_t::control_socket_t(rtpmidid::rtpmidid_t &rtpmidid,
   ret = bind(listen_socket, (const struct sockaddr *)(&addr),
              sizeof(struct sockaddr_un));
   if (ret == -1) {
+    ERROR("Error Binding socket at {}: {}", socketfile, strerror(errno));
+    close(listen_socket);
+    listen_socket = -1;
+    return;
+  }
+  if (listen(listen_socket, 20) == -1) {
     ERROR("Error Listening to socket at {}: {}", socketfile, strerror(errno));
     close(listen_socket);
     listen_socket = -1;
     return;
   }
-  listen(listen_socket, 20);
   ::chmod(socketfile.c_str(), 0777);
   rtpmidid::poller.add_fd_in(listen_socket,
                              [this](int fd) { this->connection_ready(); });
@@ -135,7 +143,8 @@ void rtpmidid::control_socket_t::data_ready(int fd) {
     ::close(fd);
     fd = -1;
   }
-  fsync(fd);
+  if (fd != -1)
+    fsync(fd);
 }
 
 namespace rtpmidid {

@@ -133,11 +133,21 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
 
 rtpserver::~rtpserver() {
   if (control_socket > 0) {
-    poller.remove_fd(control_socket);
+    try {
+      poller.remove_fd(control_socket);
+    }
+    catch(rtpmidid::exception & e) {
+      ERROR("Error removing control socket: {}", e.what());
+    }
     close(control_socket);
   }
   if (midi_socket > 0) {
-    poller.remove_fd(midi_socket);
+    try {
+      poller.remove_fd(midi_socket);
+    }
+    catch(rtpmidid::exception & e) {
+      ERROR("Error removing midi socket: {}", e.what());
+    }
     close(midi_socket);
   }
 }
