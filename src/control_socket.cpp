@@ -96,9 +96,14 @@ rtpmidid::control_socket_t::~control_socket_t() {
 void rtpmidid::control_socket_t::connection_ready() {
   int fd = accept(listen_socket, NULL, NULL);
 
-  rtpmidid::poller.add_fd_in(fd, [this](int fd) { this->data_ready(fd); });
-  DEBUG("Added control connection: {}", fd);
-  clients.push_back(fd);
+  if (fd != -1) {
+    rtpmidid::poller.add_fd_in(fd, [this](int fd) { this->data_ready(fd); });
+    DEBUG("Added control connection: {}", fd);
+    clients.push_back(fd);
+  }
+  else {
+      ERROR("\"accept()\" failed, continuing...");
+  }
 }
 
 void rtpmidid::control_socket_t::data_ready(int fd) {
