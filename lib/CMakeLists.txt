@@ -32,5 +32,5 @@ set_target_properties(rtpmidid-shared PROPERTIES OUTPUT_NAME rtpmidid)
 set_target_properties(rtpmidid-shared rtpmidid-static
 	PROPERTIES
 		SOVERSION 0
-		VERSION 20.07
+		VERSION 21.07
 	)
