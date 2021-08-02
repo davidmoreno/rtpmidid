@@ -151,7 +151,7 @@ void rtpclient::connect_to(const std::string &address,
                                 strerror(errno));
     }
     memcpy(&midi_addr, serveraddr->ai_addr, sizeof(midi_addr));
-    ::getsockname(control_socket, (struct sockaddr *)&servaddr, &len);
+    ::getsockname(midi_socket, (struct sockaddr *)&servaddr, &len);
     auto midi_port = htons(servaddr.sin6_port);
     DEBUG("MIDI PORT at port {}", midi_port);
 
