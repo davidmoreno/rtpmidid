@@ -21,6 +21,7 @@
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/rtppeer.hpp>
+#include <rtpmidid/utils.hpp>
 
 using namespace rtpmidid;
 
@@ -36,8 +37,8 @@ using namespace rtpmidid;
 rtppeer::rtppeer(std::string _name) : local_name(std::move(_name)) {
   status = NOT_CONNECTED;
   remote_ssrc = 0;
-  local_ssrc = rand() & 0x0FFFF;
-  seq_nr = rand() & 0x0FFFF;
+  local_ssrc = ::rtpmidid::rand_u32() & 0x0FFFF;
+  seq_nr = ::rtpmidid::rand_u32() & 0x0FFFF;
   seq_nr_ack = seq_nr;
   remote_seq_nr = 0; // Just not radom memory data
   timestamp_start = 0;

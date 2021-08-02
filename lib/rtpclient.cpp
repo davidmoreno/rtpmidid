@@ -33,6 +33,7 @@
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtpclient.hpp>
+#include <rtpmidid/utils.hpp>
 
 using namespace std::chrono_literals;
 using namespace rtpmidid;
@@ -41,11 +42,11 @@ rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
   local_base_port = 0;
   remote_base_port = -1; // Not defined
   control_socket = -1;
-  control_addr = { 0 };
-  midi_addr = { 0 };
+  control_addr = {0};
+  midi_addr = {0};
   timerstate = 0;
   midi_socket = -1;
-  peer.initiator_id = rand();
+  peer.initiator_id = ::rtpmidid::rand_u32();
   peer.send_event.connect([this](const io_bytes &data, rtppeer::port_e port) {
     this->sendto(data, port);
   });

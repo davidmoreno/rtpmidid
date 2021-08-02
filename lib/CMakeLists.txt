@@ -3,6 +3,7 @@ add_library(
   SHARED
   rtppeer.cpp rtpclient.cpp rtpserver.cpp
   mdns_rtpmidi.cpp logger.cpp poller.cpp
+  utils.cpp
 )
 
 add_library(
@@ -10,6 +11,7 @@ add_library(
   STATIC
   rtppeer.cpp rtpclient.cpp rtpserver.cpp
   mdns_rtpmidi.cpp logger.cpp poller.cpp
+  utils.cpp
 )
 
 include(FindPkgConfig)
