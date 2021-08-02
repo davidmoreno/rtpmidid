@@ -32,7 +32,7 @@ using namespace rtpmidid;
 
 rtpserver::rtpserver(std::string _name, const std::string &port)
     : name(std::move(_name)) {
-  control_socket = midi_socket = 0;
+  control_socket = midi_socket = -1;
   control_port = 0;
   midi_port = 0;
   struct addrinfo *sockaddress_list = nullptr;
@@ -74,6 +74,7 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
         break;
       }
       close(control_socket);
+      control_socket = -1;
     }
     if (!listenaddr) {
       throw rtpmidid::exception("Can not open rtpmidi control socket. {}.",
@@ -94,7 +95,8 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
     poller.add_fd_in(control_socket,
                      [this](int) { this->data_ready(rtppeer::CONTROL_PORT); });
 
-    midi_socket = socket(AF_INET6, SOCK_DGRAM, 0);
+    midi_socket = socket(listenaddr->ai_family, listenaddr->ai_socktype,
+                              listenaddr->ai_protocol);
     if (midi_socket < 0) {
       throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
     }
@@ -108,15 +110,15 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
                      [this](int) { this->data_ready(rtppeer::MIDI_PORT); });
   } catch (const std::exception &e) {
     ERROR("Error creating server at port {}: {}", control_port, e.what());
-    if (control_socket) {
+    if (control_socket != -1) {
       poller.remove_fd(control_socket);
       ::close(control_socket);
-      control_socket = 0;
+      control_socket = -1;
     }
-    if (midi_socket) {
+    if (midi_socket != -1) {
       poller.remove_fd(midi_socket);
       ::close(midi_socket);
-      midi_socket = 0;
+      midi_socket = -1;
     }
     if (sockaddress_list) {
       freeaddrinfo(sockaddress_list);
@@ -132,7 +134,7 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
 }
 
 rtpserver::~rtpserver() {
-  if (control_socket > 0) {
+  if (control_socket >= 0) {
     try {
       poller.remove_fd(control_socket);
     }
@@ -141,7 +143,7 @@ rtpserver::~rtpserver() {
     }
     close(control_socket);
   }
-  if (midi_socket > 0) {
+  if (midi_socket >= 0) {
     try {
       poller.remove_fd(midi_socket);
     }
