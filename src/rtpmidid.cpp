@@ -192,7 +192,7 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
 }
 
 void rtpmidid_t::setup_alsa_seq() {
-  // Export only one, but all data that is conencted to it.
+  // Export only one, but all data that is connected to it.
   // add_export_port();
   auto alsaport = seq.create_port("Network");
   seq.subscribe_event[alsaport].connect(

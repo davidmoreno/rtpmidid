@@ -197,7 +197,7 @@ void poller_t::wait() {
     try {
       pd->fd_events[fd](fd);
     } catch (const std::exception &e) {
-      ERROR("Catched exception at poller: {}", e.what());
+      ERROR("Caught exception at poller: {}", e.what());
     }
   }
   if (nfds == 0 && !pd->timer_events.empty()) { // This was a timeout

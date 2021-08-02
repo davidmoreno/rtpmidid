@@ -43,9 +43,9 @@ rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
   remote_base_port = -1; // Not defined
   control_socket = -1;
   control_addr = { 0 };
+  midi_socket = -1;
   midi_addr = { 0 };
   timerstate = 0;
-  midi_socket = -1;
   peer.initiator_id = rtpmidi_rand();
   peer.send_event.connect([this](const io_bytes &data, rtppeer::port_e port) {
     this->sendto(data, port);
@@ -85,8 +85,7 @@ void rtpclient::connect_to(const std::string &address,
   char host[NI_MAXHOST], service[NI_MAXSERV];
   socklen_t peer_addr_len = NI_MAXHOST;
 
-  control_socket = 0;
-  midi_socket = 0;
+  control_socket = midi_socket = -1;
 
   DEBUG("Try connect to service at {}:{}", address, port);
 
@@ -113,7 +112,7 @@ void rtpclient::connect_to(const std::string &address,
       DEBUG("Try connect to resolved name: {}:{}", host, service);
       // remote_base_port = service;
 
-      control_socket = socket(AF_INET, SOCK_DGRAM, 0);
+      control_socket = socket(serveraddr->ai_family, serveraddr->ai_socktype, serveraddr->ai_protocol);
       if (control_socket < 0) {
         continue;
       }
@@ -125,7 +124,7 @@ void rtpclient::connect_to(const std::string &address,
     }
     if (!serveraddr) {
       DEBUG("Error opening control socket, port {}", port);
-      control_socket = 0;
+      control_socket = -1;
       throw rtpmidid::exception(
           "Can not open remote rtpmidi control socket. {}", strerror(errno));
     }
@@ -143,9 +142,8 @@ void rtpclient::connect_to(const std::string &address,
     poller.add_fd_in(control_socket,
                      [this](int) { this->data_ready(rtppeer::CONTROL_PORT); });
 
-    midi_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    midi_socket = socket(serveraddr->ai_family, serveraddr->ai_socktype, serveraddr->ai_protocol);
     if (midi_socket < 0) {
-      midi_socket = 0;
       throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
     }
     // Reuse servaddr, just on next port
@@ -173,15 +171,15 @@ void rtpclient::connect_to(const std::string &address,
                      [this](int) { this->data_ready(rtppeer::MIDI_PORT); });
   } catch (const std::exception &excp) {
     ERROR("Error creating rtp client: {}", excp.what());
-    if (control_socket) {
+    if (control_socket >= 0) {
       poller.remove_fd(control_socket);
       ::close(control_socket);
-      control_socket = 0;
+      control_socket = -1;
     }
-    if (midi_socket) {
+    if (midi_socket >= 0) {
       poller.remove_fd(midi_socket);
       ::close(midi_socket);
-      midi_socket = 0;
+      midi_socket = -1;
     }
     if (sockaddress_list) {
       freeaddrinfo(sockaddress_list);
