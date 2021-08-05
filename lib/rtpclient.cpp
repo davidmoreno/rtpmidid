@@ -155,7 +155,7 @@ void rtpclient::connect_to(const std::string &address,
                                 strerror(errno));
     }
     memcpy(&midi_addr, serveraddr->ai_addr, sizeof(midi_addr));
-    ::getsockname(control_socket, (struct sockaddr *)&servaddr, &len);
+    ::getsockname(midi_socket, (struct sockaddr *)&servaddr, &len);
     auto midi_port = htons(servaddr.sin6_port);
     DEBUG("MIDI PORT at port {}", midi_port);
 
@@ -183,13 +183,13 @@ void rtpclient::connect_to(const std::string &address,
     freeaddrinfo(sockaddress_list);
   }
 
-  DEBUG("Connecting control port {} to {}:{}", local_base_port, host, service);
+  DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address, remote_base_port + 1);
 
   // If not connected, connect now the MIDI port
   auto conn_event = peer.connected_event.connect(
       [this, address, port](const std::string &name, rtppeer::status_e status) {
         if (status == rtppeer::CONTROL_CONNECTED) {
-          DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1,
+          DEBUG("Connected midi port {} to {}:{}", local_base_port + 1,
                 address, remote_base_port + 1);
           peer.connect_to(rtppeer::MIDI_PORT);
         } else if (status == rtppeer::CONNECTED) {
