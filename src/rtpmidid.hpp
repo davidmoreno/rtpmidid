@@ -19,20 +19,20 @@
 #pragma once
 
 #include "./aseq.hpp"
-#include <rtpmidid/mdns_rtpmidi.hpp>
 #include <memory>
+#include <optional>
+#include <rtpmidid/mdns_rtpmidi.hpp>
 #include <rtpmidid/poller.hpp>
 #include <set>
 #include <string>
-#include <optional>
 
 namespace rtpmidid {
 struct config_t;
 class rtpserver;
 class rtpclient;
 class rtppeer;
-struct io_bytes_reader;
-struct io_bytes_writer;
+class io_bytes_reader;
+class io_bytes_writer;
 struct address_t {
   std::string address;
   std::string port;
