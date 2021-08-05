@@ -428,11 +428,12 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
     case 0xF0: {
       // System messages
       switch (current_command) {
-      case 0xF0: { //SysEx event
+      case 0xF0: { // SysEx event
         auto start = midi_data.pos() - 1;
         auto len = 2;
         try {
-          while (midi_data.read_uint8() != 0xf7) len++;
+          while (midi_data.read_uint8() != 0xf7)
+            len++;
         } catch (exception &e) {
           WARNING("Malformed SysEx message in buffer has no end byte");
           break;
@@ -450,6 +451,26 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_SENSING;
+        break;
+      case 0xF8: // Clock
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_CLOCK;
+        break;
+      case 0xFA: // start
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_START;
+        break;
+      case 0xFC: // stop
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_STOP;
+        break;
+      case 0xFB: // continue
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_CONTINUE;
         break;
       default:
         break;
@@ -540,7 +561,7 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
   case SND_SEQ_EVENT_CONTINUE:
     stream.write_uint8(0xFB);
     break;
-    case SND_SEQ_EVENT_SYSEX: {
+  case SND_SEQ_EVENT_SYSEX: {
     ssize_t len = ev->data.ext.len, sz = stream.size();
     if (len <= sz) {
       uint8_t *data = (unsigned char *)ev->data.ext.ptr;
