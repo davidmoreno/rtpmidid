@@ -72,7 +72,7 @@ void rtpclient::connect_to(const std::string &address,
                            const std::string &port) {
   struct addrinfo hints;
   struct addrinfo *sockaddress_list = nullptr;
-  char host[NI_MAXHOST], service[NI_MAXSERV];
+  char host[NI_MAXHOST] = { 0 }, service[NI_MAXSERV] = { 0 };
   socklen_t peer_addr_len = NI_MAXHOST;
 
   control_socket = midi_socket = -1;
@@ -80,14 +80,13 @@ void rtpclient::connect_to(const std::string &address,
   DEBUG("Try connect to service at {}:{}", address, port);
 
   try {
-    int res;
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = 0;
     hints.ai_protocol = 0;
 
-    res = getaddrinfo(address.c_str(), port.c_str(), &hints, &sockaddress_list);
+    int res = getaddrinfo(address.c_str(), port.c_str(), &hints, &sockaddress_list);
     if (res < 0) {
       DEBUG("Error resolving address {}:{}", address, port);
       throw rtpmidid::exception("Can not resolve address {}:{}. {}", address,
@@ -97,9 +96,12 @@ void rtpclient::connect_to(const std::string &address,
     // we asusme that if the ocntrol success to be created the midi will too.
     auto serveraddr = sockaddress_list;
     for (; serveraddr != nullptr; serveraddr = serveraddr->ai_next) {
-      getnameinfo(serveraddr->ai_addr, peer_addr_len, host, NI_MAXHOST, service,
-                  NI_MAXSERV, NI_NUMERICSERV);
-      DEBUG("Try connect to resolved name: {}:{}", host, service);
+      int rc = 0;
+      if ((rc = getnameinfo(serveraddr->ai_addr, peer_addr_len, host, NI_MAXHOST, service,
+                  NI_MAXSERV, NI_NUMERICSERV)) != 0)
+        ERROR("Problem finding hostname of {}: {}", address, rc);
+      else
+        DEBUG("Try connect to resolved name: {}:{}", host, service);
       // remote_base_port = service;
 
       control_socket = socket(serveraddr->ai_family, serveraddr->ai_socktype, serveraddr->ai_protocol);
