@@ -189,8 +189,12 @@ void poller_t::wait() {
   }
 
   auto nfds = 0;
-  if (wait_ms != 0) // Maybe no wait. Some timer event pending.
+  if (wait_ms != 0) {  // Maybe no wait. Some timer event pending.
     nfds = epoll_wait(pd->epollfd, events, MAX_EVENTS, wait_ms);
+
+    if (nfds == -1)
+      ERROR("epoll_wait failed: {}", strerror(errno));
+  }
 
   for (auto n = 0; n < nfds; n++) {
     auto fd = events[n].data.fd;
@@ -200,6 +204,7 @@ void poller_t::wait() {
       ERROR("Caught exception at poller: {}", e.what());
     }
   }
+
   if (nfds == 0 && !pd->timer_events.empty()) { // This was a timeout
     // Will ensure remove via RTTI
     {
