@@ -371,7 +371,8 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
   buffer.read_uint8(); // Ignore RTP header flags (Byte 0)
   auto rtpmidi_id = buffer.read_uint8() & 0x7f;
   if (rtpmidi_id != 0x61) { // next Byte: Payload type
-    WARNING("Received packet (ID: 0x{:02x}) which is not RTP MIDI. Ignoring.", rtpmidi_id);
+    WARNING("Received packet (ID: 0x{:02x}) which is not RTP MIDI. Ignoring.",
+            rtpmidi_id);
     return;
   }
   remote_seq_nr = buffer.read_uint16(); // Ignore RTP sequence no.
@@ -451,6 +452,10 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
   seq_nr++;
 
   buffer.write_uint8(0x80);
+
+  // Here it SHOULD send 0x80 | 0x61 if there is midi data sent, but if done,
+  // then rtpmidi for windows does not read messages, so for compatibility, just
+  // send 0x61
   buffer.write_uint8(0x61);
   buffer.write_uint16(seq_nr);
   buffer.write_uint32(timestamp);

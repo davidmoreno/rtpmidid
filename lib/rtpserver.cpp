@@ -96,7 +96,7 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
                      [this](int) { this->data_ready(rtppeer::CONTROL_PORT); });
 
     midi_socket = socket(listenaddr->ai_family, listenaddr->ai_socktype,
-                              listenaddr->ai_protocol);
+                         listenaddr->ai_protocol);
     if (midi_socket < 0) {
       throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
     }
@@ -137,8 +137,7 @@ rtpserver::~rtpserver() {
   if (control_socket >= 0) {
     try {
       poller.remove_fd(control_socket);
-    }
-    catch(rtpmidid::exception & e) {
+    } catch (rtpmidid::exception &e) {
       ERROR("Error removing control socket: {}", e.what());
     }
     close(control_socket);
@@ -146,8 +145,7 @@ rtpserver::~rtpserver() {
   if (midi_socket >= 0) {
     try {
       poller.remove_fd(midi_socket);
-    }
-    catch(rtpmidid::exception & e) {
+    } catch (rtpmidid::exception &e) {
       ERROR("Error removing midi socket: {}", e.what());
     }
     close(midi_socket);
@@ -183,7 +181,7 @@ std::shared_ptr<rtppeer> rtpserver::get_peer_by_packet(io_bytes_reader &buffer,
     return ssrc_to_peer[ssrc];
   }
   default:
-    if (port == rtppeer::MIDI_PORT && buffer.start[1] == 0x61) {
+    if (port == rtppeer::MIDI_PORT && (buffer.start[1] & 0x7F) == 0x61) {
       buffer.read_uint32();
       buffer.read_uint32();
       auto ssrc = buffer.read_uint32();
