@@ -369,9 +369,9 @@ void rtppeer::parse_feedback(io_bytes_reader &buffer) {
 void rtppeer::parse_midi(io_bytes_reader &buffer) {
   // auto _headers =
   buffer.read_uint8(); // Ignore RTP header flags (Byte 0)
-  auto rtpmidi_id = buffer.read_uint8();
+  auto rtpmidi_id = buffer.read_uint8() & 0x7f;
   if (rtpmidi_id != 0x61) { // next Byte: Payload type
-    WARNING("Received packet which is not RTP MIDI. Ignoring.");
+    WARNING("Received packet (ID: 0x{:02x}) which is not RTP MIDI. Ignoring.", rtpmidi_id);
     return;
   }
   remote_seq_nr = buffer.read_uint16(); // Ignore RTP sequence no.
