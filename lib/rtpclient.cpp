@@ -245,7 +245,7 @@ void rtpclient::sendto(const io_bytes &pb, rtppeer::port_e port) {
   for(;;) {
     ssize_t res =
       ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
-               (const struct sockaddr *)address, sizeof(struct sockaddr_in6));
+               (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
 
     if (static_cast<uint32_t>(res) == pb.size())
       break;
