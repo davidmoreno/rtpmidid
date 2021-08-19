@@ -17,6 +17,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -269,13 +270,30 @@ void rtpserver::sendto(const io_bytes_reader &pb, rtppeer::port_e port,
   // address->sin6_family, inet_ntoa(address->sin6_addr),
   // htons(address->sin6_port));
 
-  auto res =
+  for(;;) {
+    ssize_t res =
       ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
                (const struct sockaddr *)address, sizeof(struct sockaddr_in6));
 
-  if (res < 0 || static_cast<uint32_t>(res) != pb.size()) {
-    throw exception("Could not send all data. Sent {}. {}", res,
-                    strerror(errno));
+    if (static_cast<uint32_t>(res) == pb.size())
+      break;
+
+    char addr_buffer[INET6_ADDRSTRLEN] { 0 };
+    inet_ntop(AF_INET6, address, addr_buffer, sizeof(struct sockaddr_in6));
+
+    if (res == -1) {
+      if (errno == EINTR) {
+        DEBUG("Retry sendto because of EINTR");
+        continue;
+      }
+
+      throw exception("Could not send all data to {}: {}", addr_buffer,
+		      strerror(errno));
+    }
+
+    DEBUG("Could not send whole message to {}: only {} of {}", addr_buffer,
+		    res, pb.size());
+    break;
   }
 }
 
