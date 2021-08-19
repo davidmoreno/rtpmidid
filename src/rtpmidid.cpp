@@ -338,7 +338,7 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
 
   case rtppeer::disconnect_reason_e::CONNECT_TIMEOUT:
   case rtppeer::disconnect_reason_e::CK_TIMEOUT:
-    WARNING("Timeout. Not trying again.");
+    WARNING("Timeout (during {}). Not trying again.", reason == rtppeer::disconnect_reason_e::CK_TIMEOUT ? "handshake" : "setup");
     remove_client(peer_info->aseq_port);
     return;
     break;
