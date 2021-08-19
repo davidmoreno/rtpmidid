@@ -269,11 +269,17 @@ void rtpserver::sendto(const io_bytes_reader &pb, rtppeer::port_e port,
   // address->sin6_family, inet_ntoa(address->sin6_addr),
   // htons(address->sin6_port));
 
-  auto res =
+  for(;;) {
+    ssize_t res =
       ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
                (const struct sockaddr *)address, sizeof(struct sockaddr_in6));
 
-  if (res < 0 || static_cast<uint32_t>(res) != pb.size()) {
+    if (static_cast<uint32_t>(res) == pb.size())
+      break;
+
+    if (res == -1 && errno == EINTR)
+      continue;
+
     throw exception("Could not send all data. Sent {}. {}", res,
                     strerror(errno));
   }

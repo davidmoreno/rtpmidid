@@ -242,10 +242,17 @@ void rtpclient::sendto(const io_bytes &pb, rtppeer::port_e port) {
 
   auto socket = rtppeer::MIDI_PORT == port ? midi_socket : control_socket;
 
-  auto res = ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
-                      (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
+  for(;;) {
+    ssize_t res =
+      ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
+               (const struct sockaddr *)address, sizeof(struct sockaddr_in6));
 
-  if (res < 0 || static_cast<uint32_t>(res) != pb.size()) {
+    if (static_cast<uint32_t>(res) == pb.size())
+      break;
+
+    if (res == -1 && errno == EINTR)
+      continue;
+
     throw exception("Could not send all data to {}:{}. Sent {}. {}",
                     peer.remote_name, remote_base_port, res, strerror(errno));
   }
