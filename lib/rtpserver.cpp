@@ -246,8 +246,13 @@ void rtpserver::data_ready(rtppeer::port_e port) {
         buffer.start[3] == 'N') {
       create_peer_from(std::move(buffer), &cliaddr, port);
     } else {
-      DEBUG("Unknown peer, and not connect on control. Ignoring. {} port.",
-            port == rtppeer::MIDI_PORT ? "MIDI" : "Control");
+      char host[NI_MAXHOST], service[NI_MAXSERV];
+      getnameinfo((const struct sockaddr *)&cliaddr, len, host, NI_MAXHOST,
+		      service, NI_MAXSERV, NI_NUMERICSERV);
+
+      DEBUG("Unknown peer ({}/{}), and not connect on control. Ignoring {} port.",
+            host, service, port == rtppeer::MIDI_PORT ? "MIDI" : "Control");
+
       buffer.print_hex(true);
     }
   }
