@@ -117,6 +117,12 @@ void poller_t::add_fd_out(int fd, std::function<void(int)> f) {
 
 poller_t::timer_t poller_t::add_timer_event(std::chrono::milliseconds ms,
                                             std::function<void(void)> f) {
+  if (ms.count() <= 0) {
+    DEBUG("Not added to timer list, but to call later list. {}ms", ms.count());
+    call_later(f);
+    return poller_t::timer_t(0);
+  }
+
   auto pd = static_cast<poller_private_data_t *>(private_data);
 
   auto timer_id = pd->max_timer_id++;
