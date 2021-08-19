@@ -250,11 +250,18 @@ void rtpclient::sendto(const io_bytes &pb, rtppeer::port_e port) {
     if (static_cast<uint32_t>(res) == pb.size())
       break;
 
-    if (res == -1 && errno == EINTR)
-      continue;
+    if (res == -1) {
+      if (errno == EINTR) {
+        DEBUG("Retry sendto because of EINTR");
+        continue;
+      }
 
-    throw exception("Could not send all data to {}:{}. Sent {}. {}",
+      throw exception("Could not send all data to {}:{}. Sent {}. {}",
                     peer.remote_name, remote_base_port, res, strerror(errno));
+    }
+
+    DEBUG("Could not send whole message: only {} of {}", res, pb.size());
+    break;
   }
 }
 
