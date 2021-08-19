@@ -221,12 +221,14 @@ void poller_t::wait() {
     // }
   }
 
-  while (!pd->later_events.empty()) {
-    std::vector<std::function<void(void)>> call_now;
-    // Clean the later, get the now.
-    std::swap(call_now, pd->later_events);
-    for (auto &f : call_now) {
-      f();
+  if (nfds != -1) {
+    while (!pd->later_events.empty()) {
+      std::vector<std::function<void(void)>> call_now;
+      // Clean the later, get the now.
+      std::swap(call_now, pd->later_events);
+      for (auto &f : call_now) {
+        f();
+      }
     }
   }
 }
