@@ -280,8 +280,13 @@ void rtpclient::data_ready(rtppeer::port_e port) {
                     (struct sockaddr *)&cliaddr, &len);
   // DEBUG("Got some data from control: {}", n);
   if (n < 0) {
-    throw exception("Error reading from rtppeer {}:{}", peer.remote_name,
-                    remote_base_port);
+    if (errno == EBADF)
+      throw invalid_fd("Filedescriptor {} for {}/{}-port is invalid",
+		      socket, peer.remote_name,
+		      port == rtppeer::CONTROL_PORT ? "control" : "MIDI");
+    else
+      throw exception("Error reading from rtppeer {}:{}",
+		      peer.remote_name, remote_base_port);
   }
 
   auto buffer = io_bytes_reader(raw, n);

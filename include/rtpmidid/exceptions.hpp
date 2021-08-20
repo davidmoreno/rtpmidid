@@ -24,6 +24,7 @@
 
 namespace rtpmidid {
 class exception : public std::exception {
+protected:
   std::string msg;
 
 public:
@@ -35,6 +36,12 @@ public:
 
 class not_implemented : public std::exception {
 public:
-  const char *what() const noexcept { return "Not Implemented"; }
+  const char *what() const noexcept { return "Not implemented"; }
+};
+
+class invalid_fd : public exception {
+public:
+  template <typename... Args> invalid_fd(Args... args) : exception(args...) {
+  }
 };
 } // namespace rtpmidid

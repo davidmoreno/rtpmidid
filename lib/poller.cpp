@@ -200,9 +200,11 @@ void poller_t::wait() {
     auto fd = events[n].data.fd;
     try {
       pd->fd_events[fd](fd);
-    } catch (const std::exception &e) {
+    } catch (const invalid_fd &e) {
       ERROR("Caught exception at poller: {}, forgetting fd {}.", e.what(), fd);
       remove_fd(fd);
+    } catch (const std::exception &e) {
+      ERROR("Caught exception at poller: {}.", e.what());
     }
   }
 
