@@ -49,7 +49,7 @@ public:
     CONTROL_PORT,
   };
   enum disconnect_reason_e {
-    CANT_CONNECT,
+    CANT_CONNECT = 0,
     PEER_DISCONNECTED,
     CONNECTION_REJECTED,
     DISCONNECT,
