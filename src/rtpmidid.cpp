@@ -307,9 +307,9 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
 }
 
 void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
-  constexpr char *failure_reasons[] = { "can't connect",
+  constexpr const char *failure_reasons[] = { "can't connect",
 	  "peer disconnected", "connection refused", "disconnect",
-	  "connection timeout", "CK timeout };
+	  "connection timeout", "CK timeout" };
   auto peer_info = &known_clients[aseq_port];
   auto reason = static_cast<rtppeer::disconnect_reason_e>(reasoni);
 
