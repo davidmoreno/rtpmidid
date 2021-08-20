@@ -48,11 +48,14 @@ std::string color(const std::string_view &str, Color color, Color bgcolor,
   return fmt::format("\033[{};{};{}m{}\033[0m", hl, color, bgcolor, str);
 }
 
-logger::logger() {}
+logger::logger() {
+	is_a_terminal = isatty(fileno(stdout));
+}
+
 logger::~logger() {}
 void logger::log(const char *filename, int lineno, LogLevel loglevel,
                  const std::string &msg) {
-  if (isatty(fileno(stdout))) {
+  if (is_a_terminal) {
     time_t now = time(nullptr);
     char timestamp[sizeof "2011-10-08T07:07:09Z"];
     strftime(timestamp, sizeof timestamp, "%FT%TZ", gmtime(&now));
