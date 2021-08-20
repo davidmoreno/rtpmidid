@@ -61,6 +61,7 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
     socklen_t peer_addr_len = NI_MAXHOST;
     auto listenaddr = sockaddress_list;
     for (; listenaddr != nullptr; listenaddr = listenaddr->ai_next) {
+      host[0] = service[0] = 0x00;
       getnameinfo(listenaddr->ai_addr, peer_addr_len, host, NI_MAXHOST, service,
                   NI_MAXSERV, NI_NUMERICSERV);
       DEBUG("Try listen at {}:{}", host, service);
@@ -245,7 +246,7 @@ void rtpserver::data_ready(rtppeer::port_e port) {
         buffer.start[3] == 'N') {
       create_peer_from(std::move(buffer), &cliaddr, port);
     } else {
-      char host[NI_MAXHOST], service[NI_MAXSERV];
+      char host[NI_MAXHOST] { 0 }, service[NI_MAXSERV] { 0 };
       getnameinfo((const struct sockaddr *)&cliaddr, len, host, NI_MAXHOST,
 		      service, NI_MAXSERV, NI_NUMERICSERV);
 

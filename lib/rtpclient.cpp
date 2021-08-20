@@ -97,8 +97,9 @@ void rtpclient::connect_to(const std::string &address,
     // we asusme that if the ocntrol success to be created the midi will too.
     auto serveraddr = sockaddress_list;
     for (; serveraddr != nullptr; serveraddr = serveraddr->ai_next) {
+      host[0] = service[0] = 0x00;
       getnameinfo(serveraddr->ai_addr, peer_addr_len, host, NI_MAXHOST, service,
-                  NI_MAXSERV, NI_NUMERICSERV);
+		      NI_MAXSERV, NI_NUMERICSERV);
       DEBUG("Try connect to resolved name: {}:{}", host, service);
       // remote_base_port = service;
 
