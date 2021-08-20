@@ -10,6 +10,7 @@
 
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "rtpmidid/poller.hpp"
+#include "rtpmidid/rtpclient.hpp"
 #include "test_case.hpp"
 
 using namespace std::chrono_literals;
@@ -89,14 +90,149 @@ std::pair<uint8_t, uint8_t> alsa_find_port(rtpmidid::aseq &aseq,
 
 class metronome_t {
 public:
-  rtpmidid::aseq seq;
+  rtpmidid::aseq aseq;
   rtpmidid::poller_t::timer_t timer;
-  metronome_t(uint8_t gadget, uint8_t port) : seq("metronome") { tick(); }
+  uint8_t port;
+  metronome_t(uint8_t gadget, uint8_t gport) : aseq("metronome") {
+    port = aseq.create_port("metro");
+    auto &seq = aseq.seq;
+
+    snd_seq_addr_t sender, dest;
+    snd_seq_port_subscribe_t *subs;
+    // int queue = 0, convert_time = 0, convert_real = 0, exclusive = 0;
+
+    snd_seq_client_info_t *info;
+    snd_seq_client_info_alloca(&info);
+    snd_seq_get_client_info(aseq.seq, info);
+
+    sender.client = snd_seq_client_info_get_client(info);
+    sender.port = port;
+
+    dest.client = gadget;
+    dest.port = gport;
+
+    DEBUG("Connect {}:{} to {}:{}", sender.client, sender.port, dest.client,
+          dest.port);
+
+    snd_seq_port_subscribe_alloca(&subs);
+    snd_seq_port_subscribe_set_sender(subs, &sender);
+    snd_seq_port_subscribe_set_dest(subs, &dest);
+    // snd_seq_port_subscribe_set_queue(subs, queue);
+    // snd_seq_port_subscribe_set_exclusive(subs, exclusive);
+    // snd_seq_port_subscribe_set_time_update(subs, convert_time);
+    // snd_seq_port_subscribe_set_time_real(subs, convert_real);
+
+    if (snd_seq_subscribe_port(seq, subs) < 0) {
+      ERROR("Connection failed ({})", snd_strerror(errno));
+      FAIL("Connection failed");
+      return;
+    }
+
+    tick();
+  }
   void tick() {
     DEBUG("TICK");
     timer = rtpmidid::poller.add_timer_event(100ms, [this]() { this->tick(); });
+
+    snd_seq_event_t ev;
+    snd_seq_ev_clear(&ev);
+    snd_seq_ev_set_noteon(&ev, 0x90 & 0x0F, 0x90, 0x90);
+
+    snd_seq_ev_set_source(&ev, port);
+    snd_seq_ev_set_subs(&ev);
+    snd_seq_ev_set_direct(&ev);
+    snd_seq_event_output_direct(aseq.seq, &ev);
   }
 };
+
+/**
+ * Just logs the events received into a list.
+ */
+class seq_logger {
+public:
+  rtpmidid::aseq aseq;
+  rtpmidid::poller_t::timer_t timer;
+  std::vector<uint8_t> events; // just the type
+  uint8_t port;
+
+  seq_logger(const std::string &gadget, const std::string &gport)
+      : aseq("logger") {
+    port = aseq.create_port("logger");
+    auto &seq = aseq.seq;
+
+    snd_seq_addr_t sender, dest;
+    snd_seq_port_subscribe_t *subs;
+    // int queue = 0, convert_time = 0, convert_real = 0, exclusive = 0;
+
+    snd_seq_client_info_t *info;
+    snd_seq_client_info_alloca(&info);
+    snd_seq_get_client_info(aseq.seq, info);
+
+    // We have to wait for avahi messages to get here
+    auto gadgetport = alsa_find_port(aseq, gadget, gport);
+    for (int i = 0; i < 1000; i++) {
+      if (gadgetport.first != 0)
+        break;
+      rtpmidid::poller.wait();
+      gadgetport = alsa_find_port(aseq, gadget, gport);
+    }
+    ASSERT_NOT_EQUAL(gadgetport.first, 0);
+
+    sender.client = gadgetport.first;
+    sender.port = gadgetport.second;
+
+    dest.client = snd_seq_client_info_get_client(info);
+    dest.port = port;
+
+    DEBUG("Connect {}:{} to {}:{}", sender.client, sender.port, dest.client,
+          dest.port);
+
+    snd_seq_port_subscribe_alloca(&subs);
+    snd_seq_port_subscribe_set_sender(subs, &sender);
+    snd_seq_port_subscribe_set_dest(subs, &dest);
+    // snd_seq_port_subscribe_set_queue(subs, queue);
+    // snd_seq_port_subscribe_set_exclusive(subs, exclusive);
+    // snd_seq_port_subscribe_set_time_update(subs, convert_time);
+    // snd_seq_port_subscribe_set_time_real(subs, convert_real);
+
+    if (snd_seq_subscribe_port(seq, subs) < 0) {
+      ERROR("Connection failed ({})", snd_strerror(errno));
+      FAIL("Connection failed");
+      return;
+    }
+  }
+
+  void poll() {
+    snd_seq_event_t *ev;
+    int pending;
+    while ((pending = snd_seq_event_input(aseq.seq, &ev)) > 0) {
+      DEBUG("EVENT!!");
+      events.push_back(ev->type);
+    }
+  }
+};
+
+// Waits a little to check we get evetns, and if not, fail.
+void ensure_get_ticks(const std::string &name, const std::string &port) {
+  seq_logger logger(name, port);
+
+  INFO("START WAITING");
+
+  static bool donewaiting = false;
+  auto timer = rtpmidid::poller.add_timer_event(400ms, []() {
+    donewaiting = true;
+    DEBUG("STOP WAIT");
+  });
+
+  while (!donewaiting) {
+    DEBUG("W");
+    rtpmidid::poller.wait();
+    logger.poll();
+  }
+
+  ASSERT_NOT_EQUAL(logger.events.size(), 0);
+  DEBUG("Got {} events", logger.events.size());
+}
 
 /**
  * Creates real servers and uses control socket to conenct between them
@@ -136,13 +272,17 @@ void test_connect_disconnect() {
   auto alsaport_A_at_B =
       alsa_find_port(aseq, "rtpmidi TEST-SERVER-B", "TEST-SERVER-A");
   DEBUG("PORTS AT {}:{}", alsaport_A_at_B.first, alsaport_A_at_B.second);
+  rtpmidid::poller.wait();
 
   // Create new metronome, uses the poller to just send beats
   metronome_t metronome(alsaport_A_at_B.first, alsaport_A_at_B.second);
+  ensure_get_ticks("rtpmidi TEST-SERVER-A", "TEST-SERVER-B/metronome-metro");
+  INFO("GOT TICKS");
+  rtpmidid::poller.wait();
 
-  for (auto i = 0; i < 30; i++) {
-    rtpmidid::poller.wait();
-  }
+  // Disconencts, and connect again
+  ensure_get_ticks("rtpmidi TEST-SERVER-A", "TEST-SERVER-B/metronome-metro");
+  INFO("GOT TICKS");
 }
 
 int main(int argc, char **argv) {
