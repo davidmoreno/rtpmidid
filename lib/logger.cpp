@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <string>
 #include <string_view>
+#include <unistd.h>
 
 namespace logger {
 logger __logger;
@@ -47,38 +48,45 @@ std::string color(const std::string_view &str, Color color, Color bgcolor,
   return fmt::format("\033[{};{};{}m{}\033[0m", hl, color, bgcolor, str);
 }
 
-logger::logger() {}
+logger::logger() {
+	is_a_terminal = isatty(fileno(stdout));
+}
+
 logger::~logger() {}
 void logger::log(const char *filename, int lineno, LogLevel loglevel,
                  const std::string &msg) {
-  time_t now;
-  time(&now);
-  char timestamp[sizeof "2011-10-08T07:07:09Z"];
-  strftime(timestamp, sizeof timestamp, "%FT%TZ", gmtime(&now));
+  if (is_a_terminal) {
+    time_t now = time(nullptr);
+    char timestamp[sizeof "2011-10-08T07:07:09Z"];
+    strftime(timestamp, sizeof timestamp, "%FT%TZ", gmtime(&now));
 
-  auto my_color = WHITE;
-  switch (loglevel) {
-  case DEBUG:
-    my_color = BLUE;
-    break;
-  case WARNING:
-    my_color = YELLOW;
-    break;
-  case ERROR:
-    my_color = RED;
-    break;
-  case INFO:
-    my_color = WHITE;
-    break;
-  case SUCCESS:
-    my_color = GREEN;
-    break;
+    auto my_color = WHITE;
+    switch (loglevel) {
+    case DEBUG:
+      my_color = BLUE;
+      break;
+    case WARNING:
+      my_color = YELLOW;
+      break;
+    case ERROR:
+      my_color = RED;
+      break;
+    case INFO:
+      my_color = WHITE;
+      break;
+    case SUCCESS:
+      my_color = GREEN;
+      break;
+    }
+
+    fmt::print(
+        "{} {}\n",
+        color(fmt::format("[{}] [{}:{}]", timestamp, filename, lineno), my_color),
+        msg); // color("msg"), RED);
   }
-
-  fmt::print(
-      "{} {}\n",
-      color(fmt::format("[{}] [{}:{}]", timestamp, filename, lineno), my_color),
-      msg); // color("msg"), RED);
+  else {
+    fmt::print("[{}:{}] {}\n", filename, lineno, msg);
+  }
 }
 void logger::flush() { ::fflush(::stderr); }
 } // namespace logger

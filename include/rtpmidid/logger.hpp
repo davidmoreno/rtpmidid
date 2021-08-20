@@ -50,6 +50,9 @@ enum LogLevel {
 };
 
 class logger {
+private:
+  bool is_a_terminal;
+
 public:
   logger();
   ~logger();
