@@ -272,9 +272,10 @@ void test_connect_disconnect() {
   auto alsaport_A_at_B =
       alsa_find_port(aseq, "rtpmidi TEST-SERVER-B", "TEST-SERVER-A");
   DEBUG("PORTS AT {}:{}", alsaport_A_at_B.first, alsaport_A_at_B.second);
-  rtpmidid::poller.wait();
+  rtpmidid::poller.wait(1ms);
 
   // Create new metronome, uses the poller to just send beats
+  DEBUG("Create metronome");
   metronome_t metronome(alsaport_A_at_B.first, alsaport_A_at_B.second);
   ensure_get_ticks("rtpmidi TEST-SERVER-A", "TEST-SERVER-B/metronome-metro");
   INFO("GOT TICKS");

@@ -178,13 +178,14 @@ void poller_t::remove_timer(timer_t &tid) {
   tid.id = 0;
 }
 
-void poller_t::wait() {
+void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
   auto pd = static_cast<poller_private_data_t *>(private_data);
 
   const auto MAX_EVENTS = 10;
   struct epoll_event events[MAX_EVENTS];
   auto wait_ms = -1;
 
+  // How long should I wait at max
   if (!pd->timer_events.empty()) {
     auto now = std::chrono::steady_clock::now();
     wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -192,16 +193,28 @@ void poller_t::wait() {
                   .count();
     // DEBUG("Timer event in {}ms", wait_ms);
     wait_ms = std::max(wait_ms, 0); // min wait 0ms.
+
+    // But maybe capped by the max_wait
+  }
+  if (max_wait_ms.has_value()) {
+    auto max_wait_in_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              max_wait_ms.value())
+                              .count();
+    if (wait_ms == -1 || wait_ms > max_wait_in_ms) {
+      wait_ms = max_wait_in_ms;
+    }
   }
 
+  // wait, get events or timeouts
   auto nfds = 0;
-  if (wait_ms != 0) {  // Maybe no wait. Some timer event pending.
+  if (wait_ms != 0) { // Maybe no wait. Some timer event pending.
     nfds = epoll_wait(pd->epollfd, events, MAX_EVENTS, wait_ms);
 
     if (nfds == -1)
       ERROR("epoll_wait failed: {}", strerror(errno));
   }
 
+  // Run events
   for (auto n = 0; n < nfds; n++) {
     auto fd = events[n].data.fd;
     try {
@@ -211,26 +224,26 @@ void poller_t::wait() {
     }
   }
 
-  if (nfds == 0 && !pd->timer_events.empty()) { // This was a timeout
+  // Run all expired events
+  while (pd->timer_events.size() > 0 &&
+         std::get<0>(pd->timer_events[0]) < std::chrono::steady_clock::now()) {
     // Will ensure remove via RTTI
-    {
-      auto firstI = pd->timer_events.begin();
-      timer_t id = std::get<1>(*firstI);
-      std::get<2> (*firstI)();
+    auto firstI = pd->timer_events.begin();
+    timer_t id = std::get<1>(*firstI);
+    std::get<2> (*firstI)();
 
-      // There is no need for this erase, as the operator= for the timer_t
-      // ensures removal. This is this way to allow use of RTTI on more
-      // complex items.
-      // pd->timer_events.erase(firstI);
-    }
-    // if (!pd->timer_events.empty()) {
-    //   DEBUG("Next timer event {}. {} left.",
-    //   std::get<1>(pd->timer_events[0]),
-    //         pd->timer_events.size());
-    // } else {
-    //   DEBUG("No more timer events.");
-    // }
+    // There is no need for this erase, as the operator= for the timer_t
+    // ensures removal. This is this way to allow use of RTTI on more
+    // complex items.
+    // pd->timer_events.erase(firstI);
   }
+  // if (!pd->timer_events.empty()) {
+  //   DEBUG("Next timer event {}. {} left.",
+  //   std::get<1>(pd->timer_events[0]),
+  //         pd->timer_events.size());
+  // } else {
+  //   DEBUG("No more timer events.");
+  // }
 
   while (!pd->later_events.empty()) {
     std::vector<std::function<void(void)>> call_now;

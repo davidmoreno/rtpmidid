@@ -53,7 +53,7 @@ public:
   void add_fd_inout(int fd, std::function<void(int)> event_f);
   void remove_fd(int fd);
 
-  void wait();
+  void wait(std::optional<std::chrono::milliseconds> wait_ms = {});
 
   void close();
   bool is_open();
