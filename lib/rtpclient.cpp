@@ -97,8 +97,9 @@ void rtpclient::connect_to(const std::string &address,
     // we asusme that if the ocntrol success to be created the midi will too.
     auto serveraddr = sockaddress_list;
     for (; serveraddr != nullptr; serveraddr = serveraddr->ai_next) {
+      host[0] = service[0] = 0x00;
       getnameinfo(serveraddr->ai_addr, peer_addr_len, host, NI_MAXHOST, service,
-                  NI_MAXSERV, NI_NUMERICSERV);
+		      NI_MAXSERV, NI_NUMERICSERV);
       DEBUG("Try connect to resolved name: {}:{}", host, service);
       // remote_base_port = service;
 
@@ -242,12 +243,26 @@ void rtpclient::sendto(const io_bytes &pb, rtppeer::port_e port) {
 
   auto socket = rtppeer::MIDI_PORT == port ? midi_socket : control_socket;
 
-  auto res = ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
-                      (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
+  for(;;) {
+    ssize_t res =
+      ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
+               (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
 
-  if (res < 0 || static_cast<uint32_t>(res) != pb.size()) {
-    throw exception("Could not send all data to {}:{}. Sent {}. {}",
+    if (static_cast<uint32_t>(res) == pb.size())
+      break;
+
+    if (res == -1) {
+      if (errno == EINTR) {
+        DEBUG("Retry sendto because of EINTR");
+        continue;
+      }
+
+      throw exception("Could not send all data to {}:{}. Sent {}. {}",
                     peer.remote_name, remote_base_port, res, strerror(errno));
+    }
+
+    DEBUG("Could not send whole message: only {} of {}", res, pb.size());
+    break;
   }
 }
 
