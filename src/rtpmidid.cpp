@@ -338,10 +338,14 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
 
   case rtppeer::disconnect_reason_e::CONNECT_TIMEOUT:
   case rtppeer::disconnect_reason_e::CK_TIMEOUT:
-    WARNING("Timeout (during {}). Not trying again.", reason == rtppeer::disconnect_reason_e::CK_TIMEOUT ? "handshake" : "setup");
-    remove_client(peer_info->aseq_port);
+    WARNING("Timeout (during {}).", reason == rtppeer::disconnect_reason_e::CK_TIMEOUT ? "handshake" : "setup");
+    if (peer_info->connect_attempts >= (3 * peer_info->addresses.size())) {
+      ERROR("Too many attempts to connect. Not trying again. Attempted "
+            "{} times.",
+            peer_info->connect_attempts);
+      remove_client(peer_info->aseq_port);
+    }
     return;
-    break;
 
   case rtppeer::disconnect_reason_e::PEER_DISCONNECTED:
     WARNING("Peer disconnected. Aseq disconnect.");
