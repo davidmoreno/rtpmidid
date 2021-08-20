@@ -201,7 +201,8 @@ void poller_t::wait() {
     try {
       pd->fd_events[fd](fd);
     } catch (const std::exception &e) {
-      ERROR("Caught exception at poller: {}", e.what());
+      ERROR("Caught exception at poller: {}, forgetting fd {}.", e.what(), fd);
+      pd->fd_events.erase(fd);
     }
   }
 
