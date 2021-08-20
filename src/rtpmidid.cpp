@@ -321,6 +321,7 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
   case rtppeer::disconnect_reason_e::CANT_CONNECT:
   case rtppeer::disconnect_reason_e::CONNECTION_REJECTED:
   case rtppeer::disconnect_reason_e::CONNECT_TIMEOUT:
+  case rtppeer::disconnect_reason_e::CK_TIMEOUT:
     if (peer_info->connect_attempts >= (3 * peer_info->addresses.size())) {
       ERROR("Too many attempts to connect. Not trying again. Attempted "
             "{} times.",
@@ -358,11 +359,6 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
     // peer_info->use_count = 0;
     // remove_client(peer_info->aseq_port);
     break;
-
-  case rtppeer::disconnect_reason_e::CK_TIMEOUT:
-    WARNING("Timeout (during setup ('CK')). Not trying again.");
-    remove_client(peer_info->aseq_port);
-    return;
 
   case rtppeer::disconnect_reason_e::DISCONNECT:
     // Do nothing, another client may connect
