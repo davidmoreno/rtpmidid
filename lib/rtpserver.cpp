@@ -17,6 +17,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -60,6 +61,7 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
     socklen_t peer_addr_len = NI_MAXHOST;
     auto listenaddr = sockaddress_list;
     for (; listenaddr != nullptr; listenaddr = listenaddr->ai_next) {
+      host[0] = service[0] = 0x00;
       getnameinfo(listenaddr->ai_addr, peer_addr_len, host, NI_MAXHOST, service,
                   NI_MAXSERV, NI_NUMERICSERV);
       DEBUG("Try listen at {}:{}", host, service);
@@ -244,7 +246,7 @@ void rtpserver::data_ready(rtppeer::port_e port) {
         buffer.start[3] == 'N') {
       create_peer_from(std::move(buffer), &cliaddr, port);
     } else {
-      char host[NI_MAXHOST], service[NI_MAXSERV];
+      char host[NI_MAXHOST] { 0 }, service[NI_MAXSERV] { 0 };
       getnameinfo((const struct sockaddr *)&cliaddr, len, host, NI_MAXHOST,
 		      service, NI_MAXSERV, NI_NUMERICSERV);
 
@@ -269,13 +271,30 @@ void rtpserver::sendto(const io_bytes_reader &pb, rtppeer::port_e port,
   // address->sin6_family, inet_ntoa(address->sin6_addr),
   // htons(address->sin6_port));
 
-  auto res =
+  for(;;) {
+    ssize_t res =
       ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
                (const struct sockaddr *)address, sizeof(struct sockaddr_in6));
 
-  if (res < 0 || static_cast<uint32_t>(res) != pb.size()) {
-    throw exception("Could not send all data. Sent {}. {}", res,
-                    strerror(errno));
+    if (static_cast<uint32_t>(res) == pb.size())
+      break;
+
+    char addr_buffer[INET6_ADDRSTRLEN] { 0 };
+    inet_ntop(AF_INET6, address, addr_buffer, sizeof(struct sockaddr_in6));
+
+    if (res == -1) {
+      if (errno == EINTR) {
+        DEBUG("Retry sendto because of EINTR");
+        continue;
+      }
+
+      throw exception("Could not send all data to {}: {}", addr_buffer,
+		      strerror(errno));
+    }
+
+    DEBUG("Could not send whole message to {}: only {} of {}", addr_buffer,
+		    res, pb.size());
+    break;
   }
 }
 
