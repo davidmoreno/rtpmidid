@@ -93,6 +93,7 @@ public:
   rtpmidid::aseq aseq;
   rtpmidid::poller_t::timer_t timer;
   uint8_t port;
+  bool paused = false;
   metronome_t(uint8_t gadget, uint8_t gport) : aseq("metronome") {
     port = aseq.create_port("metro");
     auto &seq = aseq.seq;
@@ -133,6 +134,8 @@ public:
   void tick() {
     DEBUG("TICK");
     timer = rtpmidid::poller.add_timer_event(100ms, [this]() { this->tick(); });
+    if (paused)
+      return;
 
     snd_seq_event_t ev;
     snd_seq_ev_clear(&ev);
@@ -213,26 +216,35 @@ public:
 };
 
 // Waits a little to check we get evetns, and if not, fail.
-void ensure_get_ticks(const std::string &name, const std::string &port) {
-  seq_logger logger(name, port);
+class ensure_get_ticks {
+public:
+  bool donewaiting;
+  seq_logger logger;
 
-  INFO("START WAITING");
+  ensure_get_ticks(const std::string &name, const std::string &port)
+      : donewaiting(false), logger(name, port) {}
+  void wait() {
 
-  static bool donewaiting = false;
-  auto timer = rtpmidid::poller.add_timer_event(400ms, []() {
-    donewaiting = true;
-    DEBUG("STOP WAIT");
-  });
+    INFO("START WAITING");
 
-  while (!donewaiting) {
-    DEBUG("W");
-    rtpmidid::poller.wait();
+    donewaiting = false;
+    auto timer = rtpmidid::poller.add_timer_event(400ms, [this]() {
+      donewaiting = true;
+      DEBUG("STOP WAIT");
+    });
     logger.poll();
-  }
 
-  ASSERT_NOT_EQUAL(logger.events.size(), 0);
-  DEBUG("Got {} events", logger.events.size());
-}
+    auto pre = logger.events.size();
+    while (!donewaiting) {
+      rtpmidid::poller.wait();
+      logger.poll();
+    }
+    auto post = logger.events.size();
+
+    ASSERT_NOT_EQUAL(pre, post);
+    DEBUG("Got {} events", post - pre);
+  }
+};
 
 /**
  * Creates real servers and uses control socket to conenct between them
@@ -277,13 +289,37 @@ void test_connect_disconnect() {
   // Create new metronome, uses the poller to just send beats
   DEBUG("Create metronome");
   metronome_t metronome(alsaport_A_at_B.first, alsaport_A_at_B.second);
-  ensure_get_ticks("rtpmidi TEST-SERVER-A", "TEST-SERVER-B/metronome-metro");
+  ensure_get_ticks("rtpmidi TEST-SERVER-A", "TEST-SERVER-B/metronome-metro")
+      .wait();
   INFO("GOT TICKS");
-  rtpmidid::poller.wait();
+  rtpmidid::poller.wait(100ms);
 
   // Disconencts, and connect again
-  ensure_get_ticks("rtpmidi TEST-SERVER-A", "TEST-SERVER-B/metronome-metro");
+  ensure_get_ticks("rtpmidi TEST-SERVER-A", "TEST-SERVER-B/metronome-metro")
+      .wait();
   INFO("GOT TICKS");
+  rtpmidid::poller.wait(100ms);
+
+  /// Now we connect two at the same time, disconnect one, the other should keep
+  /// receiving events
+  {
+    auto loggera = ensure_get_ticks("rtpmidi TEST-SERVER-A",
+                                    "TEST-SERVER-B/metronome-metro");
+    {
+      auto loggerb = ensure_get_ticks("rtpmidi TEST-SERVER-A",
+                                      "TEST-SERVER-B/metronome-metro");
+      loggera.wait();
+      loggerb.wait();
+    }
+    loggera.wait();
+    loggera.wait();
+    {
+      auto loggerc = ensure_get_ticks("rtpmidi TEST-SERVER-A",
+                                      "TEST-SERVER-B/metronome-metro");
+      loggera.wait();
+      loggerc.wait();
+    }
+  }
 }
 
 int main(int argc, char **argv) {
