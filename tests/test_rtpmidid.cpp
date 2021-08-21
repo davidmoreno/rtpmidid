@@ -27,8 +27,12 @@ void wait_for_avahi_announcement(const std::string &name) {
   while (std::find(std::begin(avahi_known_names), std::end(avahi_known_names),
                    name) == std::end(avahi_known_names)) {
     rtpmidid::poller.wait(1s);
-    if (pre + 10s > std::chrono::steady_clock::now()) {
-      FAIL("Waiting too long for avahi");
+
+    const auto wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - pre)
+                             .count();
+    if (wait_ms > 10'000) {
+      FAIL(fmt::format("Waiting too long for avahi: {}ms", wait_ms));
     }
   }
 }
@@ -268,12 +272,16 @@ struct ServerAB {
     avahi_known_names.clear();
 
     // Keep list of known items by server A
-    A.mdns_rtpmidi.discover_event.connect(
-        [](const std::string &name, const std::string &address,
-           const std::string &port) { avahi_known_names.push_back(name); });
+    A.mdns_rtpmidi.discover_event.connect([](const std::string &name,
+                                             const std::string &address,
+                                             const std::string &port) {
+      avahi_known_names.push_back(name);
+      DEBUG("Discover {}", name);
+    });
     A.mdns_rtpmidi.remove_event.connect([](const std::string &name) {
       avahi_known_names.erase(std::find(std::begin(avahi_known_names),
                                         std::end(avahi_known_names), name));
+      DEBUG("Undiscover {}", name);
     });
 
     auto control_A = rtpmidid::control_socket_t(A, "/tmp/rtpmidid.testA.sock");
