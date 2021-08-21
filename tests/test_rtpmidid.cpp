@@ -268,13 +268,13 @@ struct ServerAB {
     avahi_known_names.clear();
 
     // Keep list of known items by server A
-    // A.mdns_rtpmidi.discover_event.connect(
-    //     [](const std::string &name, const std::string &address,
-    //        const std::string &port) { avahi_known_names.push_back(name); });
-    // A.mdns_rtpmidi.remove_event.connect([](const std::string &name) {
-    //   avahi_known_names.erase(std::find(std::begin(avahi_known_names),
-    //                                     std::end(avahi_known_names), name));
-    // });
+    A.mdns_rtpmidi.discover_event.connect(
+        [](const std::string &name, const std::string &address,
+           const std::string &port) { avahi_known_names.push_back(name); });
+    A.mdns_rtpmidi.remove_event.connect([](const std::string &name) {
+      avahi_known_names.erase(std::find(std::begin(avahi_known_names),
+                                        std::end(avahi_known_names), name));
+    });
 
     auto control_A = rtpmidid::control_socket_t(A, "/tmp/rtpmidid.testA.sock");
     auto control_B = rtpmidid::control_socket_t(B, "/tmp/rtpmidid.testB.sock");
