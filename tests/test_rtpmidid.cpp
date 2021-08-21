@@ -1,4 +1,5 @@
 #include <bits/stdint-uintn.h>
+#include <chrono>
 #include <utility>
 #include <vector>
 
@@ -22,9 +23,13 @@ rtpmidid::config_t parse_cmd_args(std::vector<const char *> &&list) {
 }
 
 void wait_for_avahi_announcement(const std::string &name) {
+  const auto pre = std::chrono::steady_clock::now();
   while (std::find(std::begin(avahi_known_names), std::end(avahi_known_names),
                    name) == std::end(avahi_known_names)) {
-    rtpmidid::poller.wait();
+    rtpmidid::poller.wait(1s);
+    if (pre + 10s > std::chrono::steady_clock::now()) {
+      FAIL("Waiting too long for avahi");
+    }
   }
 }
 
@@ -94,7 +99,12 @@ public:
   rtpmidid::poller_t::timer_t timer;
   uint8_t port;
   bool paused = false;
-  metronome_t(uint8_t gadget, uint8_t gport) : aseq("metronome") {
+  metronome_t(const std::string &gadgetname, const std::string &portname)
+      : aseq("metronome") {
+    auto gadgetport = alsa_find_port(aseq, gadgetname, portname);
+    auto gadget = gadgetport.first;
+    auto gport = gadgetport.second;
+
     port = aseq.create_port("metro");
     auto &seq = aseq.seq;
 
@@ -246,6 +256,33 @@ public:
   }
 };
 
+struct ServerAB {
+  rtpmidid::rtpmidid_t A;
+  rtpmidid::rtpmidid_t B;
+
+  ServerAB()
+      : A(parse_cmd_args({"--port", "10000", "--name", "TEST-SERVER-A",
+                          "--control", "/tmp/rtpmidid.testA.sock"})),
+        B(parse_cmd_args({"--port", "10010", "--name", "TEST-SERVER-B",
+                          "--control", "/tmp/rtpmidid.testB.sock"})) {
+    avahi_known_names.clear();
+
+    // Keep list of known items by server A
+    // A.mdns_rtpmidi.discover_event.connect(
+    //     [](const std::string &name, const std::string &address,
+    //        const std::string &port) { avahi_known_names.push_back(name); });
+    // A.mdns_rtpmidi.remove_event.connect([](const std::string &name) {
+    //   avahi_known_names.erase(std::find(std::begin(avahi_known_names),
+    //                                     std::end(avahi_known_names), name));
+    // });
+
+    auto control_A = rtpmidid::control_socket_t(A, "/tmp/rtpmidid.testA.sock");
+    auto control_B = rtpmidid::control_socket_t(B, "/tmp/rtpmidid.testB.sock");
+
+    wait_for_avahi_announcement("TEST-SERVER-B");
+  }
+};
+
 /**
  * Creates real servers and uses control socket to conenct between them
  * sends events and checks they are received. Then connects another client
@@ -253,42 +290,11 @@ public:
  * still be flowing.
  */
 void test_connect_disconnect() {
-  auto options_A = parse_cmd_args({"--port", "10000", "--name", "TEST-SERVER-A",
-                                   "--control", "/tmp/rtpmidid.testA.sock"});
-
-  auto rtpmidid_A = rtpmidid::rtpmidid_t(&options_A);
-
-  // Keep list of known items by server A
-  rtpmidid_A.mdns_rtpmidi.discover_event.connect(
-      [](const std::string &name, const std::string &address,
-         const std::string &port) { avahi_known_names.push_back(name); });
-  rtpmidid_A.mdns_rtpmidi.remove_event.connect([](const std::string &name) {
-    avahi_known_names.erase(std::find(std::begin(avahi_known_names),
-                                      std::end(avahi_known_names), name));
-  });
-
-  auto control_A = rtpmidid::control_socket_t(rtpmidid_A, options_A.control);
-
-  auto options_B = parse_cmd_args({"--port", "10010", "--name", "TEST-SERVER-B",
-                                   "--control", "/tmp/rtpmidid.testB.sock"});
-
-  auto rtpmidid_B = rtpmidid::rtpmidid_t(&options_B);
-  auto control_B = rtpmidid::control_socket_t(rtpmidid_B, options_B.control);
-
-  wait_for_avahi_announcement("TEST-SERVER-B");
-
-  // Connect from SERVER-B to SERVER-A, using "raw" ALSA SEQ, but we use what
-  // we have too to avoid creation, descrution and so on
-  rtpmidid::aseq aseq("TEST");
-
-  auto alsaport_A_at_B =
-      alsa_find_port(aseq, "rtpmidi TEST-SERVER-B", "TEST-SERVER-A");
-  DEBUG("PORTS AT {}:{}", alsaport_A_at_B.first, alsaport_A_at_B.second);
-  rtpmidid::poller.wait(1ms);
+  auto servers = ServerAB();
 
   // Create new metronome, uses the poller to just send beats
   DEBUG("Create metronome");
-  metronome_t metronome(alsaport_A_at_B.first, alsaport_A_at_B.second);
+  metronome_t metronome("rtpmidi TEST-SERVER-B", "TEST-SERVER-A");
   ensure_get_ticks("rtpmidi TEST-SERVER-A", "TEST-SERVER-B/metronome-metro")
       .wait();
   INFO("GOT TICKS");
@@ -322,9 +328,17 @@ void test_connect_disconnect() {
   }
 }
 
+void test_evil_disconnect() {
+  auto servers = ServerAB();
+
+  metronome_t metronome("rtpmidi TEST-SERVER-B", "TEST-SERVER-A");
+  rtpmidid::poller.wait();
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_connect_disconnect),
+      TEST(test_evil_disconnect),
   };
 
   testcase.run(argc, argv);

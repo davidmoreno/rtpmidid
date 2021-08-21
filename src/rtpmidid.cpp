@@ -30,17 +30,17 @@
 using namespace rtpmidid;
 using namespace std::chrono_literals;
 
-rtpmidid_t::rtpmidid_t(config_t *config)
-    : name(config->name), seq(fmt::format("rtpmidi {}", name)) {
+rtpmidid_t::rtpmidid_t(const config_t &config)
+    : name(config.name), seq(fmt::format("rtpmidi {}", name)) {
   setup_mdns();
   setup_alsa_seq();
 
-  for (auto &port : config->ports) {
-    auto server = add_rtpmidid_import_server(config->name, port);
+  for (auto &port : config.ports) {
+    auto server = add_rtpmidid_import_server(config.name, port);
     servers.push_back(std::move(server));
   }
 
-  for (auto &connect_to : config->connect_to) {
+  for (auto &connect_to : config.connect_to) {
     auto res = add_rtpmidi_client(connect_to);
     if (res == std::nullopt) {
       throw rtpmidid::exception("Invalid address to connect to. Aborting.");

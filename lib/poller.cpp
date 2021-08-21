@@ -136,7 +136,8 @@ poller_t::timer_t poller_t::add_timer_event(std::chrono::milliseconds ms,
   // We can not call directly as it might need to be called out of this call
   // stack
   if (ms.count() <= 0) {
-    DEBUG("Not added to timer list, but to call later list. {}ms", ms.count());
+    // DEBUG("Not added to timer list, but to call later list. {}ms",
+    // ms.count());
     call_later(f);
     return poller_t::timer_t(0);
   }
@@ -182,8 +183,7 @@ void poller_t::remove_timer(timer_t &tid) {
     return;
   }
   auto pd = static_cast<poller_private_data_t *>(private_data);
-  //  DEBUG("Remove {}. {}? {}", tid.id,
-  //  b.id, b.id == tid.id);
+  //  DEBUG("Remove {}. {}? {}", tid.id, b.id, b.id == tid.id);
   pd->timer_events.erase(
       std::remove_if(pd->timer_events.begin(), pd->timer_events.end(),
                      [&tid](const auto &b) { return b.id == tid.id; }),
@@ -221,6 +221,17 @@ static void run_expired_timer_events(std::vector<timer_event_t> &events) {
   }
 }
 
+void run_call_later_events(poller_private_data_t *pd) {
+  while (!pd->later_events.empty()) {
+    std::vector<std::function<void(void)>> call_now;
+    // Clean the later, get the now.
+    std::swap(call_now, pd->later_events);
+    for (auto &f : call_now) {
+      f();
+    }
+  }
+}
+
 void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
   auto pd = static_cast<poller_private_data_t *>(private_data);
 
@@ -240,6 +251,7 @@ void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
     wait_ms = std::max(wait_ms, 0); // min wait 0ms.
   }
   // DEBUG("Wait {} ms", wait_ms);
+  run_call_later_events(pd);
 
   // wait, get events or timeouts
   auto nfds = 0;
@@ -261,16 +273,9 @@ void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
     }
   }
 
+  run_call_later_events(pd);
   run_expired_timer_events(pd->timer_events);
-
-  while (!pd->later_events.empty()) {
-    std::vector<std::function<void(void)>> call_now;
-    // Clean the later, get the now.
-    std::swap(call_now, pd->later_events);
-    for (auto &f : call_now) {
-      f();
-    }
-  }
+  run_call_later_events(pd);
 }
 
 poller_t::timer_t::timer_t() : id(0) {}

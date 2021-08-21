@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
   auto options = rtpmidid::parse_cmd_args(argc - 1, (const char **)argv + 1);
 
   try {
-    auto rtpmidid = rtpmidid::rtpmidid_t(&options);
+    auto rtpmidid = rtpmidid::rtpmidid_t(options);
     auto control = rtpmidid::control_socket_t(rtpmidid, options.control);
 
     while (rtpmidid::poller.is_open()) {
