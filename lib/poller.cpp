@@ -239,7 +239,7 @@ void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
     wait_ms = ms_to_now(pd->timer_events[0].when);
     wait_ms = std::max(wait_ms, 0); // min wait 0ms.
   }
-  DEBUG("Wait {} ms", wait_ms);
+  // DEBUG("Wait {} ms", wait_ms);
 
   // wait, get events or timeouts
   auto nfds = 0;
@@ -252,7 +252,7 @@ void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
 
   // Run events
   for (auto n = 0; n < nfds; n++) {
-    DEBUG("IO EVENT");
+    // DEBUG("IO EVENT");
     auto fd = events[n].data.fd;
     try {
       pd->fd_events[fd](fd);
