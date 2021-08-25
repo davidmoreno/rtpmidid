@@ -1,3 +1,4 @@
 -std=c++17
+-Isrc/
 -Iinclude/
 -Wall

@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2020 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -53,7 +53,6 @@ public:
   // Returns the peer for that packet, or nullptr
   std::shared_ptr<rtppeer> get_peer_by_packet(io_bytes_reader &b,
                                               rtppeer::port_e port);
-  std::shared_ptr<rtppeer> get_peer_by_ssrc(uint32_t ssrc);
   void create_peer_from(io_bytes_reader &&buffer, struct sockaddr_in6 *cliaddr,
                         rtppeer::port_e port);
 

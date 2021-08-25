@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -84,7 +84,12 @@ aseq::aseq(std::string _name) : name(std::move(_name)) {
 
 aseq::~aseq() {
   for (auto fd : fds) {
-    poller.remove_fd(fd);
+    try {
+       poller.remove_fd(fd);
+    }
+    catch(rtpmidid::exception & e) {
+      ERROR("Error removing aseq socket: {}", e.what());
+    }
   }
   snd_seq_close(seq);
   snd_config_update_free_global();
@@ -131,6 +136,10 @@ void aseq::read_ready() {
       DEBUG("Disconnected");
     } break;
     // case SND_SEQ_EVENT_NOTE:
+    case SND_SEQ_EVENT_CLOCK:
+    case SND_SEQ_EVENT_START:
+    case SND_SEQ_EVENT_CONTINUE:
+    case SND_SEQ_EVENT_STOP:
     case SND_SEQ_EVENT_NOTEOFF:
     case SND_SEQ_EVENT_NOTEON:
     case SND_SEQ_EVENT_KEYPRESS:

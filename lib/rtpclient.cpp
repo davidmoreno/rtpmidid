@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2020 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -33,6 +33,7 @@
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtpclient.hpp>
+#include <rtpmidid/utils.hpp>
 
 using namespace std::chrono_literals;
 using namespace rtpmidid;
@@ -41,8 +42,11 @@ rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
   local_base_port = 0;
   remote_base_port = -1; // Not defined
   control_socket = -1;
+  control_addr = {0};
+  midi_addr = {0};
+  timerstate = 0;
   midi_socket = -1;
-  peer.initiator_id = rand();
+  peer.initiator_id = ::rtpmidid::rand_u32();
   peer.send_event.connect([this](const io_bytes &data, rtppeer::port_e port) {
     this->sendto(data, port);
   });
@@ -71,8 +75,7 @@ void rtpclient::connect_to(const std::string &address,
   char host[NI_MAXHOST], service[NI_MAXSERV];
   socklen_t peer_addr_len = NI_MAXHOST;
 
-  control_socket = 0;
-  midi_socket = 0;
+  control_socket = midi_socket = -1;
 
   DEBUG("Try connect to service at {}:{}", address, port);
 
@@ -94,12 +97,14 @@ void rtpclient::connect_to(const std::string &address,
     // we asusme that if the ocntrol success to be created the midi will too.
     auto serveraddr = sockaddress_list;
     for (; serveraddr != nullptr; serveraddr = serveraddr->ai_next) {
+      host[0] = service[0] = 0x00;
       getnameinfo(serveraddr->ai_addr, peer_addr_len, host, NI_MAXHOST, service,
-                  NI_MAXSERV, NI_NUMERICSERV);
+		      NI_MAXSERV, NI_NUMERICSERV);
       DEBUG("Try connect to resolved name: {}:{}", host, service);
       // remote_base_port = service;
 
-      control_socket = socket(AF_INET, SOCK_DGRAM, 0);
+      control_socket = socket(serveraddr->ai_family, serveraddr->ai_socktype,
+                              serveraddr->ai_protocol);
       if (control_socket < 0) {
         continue;
       }
@@ -111,7 +116,7 @@ void rtpclient::connect_to(const std::string &address,
     }
     if (!serveraddr) {
       DEBUG("Error opening control socket, port {}", port);
-      control_socket = 0;
+      control_socket = -1;
       throw rtpmidid::exception(
           "Can not open remote rtpmidi control socket. {}", strerror(errno));
     }
@@ -129,9 +134,9 @@ void rtpclient::connect_to(const std::string &address,
     poller.add_fd_in(control_socket,
                      [this](int) { this->data_ready(rtppeer::CONTROL_PORT); });
 
-    midi_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    midi_socket = socket(serveraddr->ai_family, serveraddr->ai_socktype,
+                         serveraddr->ai_protocol);
     if (midi_socket < 0) {
-      midi_socket = 0;
       throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
     }
     // Reuse servaddr, just on next port
@@ -151,7 +156,7 @@ void rtpclient::connect_to(const std::string &address,
                                 strerror(errno));
     }
     memcpy(&midi_addr, serveraddr->ai_addr, sizeof(midi_addr));
-    ::getsockname(control_socket, (struct sockaddr *)&servaddr, &len);
+    ::getsockname(midi_socket, (struct sockaddr *)&servaddr, &len);
     auto midi_port = htons(servaddr.sin6_port);
     DEBUG("MIDI PORT at port {}", midi_port);
 
@@ -159,15 +164,15 @@ void rtpclient::connect_to(const std::string &address,
                      [this](int) { this->data_ready(rtppeer::MIDI_PORT); });
   } catch (const std::exception &excp) {
     ERROR("Error creating rtp client: {}", excp.what());
-    if (control_socket) {
+    if (control_socket >= 0) {
       poller.remove_fd(control_socket);
       ::close(control_socket);
-      control_socket = 0;
+      control_socket = -1;
     }
-    if (midi_socket) {
+    if (midi_socket >= 0) {
       poller.remove_fd(midi_socket);
       ::close(midi_socket);
-      midi_socket = 0;
+      midi_socket = -1;
     }
     if (sockaddress_list) {
       freeaddrinfo(sockaddress_list);
@@ -179,13 +184,13 @@ void rtpclient::connect_to(const std::string &address,
     freeaddrinfo(sockaddress_list);
   }
 
-  DEBUG("Connecting control port {} to {}:{}", local_base_port, host, service);
+  DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address, remote_base_port + 1);
 
   // If not connected, connect now the MIDI port
   auto conn_event = peer.connected_event.connect(
       [this, address, port](const std::string &name, rtppeer::status_e status) {
         if (status == rtppeer::CONTROL_CONNECTED) {
-          DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1,
+          DEBUG("Connected midi port {} to {}:{}", local_base_port + 1,
                 address, remote_base_port + 1);
           peer.connect_to(rtppeer::MIDI_PORT);
         } else if (status == rtppeer::CONNECTED) {
@@ -238,12 +243,26 @@ void rtpclient::sendto(const io_bytes &pb, rtppeer::port_e port) {
 
   auto socket = rtppeer::MIDI_PORT == port ? midi_socket : control_socket;
 
-  auto res = ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
-                      (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
+  for(;;) {
+    ssize_t res =
+      ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
+               (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
 
-  if (res < 0 || static_cast<uint32_t>(res) != pb.size()) {
-    throw exception("Could not send all data to {}:{}. Sent {}. {}",
+    if (static_cast<uint32_t>(res) == pb.size())
+      break;
+
+    if (res == -1) {
+      if (errno == EINTR) {
+        DEBUG("Retry sendto because of EINTR");
+        continue;
+      }
+
+      throw exception("Could not send all data to {}:{}. Sent {}. {}",
                     peer.remote_name, remote_base_port, res, strerror(errno));
+    }
+
+    DEBUG("Could not send whole message: only {} of {}", res, pb.size());
+    break;
   }
 }
 

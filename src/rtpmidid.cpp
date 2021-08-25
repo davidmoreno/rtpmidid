@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -128,7 +128,7 @@ rtpmidid_t::add_rtpmidid_import_server(const std::string &name,
               }
               auto conn = &peer_it->second;
 
-              io_bytes_writer_static<128> stream;
+              io_bytes_writer_static<4096> stream;
               alsamidi_to_midiprotocol(ev, stream);
               conn->peer->send_midi(stream);
             });
@@ -169,7 +169,7 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
   announce_rtpmidid_server(name, server->control_port);
 
   seq.midi_event[alsaport].connect([this, server](snd_seq_event_t *ev) {
-    io_bytes_writer_static<128> buffer;
+    io_bytes_writer_static<4096> buffer;
     alsamidi_to_midiprotocol(ev, buffer);
     server->send_midi_to_all_peers(buffer);
   });
@@ -192,7 +192,7 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
 }
 
 void rtpmidid_t::setup_alsa_seq() {
-  // Export only one, but all data that is conencted to it.
+  // Export only one, but all data that is connected to it.
   // add_export_port();
   auto alsaport = seq.create_port("Network");
   seq.subscribe_event[alsaport].connect(
@@ -338,7 +338,7 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
 
   case rtppeer::disconnect_reason_e::CONNECT_TIMEOUT:
   case rtppeer::disconnect_reason_e::CK_TIMEOUT:
-    WARNING("Timeout. Not trying again.");
+    WARNING("Timeout (during {}). Not trying again.", reason == rtppeer::disconnect_reason_e::CK_TIMEOUT ? "handshake" : "setup");
     remove_client(peer_info->aseq_port);
     return;
     break;
@@ -428,8 +428,19 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
     case 0xF0: {
       // System messages
       switch (current_command) {
-      // case 0xF0: //SysEx event
-      // break;
+      case 0xF0: { // SysEx event
+        auto start = midi_data.pos() - 1;
+        auto len = 2;
+        try {
+          while (midi_data.read_uint8() != 0xf7)
+            len++;
+        } catch (exception &e) {
+          WARNING("Malformed SysEx message in buffer has no end byte");
+          break;
+        }
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_sysex(&ev, len, &midi_data.start[start]);
+      } break;
       case 0xF1: // MTC Quarter Frame package
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
@@ -440,6 +451,26 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_SENSING;
+        break;
+      case 0xF8: // Clock
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_CLOCK;
+        break;
+      case 0xFA: // start
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_START;
+        break;
+      case 0xFC: // stop
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_STOP;
+        break;
+      case 0xFB: // continue
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_CONTINUE;
         break;
       default:
         break;
@@ -472,7 +503,7 @@ void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev) {
     return;
   }
 
-  io_bytes_writer_static<128> stream;
+  io_bytes_writer_static<4096> stream;
   alsamidi_to_midiprotocol(ev, stream);
   peer_info->peer->peer.send_midi(stream);
 }
@@ -517,6 +548,18 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
     break;
   case SND_SEQ_EVENT_SENSING:
     stream.write_uint8(0xFE);
+    break;
+  case SND_SEQ_EVENT_STOP:
+    stream.write_uint8(0xFC);
+    break;
+  case SND_SEQ_EVENT_CLOCK:
+    stream.write_uint8(0xF8);
+    break;
+  case SND_SEQ_EVENT_START:
+    stream.write_uint8(0xFA);
+    break;
+  case SND_SEQ_EVENT_CONTINUE:
+    stream.write_uint8(0xFB);
     break;
   case SND_SEQ_EVENT_SYSEX: {
     ssize_t len = ev->data.ext.len, sz = stream.size();

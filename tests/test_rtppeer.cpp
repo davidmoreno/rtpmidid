@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -111,7 +111,7 @@ void test_connect_disconnect_reverse_order() {
   ASSERT_EQUAL(peer.is_connected(), false);
 }
 
-void test_send_some_midi() {
+void test_send_short_midi() {
   rtpmidid::rtppeer peer("test");
 
   bool sent_midi = false;
@@ -134,6 +134,31 @@ void test_send_some_midi() {
   peer.send_midi(hex_to_bin("90 64 7F 68 7F 71 7F"));
 
   ASSERT_TRUE(sent_midi);
+}
+
+void test_send_long_midi() {
+    rtpmidid::rtppeer peer("test");
+
+    bool sent_midi = false;
+    peer.send_event.connect([&peer,
+                                    &sent_midi](const rtpmidid::io_bytes_reader &data,
+                                                rtpmidid::rtppeer::port_e port) {
+        if (peer.is_connected()) {
+            data.print_hex();
+
+            auto midi_buffer =
+                    rtpmidid::io_bytes_reader(data.start + 12, data.size() - 12);
+            ASSERT_TRUE(midi_buffer.compare(hex_to_bin("80 11 F0 7E 7F 06 02 00 01 0C 00 00 00 03 30 32 32 30 F7")));
+            sent_midi = true;
+        }
+    });
+
+    peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
+    peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
+
+    peer.send_midi(hex_to_bin("F0 7E 7F 06 02 00 01 0C 00 00 00 03 30 32 32 30 F7"));
+
+    ASSERT_TRUE(sent_midi);
 }
 
 void test_recv_some_midi() {
@@ -302,7 +327,8 @@ int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_connect_disconnect),
       TEST(test_connect_disconnect_reverse_order),
-      TEST(test_send_some_midi),
+      TEST(test_send_short_midi),
+      TEST(test_send_long_midi),
       TEST(test_recv_some_midi),
       TEST(test_journal),
   };

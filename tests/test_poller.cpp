@@ -15,21 +15,38 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#pragma once
 
-#include <vector>
+#include "./test_case.hpp"
+#include <rtpmidid/poller.hpp>
+using namespace std::chrono_literals;
 
-#include <rtpmidid/iobytes.hpp>
+rtpmidid::poller_t poller;
 
-class test_client_t {
-public:
-  int sockfd;
-  int local_port;
-  int remote_port;
-  // UDP connection to this "localhost":port
-  test_client_t(int local_port, int remote_port);
-  void send(rtpmidid::io_bytes_reader &&data);
-  void recv(rtpmidid::io_bytes_reader &&data);
-};
+/// To check for bug https://github.com/davidmoreno/rtpmidid/issues/39
+void test_timer_event_order() {
+  int state = 0;
+  poller.add_timer_event(10ms, [&state] {
+    DEBUG("1st Poller {}", state);
+    ASSERT_EQUAL(state, 0);
+    state = 1;
+  });
+  poller.add_timer_event(20ms, [&state] {
+    DEBUG("2nd Poller {}", state);
+    ASSERT_EQUAL(state, 1);
+    state = 2;
+  });
 
-rtpmidid::io_bytes_managed hex_to_bin(const std::string &str);
+  while (state != 2) {
+    poller.wait();
+  }
+}
+
+int main(int argc, char **argv) {
+  test_case_t testcase{
+      TEST(test_timer_event_order),
+  };
+
+  testcase.run(argc, argv);
+
+  return testcase.exit_code();
+}

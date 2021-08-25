@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2020 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -34,7 +34,7 @@ struct poller_private_data_t {
                          std::function<void(void)>>>
       timer_events;
   std::vector<std::function<void(void)>> later_events;
-  int max_timer_id = 0;
+  int max_timer_id = 1;
 };
 
 poller_t rtpmidid::poller;
@@ -95,8 +95,8 @@ void poller_t::add_fd_in(int fd, std::function<void(int)> f) {
   ev.data.fd = fd;
   auto r = epoll_ctl(pd->epollfd, EPOLL_CTL_ADD, fd, &ev);
   if (r == -1) {
-    throw exception("Can't add fd {} to poller: {} ({})", fd, strerror(errno),
-                    errno);
+    throw exception("Can't add fd {} to poller: {} ({}, ep {})", fd,
+                    strerror(errno), errno);
   }
 }
 void poller_t::add_fd_out(int fd, std::function<void(int)> f) {
@@ -117,6 +117,12 @@ void poller_t::add_fd_out(int fd, std::function<void(int)> f) {
 
 poller_t::timer_t poller_t::add_timer_event(std::chrono::milliseconds ms,
                                             std::function<void(void)> f) {
+  if (ms.count() <= 0) {
+    DEBUG("Not added to timer list, but to call later list. {}ms", ms.count());
+    call_later(f);
+    return poller_t::timer_t(0);
+  }
+
   auto pd = static_cast<poller_private_data_t *>(private_data);
 
   auto timer_id = pd->max_timer_id++;
@@ -125,7 +131,7 @@ poller_t::timer_t poller_t::add_timer_event(std::chrono::milliseconds ms,
   pd->timer_events.push_back(std::make_tuple(when, timer_id, f));
   std::sort(std::begin(pd->timer_events), std::end(pd->timer_events),
             [](const auto &a, const auto &b) {
-              return std::get<0>(a) > std::get<0>(b);
+              return std::get<0>(a) < std::get<0>(b);
             });
 
   // DEBUG("Added timer {}. {} s ({} pending)", timer_id, in_ms,
@@ -153,6 +159,10 @@ void poller_t::remove_fd(int fd) {
 }
 
 void poller_t::remove_timer(timer_t &tid) {
+  // already invalidated
+  if (tid.id == 0) {
+    return;
+  }
   auto pd = static_cast<poller_private_data_t *>(private_data);
   pd->timer_events.erase(std::remove_if(pd->timer_events.begin(),
                                         pd->timer_events.end(),
@@ -185,31 +195,40 @@ void poller_t::wait() {
   }
 
   auto nfds = 0;
-  if (wait_ms != 0) // Maybe no wait. Some timer event pending.
+  if (wait_ms != 0) {  // Maybe no wait. Some timer event pending.
     nfds = epoll_wait(pd->epollfd, events, MAX_EVENTS, wait_ms);
+
+    if (nfds == -1)
+      ERROR("epoll_wait failed: {}", strerror(errno));
+  }
 
   for (auto n = 0; n < nfds; n++) {
     auto fd = events[n].data.fd;
     try {
       pd->fd_events[fd](fd);
     } catch (const std::exception &e) {
-      ERROR("Catched exception at poller: {}", e.what());
+      ERROR("Caught exception at poller: {}", e.what());
     }
   }
+
   if (nfds == 0 && !pd->timer_events.empty()) { // This was a timeout
     // Will ensure remove via RTTI
     {
       auto firstI = pd->timer_events.begin();
       timer_t id = std::get<1>(*firstI);
       std::get<2> (*firstI)();
+
+      // There is no need for this erase, as the operator= for the timer_t
+      // ensures removal. This is this way to allow use of RTTI on more
+      // complex items.
+      // pd->timer_events.erase(firstI);
     }
-    // if (!timer_events.empty()){
-    //   auto now = std::time(nullptr);
-    //   // DEBUG("Next timer event {} in {} s. {} left.",
-    //   std::get<1>(timer_events[0]), std::get<0>(timer_events[0]) - now,
-    //   timer_events.size());
+    // if (!pd->timer_events.empty()) {
+    //   DEBUG("Next timer event {}. {} left.",
+    //   std::get<1>(pd->timer_events[0]),
+    //         pd->timer_events.size());
     // } else {
-    //   DEBUG("No timer events.");
+    //   DEBUG("No more timer events.");
     // }
   }
 

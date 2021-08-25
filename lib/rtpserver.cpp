@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2020 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,6 +17,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -32,7 +33,7 @@ using namespace rtpmidid;
 
 rtpserver::rtpserver(std::string _name, const std::string &port)
     : name(std::move(_name)) {
-  control_socket = midi_socket = 0;
+  control_socket = midi_socket = -1;
   control_port = 0;
   midi_port = 0;
   struct addrinfo *sockaddress_list = nullptr;
@@ -60,6 +61,7 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
     socklen_t peer_addr_len = NI_MAXHOST;
     auto listenaddr = sockaddress_list;
     for (; listenaddr != nullptr; listenaddr = listenaddr->ai_next) {
+      host[0] = service[0] = 0x00;
       getnameinfo(listenaddr->ai_addr, peer_addr_len, host, NI_MAXHOST, service,
                   NI_MAXSERV, NI_NUMERICSERV);
       DEBUG("Try listen at {}:{}", host, service);
@@ -74,6 +76,7 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
         break;
       }
       close(control_socket);
+      control_socket = -1;
     }
     if (!listenaddr) {
       throw rtpmidid::exception("Can not open rtpmidi control socket. {}.",
@@ -94,7 +97,8 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
     poller.add_fd_in(control_socket,
                      [this](int) { this->data_ready(rtppeer::CONTROL_PORT); });
 
-    midi_socket = socket(AF_INET6, SOCK_DGRAM, 0);
+    midi_socket = socket(listenaddr->ai_family, listenaddr->ai_socktype,
+                         listenaddr->ai_protocol);
     if (midi_socket < 0) {
       throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
     }
@@ -108,15 +112,15 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
                      [this](int) { this->data_ready(rtppeer::MIDI_PORT); });
   } catch (const std::exception &e) {
     ERROR("Error creating server at port {}: {}", control_port, e.what());
-    if (control_socket) {
+    if (control_socket != -1) {
       poller.remove_fd(control_socket);
       ::close(control_socket);
-      control_socket = 0;
+      control_socket = -1;
     }
-    if (midi_socket) {
+    if (midi_socket != -1) {
       poller.remove_fd(midi_socket);
       ::close(midi_socket);
-      midi_socket = 0;
+      midi_socket = -1;
     }
     if (sockaddress_list) {
       freeaddrinfo(sockaddress_list);
@@ -132,12 +136,20 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
 }
 
 rtpserver::~rtpserver() {
-  if (control_socket > 0) {
-    poller.remove_fd(control_socket);
+  if (control_socket >= 0) {
+    try {
+      poller.remove_fd(control_socket);
+    } catch (rtpmidid::exception &e) {
+      ERROR("Error removing control socket: {}", e.what());
+    }
     close(control_socket);
   }
-  if (midi_socket > 0) {
-    poller.remove_fd(midi_socket);
+  if (midi_socket >= 0) {
+    try {
+      poller.remove_fd(midi_socket);
+    } catch (rtpmidid::exception &e) {
+      ERROR("Error removing midi socket: {}", e.what());
+    }
     close(midi_socket);
   }
 }
@@ -156,43 +168,57 @@ std::shared_ptr<rtppeer> rtpserver::get_peer_by_packet(io_bytes_reader &buffer,
     buffer.position = buffer.start + 8;
     auto initiator_id = buffer.read_uint32();
     buffer.position = buffer.start;
-    return initiator_to_peer[initiator_id];
+
+    auto peer = initiator_to_peer.find(initiator_id);
+    if (peer == initiator_to_peer.end()) {
+      return nullptr;
+    }
+    return peer->second;
   }
   case rtppeer::CK:
   case rtppeer::RS: {
     buffer.position = buffer.start + 4;
     auto ssrc = buffer.read_uint32();
     buffer.position = buffer.start;
-    return get_peer_by_ssrc(ssrc);
+    return ssrc_to_peer[ssrc];
   }
   default:
-    if (port == rtppeer::MIDI_PORT && buffer.start[1] == 0x61) {
+    if (port == rtppeer::MIDI_PORT && (buffer.start[1] & 0x7F) == 0x61) {
       buffer.read_uint32();
       buffer.read_uint32();
       auto ssrc = buffer.read_uint32();
       buffer.position = buffer.start;
-      return get_peer_by_ssrc(ssrc);
+
+      auto peer = ssrc_to_peer.find(ssrc);
+      if (peer == ssrc_to_peer.end()) {
+        return nullptr;
+      }
+      return ssrc_to_peer[ssrc];
+      ;
     }
-    DEBUG("COMMAND if {:X}", int(command));
+    DEBUG("Unknown COMMAND id {:X} / {:X}", int(command), buffer.start[1]);
     return nullptr;
   }
 }
 
-std::shared_ptr<rtppeer> rtpserver::get_peer_by_ssrc(uint32_t ssrc) {
-  auto peer = ssrc_to_peer[ssrc];
-  if (peer)
-    return peer;
+//   20210130 -- Always has to be at ssrc_to_peer.
+// No need, so a simple getter is more efficient
+// std::shared_ptr<rtppeer> rtpserver::get_peer_by_ssrc(uint32_t ssrc) {
+//   auto peer = ssrc_to_peer[ssrc];
+//   if (peer)
+//     return peer;
 
-  // If just connected, maybe we dont know the SSRC yet. Check all the peers to
-  // update
-  for (auto &initiator_peer : initiator_to_peer) {
-    if (initiator_peer.second->remote_ssrc == ssrc) {
-      ssrc_to_peer[ssrc] = initiator_peer.second;
-      return initiator_peer.second;
-    }
-  }
-  return nullptr;
-}
+//   // If just connected, maybe we dont know the SSRC yet. Check all the peers
+//   to
+//   // update
+//   for (auto &initiator_peer : initiator_to_peer) {
+//     if (initiator_peer.second->remote_ssrc == ssrc) {
+//       ssrc_to_peer[ssrc] = initiator_peer.second;
+//       return initiator_peer.second;
+//     }
+//   }
+//   return nullptr;
+// }
 
 void rtpserver::data_ready(rtppeer::port_e port) {
   uint8_t raw[1500];
@@ -220,8 +246,13 @@ void rtpserver::data_ready(rtppeer::port_e port) {
         buffer.start[3] == 'N') {
       create_peer_from(std::move(buffer), &cliaddr, port);
     } else {
-      DEBUG("Unknown peer, and not connect on control. Ignoring. {} port.",
-            port == rtppeer::MIDI_PORT ? "MIDI" : "Control");
+      char host[NI_MAXHOST] { 0 }, service[NI_MAXSERV] { 0 };
+      getnameinfo((const struct sockaddr *)&cliaddr, len, host, NI_MAXHOST,
+		      service, NI_MAXSERV, NI_NUMERICSERV);
+
+      DEBUG("Unknown peer ({}/{}), and not connect on control. Ignoring {} port.",
+            host, service, port == rtppeer::MIDI_PORT ? "MIDI" : "Control");
+
       buffer.print_hex(true);
     }
   }
@@ -240,19 +271,37 @@ void rtpserver::sendto(const io_bytes_reader &pb, rtppeer::port_e port,
   // address->sin6_family, inet_ntoa(address->sin6_addr),
   // htons(address->sin6_port));
 
-  auto res =
+  for(;;) {
+    ssize_t res =
       ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
                (const struct sockaddr *)address, sizeof(struct sockaddr_in6));
 
-  if (res < 0 || static_cast<uint32_t>(res) != pb.size()) {
-    throw exception("Could not send all data. Sent {}. {}", res,
-                    strerror(errno));
+    if (static_cast<uint32_t>(res) == pb.size())
+      break;
+
+    char addr_buffer[INET6_ADDRSTRLEN] { 0 };
+    inet_ntop(AF_INET6, address, addr_buffer, sizeof(struct sockaddr_in6));
+
+    if (res == -1) {
+      if (errno == EINTR) {
+        DEBUG("Retry sendto because of EINTR");
+        continue;
+      }
+
+      throw exception("Could not send all data to {}: {}", addr_buffer,
+		      strerror(errno));
+    }
+
+    DEBUG("Could not send whole message to {}: only {} of {}", addr_buffer,
+		    res, pb.size());
+    break;
   }
 }
 
 void rtpserver::create_peer_from(io_bytes_reader &&buffer,
                                  struct sockaddr_in6 *cliaddr,
                                  rtppeer::port_e port) {
+
   auto peer = std::make_shared<rtppeer>(name);
   auto address = std::make_shared<struct sockaddr_in6>();
   ::memcpy(address.get(), cliaddr, sizeof(struct sockaddr_in6));
@@ -269,8 +318,9 @@ void rtpserver::create_peer_from(io_bytes_reader &&buffer,
 
   peer->data_ready(std::move(buffer), port);
 
-  // After read the first packet I know the initiator_id
+  // After read the first packet I know the initiator_id and ssrc
   initiator_to_peer[peer->initiator_id] = peer;
+  ssrc_to_peer[peer->remote_ssrc] = peer;
 
   // Setup some callbacks
   auto wpeer = std::weak_ptr(peer);
@@ -288,6 +338,16 @@ void rtpserver::create_peer_from(io_bytes_reader &&buffer,
     // DEBUG("Got MIDI from the remote peer into this server.");
     midi_event(data);
   });
+
+  peer->disconnect_event.connect(
+      [this, wpeer](rtpmidid::rtppeer::disconnect_reason_e dr) {
+        if (wpeer.expired())
+          return;
+        auto peer = wpeer.lock();
+
+        this->initiator_to_peer.erase(peer->initiator_id);
+        this->ssrc_to_peer.erase(peer->remote_ssrc);
+      });
 }
 
 void rtpserver::send_midi_to_all_peers(const io_bytes_reader &buffer) {

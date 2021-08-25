@@ -19,7 +19,7 @@ For information about librtpmidid and how to use it, read
 ## Other implementations
 
 There is many hardware with RTP MIDI support, normally controllers, but for
-example Behringer DeepMind12 Synthetizer has support over Wifi.
+example Behringer DeepMind12 Synthesizer has support over Wifi.
 
 ### Linux
 
@@ -38,7 +38,7 @@ On MacOS there is support included in the OS.
 To test I used `MIDI Network` and `MIDI Wrench`. The first to manage
 connections, the second to test.
 
-I was able to communicate exporting at rtpmidid side conneting my gadget to the
+I was able to communicate exporting at rtpmidid side connecting my gadget to the
 `Network` port. Then use the `MIDI Network` on the iPad to make the connection.
 
 ### Windows
@@ -59,12 +59,12 @@ support. I will try to list them as I find them:
 
 recomended use is via debian packages, at https://github.com/davidmoreno/rtpmidid/releases
 
-`rtpmidid` provides two modes of operation, one focused on importing another on
+`rtpmidid` provides two modes of operation, one focused on importing, another on
 exporting.
 
 ```
 Real Time Protocol Music Instrument Digital Interface Daemon - 20.04.5
-(C) 2019 David Moreno Montero <dmoreno@coralbits.com>
+(C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
 Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.
 
 rtpmidi allows to use rtpmidi protocol to communicate with MIDI equipement
@@ -177,11 +177,14 @@ cli/rtpmidid-cli.py help
 
 ## License
 
-RtpMidid is GPLv3 licensed. This basically meass that you are free to use,
+RtpMidid is GPLv3 licensed. This basically means that you are free to use,
 modify and share it, given that you share your modifications with your users.
 
 This includes embeded software uses (anti
 [tivoization](https://en.wikipedia.org/wiki/Tivoization) clause of the GPLv3).
+
+The librtpmidid library is LGPL 2.1 license, so it can be embedded freely
+on free and commercial software.
 
 If you think the license does not fit your use case, please contact me at
 dmoreno@coralbits.com for alternative licensing options. I'm a freelancer

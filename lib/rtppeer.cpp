@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2020 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -21,6 +21,7 @@
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/rtppeer.hpp>
+#include <rtpmidid/utils.hpp>
 
 using namespace rtpmidid;
 
@@ -36,13 +37,14 @@ using namespace rtpmidid;
 rtppeer::rtppeer(std::string _name) : local_name(std::move(_name)) {
   status = NOT_CONNECTED;
   remote_ssrc = 0;
-  local_ssrc = rand() & 0x0FFFF;
-  seq_nr = rand() & 0x0FFFF;
+  local_ssrc = ::rtpmidid::rand_u32() & 0x0FFFF;
+  seq_nr = ::rtpmidid::rand_u32() & 0x0FFFF;
   seq_nr_ack = seq_nr;
   remote_seq_nr = 0; // Just not radom memory data
   timestamp_start = 0;
   timestamp_start = get_timestamp();
   initiator_id = 0;
+  latency = 0;
   waiting_ck = false;
 }
 
@@ -223,6 +225,8 @@ void rtppeer::parse_command_by(io_bytes_reader &buffer, port_e port) {
     return;
   }
 
+  DEBUG("status: {}, port {} (midi: %d)", status, port, port == MIDI_PORT);
+
   status = (status_e)(
       ((int)status) &
       ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
@@ -360,9 +364,10 @@ void rtppeer::parse_command_rs(io_bytes_reader &buffer, port_e port) {
 void rtppeer::parse_midi(io_bytes_reader &buffer) {
   // auto _headers =
   buffer.read_uint8(); // Ignore RTP header flags (Byte 0)
-  auto rtpmidi_id = buffer.read_uint8();
+  auto rtpmidi_id = buffer.read_uint8() & 0x7f;
   if (rtpmidi_id != 0x61) { // next Byte: Payload type
-    WARNING("Received packet which is not RTP MIDI. Ignoring.");
+    WARNING("Received packet (ID: 0x{:02x}) which is not RTP MIDI. Ignoring.",
+            rtpmidi_id);
     return;
   }
   remote_seq_nr = buffer.read_uint16();
@@ -438,13 +443,17 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
     return;
   }
 
-  io_bytes_writer_static<512> buffer;
+  io_bytes_writer_static<4096 + 12> buffer;
 
   uint32_t timestamp = get_timestamp();
   seq_nr++;
 
   uint8_t has_journal_bit = journal->has_journal ? 0x40 : 0;
   buffer.write_uint8(0x80);
+
+  // Here it SHOULD send 0x80 | 0x61 if there is midi data sent, but if done,
+  // then rtpmidi for windows does not read messages, so for compatibility, just
+  // send 0x61
   buffer.write_uint8(0x61);
   buffer.write_uint16(seq_nr);
   buffer.write_uint32(timestamp);
@@ -464,6 +473,15 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
     buffer.write_uint8(sizel);
   }
   // Now midi
+  if (events.size() < 16) {
+    // Short header, 1 octet
+    buffer.write_uint8(events.size());
+  } else {
+    // Long header, 2 octets
+    buffer.write_uint8((events.size() & 0x0f00) >> 8 | 0x80);
+    buffer.write_uint8(events.size() & 0xff);
+  }
+
   buffer.copy_from(events);
 
   // Now journal
