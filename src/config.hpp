@@ -38,5 +38,5 @@ struct config_t {
   std::string host;
   std::string control;
 };
-config_t parse_cmd_args(int argc, char **argv);
+config_t parse_cmd_args(int argc, const char **argv);
 } // namespace rtpmidid

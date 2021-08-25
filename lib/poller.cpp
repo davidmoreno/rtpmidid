@@ -27,19 +27,31 @@
 
 using namespace rtpmidid;
 
+struct timer_event_t {
+  std::chrono::steady_clock::time_point when;
+  int id;
+  std::function<void(void)> callback;
+};
+
 struct poller_private_data_t {
   int epollfd;
   std::map<int, std::function<void(int)>> fd_events;
-  std::vector<std::tuple<std::chrono::steady_clock::time_point, int,
-                         std::function<void(void)>>>
-      timer_events;
+  std::vector<timer_event_t> timer_events;
   std::vector<std::function<void(void)>> later_events;
   int max_timer_id = 1;
 };
 
 poller_t rtpmidid::poller;
 
+static bool poller_initialized = false;
+
 poller_t::poller_t() {
+  if (poller_initialized) {
+    throw exception("Poller already initialized. Can only use one poller "
+                    "(rtpmidid::poller).");
+  }
+  poller_initialized = true;
+
   poller_private_data_t *pd = new poller_private_data_t;
   pd->epollfd = epoll_create1(0);
   if (pd->epollfd < 0) {
@@ -49,9 +61,11 @@ poller_t::poller_t() {
 }
 poller_t::~poller_t() {
   close();
+  clear_timers();
 
   auto pd = static_cast<poller_private_data_t *>(private_data);
   delete pd;
+  poller_initialized = false;
 }
 
 bool poller_t::is_open() {
@@ -117,22 +131,28 @@ void poller_t::add_fd_out(int fd, std::function<void(int)> f) {
 
 poller_t::timer_t poller_t::add_timer_event(std::chrono::milliseconds ms,
                                             std::function<void(void)> f) {
+
+  using namespace std::chrono_literals;
+
+  // We can not call directly as it might need to be called out of this call
+  // stack
   if (ms.count() <= 0) {
-    DEBUG("Not added to timer list, but to call later list. {}ms", ms.count());
+    // DEBUG("Not added to timer list, but to call later list. {}ms",
+    // ms.count());
     call_later(f);
     return poller_t::timer_t(0);
   }
 
   auto pd = static_cast<poller_private_data_t *>(private_data);
 
+  // This 1ms is because of the precission mismatch later. now() is in
+  // microseconds, and later we need also ms. This way we ensure ms precission.
   auto timer_id = pd->max_timer_id++;
-  auto when = std::chrono::steady_clock::now() + ms;
+  auto when = std::chrono::steady_clock::now() + ms + 1ms;
 
-  pd->timer_events.push_back(std::make_tuple(when, timer_id, f));
+  pd->timer_events.push_back(timer_event_t{when, timer_id, f});
   std::sort(std::begin(pd->timer_events), std::end(pd->timer_events),
-            [](const auto &a, const auto &b) {
-              return std::get<0>(a) < std::get<0>(b);
-            });
+            [](const auto &a, const auto &b) { return a.when < b.when; });
 
   // DEBUG("Added timer {}. {} s ({} pending)", timer_id, in_ms,
   // timer_events.size());
@@ -164,74 +184,50 @@ void poller_t::remove_timer(timer_t &tid) {
     return;
   }
   auto pd = static_cast<poller_private_data_t *>(private_data);
-  pd->timer_events.erase(std::remove_if(pd->timer_events.begin(),
-                                        pd->timer_events.end(),
-                                        [&tid](const auto &b) {
-                                          // DEBUG("Remove {}. {}? {}", tid.id,
-                                          // std::get<1>(b), std::get<1>(b) ==
-                                          // tid.id);
-                                          return (std::get<1>(b) == tid.id);
-                                        }),
-                         pd->timer_events.end());
-  // DEBUG("Remove timer {}. {} left", tid.id, timer_events.size());
+  //  DEBUG("Remove {}. {}? {}", tid.id, b.id, b.id == tid.id);
+  pd->timer_events.erase(
+      std::remove_if(pd->timer_events.begin(), pd->timer_events.end(),
+                     [&tid](const auto &b) { return b.id == tid.id; }),
+      pd->timer_events.end());
+  // DEBUG("Remove timer {}. {} left", tid.id, pd->timer_events.size());
   // Invalidate
   tid.id = 0;
 }
 
-void poller_t::wait() {
+void poller_t::clear_timers() {
   auto pd = static_cast<poller_private_data_t *>(private_data);
+  pd->timer_events.clear();
+}
 
-  const auto MAX_EVENTS = 10;
-  struct epoll_event events[MAX_EVENTS];
-  auto wait_ms = -1;
+static int chrono_ms_to_int(std::chrono::milliseconds &ms) {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(ms).count();
+}
 
-  if (!pd->timer_events.empty()) {
-    auto now = std::chrono::steady_clock::now();
-    wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                  std::get<0>(pd->timer_events[0]) - now)
-                  .count();
-    // DEBUG("Timer event in {}ms", wait_ms);
-    wait_ms = std::max(wait_ms, 0); // min wait 0ms.
-  }
+static int ms_to_now(std::chrono::steady_clock::time_point &tp) {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             tp - std::chrono::steady_clock::now())
+      .count();
+}
 
-  auto nfds = 0;
-  if (wait_ms != 0) {  // Maybe no wait. Some timer event pending.
-    nfds = epoll_wait(pd->epollfd, events, MAX_EVENTS, wait_ms);
+static void run_expired_timer_events(std::vector<timer_event_t> &events) {
+  // if (events.size()) {
+  //   DEBUG("Next event in {} ms", ms_to_now(events[0].when));
+  // }
 
-    if (nfds == -1)
-      ERROR("epoll_wait failed: {}", strerror(errno));
-  }
-
-  for (auto n = 0; n < nfds; n++) {
-    auto fd = events[n].data.fd;
-    try {
-      pd->fd_events[fd](fd);
-    } catch (const std::exception &e) {
-      ERROR("Caught exception at poller: {}", e.what());
-    }
-  }
-
-  if (nfds == 0 && !pd->timer_events.empty()) { // This was a timeout
+  while (events.size() > 0 && ms_to_now(events[0].when) <= 0) {
     // Will ensure remove via RTTI
-    {
-      auto firstI = pd->timer_events.begin();
-      timer_t id = std::get<1>(*firstI);
-      std::get<2> (*firstI)();
+    auto firstI = events.begin();
+    poller_t::timer_t id(firstI->id);
+    firstI->callback();
 
-      // There is no need for this erase, as the operator= for the timer_t
-      // ensures removal. This is this way to allow use of RTTI on more
-      // complex items.
-      // pd->timer_events.erase(firstI);
-    }
-    // if (!pd->timer_events.empty()) {
-    //   DEBUG("Next timer event {}. {} left.",
-    //   std::get<1>(pd->timer_events[0]),
-    //         pd->timer_events.size());
-    // } else {
-    //   DEBUG("No more timer events.");
-    // }
+    // There is no need for this erase, as the operator= for the timer_t
+    // ensures removal. This is this way to allow use of RTTI on more
+    // complex items.
+    // pd->timer_events.erase(firstI);
   }
+}
 
+void run_call_later_events(poller_private_data_t *pd) {
   while (!pd->later_events.empty()) {
     std::vector<std::function<void(void)>> call_now;
     // Clean the later, get the now.
@@ -240,6 +236,52 @@ void poller_t::wait() {
       f();
     }
   }
+}
+
+void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
+  auto pd = static_cast<poller_private_data_t *>(private_data);
+
+  const auto MAX_EVENTS = 10;
+  struct epoll_event events[MAX_EVENTS];
+  auto wait_ms = 10'000'000; // not forever, but a lot (10'000s)
+
+  // Maybe some default value, set as max wait
+  if (max_wait_ms.has_value()) {
+    auto max_wait_in_ms = chrono_ms_to_int(max_wait_ms.value());
+    wait_ms = max_wait_in_ms;
+  }
+
+  // How long should I wait at max
+  if (!pd->timer_events.empty()) {
+    wait_ms = ms_to_now(pd->timer_events[0].when);
+    wait_ms = std::max(wait_ms, 0); // min wait 0ms.
+  }
+  // DEBUG("Wait {} ms", wait_ms);
+  run_call_later_events(pd);
+
+  // wait, get events or timeouts
+  auto nfds = 0;
+  if (wait_ms != 0) { // Maybe no wait. Some timer event pending.
+    nfds = epoll_wait(pd->epollfd, events, MAX_EVENTS, wait_ms);
+
+    if (nfds == -1)
+      ERROR("epoll_wait failed: {}", strerror(errno));
+  }
+
+  // Run events
+  for (auto n = 0; n < nfds; n++) {
+    // DEBUG("IO EVENT");
+    auto fd = events[n].data.fd;
+    try {
+      pd->fd_events[fd](fd);
+    } catch (const std::exception &e) {
+      ERROR("Caught exception at poller: {}", e.what());
+    }
+  }
+
+  run_call_later_events(pd);
+  run_expired_timer_events(pd->timer_events);
+  run_call_later_events(pd);
 }
 
 poller_t::timer_t::timer_t() : id(0) {}

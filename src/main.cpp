@@ -55,10 +55,10 @@ int main(int argc, char **argv) {
        rtpmidid::VERSION);
   INFO("(C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>");
 
-  auto options = rtpmidid::parse_cmd_args(argc - 1, argv + 1);
+  auto options = rtpmidid::parse_cmd_args(argc - 1, (const char **)argv + 1);
 
   try {
-    auto rtpmidid = rtpmidid::rtpmidid_t(&options);
+    auto rtpmidid = rtpmidid::rtpmidid_t(options);
     auto control = rtpmidid::control_socket_t(rtpmidid, options.control);
 
     while (rtpmidid::poller.is_open()) {

@@ -2,3 +2,4 @@ build
 .*
 !.gitignore
 dump.*
+!.clang-format
