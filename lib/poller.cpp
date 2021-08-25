@@ -61,6 +61,7 @@ poller_t::poller_t() {
 }
 poller_t::~poller_t() {
   close();
+  clear_timers();
 
   auto pd = static_cast<poller_private_data_t *>(private_data);
   delete pd;
@@ -191,6 +192,11 @@ void poller_t::remove_timer(timer_t &tid) {
   // DEBUG("Remove timer {}. {} left", tid.id, pd->timer_events.size());
   // Invalidate
   tid.id = 0;
+}
+
+void poller_t::clear_timers() {
+  auto pd = static_cast<poller_private_data_t *>(private_data);
+  pd->timer_events.clear();
 }
 
 static int chrono_ms_to_int(std::chrono::milliseconds &ms) {

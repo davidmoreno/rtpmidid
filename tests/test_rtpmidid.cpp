@@ -22,21 +22,6 @@ rtpmidid::config_t parse_cmd_args(std::vector<const char *> &&list) {
   return rtpmidid::parse_cmd_args(list.size(), list.data());
 }
 
-void wait_for_avahi_announcement(const std::string &name) {
-  const auto pre = std::chrono::steady_clock::now();
-  while (std::find(std::begin(avahi_known_names), std::end(avahi_known_names),
-                   name) == std::end(avahi_known_names)) {
-    rtpmidid::poller.wait(1s);
-
-    const auto wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                             std::chrono::steady_clock::now() - pre)
-                             .count();
-    if (wait_ms > 10'000) {
-      FAIL(fmt::format("Waiting too long for avahi: {}ms", wait_ms));
-    }
-  }
-}
-
 static std::pair<uint8_t, uint8_t>
 alsa_find_port(snd_seq_t *seq, snd_seq_client_info_t *cinfo,
                snd_seq_port_info_t *pinfo, int count,
@@ -97,6 +82,38 @@ std::pair<uint8_t, uint8_t> alsa_find_port(rtpmidid::aseq &aseq,
   return std::make_pair(0, 0);
 }
 
+void wait_for_avahi_announcement(const std::string &name) {
+  const auto pre = std::chrono::steady_clock::now();
+  while (std::find(std::begin(avahi_known_names), std::end(avahi_known_names),
+                   name) == std::end(avahi_known_names)) {
+    rtpmidid::poller.wait(1s);
+
+    const auto wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - pre)
+                             .count();
+    if (wait_ms > 10'000) {
+      FAIL(fmt::format("Waiting too long for avahi: {}ms", wait_ms));
+    }
+  }
+}
+
+void wait_for_alsa_announcement(const std::string &gadget,
+                                const std::string &port) {
+  const auto pre = std::chrono::steady_clock::now();
+
+  rtpmidid::aseq aseq("WAIT");
+
+  while (alsa_find_port(aseq, gadget, port).first != 0) {
+    rtpmidid::poller.wait(1s);
+
+    const auto wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - pre)
+                             .count();
+    if (wait_ms > 10'000) {
+      FAIL(fmt::format("Waiting too long for avahi: {}ms", wait_ms));
+    }
+  }
+}
 class metronome_t {
 public:
   rtpmidid::aseq aseq;
@@ -334,13 +351,33 @@ void test_connect_disconnect() {
       loggerc.wait();
     }
   }
+  rtpmidid::poller.clear_timers();
 }
 
 void test_evil_disconnect() {
   auto servers = ServerAB();
 
   metronome_t metronome("rtpmidi TEST-SERVER-B", "TEST-SERVER-A");
+
+  wait_for_alsa_announcement("TEST-SERVER-B", "metronome-metro");
+
+  ensure_get_ticks loggera = ensure_get_ticks("rtpmidi TEST-SERVER-A",
+                                              "TEST-SERVER-B/metronome-metro");
+  loggera.wait();
+
+  // Now disconnect the control port of server-b / metronome-metro
+  for (auto &peer : servers.B.known_clients) {
+    if (peer.second.peer) {
+      DEBUG("Peer: {} / control fd {}", peer.second.peer->peer.local_name,
+            peer.second.peer->control_socket);
+      close(peer.second.peer->midi_socket);
+    }
+  }
+  loggera.wait();
+
   rtpmidid::poller.wait();
+  rtpmidid::poller.clear_timers();
+  rtpmidid::poller.wait(1ms);
 }
 
 int main(int argc, char **argv) {

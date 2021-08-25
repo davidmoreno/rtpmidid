@@ -44,6 +44,8 @@ public:
   timer_t add_timer_event(std::chrono::milliseconds ms,
                           std::function<void(void)> event_f);
   void remove_timer(timer_t &tid);
+  void clear_timers(); // This is used for destruction, and also for cleanup at
+                       // tests.
 
   // Just call it later. after finishing current round of event loop
   void call_later(std::function<void(void)> later_f);
