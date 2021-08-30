@@ -465,21 +465,11 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
   }
   if (size < 16) {
     buffer.write_uint8(size | has_journal_bit);
-
   } else {
     uint8_t sizeh = size << 8;
     uint8_t sizel = size & 0xFF;
     buffer.write_uint8(sizeh | has_journal_bit | 0x80); // mark long midi packet
     buffer.write_uint8(sizel);
-  }
-  // Now midi
-  if (events.size() < 16) {
-    // Short header, 1 octet
-    buffer.write_uint8(events.size());
-  } else {
-    // Long header, 2 octets
-    buffer.write_uint8((events.size() & 0x0f00) >> 8 | 0x80);
-    buffer.write_uint8(events.size() & 0xff);
   }
 
   buffer.copy_from(events);
