@@ -64,7 +64,7 @@ typedef enum {
   ARG_CONTROL,
 } optnames_e;
 
-config_t rtpmidid::parse_cmd_args(int argc, char **argv) {
+config_t rtpmidid::parse_cmd_args(int argc, const char **argv) {
   config_t opts;
 
   opts.host = "0.0.0.0";

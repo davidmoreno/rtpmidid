@@ -67,8 +67,18 @@ public:
 
   bool run(int argc = 0, char **argv = nullptr) {
     std::vector<std::string> args;
+    bool fastfail = false;
     for (auto i = 1; i < argc; i++) {
-      args.push_back(argv[i]);
+      std::string opt = argv[i];
+      if (opt == "--help") {
+        INFO("{} [--failfast] [--help] [testname...]", argv[0]);
+        return true;
+      }
+      if (opt == "--fastfail") {
+        fastfail = true;
+      } else {
+        args.push_back(std::move(opt));
+      }
     }
 
     int errors = 0;
@@ -79,20 +89,26 @@ public:
       INFO("*******************************************************************"
            "**************************");
       INFO("Test ({}/{}) {} Run", count, total, tcase.name);
-      if (string_in_argv(args, tcase.name))
+      if (string_in_argv(args, tcase.name)) {
         try {
           tcase.fn();
           SUCCESS("Test {} OK", tcase.name);
         } catch (const test_exception &e) {
           logger::log(e.filename, e.line, logger::ERROR, e.error);
+          ERROR("FAIL TEST {}: {}", tcase.name, e.what());
           errors += 1;
         } catch (const std::exception &e) {
-          ERROR("{}", e.what());
+          ERROR("FAIL TEST {}: {}", tcase.name, e.what());
           errors += 1;
         } catch (...) {
           ERROR("Unknown exception");
           errors += 1;
         }
+
+        if (fastfail && errors) {
+          return false;
+        }
+      }
     }
     if (errors == 0) {
       INFO("No errors.");

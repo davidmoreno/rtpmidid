@@ -67,7 +67,7 @@ public:
   std::map<aseq::port_t, std::shared_ptr<::rtpmidid::rtpserver>> alsa_to_server;
   std::set<std::string> known_mdns_peers;
 
-  rtpmidid_t(config_t *config);
+  rtpmidid_t(const config_t &config);
 
   // Manual connect to a server.
   std::optional<uint8_t> add_rtpmidi_client(const std::string &hostdescription);
