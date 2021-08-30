@@ -19,6 +19,7 @@
 #include "../tests/test_utils.hpp"
 #include "./test_case.hpp"
 #include "rtpmidid/journal.hpp"
+#include <cstdint>
 #include <memory>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
@@ -137,28 +138,30 @@ void test_send_short_midi() {
 }
 
 void test_send_long_midi() {
-    rtpmidid::rtppeer peer("test");
+  rtpmidid::rtppeer peer("test");
 
-    bool sent_midi = false;
-    peer.send_event.connect([&peer,
-                                    &sent_midi](const rtpmidid::io_bytes_reader &data,
-                                                rtpmidid::rtppeer::port_e port) {
+  bool sent_midi = false;
+  peer.send_event.connect(
+      [&peer, &sent_midi](const rtpmidid::io_bytes_reader &data,
+                          rtpmidid::rtppeer::port_e port) {
         if (peer.is_connected()) {
-            data.print_hex();
+          data.print_hex();
 
-            auto midi_buffer =
-                    rtpmidid::io_bytes_reader(data.start + 12, data.size() - 12);
-            ASSERT_TRUE(midi_buffer.compare(hex_to_bin("80 11 F0 7E 7F 06 02 00 01 0C 00 00 00 03 30 32 32 30 F7")));
-            sent_midi = true;
+          auto midi_buffer =
+              rtpmidid::io_bytes_reader(data.start + 12, data.size() - 12);
+          ASSERT_TRUE(midi_buffer.compare(hex_to_bin(
+              "80 11 F0 7E 7F 06 02 00 01 0C 00 00 00 03 30 32 32 30 F7")));
+          sent_midi = true;
         }
-    });
+      });
 
-    peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
-    peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
+  peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
+  peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
 
-    peer.send_midi(hex_to_bin("F0 7E 7F 06 02 00 01 0C 00 00 00 03 30 32 32 30 F7"));
+  peer.send_midi(
+      hex_to_bin("F0 7E 7F 06 02 00 01 0C 00 00 00 03 30 32 32 30 F7"));
 
-    ASSERT_TRUE(sent_midi);
+  ASSERT_TRUE(sent_midi);
 }
 
 void test_recv_some_midi() {
@@ -273,11 +276,11 @@ void test_journal() {
   ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
 
   DEBUG("MIDI DATA. {} bytes", midi_io.pos());
-  midi_io.print_hex();
+  midi_io.print_hex(false);
 
   DEBUG("NETWORK DATA, {} bytes", network_io.pos());
-  network_io.print_hex();
-  // There should be some data at network_buffer
+  network_io.print_hex(false);
+  // There should be some data at network_buffer. Both recovered from Journal.
   ASSERT_NOT_EQUAL(network_io.pos(), 0);
 
   ASSERT_EQUAL(midi_io.data[0], 0x90);
@@ -288,29 +291,36 @@ void test_journal() {
   ASSERT_EQUAL(midi_io.data[4], 0x48);
   ASSERT_EQUAL(midi_io.data[5], 0x0);
 
-  // The other side, we send something, have no reply after some time
+  // Here I will send two notes from my peer, but the other side will
+  // not confirm. So there will be a journal sent later
+
+  // Maybe not real note number, buts thats not relevant
+  const auto NOTE_C = 64, VEL_C = 33, NOTE_D = 62, VEL_D = 100;
+
+  // Send one note on
   network_io.truncate();
   midi_io.truncate();
   midi_io.write_uint8(0x80);
-  midi_io.write_uint8(64);
-  midi_io.write_uint8(23);
+  midi_io.write_uint8(NOTE_C);
+  midi_io.write_uint8(VEL_C);
   peer.send_midi(midi_io);
   auto length_wo_journal = network_io.pos();
 
-  // Something else, first not confirmed, so we need the journal
+  // Another note on
   network_io.truncate();
   midi_io.truncate();
   midi_io.write_uint8(0x80);
-  midi_io.write_uint8(62);
-  midi_io.write_uint8(23);
+  midi_io.write_uint8(NOTE_D);
+  midi_io.write_uint8(VEL_D);
   peer.send_midi(midi_io);
 
-  // Only one packet, should have journal for Note
-  network_io.print_hex();
+  // The last packet sent will have the midi data for the second note on, and
+  // journal of the first
+  network_io.print_hex(false);
   // Should, for one, be larger
   ASSERT_LT(length_wo_journal, network_io.pos());
 
-  // Confirm first packet
+  // Confirm first packet, so next journal should be only the second
   peer.data_ready(hex_to_bin("FF FF 'RS'"
                              "'BEEF'" // SSRC
                              "00 00 00 01"),
@@ -319,8 +329,73 @@ void test_journal() {
   DEBUG("Send Only Journal");
   peer.send_journal();
   DEBUG("Packet with journal");
-  network_io.print_hex(true);
-  ASSERT_EQUAL(network_io.pos(), 20);
+  // ASSERT_EQUAL(network_io.pos(), 20);
+
+  // manual parse
+  rtpmidid::io_bytes_reader reader(network_io);
+  reader.print_hex(false);
+  // auto _header =
+  reader.read_uint32();
+  // auto _seqnr =
+  reader.read_uint32();
+  auto from = reader.read_uint32();
+  ASSERT_EQUAL(from, peer.local_ssrc); // we are at 7, 6 got lost?
+  auto nelems = reader.read_uint8();
+  ASSERT_EQUAL(nelems, 0x40); // zero midi data, BUT journal bit is on
+  auto journalheader = reader.read_uint8();
+  DEBUG("header? {} =? {}", journalheader, rtpmidid::journal_t::A_CHANNEL);
+  ASSERT_EQUAL(
+      journalheader,
+      rtpmidid::journal_t::A_CHANNEL); // 0x40, Only system journal, 1 channel.
+
+  auto seqnum = reader.read_uint16();
+  DEBUG("Seqnum? {} {}", seqnum, peer.seq_nr - 1);
+  ASSERT_EQUAL(seqnum, peer.seq_nr - 1);
+
+  auto nheaderlength = reader.read_uint16();
+  DEBUG("N header | length: {:04X}", nheaderlength);
+  ASSERT_EQUAL(nheaderlength & 0xFC00,
+               0); // 0x40, Only system journal, 1 channel.
+  ASSERT_EQUAL(nheaderlength & 0x03FF, 7);
+
+  auto which_chapters = reader.read_uint8();
+  ASSERT_EQUAL(which_chapters, rtpmidid::journal_t::N_NOTE_ON_OFF);
+
+  auto nlength = reader.read_uint8();
+  ASSERT_EQUAL(nlength, 2);
+
+  auto lowhigh = reader.read_uint8();
+  ASSERT_EQUAL(lowhigh, 0);
+
+  std::uint8_t note_num, note_vel;
+  note_num = reader.read_uint8();
+  note_vel = reader.read_uint8();
+  ASSERT_EQUAL(note_num, 0x80 | NOTE_D);
+  ASSERT_EQUAL(note_vel, 0x80 | VEL_D);
+
+  note_num = reader.read_uint8();
+  note_vel = reader.read_uint8();
+  ASSERT_EQUAL(note_num, 0x80 | NOTE_C);
+  ASSERT_EQUAL(note_vel, 0x80 | VEL_C);
+
+  INFO("All good on journal N packet.");
+
+  // ok, confirm this packet, and send another journal
+  auto confirmation = hex_to_bin("FF FF 'RS'"
+                                 "'BEEF'" // SSRC
+                                 "00 00 00 01");
+  *((uint32_t *)(&confirmation.data[8])) = htonl(peer.seq_nr);
+
+  network_io.truncate();
+  peer.data_ready(confirmation, rtpmidid::rtppeer::MIDI_PORT);
+  auto sent_journal = peer.send_journal();
+  ASSERT_FALSE(sent_journal);
+  network_io.print_hex(false);
+
+  // Nothing has been sent
+  ASSERT_EQUAL(network_io.position, network_io.start);
+
+  DEBUG("All parsed OK.");
 }
 
 int main(int argc, char **argv) {

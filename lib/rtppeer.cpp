@@ -70,19 +70,24 @@ void rtppeer::data_ready(io_bytes_reader &&buffer, port_e port) {
     if (is_command(buffer)) {
       parse_command(buffer, port);
     } else {
+      buffer.print_hex();
       parse_midi(buffer);
     }
   }
 }
 
+const auto MIN_COMMAND_PACKET_SIZE = 12;
+
 bool rtppeer::is_command(io_bytes_reader &pb) {
-  // DEBUG("Is command? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF,
-  // pb.start[1] == 0xFF);
-  return (pb.size() >= 16 && pb.start[0] == 0xFF && pb.start[1] == 0xFF);
+  // DEBUG("Is command? {} {} {}", pb.size() >= MIN_COMMAND_PACKET_SIZE,
+  // pb.start[0] == 0xFF,
+  //       pb.start[1] == 0xFF);
+  return (pb.size() >= MIN_COMMAND_PACKET_SIZE && pb.start[0] == 0xFF &&
+          pb.start[1] == 0xFF);
 }
 
 void rtppeer::parse_command(io_bytes_reader &buffer, port_e port) {
-  if (buffer.size() < 16) {
+  if (buffer.size() < MIN_COMMAND_PACKET_SIZE) {
     // This should never be reachable, but should help to smart compilers for
     // further size checks
     throw exception("Invalid command packet.");
@@ -523,24 +528,31 @@ void rtppeer::send_feedback(uint32_t seqnum) {
 }
 
 /// Sends a packet with ONLY the journal, no MIDI data
-void rtppeer::send_journal() {
+bool rtppeer::send_journal() {
   if (!journal)
-    return;
+    return false;
 
   io_bytes_writer_static<512> buffer;
   uint32_t timestamp = get_timestamp();
   seq_nr++;
 
+  auto prejournal = buffer.position;
   buffer.write_uint8(0x81);
   buffer.write_uint8(0x61);
   buffer.write_uint16(seq_nr);
   buffer.write_uint32(timestamp);
   buffer.write_uint32(local_ssrc);
   buffer.write_uint8(0x40); // Only journal bit
-  journal->write_journal(buffer);
+  bool has_journal = journal->write_journal(buffer);
+  if (!has_journal) {
+    buffer.position = prejournal;
+    seq_nr--;
+    return false;
+  }
 
   DEBUG("Journal packet ready: {} bytes", buffer.pos());
   send_event(buffer, CONTROL_PORT);
+  return true;
 }
 
 void rtppeer::connect_to(port_e rtp_port) {

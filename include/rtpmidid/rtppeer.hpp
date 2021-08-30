@@ -113,7 +113,7 @@ public:
   void send_midi(const io_bytes_reader &buffer);
   void send_goodbye(port_e to_port);
   void send_feedback(uint32_t seqnum);
-  void send_journal();
+  bool send_journal();
   void connect_to(port_e rtp_port);
   void send_ck0();
   uint64_t get_timestamp();

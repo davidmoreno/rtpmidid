@@ -23,6 +23,7 @@
 
 namespace rtpmidid {
 class journal_t {
+public:
   typedef enum {
     S_SINGLE_PACKET_LOSS = 0x80,
     Y_SYSTEM = 0x40,
@@ -60,7 +61,7 @@ public:
   void midi_in(uint32_t seq_nr, const io_bytes_reader &midi_in);
 
   // Write journal
-  void write_journal(io_bytes_writer &packet);
+  bool write_journal(io_bytes_writer &packet);
   bool write_channel_n(int8_t channel, io_bytes_writer &packet);
 
   // Parse

@@ -155,11 +155,24 @@ only one packet lost.
     |    OFFBITS    |    OFFBITS    |     ....      |    OFFBITS    |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-| Bit |   pos   | description                          |
-| --- | :-----: | ------------------------------------ |
-| B   |    0    | S-Style functionality. By default 1. |
-| S   |   16n   | If B is 0, all S are 0.              |
-| Y   | 16n + 8 | Recomendation to play.               |
+| Bit     |   pos   | description                                              |
+| ------- | :-----: | -------------------------------------------------------- |
+| B       |    0    | S-Style functionality. By default 1.                     |
+| S       |   16n   | If B is 0, all S are 0.                                  |
+| LOW     |         | See note                                                 |
+| HIGH    |         | See note                                                 |
+| Y       | 16n + 8 | Recomendation to play, may be 0 if later will be off.    |
+| OFFBITS |         | Bits with 1 will be note off. (note nr = nrbit + low\*8) |
+
+(from https://datatracker.ietf.org/doc/html/rfc6295#appendix-A.6.1)
+
+The 4-bit LOW and HIGH fields code the number of OFFBITS octets that
+follow the note log list. LOW and HIGH are unsigned integer values.
+If LOW <= HIGH, there are (HIGH - LOW + 1) OFFBITS octets in the
+chapter. The value pairs (LOW = 15, HIGH = 0) and (LOW = 15, HIGH = 1)
+code an empty NoteOff bitfield structure (i.e., no OFFBITS
+octets). Other (LOW > HIGH) value pairs MUST NOT appear in the
+header.
 
 ## Chapter T
 

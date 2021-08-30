@@ -18,6 +18,7 @@
  */
 
 #include <bits/stdint-uintn.h>
+#include <netinet/in.h>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/journal.hpp>
 
@@ -63,19 +64,42 @@ void journal_t::midi_in(uint32_t seqnr, const io_bytes_reader &cmidi_in) {
   seq_sent = seqnr;
 }
 
-void journal_t::write_journal(rtpmidid::io_bytes_writer &packet) {
+bool journal_t::write_journal(rtpmidid::io_bytes_writer &packet) {
   // keep header, to overwrite it later
   uint8_t *headerp = packet.position;
-  packet.write_uint8(0);
-  uint8_t header = 0;
+  packet.write_uint8(0); // journalheader
+  packet.write_uint8(0); // packet seqnum 1
+  packet.write_uint8(0); // packet seqnum 0
+
+  uint8_t header_journal = 0;
+  uint8_t header_chapter = 0;
+  uint8_t header_system = 0;
 
   for (int chan = 0; chan < 16; chan++) {
     if (write_channel_n(chan, packet)) {
-      header |= header_chapter_journal_e::N_NOTE_ON_OFF;
+      header_chapter |= header_chapter_journal_e::N_NOTE_ON_OFF;
     }
   }
 
-  *headerp = header;
+  if (header_chapter) {
+    header_journal = rtpmidid::journal_t::A_CHANNEL;
+  }
+  if (seq_confirmed == seq_sent - 1) {
+    header_journal |= rtpmidid::journal_t::S_SINGLE_PACKET_LOSS;
+  }
+  if (header_system) {
+    header_journal |= rtpmidid::journal_t::Y_SYSTEM;
+  }
+
+  if (!header_journal) {
+    return false;
+  }
+
+  *headerp = header_journal;
+  headerp[1] = (seq_sent & 0x00FF00) >> 8;
+  headerp[2] = (seq_sent & 0x0000FF);
+  DEBUG("Journal up to seq nr {}", seq_sent);
+  return true;
 }
 
 bool journal_t::write_channel_n(int8_t chan, io_bytes_writer &packet) {
@@ -84,10 +108,14 @@ bool journal_t::write_channel_n(int8_t chan, io_bytes_writer &packet) {
   auto noteoff_low = 127;
   auto noteoff_high = 0;
   auto noteon_seqn = channel[chan].chapter_n.noteon_seqn;
+  auto minseq = seq_sent;
   for (auto noten = 0; noten < 128; noten++) {
     auto seqn = noteon_seqn[noten];
     if (seqn > seq_confirmed) {
       noteon_count++;
+    }
+    if (minseq > seqn) {
+      minseq = seqn;
     }
   }
   auto noteoff_seqn = channel[chan].chapter_n.noteoff_seqn;
@@ -105,33 +133,41 @@ bool journal_t::write_channel_n(int8_t chan, io_bytes_writer &packet) {
 
   auto *header = packet.position;
   packet.write_uint16(0);
+  packet.write_uint8(0);
 
   DEBUG("Chapter N. Channel: {}, Has noteon: {}, has note off: {}", chan,
         noteon_count, noteoff_count);
 
+  auto chapter_n_header = packet.position;
+  packet.write_uint16(0);
+
+  int notecount = 0;
   if (noteon_count) {
     // TODO S bit to 1 always. But called B bit here.
-    header[0] = 0x80 | noteon_count;
     auto noteon_vel = channel[chan].chapter_n.noteon_vel;
     for (int noten = 0; noten < 128; noten++) {
       auto seqn = noteon_seqn[noten];
       if (seqn > seq_confirmed) {
+        // DEBUG("Play note {:X} {:X}", noten, noteon_vel[noten]);
         // TODO: Figure out whet is S bit. It looks it must be 1 except in some
         // cases. So always 1
         packet.write_uint8(0x80 | noten);
         // TODO: Encode Y -- Whether to recomend playing or skip this noteon.
         // Now always go for it.
         packet.write_uint8(0x80 | noteon_vel[noten]);
+        notecount++;
       }
     }
   }
+  chapter_n_header[0] = notecount == 128 ? 127 : notecount;
+
   if (noteoff_count) {
     noteoff_low >>= 4;
     noteoff_high >>= 4;
     // noten is the minimum note to store at the journal
     auto noten = noteoff_low << 4;
     // which is properly in the format needed here.
-    header[1] = noten | noteoff_high;
+    chapter_n_header[1] = noteoff_high;
     for (auto notenb = noteoff_low; notenb <= noteoff_high; notenb++) {
       uint8_t bitset = 0;
       for (int i = 0; i < 8; i++) {
@@ -142,7 +178,22 @@ bool journal_t::write_channel_n(int8_t chan, io_bytes_writer &packet) {
       }
       packet.write_uint8(bitset);
     }
+  } else {
+    if (notecount == 128) {
+
+      header[1] = 0xF0;
+    } else {
+      header[0] = 0xF1;
+    }
   }
+
+  const auto single_packet = ((seq_sent - minseq) == 1) ? 0x8000 : 0;
+  *((uint16_t *)(header)) =
+      ::htons(single_packet | (chan & 0x0F) << 11 |
+              (((packet.position - header) - 2) & 0x03FF));
+  header[2] |= N_NOTE_ON_OFF;
+  DEBUG("CHANNNEL HEADER {:X} {:X} {:X} SP {}, lenght {}", header[0], header[1],
+        header[2], single_packet, (((packet.position - header) - 3) & 0x03FF));
 
   return true;
 }
