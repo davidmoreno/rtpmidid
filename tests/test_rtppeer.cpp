@@ -18,6 +18,7 @@
 
 #include "../tests/test_utils.hpp"
 #include "./test_case.hpp"
+#include <algorithm>
 #include <memory>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
@@ -136,28 +137,30 @@ void test_send_short_midi() {
 }
 
 void test_send_long_midi() {
-    rtpmidid::rtppeer peer("test");
+  rtpmidid::rtppeer peer("test");
 
-    bool sent_midi = false;
-    peer.send_event.connect([&peer,
-                                    &sent_midi](const rtpmidid::io_bytes_reader &data,
-                                                rtpmidid::rtppeer::port_e port) {
+  bool sent_midi = false;
+  peer.send_event.connect(
+      [&peer, &sent_midi](const rtpmidid::io_bytes_reader &data,
+                          rtpmidid::rtppeer::port_e port) {
         if (peer.is_connected()) {
-            data.print_hex();
+          data.print_hex();
 
-            auto midi_buffer =
-                    rtpmidid::io_bytes_reader(data.start + 12, data.size() - 12);
-            ASSERT_TRUE(midi_buffer.compare(hex_to_bin("80 11 F0 7E 7F 06 02 00 01 0C 00 00 00 03 30 32 32 30 F7")));
-            sent_midi = true;
+          auto midi_buffer =
+              rtpmidid::io_bytes_reader(data.start + 12, data.size() - 12);
+          ASSERT_TRUE(midi_buffer.compare(hex_to_bin(
+              "80 11 F0 7E 7F 06 02 00 01 0C 00 00 00 03 30 32 32 30 F7")));
+          sent_midi = true;
         }
-    });
+      });
 
-    peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
-    peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
+  peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
+  peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
 
-    peer.send_midi(hex_to_bin("F0 7E 7F 06 02 00 01 0C 00 00 00 03 30 32 32 30 F7"));
+  peer.send_midi(
+      hex_to_bin("F0 7E 7F 06 02 00 01 0C 00 00 00 03 30 32 32 30 F7"));
 
-    ASSERT_TRUE(sent_midi);
+  ASSERT_TRUE(sent_midi);
 }
 
 void test_recv_some_midi() {
@@ -287,6 +290,99 @@ void test_journal() {
   ASSERT_EQUAL(midi_io.data[5], 0x0);
 }
 
+void test_send_large_sysex(void) {
+  const auto sysex = hex_to_bin(
+      "F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 "
+      "F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 "
+      "F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F7 44 01 47 57 2D "
+      "00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 "
+      "00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 "
+      "12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 "
+      "0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 "
+      "18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 "
+      "40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 "
+      "17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 "
+      "00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 "
+      "2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 "
+      "3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 "
+      "44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F "
+      "34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C "
+      "48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 "
+      "47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F "
+      "2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 "
+      "01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 "
+      "2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 "
+      "60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 "
+      "44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 "
+      "00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 "
+      "04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 "
+      "04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D "
+      "33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 "
+      "F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 "
+      "00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 "
+      "00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 "
+      "F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E "
+      "1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E "
+      "0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 "
+      "01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 "
+      "1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 "
+      "31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 "
+      "57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B "
+      "69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 "
+      "09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D "
+      "00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 "
+      "00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 "
+      "12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 "
+      "0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 "
+      "18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 "
+      "40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 "
+      "17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 "
+      "00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 "
+      "2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 "
+      "3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 "
+      "44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F "
+      "34 1F 2B 69 60 00 04 18 F0 00 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
+      "F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
+      "F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
+      "F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
+      "F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
+      "F7 F0 00 F7 ");
+
+  rtpmidid::rtppeer sender("sender");
+  rtpmidid::rtppeer receiver("receiver");
+
+  sender.send_event.connect([&receiver](const rtpmidid::io_bytes_reader &data,
+                                        rtpmidid::rtppeer::port_e port) {
+    rtpmidid::io_bytes_reader datar(data);
+    DEBUG("Write {} bytes to receiver data_ready", data.size());
+    receiver.data_ready(std::move(datar), port);
+  });
+
+  receiver.send_event.connect([&sender](const rtpmidid::io_bytes_reader &data,
+                                        rtpmidid::rtppeer::port_e port) {
+    rtpmidid::io_bytes_reader datar(data);
+    DEBUG("Write {} bytes to sender data_ready", data.size());
+    sender.data_ready(std::move(datar), port);
+  });
+  bool got_data = false;
+  receiver.midi_event.connect(
+      [&got_data, &sysex](const rtpmidid::io_bytes_reader &midi) {
+        INFO("Got MIDI data");
+        // midi.print_hex();
+        ASSERT_EQUAL(midi.size(), sysex.size());
+        ASSERT_EQUAL(memcmp(midi.start, sysex.start, midi.size()), 0);
+
+        got_data = true;
+      });
+
+  sender.connect_to(rtpmidid::rtppeer::CONTROL_PORT);
+  sender.connect_to(rtpmidid::rtppeer::MIDI_PORT);
+
+  sender.send_midi(sysex);
+
+  ASSERT_TRUE(got_data);
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_connect_disconnect),
@@ -295,6 +391,7 @@ int main(int argc, char **argv) {
       TEST(test_send_long_midi),
       TEST(test_recv_some_midi),
       TEST(test_journal),
+      TEST(test_send_large_sysex),
   };
 
   testcase.run(argc, argv);
