@@ -1,15 +1,24 @@
+PORT := 10000
+
 .PHONY: help
 help:
 	@echo "Makefile for rtpmidid"
 	@echo
-	@echo "build   -- Creates the build directory and builds the rtpmidid"
-	@echo "run     -- builds and runs the daemon"
-	@echo "setup   -- Creates the socket control file"
-	@echo "clean   -- Cleans project"
-	@echo "deb     -- Generate deb package"
-	@echo "test    -- Runs all test"
-	@echo "install -- Installs to PREFIX or DESTDIR (default /usr/local/)"
+	@echo " build   -- Creates the build directory and builds the rtpmidid"
+	@echo " run     -- builds and runs the daemon"
+	@echo " setup   -- Creates the socket control file"
+	@echo " clean   -- Cleans project"
+	@echo " deb     -- Generate deb package"
+	@echo " test    -- Runs all test"
+	@echo " install -- Installs to PREFIX or DESTDIR (default /usr/local/)"
 	@echo
+	@echo " gdb     -- Run inside gdb, to capture backtrace of failures (bt). Useful for bug reports."
+	@echo " capture -- Capture packets with tcpdump. Add this to bug reports."
+	@echo
+	@echo "Variables:"
+	@echo 
+	@echo " PORT=10000"
+	@echo 
 
 .PHONY: build
 build: build/bin/rtpmidid
@@ -30,7 +39,7 @@ clean:
 	rm -rf build
 
 VALGRINDFLAGS := --leak-check=full --error-exitcode=1
-RTPMIDID_ARGS := --port 10000
+RTPMIDID_ARGS := --port ${PORT} --name devel
 
 .PHONY: run run-valgrind gdb
 run: build
@@ -41,6 +50,20 @@ gdb: build-dev
 
 run-valgrind: build
 	valgrind --leak-check=full --show-leak-kinds=all build/src/rtpmidid $(RTPMIDID_ARGS)
+
+PORT1 = $(shell echo | awk '{print ${PORT} + 1}')
+
+.PHONY: dump
+capture:
+	rm -f /tmp/rtpmidid-${PORT}.dump
+	@echo "\033[1;32m"
+	@echo
+	@echo "   Captured data will be at /tmp/rtpmidid-${PORT}.dump"
+	@echo
+	@echo "   Press Control-C to stop capturing.  "
+	@echo "\033[0m"
+	@echo
+	tcpdump -i any '(udp port ${PORT}) or (udp port ${PORT1})' -v -w /tmp/rtpmidid-${PORT}.dump
 
 .PHONY: setup
 setup:
@@ -101,19 +124,4 @@ install-librtpmidid0-dev: build
 	cp README.md $(PREFIX)/usr/share/doc/librtpmidid0-dev/
 	cp README.librtpmidid.md $(PREFIX)/usr/share/doc/librtpmidid0-dev/
 	cp LICENSE-lib.txt $(PREFIX)/usr/share/doc/librtpmidid0-dev/LICENSE.txt
-
-
-ETH = $(shell route | awk '$$1 == "default" { print $$8 }')
-PORT = 5004
-
-PORT1 = $(shell echo | awk '{print ${PORT} + 1}')
-
-.PHONY: dump
-dump:
-	@echo
-	@echo "Set ETH port or PORT with: make dump ETH=eth0 PORT=5004"
-	@echo
-	rm -f dump.${PORT}
-	tcpdump '(port ${PORT}) or (port ${PORT1})' -s 65536 -w dump.${PORT} -i ${ETH} -v
-
 
