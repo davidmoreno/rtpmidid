@@ -93,7 +93,7 @@ One for each (TOTCHAN + 1)
 | ------ | :----: | ------------------------------------------------------------------------ |
 | S      |   0    | Single packet loss. To indicate only one packet is described in journal. |
 | CHAN   |  1-4   | Channel number                                                           |
-| H      |   5    | Whether controllers are Enhanced Chapter C.                               |
+| H      |   5    | Whether controllers are Enhanced Chapter C.                              |
 | LENGHT |  6-15  | Lenght of the journal                                                    |
 | P      | 16 / 0 | Chapter P. Program Change.                                               |
 | C      | 17 / 1 | Chapter C. Control Change.                                               |
@@ -178,3 +178,16 @@ only one packet lost.
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |X|  PRESSURE   |  ....                                         |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+# SysEx
+
+https://datatracker.ietf.org/doc/html/rfc6295 - pg 17
+
+| Formats  | notes                                | encoding  |
+| -------- | ------------------------------------ | --------- |
+| Basic    |                                      | F0 ... F7 |
+| Multiple | Temporal information, or Big packets |           |
+|          | First packet                         | F0 ... F0 |
+|          | list have to have some data          | F7 ... F0 |
+|          | last may be empty                    | F7 .x. F7 |
+|          | Cancel must be empty                 | F7 F4     |

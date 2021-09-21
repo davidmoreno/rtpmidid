@@ -17,6 +17,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <iterator>
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
@@ -419,8 +420,63 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
   }
   buffer.check_enough(length);
 
-  io_bytes midi(buffer.position, length);
-  midi_event(midi);
+  if (!sysex.empty() || *buffer.position == 0xF0) {
+    parse_sysex(buffer, length);
+  } else {
+    // Normal flow, simple midi data
+    io_bytes midi(buffer.position, length);
+    midi_event(midi);
+  }
+}
+
+void rtppeer::parse_sysex(io_bytes_reader &buffer, int16_t length) {
+  buffer.print_hex();
+  auto last_byte = *(buffer.position + length - 1);
+
+  if (!sysex.empty()) {
+    DEBUG("Read SysEx cont. {:x} ... {:x}", *buffer.position, last_byte);
+    if (*buffer.position != 0xF7) {
+      throw rtpmidid::bad_sysex_exception("Next packet does not start with F7");
+    }
+    std::copy(buffer.position + 1, buffer.position + length - 1,
+              std::back_inserter(sysex));
+
+    // Final packet
+    switch (last_byte) {
+    case 0xF7: {
+      sysex.push_back(0xF7);
+      auto sysexreader = io_bytes_reader(&sysex[1], sysex.size() - 1);
+      sysexreader.print_hex();
+      midi_event(sysexreader);
+      sysex.clear();
+
+    } break;
+    case 0xF4:
+      // Cancel.. just clear sysex
+      sysex.clear();
+      break;
+    case 0xF0:
+      // Continue, do nothing (data already copied before)
+      break;
+    default:
+      WARNING("Bad sysex end byte: {X}", last_byte);
+      throw rtpmidid::bad_sysex_exception("Bad sysex end byte");
+    }
+  }
+
+  if (*buffer.position == 0xF0) {
+    DEBUG("Read SysEx. {:x} ... {:x}", *buffer.position, last_byte);
+    if (last_byte == 0xF7) { // Normal packet
+      DEBUG("Read normal sysex packet");
+      io_bytes midi(buffer.position, length);
+      midi_event(midi);
+    } else {
+      DEBUG("First part");
+      sysex.clear();
+      std::copy(buffer.position - 1, buffer.position + length - 1,
+                std::back_inserter(sysex));
+    }
+  }
 }
 
 /**

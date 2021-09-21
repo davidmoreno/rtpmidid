@@ -383,6 +383,52 @@ void test_send_large_sysex(void) {
   ASSERT_TRUE(got_data);
 }
 
+void test_segmented_sysex(void) {
+  const auto segmented_sysex1 = hex_to_bin("F0 01 02 03 04 F0");
+  const auto segmented_sysex2 = hex_to_bin("F7 05 06 07 08 F7");
+  const auto cancel_sysex = hex_to_bin("F7 F4");
+  const auto sysex = hex_to_bin("F0 01 02 03 0405 06 07 08 F7");
+
+  rtpmidid::rtppeer sender("sender");
+  rtpmidid::rtppeer receiver("receiver");
+
+  sender.send_event.connect([&receiver](const rtpmidid::io_bytes_reader &data,
+                                        rtpmidid::rtppeer::port_e port) {
+    rtpmidid::io_bytes_reader datar(data);
+    DEBUG("Write {} bytes to receiver data_ready", data.size());
+    receiver.data_ready(std::move(datar), port);
+  });
+
+  receiver.send_event.connect([&sender](const rtpmidid::io_bytes_reader &data,
+                                        rtpmidid::rtppeer::port_e port) {
+    rtpmidid::io_bytes_reader datar(data);
+    DEBUG("Write {} bytes to sender data_ready", data.size());
+    sender.data_ready(std::move(datar), port);
+  });
+  bool got_data = false;
+  receiver.midi_event.connect(
+      [&got_data, &sysex](const rtpmidid::io_bytes_reader &midi) {
+        INFO("Got MIDI data");
+        // midi.print_hex();
+        DEBUG("Got {} bytes, need {} bytes", midi.size(), sysex.size());
+        ASSERT_EQUAL(midi.size(), sysex.size());
+        ASSERT_EQUAL(memcmp(midi.start, sysex.start, midi.size()), 0);
+
+        got_data = true;
+      });
+
+  sender.connect_to(rtpmidid::rtppeer::CONTROL_PORT);
+  sender.connect_to(rtpmidid::rtppeer::MIDI_PORT);
+
+  sender.send_midi(segmented_sysex1);
+  sender.send_midi(cancel_sysex);
+
+  sender.send_midi(segmented_sysex1);
+  sender.send_midi(segmented_sysex2);
+
+  ASSERT_TRUE(got_data);
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_connect_disconnect),
@@ -392,6 +438,7 @@ int main(int argc, char **argv) {
       TEST(test_recv_some_midi),
       TEST(test_journal),
       TEST(test_send_large_sysex),
+      TEST(test_segmented_sysex),
   };
 
   testcase.run(argc, argv);
