@@ -48,9 +48,7 @@ std::string color(const std::string_view &str, Color color, Color bgcolor,
   return fmt::format("\033[{};{};{}m{}\033[0m", hl, color, bgcolor, str);
 }
 
-logger::logger() {
-	is_a_terminal = isatty(fileno(stdout));
-}
+logger::logger() { is_a_terminal = isatty(fileno(stdout)); }
 
 logger::~logger() {}
 void logger::log(const char *filename, int lineno, LogLevel loglevel,
@@ -79,12 +77,11 @@ void logger::log(const char *filename, int lineno, LogLevel loglevel,
       break;
     }
 
-    fmt::print(
-        "{} {}\n",
-        color(fmt::format("[{}] [{}:{}]", timestamp, filename, lineno), my_color),
-        msg); // color("msg"), RED);
-  }
-  else {
+    fmt::print("{} {}\n",
+               color(fmt::format("[{}] [{}:{}]", timestamp, filename, lineno),
+                     my_color),
+               msg); // color("msg"), RED);
+  } else {
     fmt::print("[{}:{}] {}\n", filename, lineno, msg);
   }
 }

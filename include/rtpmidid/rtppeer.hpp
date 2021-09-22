@@ -34,6 +34,12 @@ public:
       : ::rtpmidid::exception("Bad SysEx: {}", what) {}
 };
 
+class bad_midi_packet : public ::rtpmidid::exception {
+public:
+  bad_midi_packet(const char *what)
+      : ::rtpmidid::exception("Bad MIDI packet: {}", what) {}
+};
+
 class rtppeer {
 public:
   // Commands, the id is the same chars as the name

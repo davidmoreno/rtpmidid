@@ -367,6 +367,54 @@ void rtppeer::parse_feedback(io_bytes_reader &buffer) {
         seq_nr_ack, seq_nr);
 }
 
+static int next_midi_packet_length(io_bytes_reader &buffer) {
+  // Get length depending on midi event
+  buffer.check_enough(1);
+  auto first_byte = *buffer.position;
+  auto first_byte_f0 = first_byte & 0xF0;
+  int length = 0;
+  switch (first_byte_f0) {
+  case 0x80:
+  case 0x90:
+  case 0xA0:
+  case 0xB0:
+  case 0xE0:
+    length = 3;
+    break;
+  case 0xC0:
+  case 0xD0:
+    length = 2;
+    break;
+  }
+  if (length == 0) {
+    switch (first_byte) {
+    case 0xFE:
+    case 0xFC:
+    case 0xF8:
+    case 0xFA:
+    case 0xFB:
+    case 0xF1:
+      length = 1;
+      break;
+    case 0xF0:
+    case 0xF7:
+    case 0xF4:
+      length = 2;
+      auto byte = buffer.position + 1;
+      while ((*byte & 0x80) == 0x00) {
+        byte++;
+        if (byte >= buffer.end) {
+          throw bad_midi_packet("Unexpected SysEx packet end");
+        }
+        length++;
+      }
+      // DEBUG("Check sysex length: {}", length);
+      break;
+    }
+  }
+  return length;
+}
+
 void rtppeer::parse_midi(io_bytes_reader &buffer) {
   // auto _headers =
   buffer.read_uint8(); // Ignore RTP header flags (Byte 0)
@@ -420,33 +468,72 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
   }
   buffer.check_enough(length);
 
-  if (!sysex.empty() || *buffer.position == 0xF0) {
-    parse_sysex(buffer, length);
-  } else {
-    // Normal flow, simple midi data
-    io_bytes midi(buffer.position, length);
-    midi_event(midi);
+  // May be several midi messages with delta time
+  auto remaining = length;
+  while (remaining) {
+    length = next_midi_packet_length(buffer);
+    if (length == 0) {
+      throw bad_midi_packet(
+          fmt::format("Unexpected MIDI data: {}", *buffer.position).c_str());
+    }
+    buffer.check_enough(length);
+    // DEBUG("Remaining {}, length for this packet: {}", remaining, length);
+    remaining -= length;
+
+    if (!sysex.empty() || *buffer.position == 0xF0) {
+      parse_sysex(buffer, length);
+    } else {
+      // Normal flow, simple midi data
+      io_bytes midi(buffer.position, length);
+      midi_event(midi);
+    }
+    buffer.skip(length);
+
+    // DEBUG("Remaining: {}, size: {}, left: {}", remaining, buffer.size(),
+    //       buffer.size() - buffer.pos());
+
+    if (remaining) {
+      // DEBUG("Packet with several midi events. {} bytes remaining",
+      // remaining); Skip delta just look for first bit that will mark if more
+      // bytes
+      uint8_t delta;
+      while (((delta = buffer.read_uint8()) & 0x80) == 0x00) {
+        // DEBUG("Skip delta: {}", delta);
+        remaining--;
+      };
+      // rewind one
+      buffer.position--;
+    }
   }
 }
 
 void rtppeer::parse_sysex(io_bytes_reader &buffer, int16_t length) {
-  buffer.print_hex();
+  // buffer.print_hex();
   auto last_byte = *(buffer.position + length - 1);
 
   if (!sysex.empty()) {
-    DEBUG("Read SysEx cont. {:x} ... {:x}", *buffer.position, last_byte);
+    // DEBUG("Read SysEx cont. {:x} ... {:x} ({:p})", *buffer.position,
+    // last_byte, buffer.position);
     if (*buffer.position != 0xF7) {
       throw rtpmidid::bad_sysex_exception("Next packet does not start with F7");
     }
     std::copy(buffer.position + 1, buffer.position + length - 1,
               std::back_inserter(sysex));
+    // DEBUG("Sysex size: {}", sysex.size());
+    // io_bytes(&sysex[0], sysex.size()).print_hex();
 
     // Final packet
     switch (last_byte) {
     case 0xF7: {
       sysex.push_back(0xF7);
+      if (sysex.size() == 3) {
+        WARNING("NOT Sending empty SysEx packet");
+        sysex.clear();
+        return;
+      }
       auto sysexreader = io_bytes_reader(&sysex[1], sysex.size() - 1);
-      sysexreader.print_hex();
+      // DEBUG("Send sysex {}", sysex.size());
+      // sysexreader.print_hex();
       midi_event(sysexreader);
       sysex.clear();
 
@@ -462,16 +549,15 @@ void rtppeer::parse_sysex(io_bytes_reader &buffer, int16_t length) {
       WARNING("Bad sysex end byte: {X}", last_byte);
       throw rtpmidid::bad_sysex_exception("Bad sysex end byte");
     }
-  }
-
-  if (*buffer.position == 0xF0) {
-    DEBUG("Read SysEx. {:x} ... {:x}", *buffer.position, last_byte);
+  } else if (*buffer.position == 0xF0) {
+    // DEBUG("Read SysEx. {:x} ... {:x} ({:p})", *buffer.position, last_byte,
+    //       buffer.position);
     if (last_byte == 0xF7) { // Normal packet
-      DEBUG("Read normal sysex packet");
+      // DEBUG("Read normal sysex packet");
       io_bytes midi(buffer.position, length);
       midi_event(midi);
     } else {
-      DEBUG("First part");
+      // DEBUG("First part");
       sysex.clear();
       std::copy(buffer.position - 1, buffer.position + length - 1,
                 std::back_inserter(sysex));
@@ -510,8 +596,8 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
   buffer.write_uint8(0x80);
 
   // Here it SHOULD send 0x80 | 0x61 if there is midi data sent, but if done,
-  // then rtpmidi for windows does not read messages, so for compatibility, just
-  // send 0x61
+  // then rtpmidi for windows does not read messages, so for compatibility,
+  // just send 0x61
   buffer.write_uint8(0x61);
   buffer.write_uint16(seq_nr);
   buffer.write_uint32(timestamp);
@@ -627,7 +713,8 @@ void rtppeer::parse_journal_chapter(io_bytes_reader &journal_data) {
 
   DEBUG("Chapters: {:08b}", chapters);
 
-  // Although maybe I dont know how to parse them.. I need to at least skip them
+  // Although maybe I dont know how to parse them.. I need to at least skip
+  // them
   if (chapters & 0xF0) {
     WARNING("There are some PCMW chapters and I dont even know how to skip "
             "them. Sorry journal invalid.");
