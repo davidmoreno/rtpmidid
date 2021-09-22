@@ -372,7 +372,6 @@ static int next_midi_packet_length(io_bytes_reader &buffer) {
   buffer.check_enough(1);
   auto first_byte = *buffer.position;
   auto first_byte_f0 = first_byte & 0xF0;
-  DEBUG("First byte {:X}", first_byte);
   int length = 0;
   switch (first_byte_f0) {
   case 0x80:
@@ -400,7 +399,6 @@ static int next_midi_packet_length(io_bytes_reader &buffer) {
     case 0xF0:
     case 0xF7:
     case 0xF4:
-      DEBUG("Check sysex length");
       length = 2;
       auto byte = buffer.position + 1;
       while ((*byte & 0x80) == 0x00) {
@@ -410,6 +408,7 @@ static int next_midi_packet_length(io_bytes_reader &buffer) {
         }
         length++;
       }
+      // DEBUG("Check sysex length: {}", length);
       break;
     }
   }
@@ -478,7 +477,7 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
           fmt::format("Unexpected MIDI data: {}", *buffer.position).c_str());
     }
     buffer.check_enough(length);
-    DEBUG("Remaining {}, length for this packet: {}", remaining, length);
+    // DEBUG("Remaining {}, length for this packet: {}", remaining, length);
     remaining -= length;
 
     if (!sysex.empty() || *buffer.position == 0xF0) {
@@ -490,11 +489,17 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
     }
     buffer.skip(length);
 
+    // DEBUG("Remaining: {}, size: {}, left: {}", remaining, buffer.size(),
+    //       buffer.size() - buffer.pos());
+
     if (remaining) {
-      DEBUG("Packet with several midi events. {} bytes remaining", remaining);
-      // Skip delta
-      // just look for first bit that will mark if more bytes
-      while ((buffer.read_uint8() & 0x80) == 0x00) {
+      // DEBUG("Packet with several midi events. {} bytes remaining",
+      // remaining); Skip delta just look for first bit that will mark if more
+      // bytes
+      uint8_t delta;
+      while (((delta = buffer.read_uint8()) & 0x80) == 0x00) {
+        // DEBUG("Skip delta: {}", delta);
+        remaining--;
       };
       // rewind one
       buffer.position--;
@@ -503,16 +508,19 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
 }
 
 void rtppeer::parse_sysex(io_bytes_reader &buffer, int16_t length) {
-  buffer.print_hex();
+  // buffer.print_hex();
   auto last_byte = *(buffer.position + length - 1);
 
   if (!sysex.empty()) {
-    DEBUG("Read SysEx cont. {:x} ... {:x}", *buffer.position, last_byte);
+    // DEBUG("Read SysEx cont. {:x} ... {:x} ({:p})", *buffer.position,
+    // last_byte, buffer.position);
     if (*buffer.position != 0xF7) {
       throw rtpmidid::bad_sysex_exception("Next packet does not start with F7");
     }
     std::copy(buffer.position + 1, buffer.position + length - 1,
               std::back_inserter(sysex));
+    // DEBUG("Sysex size: {}", sysex.size());
+    // io_bytes(&sysex[0], sysex.size()).print_hex();
 
     // Final packet
     switch (last_byte) {
@@ -524,8 +532,8 @@ void rtppeer::parse_sysex(io_bytes_reader &buffer, int16_t length) {
         return;
       }
       auto sysexreader = io_bytes_reader(&sysex[1], sysex.size() - 1);
-      DEBUG("Send sysex {}", sysex.size());
-      sysexreader.print_hex();
+      // DEBUG("Send sysex {}", sysex.size());
+      // sysexreader.print_hex();
       midi_event(sysexreader);
       sysex.clear();
 
@@ -541,16 +549,15 @@ void rtppeer::parse_sysex(io_bytes_reader &buffer, int16_t length) {
       WARNING("Bad sysex end byte: {X}", last_byte);
       throw rtpmidid::bad_sysex_exception("Bad sysex end byte");
     }
-  }
-
-  if (*buffer.position == 0xF0) {
-    DEBUG("Read SysEx. {:x} ... {:x}", *buffer.position, last_byte);
+  } else if (*buffer.position == 0xF0) {
+    // DEBUG("Read SysEx. {:x} ... {:x} ({:p})", *buffer.position, last_byte,
+    //       buffer.position);
     if (last_byte == 0xF7) { // Normal packet
-      DEBUG("Read normal sysex packet");
+      // DEBUG("Read normal sysex packet");
       io_bytes midi(buffer.position, length);
       midi_event(midi);
     } else {
-      DEBUG("First part");
+      // DEBUG("First part");
       sysex.clear();
       std::copy(buffer.position - 1, buffer.position + length - 1,
                 std::back_inserter(sysex));

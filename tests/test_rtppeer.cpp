@@ -303,9 +303,12 @@ void test_send_large_sysex(void) {
   const auto sysex = hex_to_bin(
       "F0 " // this was not in the report.. maybe a bug? if there everything
             // makes sense
+      // Bunch of empty sysex.
       "F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 "
       "F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 "
-      "F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F7 44 01 47 57 2D "
+      "F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F7"
+      "F0"
+      "44 01 47 57 2D "
       "00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 "
       "00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 "
       "12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 "
@@ -352,12 +355,14 @@ void test_send_large_sysex(void) {
       "2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 "
       "3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 "
       "44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F "
-      "34 1F 2B 69 60 00 04 18 F0 00 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
+      "34 1F 2B 69 60 00 04 18 F7 "
+      // and more empty packets
+      "00 F0 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
       "F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
       "F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
       "F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
       "F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
-      "F7 F0 00 F7 ");
+      "F7 F0 00 F7 F7");
 
   rtpmidid::rtppeer sender("sender");
   rtpmidid::rtppeer receiver("receiver");
@@ -375,15 +380,19 @@ void test_send_large_sysex(void) {
     DEBUG("Write {} bytes to sender data_ready", data.size());
     sender.data_ready(std::move(datar), port);
   });
-  bool got_data = false;
-  receiver.midi_event.connect(
-      [&got_data, &sysex](const rtpmidid::io_bytes_reader &midi) {
-        INFO("Got MIDI data");
-        midi.print_hex();
-        ASSERT_EQUAL(midi.size(), sysex.size());
-        ASSERT_EQUAL(memcmp(midi.start, sysex.start, midi.size()), 0);
 
-        got_data = true;
+  bool got_midi = false;
+
+  receiver.midi_event.connect(
+      [&got_midi](const rtpmidid::io_bytes_reader &midi) {
+        INFO("Got MIDI data, size: {}", midi.size());
+        // midi.print_hex();
+        ASSERT_EQUAL(*midi.position, 0xF0);
+        ASSERT_EQUAL(*(midi.end - 1), 0xF7);
+        INFO("Got MIDI data, size: {}", midi.size());
+        ASSERT_EQUAL(midi.size(), 1026);
+
+        got_midi = true;
       });
 
   sender.connect_to(rtpmidid::rtppeer::CONTROL_PORT);
@@ -391,7 +400,7 @@ void test_send_large_sysex(void) {
 
   sender.send_midi(sysex);
 
-  ASSERT_TRUE(got_data);
+  ASSERT_TRUE(got_midi);
 }
 
 void test_segmented_sysex(void) {
