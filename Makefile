@@ -11,6 +11,7 @@ help:
 	@echo " deb     -- Generate deb package"
 	@echo " test    -- Runs all test"
 	@echo " install -- Installs to PREFIX or DESTDIR (default /usr/local/)"
+	@echo " man     -- Generate man pages"
 	@echo
 	@echo " gdb     -- Run inside gdb, to capture backtrace of failures (bt). Useful for bug reports."
 	@echo " capture -- Capture packets with tcpdump. Add this to bug reports."
@@ -33,6 +34,10 @@ build-dev:
 	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug
 	cd build && make -j
 
+
+man: 
+	mkdir -p build/man/
+	pandoc rtpmidid.1.md -s -t man -o build/man/rtpmidid.1
 
 .PHONY: clean
 clean:
@@ -96,7 +101,7 @@ ifeq ($(PREFIX),)
 endif
 .PHONY: install
 
-install: install-rtpmidid install-librtpmidid0 install-librtpmidid0-dev
+install: install-rtpmidid install-librtpmidid0 install-librtpmidid0-dev install-man
 
 install-rtpmidid: build
 	mkdir -p $(PREFIX)/usr/bin/ 
@@ -125,3 +130,7 @@ install-librtpmidid0-dev: build
 	cp README.librtpmidid.md $(PREFIX)/usr/share/doc/librtpmidid0-dev/
 	cp LICENSE-lib.txt $(PREFIX)/usr/share/doc/librtpmidid0-dev/LICENSE.txt
 
+install-man: man
+	mkdir -p $(PREFIX)/man/man1/
+	cp build/man/rtpmidid.1 $(PREFIX)/man/man1/
+	
