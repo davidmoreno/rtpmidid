@@ -1,6 +1,13 @@
-rtpmidid (21.07~65~g8bc88) unstable; urgency=medium
+rtpmidid (21.11) unstable; urgency=medium
 
-  * Rolling
+  * Several MIDI packets in a single packet. This solves several issues 
+    with third party implementations.
+  * Resassembly of SysEx packages
+  * Internal improvements
+  * More tests
+  * Log colors only on terminals
+  * Parsing or Real Time Events
+  * Moved mdns_rtpmidi into the library
 
  -- David Moreno <dmoreno@coralbits.com>  Thu, 04 Nov 2021 21:52:52 +0100
 
