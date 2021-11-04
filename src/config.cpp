@@ -23,7 +23,12 @@
 
 using namespace rtpmidid;
 
-const char * ::rtpmidid::VERSION = "21.07.1";
+#ifdef RTPMIDID_VERSION
+const char * ::rtpmidid::VERSION = RTPMIDID_VERSION;
+#else
+const char * ::rtpmidid::VERSION = "unknown";
+#endif
+
 const char *CMDLINE_HELP =
     ""
     "Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.\n"

@@ -5,7 +5,6 @@ add_executable(
   control_socket.cpp
 )
 
-
 target_link_libraries(rtpmidid-daemon ${AVAHI_LIBRARIES})
 target_include_directories(rtpmidid-daemon PUBLIC ${AVAHI_INCLUDE_DIRS})
 target_compile_options(rtpmidid-daemon PUBLIC ${AVAHI_CFLAGS_OTHER})
