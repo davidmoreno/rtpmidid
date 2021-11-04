@@ -2,7 +2,7 @@ Source: rtpmidid
 Section: unknown
 Priority: optional
 Maintainer: David Moreno <dmoreno@coralbits.com>
-Build-Depends: debhelper (>= 10), libavahi-client-dev, libfmt-dev, libasound2-dev, python3, cmake
+Build-Depends: debhelper (>= 10), libavahi-client-dev, libfmt-dev, libasound2-dev, python3, cmake, pandoc
 Standards-Version: 4.1.2
 Homepage: https://github.com/davidmoreno/rtpmidid
 

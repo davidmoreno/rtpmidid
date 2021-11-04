@@ -38,6 +38,7 @@ build-dev:
 man: 
 	mkdir -p build/man/
 	pandoc rtpmidid.1.md -s -t man -o build/man/rtpmidid.1
+	pandoc rtpmidid-cli.1.md -s -t man -o build/man/rtpmidid-cli.1
 
 .PHONY: clean
 clean:
@@ -103,7 +104,7 @@ endif
 
 install: install-rtpmidid install-librtpmidid0 install-librtpmidid0-dev install-man
 
-install-rtpmidid: build
+install-rtpmidid: build man
 	mkdir -p $(PREFIX)/usr/bin/ 
 	cp build/src/rtpmidid $(PREFIX)/usr/bin/
 	cp cli/rtpmidid-cli.py $(PREFIX)/usr/bin/rtpmidid-cli
@@ -112,6 +113,9 @@ install-rtpmidid: build
 	mkdir -p $(PREFIX)/usr/share/doc/rtpmidid/
 	cp README.md $(PREFIX)/usr/share/doc/rtpmidid/
 	cp LICENSE-daemon.txt $(PREFIX)/usr/share/doc/rtpmidid/LICENSE.txt
+	mkdir -p $(PREFIX)/usr/share/man/man1/
+	cp build/man/rtpmidid.1 $(PREFIX)/usr/share/man/man1/
+	cp build/man/rtpmidid-cli.1 $(PREFIX)/usr/share/man/man1/
 
 install-librtpmidid0: build
 	mkdir -p $(PREFIX)/usr/lib/ 
@@ -130,7 +134,4 @@ install-librtpmidid0-dev: build
 	cp README.librtpmidid.md $(PREFIX)/usr/share/doc/librtpmidid0-dev/
 	cp LICENSE-lib.txt $(PREFIX)/usr/share/doc/librtpmidid0-dev/LICENSE.txt
 
-install-man: man
-	mkdir -p $(PREFIX)/man/man1/
-	cp build/man/rtpmidid.1 $(PREFIX)/man/man1/
 	
