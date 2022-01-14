@@ -102,7 +102,7 @@ ifeq ($(PREFIX),)
 endif
 .PHONY: install
 
-install: install-rtpmidid install-librtpmidid0 install-librtpmidid0-dev install-man
+install: install-rtpmidid install-librtpmidid0 install-librtpmidid0-dev
 
 install-rtpmidid: build man
 	mkdir -p $(PREFIX)/usr/bin/ 
