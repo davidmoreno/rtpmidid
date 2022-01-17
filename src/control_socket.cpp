@@ -273,7 +273,7 @@ rtpmidid::control_socket_t::parse_command(const std::string &command) {
     }
   }
   if (msg.method == "update-mdns") {
-    rtpmidid.mdns_rtpmidi.setup_mdns_browser();
+    rtpmidid.mdns.setup_mdns_browser();
     ret = {{"detail", "mDNS update requested"}};
   }
   if (msg.method == "help") {

@@ -9,7 +9,7 @@
 #include "./aseq.hpp"
 #include <alsa/seq.h>
 
-#include "rtpmidid/mdns_rtpmidi.hpp"
+#include "rtpmidid/mdns.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/rtpclient.hpp"
 #include "test_case.hpp"
@@ -289,13 +289,13 @@ struct ServerAB {
     avahi_known_names.clear();
 
     // Keep list of known items by server A
-    A.mdns_rtpmidi.discover_event.connect([](const std::string &name,
+    A.mdns.discover_event.connect([](const std::string &name,
                                              const std::string &address,
                                              const std::string &port) {
       avahi_known_names.push_back(name);
       DEBUG("Discover {}", name);
     });
-    A.mdns_rtpmidi.remove_event.connect([](const std::string &name) {
+    A.mdns.remove_event.connect([](const std::string &name) {
       avahi_known_names.erase(std::find(std::begin(avahi_known_names),
                                         std::end(avahi_known_names), name));
       DEBUG("Undiscover {}", name);

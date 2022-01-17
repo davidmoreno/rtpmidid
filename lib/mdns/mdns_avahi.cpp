@@ -18,8 +18,8 @@
  */
 
 #include <rtpmidid/logger.hpp>
-#include <rtpmidid/mdns_rtpmidi.hpp>
 #include <rtpmidid/poller.hpp>
+#include <rtpmidid/mdns_avahi.hpp>
 
 #include <avahi-client/client.h>
 #include <avahi-client/lookup.h>
@@ -27,6 +27,7 @@
 #include <avahi-common/alternative.h>
 #include <avahi-common/error.h>
 #include <avahi-common/malloc.h>
+
 
 struct AvahiTimeout {
   rtpmidid::poller_t::timer_t timer_id;
@@ -47,7 +48,7 @@ struct AvahiEntryGroup {
 
 static void entry_group_callback(AvahiEntryGroup *g, AvahiEntryGroupState state,
                                  AVAHI_GCC_UNUSED void *userdata) {
-  rtpmidid::mdns_rtpmidi *mr = (rtpmidid::mdns_rtpmidi *)userdata;
+  rtpmidid::mdns *mr = (rtpmidid::mdns *)userdata;
   mr->group = g;
 
   /* Called whenever the entry group state changes */
@@ -173,7 +174,7 @@ void poller_adapter_timeout_free(AvahiTimeout *to) {
 
 static void client_callback(AvahiClient *c, AvahiClientState state,
                             void *userdata) {
-  rtpmidid::mdns_rtpmidi *mr = (rtpmidid::mdns_rtpmidi *)userdata;
+  rtpmidid::mdns *mr = (rtpmidid::mdns *)userdata;
   mr->client = c;
 
   /* Called whenever the client or server state changes */
@@ -213,7 +214,7 @@ static void resolve_callback(AvahiServiceResolver *r, AvahiIfIndex interface,
                              AvahiLookupResultFlags flags,
                              AVAHI_GCC_UNUSED void *userdata) {
 
-  rtpmidid::mdns_rtpmidi *mr = (rtpmidid::mdns_rtpmidi *)userdata;
+  rtpmidid::mdns *mr = (rtpmidid::mdns *)userdata;
 
   assert(r);
   /* Called whenever a service has been resolved successfully or timed out */
@@ -272,7 +273,7 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface,
                             AVAHI_GCC_UNUSED AvahiLookupResultFlags flags,
                             void *userdata) {
 
-  rtpmidid::mdns_rtpmidi *mr = (rtpmidid::mdns_rtpmidi *)userdata;
+  rtpmidid::mdns *mr = (rtpmidid::mdns *)userdata;
 
   switch (event) {
   case AVAHI_BROWSER_FAILURE:
@@ -307,7 +308,7 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface,
   }
 }
 
-rtpmidid::mdns_rtpmidi::mdns_rtpmidi() {
+rtpmidid::mdns::mdns() {
   group = nullptr;
   poller_adapter = std::make_unique<AvahiPoll>();
   poller_adapter->watch_new = poller_adapter_watch_new;
@@ -330,7 +331,7 @@ rtpmidid::mdns_rtpmidi::mdns_rtpmidi() {
 }
 
 /// Asks the network mdns for entries.
-void rtpmidid::mdns_rtpmidi::setup_mdns_browser() {
+void rtpmidid::mdns::setup_mdns_browser() {
   if (service_browser)
     avahi_service_browser_free(service_browser);
   service_browser = avahi_service_browser_new(
@@ -343,9 +344,9 @@ void rtpmidid::mdns_rtpmidi::setup_mdns_browser() {
   }
 }
 
-rtpmidid::mdns_rtpmidi::~mdns_rtpmidi() { avahi_client_free(client); }
+rtpmidid::mdns::~mdns() { avahi_client_free(client); }
 
-void rtpmidid::mdns_rtpmidi::announce_all() {
+void rtpmidid::mdns::announce_all() {
   if (!group) {
     if (!(group = avahi_entry_group_new(client, entry_group_callback, this))) {
       ERROR("avahi_entry_group_new() failed: {}",
@@ -381,14 +382,14 @@ collision:
 fail:;
 }
 
-void rtpmidid::mdns_rtpmidi::announce_rtpmidi(const std::string &name,
+void rtpmidid::mdns::announce_rtpmidi(const std::string &name,
                                               const int32_t port) {
   announcements.push_back({name, port});
 
   announce_all();
 }
 
-void rtpmidid::mdns_rtpmidi::unannounce_rtpmidi(const std::string &name,
+void rtpmidid::mdns::unannounce_rtpmidi(const std::string &name,
                                                 const int32_t port) {
   announcements.erase(std::remove_if(announcements.begin(), announcements.end(),
                                      [port](const announcement_t &t) {

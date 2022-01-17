@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2020 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,13 +17,15 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+
 #pragma once
-#include "./exceptions.hpp"
-#include "logger.hpp"
 #include <cstdint>
 #include <string_view>
 
-namespace rtpmidid {
+#include <rtpmidid/exceptions.hpp>
+#include <rtpmidid/logger.hpp>
+
+namespace mdns {
 struct parse_buffer_t {
   uint8_t *start;
   uint8_t *end;
@@ -42,12 +44,12 @@ struct parse_buffer_t {
 
   void check_enough(int nbytes) const {
     if (position + nbytes > end)
-      throw exception("Try to access end of buffer at {}",
+      throw rtpmidid::exception("Try to access end of buffer at {}",
                       (position - start) + nbytes);
   }
   void assert_valid_position() const {
     if (position > end)
-      throw exception("Invalid buffer position {}", position - start);
+      throw rtpmidid::exception("Invalid buffer position {}", position - start);
   }
 
   // This is used for writing to it, says current length

@@ -89,12 +89,12 @@ rtpmidid_t::add_rtpmidi_client(const std::string &connect_to) {
 
 void rtpmidid_t::announce_rtpmidid_server(const std::string &name,
                                           uint16_t port) {
-  mdns_rtpmidi.announce_rtpmidi(name, port);
+  mdns.announce_rtpmidi(name, port);
 }
 
 void rtpmidid_t::unannounce_rtpmidid_server(const std::string &name,
                                             uint16_t port) {
-  mdns_rtpmidi.unannounce_rtpmidi(name, port);
+  mdns.unannounce_rtpmidi(name, port);
 }
 
 std::shared_ptr<rtpserver>
@@ -207,13 +207,13 @@ void rtpmidid_t::setup_alsa_seq() {
 }
 
 void rtpmidid_t::setup_mdns() {
-  mdns_rtpmidi.discover_event.connect([this](const std::string &name,
+  mdns.discover_event.connect([this](const std::string &name,
                                              const std::string &address,
                                              const std::string &port) {
     this->add_rtpmidi_client(name, address, port);
   });
 
-  mdns_rtpmidi.remove_event.connect([this](const std::string &name) {
+  mdns.remove_event.connect([this](const std::string &name) {
     // TODO : remove client / alsa sessions
     this->remove_rtpmidi_client(name);
   });

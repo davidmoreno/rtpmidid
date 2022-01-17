@@ -33,5 +33,11 @@ target_link_libraries(test_rtpmidid ${ALSA_LIBRARIES})
 target_include_directories(test_rtpmidid PUBLIC ${ALSA_INCLUDE_DIRS})
 target_compile_options(test_rtpmidid PUBLIC ${ALSA_CFLAGS_OTHER})
 
+IF (MDNS STREQUAL "custom")
+    add_executable(test_mdns test_mdns.cpp test_utils.cpp)
+    target_link_libraries(test_mdns rtpmidid -lfmt)
+    add_test(NAME test_mdns COMMAND test_mdns)
+ENDIF (MDNS STREQUAL "custom")
+
 # disabled as failing 
 # add_test(NAME test_rtpmidid COMMAND test_rtpmidid)

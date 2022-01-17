@@ -1,5 +1,14 @@
 project(rtpmidid)
 cmake_minimum_required(VERSION 3.2)
+
+
+SET(MDNS "avahi" CACHE STRING "Which mdns implemetnation to use: avahi | custom | empty.")
+
+
+MESSAGE(STATUS "Compiling with ${MDNS} for mdns")
+
+####
+
 add_definitions("-std=gnu++17 -Wall -Werror")
 # set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -8,7 +17,15 @@ set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-point
 
 
 include(FindPkgConfig)
-pkg_check_modules(AVAHI REQUIRED avahi-client)
+IF (MDNS STREQUAL "avahi")
+  pkg_check_modules(AVAHI REQUIRED avahi-client)
+  add_definitions(-DMDNS=a)
+ELSEIF (MDNS STREQUAL "custom")
+  add_definitions(-DMDNS=c)
+ELSEIF (MDNS STREQUAL "empty")
+  add_definitions(-DMDNS=e)
+  ENDIF (MDNS STREQUAL "avahi")
+
 pkg_check_modules(FMT REQUIRED fmt)
 pkg_check_modules(ALSA REQUIRED alsa)
 

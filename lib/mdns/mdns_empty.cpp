@@ -17,11 +17,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#include <cstdint>
-#pragma once
+#include <rtpmidid/mdns_custom.hpp>
 
-#define UNUSED __attribute__((unused))
+using namespace rtpmidid;
 
-namespace rtpmidid {
-uint32_t rand_u32(void);
-}
+
+mdns::mdns(){}
+mdns::~mdns(){}
+void mdns::setup_mdns_browser(){}
+void mdns::announce_all(){}
+void mdns::announce_rtpmidi(const std::string &name, const int32_t port){}
+void mdns::unannounce_rtpmidi(const std::string &name, const int32_t port){}

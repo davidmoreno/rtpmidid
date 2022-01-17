@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2020 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,11 +17,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+
 #include <ctype.h>
-#include <rtpmidid/netutils.hpp>
 #include <stdio.h>
 
-namespace rtpmidid {
+#include "netutils.hpp"
+
+namespace mdns {
 
 uint8_t *raw_write_uint16(uint8_t *data, uint16_t n) {
   *data++ = (n >> 8) & 0x0FF;

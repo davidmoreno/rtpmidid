@@ -17,11 +17,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#include <cstdint>
 #pragma once
+#if (MDNS == 'c' || MDNS == 'e') 
+#include <rtpmidid/mdns_custom.hpp>
+#else
+#include <rtpmidid/mdns_avahi.hpp>
+#endif
 
-#define UNUSED __attribute__((unused))
-
-namespace rtpmidid {
-uint32_t rand_u32(void);
-}
