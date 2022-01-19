@@ -15,11 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+#include "../lib/mdns/netutils.hpp"
 #include "./test_case.hpp"
 #include "./test_utils.hpp"
 #include <cstdint>
 #include <rtpmidid/logger.hpp>
-#include <rtpmidid/netutils.hpp>
 
 auto packet_dns = hex_to_bin("00 00 84 00" // DNS header and flags
                              "00 00 00 01" // 1 question
@@ -38,34 +38,36 @@ auto packet_dns = hex_to_bin("00 00 84 00" // DNS header and flags
 );
 
 void test_label_simple() {
-  auto buffer = *packet_dns;
+  auto buffer =
+      mdns::parse_buffer_t(packet_dns.data.data(), packet_dns.data.size());
   buffer.print_hex(true);
   uint8_t label[120];
-  auto label_buffer = rtpmidid::parse_buffer_t(label, sizeof(label));
+  auto label_buffer = mdns::parse_buffer_t(label, sizeof(label));
 
   // label position
   buffer.position += 12;
-  rtpmidid::read_label(buffer, label_buffer);
+  mdns::read_label(buffer, label_buffer);
 
   ASSERT_EQUAL(strncmp((char *)label, "_apple-midi._udp.local", sizeof(label)),
                0);
 }
 
 void test_label_w_pointer() {
-  auto buffer = *packet_dns;
+  auto buffer =
+      mdns::parse_buffer_t(packet_dns.data.data(), packet_dns.data.size());
   uint8_t label[120];
-  auto label_buffer = rtpmidid::parse_buffer_t(label, sizeof(label));
+  auto label_buffer = mdns::parse_buffer_t(label, sizeof(label));
 
   // label with pointer position
   buffer.position = buffer.start + 40;
-  rtpmidid::read_label(buffer, label_buffer);
+  mdns::read_label(buffer, label_buffer);
   DEBUG("{}", (char *)&label);
   ASSERT_EQUAL(strncmp((char *)label, "_apple-midi._udp.local", sizeof(label)),
                0);
 
   buffer.position = buffer.start + 52;
   label_buffer.position = label_buffer.start;
-  rtpmidid::read_label(buffer, label_buffer);
+  mdns::read_label(buffer, label_buffer);
   DEBUG("{}", (char *)&label);
   ASSERT_EQUAL(strncmp((char *)label, "test-server._apple-midi._udp.local",
                        sizeof(label)),

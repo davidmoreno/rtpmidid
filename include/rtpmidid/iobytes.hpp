@@ -325,6 +325,12 @@ public:
     end = other.end;
     position = other.position;
   }
+
+  io_bytes_managed dup() {
+    auto ret = io_bytes_managed(data.size());
+    memcpy(data.data(), ret.data.data(), data.size());
+    return ret;
+  }
 };
 
 } // namespace rtpmidid

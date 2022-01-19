@@ -34,8 +34,8 @@ target_include_directories(test_rtpmidid PUBLIC ${ALSA_INCLUDE_DIRS})
 target_compile_options(test_rtpmidid PUBLIC ${ALSA_CFLAGS_OTHER})
 
 IF (MDNS STREQUAL "custom")
-    add_executable(test_mdns test_mdns.cpp test_utils.cpp)
-    target_link_libraries(test_mdns rtpmidid -lfmt)
+    add_executable(test_mdns test_mdns.cpp test_utils.cpp ../lib/logger.cpp ../lib/poller.cpp ../lib/mdns/netutils.cpp)
+    target_link_libraries(test_mdns -lfmt)
     add_test(NAME test_mdns COMMAND test_mdns)
 ENDIF (MDNS STREQUAL "custom")
 

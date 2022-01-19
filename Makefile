@@ -1,4 +1,5 @@
 PORT := 10000
+MDNS := avahi
 
 .PHONY: help
 help:
@@ -19,6 +20,7 @@ help:
 	@echo "Variables:"
 	@echo 
 	@echo " PORT=10000"
+	@echo " MDNS=avahi | empty | custom"
 	@echo 
 
 .PHONY: build
@@ -26,12 +28,12 @@ build: build/bin/rtpmidid
 
 build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -DMDNS=${MDNS}
 	cd build && make -j
 
 build-dev: 
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug -DMDNS=${MDNS}
 	cd build && make -j
 
 

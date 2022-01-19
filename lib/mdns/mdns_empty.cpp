@@ -21,10 +21,8 @@
 
 using namespace rtpmidid;
 
-
-mdns::mdns(){}
-mdns::~mdns(){}
-void mdns::setup_mdns_browser(){}
-void mdns::announce_all(){}
-void mdns::announce_rtpmidi(const std::string &name, const int32_t port){}
-void mdns::unannounce_rtpmidi(const std::string &name, const int32_t port){}
+mdns::mdns() {}
+mdns::~mdns() {}
+void mdns::announce_all() {}
+void mdns::announce_rtpmidi(const std::string &name, const int32_t port) {}
+void mdns::unannounce_rtpmidi(const std::string &name, const int32_t port) {}
