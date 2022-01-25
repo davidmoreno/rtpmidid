@@ -25,6 +25,7 @@
 #include <rtpmidid/poller.hpp>
 #include <set>
 #include <string>
+#include <optional>
 
 namespace rtpmidid {
 struct config_t;

@@ -94,7 +94,7 @@ public:
     return true;
   }
 
-  void print_hex(bool to_end = true) const {
+  void print_hex(bool to_end = true, bool ascii = false) const {
     auto data = start;
     auto n = (to_end ? end : position) - data;
     printf("\033[1;34m");
@@ -110,6 +110,8 @@ public:
       ++data;
     }
     printf("\n");
+    if (!ascii)
+      return;
     printf("\033[1;34m");
     data = start;
     for (int i = 0; i < n; i++) {

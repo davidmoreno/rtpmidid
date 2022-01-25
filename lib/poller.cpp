@@ -275,7 +275,7 @@ void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
     try {
       pd->fd_events[fd](fd);
     } catch (const std::exception &e) {
-      ERROR("Caught exception at poller: {}", e.what());
+      ERROR_ONCE("Caught exception at poller: {}", e.what());
     }
   }
 

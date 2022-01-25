@@ -125,6 +125,22 @@ Its possible to create a debian / ubuntu package with `make deb`
 
 Requires C++17 (Ubuntu 18.04+), and libfmt-dev, libasound2-dev, libavahi-client-dev.
 
+## Testing and bug reporting
+
+If you find any bug, please report it to https://github.com/davidmoreno/rtpmidid/issues/
+
+It is very usefull if you can accompany it with the resulting capture file from executing
+`make capture`.
+
+`make capture` is tuned to capture the network packets at ports `10000` and `10001`, but
+can be tuned to other ports with `make capture PORT=5004`.
+
+The port `10000` is the one used for developing. To run a development version of the
+rtpmidid server, execute `make run`. There are more options at `make help`.
+
+This captures packets for connections TO rtpmidid, not connecitons FROM rtpmidid.
+For those connecitons another port may need to be set.
+
 ## Goals
 
 - [x] Daemon, no need for UI

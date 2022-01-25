@@ -23,6 +23,7 @@
 #include <functional>
 #include <map>
 #include <vector>
+#include <optional>
 
 namespace rtpmidid {
 /**

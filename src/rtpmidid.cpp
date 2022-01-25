@@ -219,6 +219,16 @@ void rtpmidid_t::setup_mdns() {
   });
 }
 
+/** @short Adds a known client to the list of known clients.
+ *
+ * This does not connect yet, just adds to the list of known remote clients
+ *
+ * As it exists remotely,also adds local alsa ports, that when connected
+ * will create the real connection.
+ *
+ * And when disconnected, will disconnect real connection if it's last connected
+ * endpoint.
+ */
 std::optional<uint8_t>
 rtpmidid_t::add_rtpmidi_client(const std::string &name,
                                const std::string &address,
@@ -251,10 +261,14 @@ rtpmidid_t::add_rtpmidi_client(const std::string &name,
       });
   seq.unsubscribe_event[aseq_port].connect(
       [this, aseq_port](aseq::port_t port) {
-        DEBUG("Callback on unsubscribe at rtpmidid");
         auto peer_info = &known_clients[aseq_port];
-        peer_info->use_count--;
+        if (peer_info->use_count > 0)
+          peer_info->use_count--;
+
+        DEBUG("Callback on unsubscribe at peer {} rtpmidid (users {})",
+              peer_info->name, peer_info->use_count);
         if (peer_info->use_count <= 0) {
+          DEBUG("Real disconnection, no more users");
           peer_info->peer = nullptr;
         }
       });
@@ -285,7 +299,9 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
   auto peer_info = &known_clients[aseq_port];
   if (peer_info->peer) {
     if (peer_info->peer->peer.status == rtppeer::CONNECTED) {
-      DEBUG("Already connected.");
+      peer_info->use_count++;
+      DEBUG("Already connected {}. (users {})", peer_info->name,
+            peer_info->use_count);
     } else {
       DEBUG("Already connecting.");
     }
@@ -301,6 +317,8 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
           this->disconnect_client(aseq_port, reason);
         });
     peer_info->use_count++;
+    DEBUG("Subscribed another local client to peer {} at rtpmidid (users {})",
+          peer_info->name, peer_info->use_count);
 
     peer_info->peer->connect_to(address.address, address.port);
   }
@@ -355,10 +373,11 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
     break;
 
   case rtppeer::disconnect_reason_e::PEER_DISCONNECTED:
-    WARNING("Peer disconnected. Aseq disconnect.");
     seq.disconnect_port(peer_info->aseq_port);
     if (peer_info->use_count > 0)
       peer_info->use_count--;
+    WARNING("Peer disconnected {}. Aseq disconnect. ({} users)",
+            peer_info->name, peer_info->use_count);
     // Delete it, but later as we are here because of a call inside the peer
     if (peer_info->use_count == 0) {
       poller.call_later([this, aseq_port] {
@@ -572,6 +591,10 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
   case SND_SEQ_EVENT_CONTINUE:
     stream.write_uint8(0xFB);
     break;
+  case SND_SEQ_EVENT_QFRAME:
+    stream.write_uint8(0xF1);
+    stream.write_uint8(ev->data.control.value & 0x0FF);
+    break;
   case SND_SEQ_EVENT_SYSEX: {
     ssize_t len = ev->data.ext.len, sz = stream.size();
     if (len <= sz) {
@@ -583,10 +606,6 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
       WARNING("Sysex buffer overflow! Not sending. ({} bytes needed)", len);
     }
   } break;
-  case SND_SEQ_EVENT_QFRAME:
-    stream.write_uint8(0xF1);
-    stream.write_uint8(ev->data.control.value & 0x0FF);
-    break;
   default:
     WARNING("Event type not yet implemented! Not sending. {}", ev->type);
     return;

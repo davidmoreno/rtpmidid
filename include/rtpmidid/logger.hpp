@@ -36,6 +36,23 @@
 #define SUCCESS(...)                                                           \
   logger::log(__FILE__, __LINE__, logger::SUCCESS, __VA_ARGS__)
 
+#define ERROR_ONCE(...)                                                        \
+  {                                                                            \
+    static bool __error_once_unseen_##__LINENO__ = true;                       \
+    if (__error_once_unseen_##__LINENO__) {                                    \
+      __error_once_unseen_##__LINENO__ = false;                                \
+      logger::log(__FILE__, __LINE__, logger::ERROR, __VA_ARGS__);             \
+    }                                                                          \
+  }
+#define WARNING_ONCE(...)                                                      \
+  {                                                                            \
+    static bool __warning_once_unseen_##__LINENO__ = true;                     \
+    if (__warning_once_unseen_##__LINENO__) {                                  \
+      __warning_once_unseen_##__LINENO__ = false;                              \
+      logger::log(__FILE__, __LINE__, logger::WARNING, __VA_ARGS__);           \
+    }                                                                          \
+  }
+
 namespace logger {
 class logger;
 

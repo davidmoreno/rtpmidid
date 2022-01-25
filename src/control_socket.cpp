@@ -108,9 +108,8 @@ void rtpmidid::control_socket_t::connection_ready() {
     rtpmidid::poller.add_fd_in(fd, [this](int fd) { this->data_ready(fd); });
     DEBUG("Added control connection: {}", fd);
     clients.push_back(fd);
-  }
-  else {
-      ERROR("\"accept()\" failed, continuing...");
+  } else {
+    ERROR("\"accept()\" failed, continuing...");
   }
 }
 
@@ -206,15 +205,15 @@ static json exit(rtpmidid::rtpmidid_t &rtpmidid) {
   return {{"detail", "Bye."}};
 }
 
-static json create(rtpmidid::rtpmidid_t &rtpmidid, const std::string &name,
-                   const std::string &host, const std::string &port) {
+static json connect(rtpmidid::rtpmidid_t &rtpmidid, const std::string &name,
+                    const std::string &host, const std::string &port) {
   auto alsa_port = rtpmidid.add_rtpmidi_client(name, host, port);
   if (alsa_port.has_value()) {
     return {
         {"alsa_port", alsa_port.value()},
     };
   } else {
-    return {{"detail", "Could not create. Check logs."}};
+    return {{"detail", "Could not connect. Check logs."}};
   }
 }
 } // namespace commands
@@ -255,19 +254,19 @@ rtpmidid::control_socket_t::parse_command(const std::string &command) {
   if (msg.method == "exit" || msg.method == "quit") {
     ret = rtpmidid::commands::exit(rtpmidid);
   }
-  if (msg.method == "create") {
+  if (msg.method == "connect") {
     switch (msg.params.size()) {
     case 1:
-      ret = rtpmidid::commands::create(rtpmidid, msg.params[0], msg.params[0],
-                                       "5004");
+      ret = rtpmidid::commands::connect(rtpmidid, msg.params[0], msg.params[0],
+                                        "5004");
       break;
     case 2:
-      ret = rtpmidid::commands::create(rtpmidid, msg.params[0], msg.params[0],
-                                       msg.params[1]);
+      ret = rtpmidid::commands::connect(rtpmidid, msg.params[0], msg.params[0],
+                                        msg.params[1]);
       break;
     case 3:
-      ret = rtpmidid::commands::create(rtpmidid, msg.params[0], msg.params[1],
-                                       msg.params[2]);
+      ret = rtpmidid::commands::connect(rtpmidid, msg.params[0], msg.params[1],
+                                        msg.params[2]);
       break;
     default:
       error = {{"detail", "Invalid params"}, {"code", 3}};
@@ -278,7 +277,7 @@ rtpmidid::control_socket_t::parse_command(const std::string &command) {
     ret = {{"detail", "mDNS update requested"}};
   }
   if (msg.method == "help") {
-    ret = json{{"commands", {"help", "exit", "create", "status"}}};
+    ret = json{{"commands", {"help", "exit", "connect", "status"}}};
   }
 
   json retdata = {{"id", msg.id}};

@@ -20,6 +20,7 @@
 #include "./test_case.hpp"
 #include "rtpmidid/journal.hpp"
 #include <cstdint>
+#include <algorithm>
 #include <memory>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
@@ -167,31 +168,40 @@ void test_send_long_midi() {
 void test_recv_some_midi() {
   rtpmidid::rtppeer peer("test");
 
-  bool got_midi = false;
+  int got_midi_nr = 0;
 
   // This will be called when I get some midi data.
   peer.midi_event.connect(
-      [&peer, &got_midi](const rtpmidid::io_bytes_reader &data) {
+      [&peer, &got_midi_nr](const rtpmidid::io_bytes_reader &data) {
         ASSERT_TRUE(peer.is_connected());
         ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
         data.print_hex(true);
-        got_midi = true;
-        ASSERT_TRUE(data.compare(hex_to_bin("90 64 7F 68 7F 71 7F")));
+        if (data.compare(hex_to_bin("90 64 7F"))) {
+          ASSERT_EQUAL(got_midi_nr, 0);
+          got_midi_nr++;
+        } else if (data.compare(hex_to_bin("90 7F 71"))) {
+          ASSERT_EQUAL(got_midi_nr, 1);
+          got_midi_nr++;
+
+        } else if (data.compare(hex_to_bin("F8"))) {
+          ASSERT_EQUAL(got_midi_nr, 2);
+          got_midi_nr++;
+        }
       });
 
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
 
-  peer.data_ready(
-      hex_to_bin(
-          "[1000 0001] [0110 0001] 'SQ'"
-          "00 00 00 00"
-          "'BEEF'"
-          "07 90 64 7F 68 7F 71 7F" // No Journal, 7 bytes, Three note ons
-          ),
-      rtpmidid::rtppeer::MIDI_PORT);
+  peer.data_ready(hex_to_bin("[1000 0001] [0110 0001] 'SQ'"
+                             "00 00 00 00"
+                             "'BEEF'"
+                             "07"
+                             "90 64 7F 90 7F 71 F8" // No Journal, 7 bytes, Two
+                                                    // note ons and one clock
+                             ),
+                  rtpmidid::rtppeer::MIDI_PORT);
 
-  ASSERT_TRUE(got_midi);
+  ASSERT_EQUAL(got_midi_nr, 3);
 }
 
 void test_journal() {
@@ -398,6 +408,160 @@ void test_journal() {
   DEBUG("All parsed OK.");
 }
 
+void test_send_large_sysex(void) {
+  const auto sysex = hex_to_bin(
+      "F0 " // this was not in the report.. maybe a bug? if there everything
+            // makes sense
+      // Bunch of empty sysex.
+      "F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 "
+      "F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 "
+      "F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F7"
+      "F0"
+      "44 01 47 57 2D "
+      "00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 "
+      "00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 "
+      "12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 "
+      "0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 "
+      "18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 "
+      "40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 "
+      "17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 "
+      "00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 "
+      "2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 "
+      "3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 "
+      "44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F "
+      "34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C "
+      "48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 "
+      "47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F "
+      "2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 "
+      "01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 "
+      "2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 "
+      "60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 "
+      "44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 "
+      "00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 "
+      "04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 "
+      "04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D "
+      "33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 "
+      "F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 "
+      "00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 "
+      "00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 "
+      "F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E "
+      "1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E "
+      "0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 "
+      "01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 "
+      "1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 "
+      "31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 "
+      "57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B "
+      "69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 "
+      "09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D "
+      "00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 "
+      "00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 "
+      "12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 "
+      "0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 "
+      "18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 "
+      "40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 "
+      "17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 "
+      "00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 "
+      "2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 "
+      "3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 00 04 18 F0 00 F7 "
+      "44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F "
+      "34 1F 2B 69 60 00 04 18 F7 "
+      // and more empty packets
+      "00 F0 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
+      "F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
+      "F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
+      "F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
+      "F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 "
+      "F7 F0 00 F7 F7");
+
+  rtpmidid::rtppeer sender("sender");
+  rtpmidid::rtppeer receiver("receiver");
+
+  sender.send_event.connect([&receiver](const rtpmidid::io_bytes_reader &data,
+                                        rtpmidid::rtppeer::port_e port) {
+    rtpmidid::io_bytes_reader datar(data);
+    DEBUG("Write {} bytes to receiver data_ready", data.size());
+    receiver.data_ready(std::move(datar), port);
+  });
+
+  receiver.send_event.connect([&sender](const rtpmidid::io_bytes_reader &data,
+                                        rtpmidid::rtppeer::port_e port) {
+    rtpmidid::io_bytes_reader datar(data);
+    DEBUG("Write {} bytes to sender data_ready", data.size());
+    sender.data_ready(std::move(datar), port);
+  });
+
+  bool got_midi = false;
+
+  receiver.midi_event.connect(
+      [&got_midi](const rtpmidid::io_bytes_reader &midi) {
+        INFO("Got MIDI data, size: {}", midi.size());
+        // midi.print_hex();
+        ASSERT_EQUAL(*midi.position, 0xF0);
+        ASSERT_EQUAL(*(midi.end - 1), 0xF7);
+        INFO("Got MIDI data, size: {}", midi.size());
+        ASSERT_EQUAL(midi.size(), 1026);
+
+        got_midi = true;
+      });
+
+  sender.connect_to(rtpmidid::rtppeer::CONTROL_PORT);
+  sender.connect_to(rtpmidid::rtppeer::MIDI_PORT);
+
+  sender.send_midi(sysex);
+
+  ASSERT_TRUE(got_midi);
+}
+
+void test_segmented_sysex(void) {
+  const auto segmented_sysex1 = hex_to_bin("F0 01 02 03 04 F0");
+  const auto segmented_sysex2 = hex_to_bin("F7 05 06 07 08 F7");
+  const auto cancel_sysex = hex_to_bin("F7 F4");
+  const auto sysex = hex_to_bin("F0 01 02 03 0405 06 07 08 F7");
+
+  rtpmidid::rtppeer sender("sender");
+  rtpmidid::rtppeer receiver("receiver");
+
+  sender.send_event.connect([&receiver](const rtpmidid::io_bytes_reader &data,
+                                        rtpmidid::rtppeer::port_e port) {
+    rtpmidid::io_bytes_reader datar(data);
+    DEBUG("Write {} bytes to receiver data_ready", data.size());
+    receiver.data_ready(std::move(datar), port);
+  });
+
+  receiver.send_event.connect([&sender](const rtpmidid::io_bytes_reader &data,
+                                        rtpmidid::rtppeer::port_e port) {
+    rtpmidid::io_bytes_reader datar(data);
+    DEBUG("Write {} bytes to sender data_ready", data.size());
+    sender.data_ready(std::move(datar), port);
+  });
+  bool got_data = false;
+  receiver.midi_event.connect(
+      [&got_data, &sysex](const rtpmidid::io_bytes_reader &midi) {
+        INFO("Got MIDI data");
+        // midi.print_hex();
+        DEBUG("Got {} bytes, need {} bytes", midi.size(), sysex.size());
+        ASSERT_EQUAL(midi.size(), sysex.size());
+        ASSERT_EQUAL(memcmp(midi.start, sysex.start, midi.size()), 0);
+
+        got_data = true;
+      });
+
+  sender.connect_to(rtpmidid::rtppeer::CONTROL_PORT);
+  sender.connect_to(rtpmidid::rtppeer::MIDI_PORT);
+
+  DEBUG("Send p1");
+  sender.send_midi(segmented_sysex1);
+  DEBUG("Send cancel");
+  sender.send_midi(cancel_sysex);
+
+  DEBUG("Send p1");
+  sender.send_midi(segmented_sysex1);
+  DEBUG("Send p2");
+  sender.send_midi(segmented_sysex2);
+
+  ASSERT_TRUE(got_data);
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_connect_disconnect),
@@ -406,6 +570,8 @@ int main(int argc, char **argv) {
       TEST(test_send_long_midi),
       TEST(test_recv_some_midi),
       TEST(test_journal),
+      TEST(test_send_large_sysex),
+      TEST(test_segmented_sysex),
   };
 
   testcase.run(argc, argv);

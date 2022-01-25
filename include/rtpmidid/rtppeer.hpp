@@ -19,6 +19,7 @@
 
 #pragma once
 #include "journal.hpp"
+#include "exceptions.hpp"
 #include "signal.hpp"
 #include <arpa/inet.h>
 #include <functional>
@@ -28,6 +29,18 @@
 namespace rtpmidid {
 class io_bytes_reader;
 class io_bytes;
+
+class bad_sysex_exception : public ::rtpmidid::exception {
+public:
+  bad_sysex_exception(const char *what)
+      : ::rtpmidid::exception("Bad SysEx: {}", what) {}
+};
+
+class bad_midi_packet : public ::rtpmidid::exception {
+public:
+  bad_midi_packet(const char *what)
+      : ::rtpmidid::exception("Bad MIDI packet: {}", what) {}
+};
 
 class rtppeer {
 public:
@@ -72,6 +85,8 @@ public:
   uint64_t latency;
   bool waiting_ck;
   std::optional<journal_t> journal;
+  // Need some buffer space for sysex. This may require memory alloc.
+  std::vector<uint8_t> sysex;
 
   /// Event for connected
   signal_t<const std::string &, status_e> connected_event;
@@ -109,6 +124,7 @@ public:
   void parse_command_no(io_bytes_reader &, port_e port);
   void parse_command_rs(io_bytes_reader &, port_e port);
   void parse_midi(io_bytes_reader &);
+  void parse_sysex(io_bytes_reader &, int16_t length);
 
   void send_midi(const io_bytes_reader &buffer);
   void send_goodbye(port_e to_port);

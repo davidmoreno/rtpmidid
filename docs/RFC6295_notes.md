@@ -191,3 +191,16 @@ header.
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |X|  PRESSURE   |  ....                                         |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+# SysEx
+
+https://datatracker.ietf.org/doc/html/rfc6295 - pg 17
+
+| Formats  | notes                                | encoding  |
+| -------- | ------------------------------------ | --------- |
+| Basic    |                                      | F0 ... F7 |
+| Multiple | Temporal information, or Big packets |           |
+|          | First packet                         | F0 ... F0 |
+|          | list have to have some data          | F7 ... F0 |
+|          | last may be empty                    | F7 .x. F7 |
+|          | Cancel must be empty                 | F7 F4     |
