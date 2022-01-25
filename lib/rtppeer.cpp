@@ -613,7 +613,7 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
   if (size < 16) {
     buffer.write_uint8(size | has_journal_bit);
   } else {
-    uint8_t sizeh = size << 8;
+    uint8_t sizeh = size >> 8;
     uint8_t sizel = size & 0xFF;
     buffer.write_uint8(sizeh | has_journal_bit | 0x80); // mark long midi packet
     buffer.write_uint8(sizel);
