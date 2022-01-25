@@ -510,6 +510,7 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
 }
 
 void rtppeer::parse_sysex(io_bytes_reader &buffer, int16_t length) {
+  // DEBUG("{}", length);
   // buffer.print_hex();
   auto last_byte = *(buffer.position + length - 1);
 
@@ -595,7 +596,7 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
   uint32_t timestamp = get_timestamp();
   seq_nr++;
 
-  uint8_t has_journal_bit = journal->has_journal ? 0x40 : 0;
+  uint8_t has_journal_bit = journal && journal->has_journal ? 0x40 : 0;
   buffer.write_uint8(0x80);
 
   // Here it SHOULD send 0x80 | 0x61 if there is midi data sent, but if done,
