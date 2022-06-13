@@ -85,5 +85,5 @@ void logger::log(const char *filename, int lineno, LogLevel loglevel,
     fmt::print("[{}:{}] {}\n", filename, lineno, msg);
   }
 }
-void logger::flush() { ::fflush(::stderr); }
+void logger::flush() { ::fflush(stderr); }
 } // namespace logger
