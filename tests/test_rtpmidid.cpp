@@ -1,4 +1,4 @@
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <chrono>
 #include <utility>
 #include <vector>
