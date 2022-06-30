@@ -394,7 +394,7 @@ static int next_midi_packet_length(io_bytes_reader &buffer) {
     case 0xFA:
     case 0xFB:
     case 0xF1:
-      length = 1;
+      length = 2; //MTC QUARTER FRAME = STATUS + DATA
       break;
     case 0xF0:
     case 0xF7:
