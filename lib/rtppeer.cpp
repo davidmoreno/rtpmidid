@@ -388,19 +388,26 @@ static int next_midi_packet_length(io_bytes_reader &buffer) {
   }
   if (length == 0) {
     switch (first_byte) {
-    case 0xFE:
-    case 0xFC:
-    case 0xF8:
-    case 0xFA:
-    case 0xFB:
+    case 0xF6: // Tune request
+    case 0xF8: // Clock message (24 ticks per quarter note)
+    case 0xF9: // Tick (some master devices send once every 10ms)
+    case 0xFA: // Start
+    case 0xFB: // Continue
+    case 0xFC: // Stop
+    case 0xFE: // Active sense (ping every 300ms or so, to advice still connected)
+    case 0xFF: // Reset (Panic)
       length = 1;
       break;
-    case 0xF1:
+    case 0xF1: // MTC Quarter frame
+    case 0xF3: // Song select
       length = 2;
       break;
-    case 0xF0:
-    case 0xF7:
-    case 0xF4:
+    case 0xF2: // Song position pointer
+      length = 3;
+      break;
+    case 0xF0: // SysEX start
+    case 0xF7: // SysEX end
+    case 0xF4: // SysEX continue
       length = 2;
       auto byte = buffer.position + 1;
       while ((*byte & 0x80) == 0x00) {

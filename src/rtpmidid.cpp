@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+#include <alsa/seq_event.h>
 #include <stdlib.h>
 #include <string>
 
@@ -477,15 +478,36 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
         ev.data.control.value = midi_data.read_uint8();
         ev.type = SND_SEQ_EVENT_QFRAME;
         break;
+      case 0xF3: // Song select
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.data.control.value = midi_data.read_uint8();
+        ev.type = SND_SEQ_EVENT_SONGSEL;
+        break;
       case 0xFE: // Active sense
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_SENSING;
         break;
+      case 0xF6: // Tune request
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_TUNE_REQUEST;
+        break;
       case 0xF8: // Clock
         snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_CLOCK;
+        break;
+      case 0xF9: // Tick
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_TICK;
+        break;
+      case 0xFF: // Clock
+        snd_seq_ev_clear(&ev);
+        snd_seq_ev_set_fixed(&ev);
+        ev.type = SND_SEQ_EVENT_RESET;
         break;
       case 0xFA: // start
         snd_seq_ev_clear(&ev);
