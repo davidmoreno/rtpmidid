@@ -201,6 +201,43 @@ void test_recv_some_midi() {
   ASSERT_EQUAL(got_midi_nr, 3);
 }
 
+void test_recv_midi_with_running_status() {
+  rtpmidid::rtppeer peer("test");
+
+  int got_midi_nr = 0;
+
+  // This will be called when I get some midi data.
+  peer.midi_event.connect(
+      [&peer, &got_midi_nr](const rtpmidid::io_bytes_reader &data) {
+        ASSERT_TRUE(peer.is_connected());
+        ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
+        data.print_hex(true);
+        if (data.compare(hex_to_bin("BF 6D 24"))) {
+          ASSERT_EQUAL(got_midi_nr, 0);
+          got_midi_nr++;
+        } else if (data.compare(hex_to_bin("BF 37 01"))) {
+          ASSERT_EQUAL(got_midi_nr, 1);
+          got_midi_nr++;
+        } else if (data.compare(hex_to_bin("BF 6D 20"))) {
+          ASSERT_EQUAL(got_midi_nr, 2);
+          got_midi_nr++;
+        }
+      });
+
+  peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
+  peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
+
+  peer.data_ready(hex_to_bin("[1000 0001] [0110 0001] 'SQ'"
+                             "00 00 00 00"
+                             "'BEEF'"
+                             "09"                          // No Journal, 9 bytes
+                             "BF 6D 24 00 37 01 00 6D 20"  // 3 CC commands on ch15 (running status)
+                             ),                            // Delta times are zero
+                  rtpmidid::rtppeer::MIDI_PORT);
+
+  ASSERT_EQUAL(got_midi_nr, 3);
+}
+
 void test_journal() {
   rtpmidid::rtppeer peer("test");
 
@@ -459,6 +496,7 @@ int main(int argc, char **argv) {
       TEST(test_send_short_midi),
       TEST(test_send_long_midi),
       TEST(test_recv_some_midi),
+      TEST(test_recv_midi_with_running_status),
       TEST(test_journal),
       TEST(test_send_large_sysex),
       TEST(test_segmented_sysex),

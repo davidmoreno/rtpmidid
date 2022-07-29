@@ -367,27 +367,41 @@ void rtppeer::parse_feedback(io_bytes_reader &buffer) {
         seq_nr_ack, seq_nr);
 }
 
-static int next_midi_packet_length(io_bytes_reader &buffer) {
+int rtppeer::next_midi_packet_length(io_bytes_reader &buffer) {
   // Get length depending on midi event
   buffer.check_enough(1);
-  auto first_byte = *buffer.position;
-  auto first_byte_f0 = first_byte & 0xF0;
+  auto status = *buffer.position;
   int length = 0;
+
+  // Update running status
+  // RealTime Category messages (0xF8 to 0xFF) do nothing to the running status state
+  if (0xF0 <= status && status <= 0xF7) { // System Common and System Exclusive messages 
+    running_status = 0;                   // cancel the running status state.
+  }
+  else if (0x80 <= status && status < 0xF0) { // Voice Category messages
+    running_status = status;                  // update the runnning status state.
+  }
+  else if (status < 0x80) {  // Abbreviated commands
+    status = running_status; // use the running status state
+    length = -1;             // and are 1 byte shorter.
+  }
+
+  auto first_byte_f0 = status & 0xF0;
   switch (first_byte_f0) {
   case 0x80:
   case 0x90:
   case 0xA0:
   case 0xB0:
   case 0xE0:
-    length = 3;
+    length += 3;
     break;
   case 0xC0:
   case 0xD0:
-    length = 2;
+    length += 2;
     break;
   }
-  if (length == 0) {
-    switch (first_byte) {
+  if (length <= 0) {
+    switch (status) {
     case 0xF6: // Tune request
     case 0xF8: // Clock message (24 ticks per quarter note)
     case 0xF9: // Tick (some master devices send once every 10ms)
@@ -501,7 +515,12 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
     WARNING("There was no status byte in original MIDI command. Ignoring.");
   }
 
-  // May be several midi messages with delta time
+  // Parse MIDI list structure
+  // (May be several midi messages with delta time)
+
+  // The first MIDI channel command in the MIDI list MUST include a status octet. (RFC 6295, p.16)
+  running_status = 0;
+
   while (remaining) {
     length = next_midi_packet_length(buffer);
     if (length == 0) {
@@ -514,6 +533,13 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
 
     if (!sysex.empty() || *buffer.position == 0xF0) {
       parse_sysex(buffer, length);
+    } else if (*buffer.position < 0x80 && running_status) {
+      // Abbreviated midi message using running status
+      io_bytes_managed midi(length+1);
+      io_bytes_writer midi_writer(midi);
+      midi_writer.write_uint8(running_status);
+      midi_writer.copy_from(buffer.position, length);
+      midi_event(midi);
     } else {
       // Normal flow, simple midi data
       io_bytes midi(buffer.position, length);

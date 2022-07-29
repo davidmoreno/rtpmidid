@@ -82,6 +82,7 @@ public:
   uint64_t timestamp_start; // Time in ms
   uint64_t latency;
   bool waiting_ck;
+  uint8_t running_status;
   // Need some buffer space for sysex. This may require memory alloc.
   std::vector<uint8_t> sysex;
 
@@ -122,6 +123,7 @@ public:
   void parse_command_by(io_bytes_reader &, port_e port);
   void parse_command_no(io_bytes_reader &, port_e port);
   static int read_delta_time(io_bytes_reader &, uint32_t &delta_time);
+  int next_midi_packet_length(io_bytes_reader &);
   void parse_midi(io_bytes_reader &);
   void parse_sysex(io_bytes_reader &, int16_t length);
 
