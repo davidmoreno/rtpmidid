@@ -193,10 +193,9 @@ void test_recv_some_midi() {
   peer.data_ready(hex_to_bin("[1000 0001] [0110 0001] 'SQ'"
                              "00 00 00 00"
                              "'BEEF'"
-                             "07"
-                             "90 64 7F 90 7F 71 F8" // No Journal, 7 bytes, Two
-                                                    // note ons and one clock
-                             ),
+                             "0B"                               // No Journal, 11 bytes
+                             "90 64 7F 00 90 7F 71 80 80 00 F8" // Two note ons and one clock
+                             ),                                 // Delta times zero (2 different encodings)
                   rtpmidid::rtppeer::MIDI_PORT);
 
   ASSERT_EQUAL(got_midi_nr, 3);
@@ -307,7 +306,7 @@ void test_send_large_sysex(void) {
       "F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 "
       "F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 "
       "F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F0 00 F7 F7"
-      "F0"
+      "00 F0"
       "44 01 47 57 2D "
       "00 00 0D 33 17 00 3E 0C 48 31 01 09 44 12 04 40 00 2E 1F 34 1F 2B 69 60 "
       "00 04 18 F0 00 F7 44 01 47 57 2D 00 00 0D 33 17 00 3E 0C 48 31 01 09 44 "

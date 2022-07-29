@@ -121,6 +121,7 @@ public:
   void parse_command_ck(io_bytes_reader &, port_e port);
   void parse_command_by(io_bytes_reader &, port_e port);
   void parse_command_no(io_bytes_reader &, port_e port);
+  static int read_delta_time(io_bytes_reader &, uint32_t &delta_time);
   void parse_midi(io_bytes_reader &);
   void parse_sysex(io_bytes_reader &, int16_t length);
 

@@ -424,6 +424,27 @@ static int next_midi_packet_length(io_bytes_reader &buffer) {
   return length;
 }
 
+/**
+ * Read and decode delta time from a RFC 6295 MIDI List Structure.
+ *
+ * Returns the number of consumed bytes (1-4).
+ * buffer (in/out): the buffer from which to consume data (position is updated)
+ * delta_time (out): the decoded delta time
+ */
+int rtppeer::read_delta_time(io_bytes_reader &buffer, uint32_t &delta_time) {
+  uint8_t delta_byte = buffer.read_uint8();
+  int nb_read = 1;
+  delta_time = delta_byte & 0x7F;
+  // Just look for first bit that will mark if more bytes
+  while ((delta_byte & 0x80) != 0x00) {
+    delta_byte = buffer.read_uint8();
+    delta_time <<= 7;
+    delta_time |= delta_byte & 0x7F;
+    nb_read++;
+  }
+  return nb_read;
+}
+
 void rtppeer::parse_midi(io_bytes_reader &buffer) {
   // auto _headers =
   buffer.read_uint8(); // Ignore RTP header flags (Byte 0)
@@ -458,6 +479,9 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
     length += buffer.read_uint8();
     DEBUG("Long header, {} bytes long", length);
   }
+  buffer.check_enough(length);
+  auto remaining = length;
+
   if ((header & 0x40) != 0) {
     // I actually parse the journal BEFORE the current message as it is
     // for events before the event.
@@ -470,15 +494,14 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
   if ((header & 0x20) != 0) {
     WARNING("This RTP MIDI payload has delta time for the first command. "
             "Ignoring.");
-    buffer.read_uint8();
+    uint32_t delta_time;
+    remaining -= read_delta_time(buffer, delta_time);
   }
   if ((header & 0x10) != 0) {
     WARNING("There was no status byte in original MIDI command. Ignoring.");
   }
-  buffer.check_enough(length);
 
   // May be several midi messages with delta time
-  auto remaining = length;
   while (remaining) {
     length = next_midi_packet_length(buffer);
     if (length == 0) {
@@ -502,16 +525,11 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
     //       buffer.size() - buffer.pos());
 
     if (remaining) {
-      // DEBUG("Packet with several midi events. {} bytes remaining",
-      // remaining); Skip delta just look for first bit that will mark if more
-      // bytes
-      uint8_t delta;
-      while (((delta = buffer.read_uint8()) & 0x80) == 0x00) {
-        // DEBUG("Skip delta: {}", delta);
-        remaining--;
-      };
-      // rewind one
-      buffer.position--;
+      // DEBUG("Packet with several midi events. {} bytes remaining", remaining);
+      // Skip delta
+      uint32_t delta_time;
+      remaining -= read_delta_time(buffer, delta_time);
+      // DEBUG("Skip delta_time: {}", delta_time);
     }
   }
 }
