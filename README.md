@@ -53,6 +53,8 @@ support. I will try to list them as I find them:
 
 #### Android
 
+- [MIDI Hub] (https://abrahamwisman.com/midihub)
+- [MIDI Connector] (https://abrahamwisman.com/midiconnector)
 - [TouchDAW](https://www.humatic.de/htools/touchdaw/).
 
 ## How to use `rtpmidid`
