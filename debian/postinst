@@ -23,7 +23,7 @@ case "$1" in
         adduser --disabled-password  --quiet --system \
             --home /var/run/rtpmidid --no-create-home \
             --gecos "rtpmidid daemon" rtpmidid
-        addgroup --quiet rtpmidid audio
+        adduser --quiet rtpmidid audio
 
         systemctl enable rtpmidid || true
         systemctl restart rtpmidid
