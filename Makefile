@@ -90,7 +90,7 @@ deb:
 	$(eval VERSION := $(shell git describe --match "v[0-9]*" --tags --abbrev=5 HEAD | sed 's/^v//g' | sed 's/-/~/g' ))
 	$(eval DATE := $(shell date -R))
 	sed -i "1s/.*/rtpmidid (${VERSION}) unstable; urgency=medium/" debian/changelog
-	sed -i "5s/.*/ -- David Moreno <dmoreno@coralbits.com>  ${DATE}/" debian/changelog
+	sed -i "s/^ --.*/ -- David Moreno <dmoreno@coralbits.com>  ${DATE}/" debian/changelog
 
 	dpkg-buildpackage --no-sign
 
@@ -134,4 +134,4 @@ install-librtpmidid0-dev: build
 	cp README.librtpmidid.md $(PREFIX)/usr/share/doc/librtpmidid0-dev/
 	cp LICENSE-lib.txt $(PREFIX)/usr/share/doc/librtpmidid0-dev/LICENSE.txt
 
-	
+
