@@ -1,5 +1,5 @@
 rtpmidid
 files
-rtpmidid.substvars
+*.substvars
 librtpmidid0
 librtpmidid0-dev
