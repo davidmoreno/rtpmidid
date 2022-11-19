@@ -24,6 +24,7 @@ install:
 	make install-rtpmidid PREFIX=debian/rtpmidid/
 	make install-librtpmidid0 PREFIX=debian/librtpmidid0/
 	make install-librtpmidid0-dev PREFIX=debian/librtpmidid0-dev/
+	dh_installchangelogs
 
 # dh_make generated override targets
 # This is example for Cmake (See https://bugs.debian.org/641051 )
