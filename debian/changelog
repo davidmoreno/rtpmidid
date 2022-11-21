@@ -20,7 +20,6 @@ rtpmidid (21.07) unstable; urgency=medium
 
  -- David Moreno <dmoreno@coralbits.com>  Fri, 23 Jul 2021 19:42:45 +0200
 
-
 rtpmidid (20.07) unstable; urgency=medium
 
   * Improved Mac OS and iOS support
@@ -29,7 +28,6 @@ rtpmidid (20.07) unstable; urgency=medium
   * Improved stability
 
  -- David Moreno <dmoreno@coralbits.com>  Sat, 11 Jul 2020 13:01:46 +0200
-
 
 rtpmidid (20.04.5) unstable; urgency=medium
 
