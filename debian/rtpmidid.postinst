@@ -24,9 +24,6 @@ case "$1" in
             --home /var/run/rtpmidid --no-create-home \
             --gecos "rtpmidid daemon" rtpmidid
         adduser --quiet rtpmidid audio
-
-        systemctl enable rtpmidid || true
-        systemctl restart rtpmidid
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
