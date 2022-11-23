@@ -33,6 +33,9 @@ override_dh_install:
 	# Move the unversioned symlink into the -dev package.
 	mv debian/librtpmidid0/usr/lib/*so debian/librtpmidid0-dev/usr/lib
 
+	# Remove unrequired LICENSE.txt files, copyright file suffices.
+	rm debian/*/usr/share/doc/*/LICENSE.txt
+
 # Disable tests, as valgrind is failing when cross compiling for armhf, not
 # looked into it yet.
 override_dh_auto_test:
