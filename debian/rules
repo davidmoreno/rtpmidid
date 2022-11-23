@@ -30,6 +30,9 @@ override_dh_install:
 	make install-librtpmidid0 PREFIX=debian/librtpmidid0/
 	make install-librtpmidid0-dev PREFIX=debian/librtpmidid0-dev/
 
+	# Move the unversioned symlink into the -dev package.
+	mv debian/librtpmidid0/usr/lib/*so debian/librtpmidid0-dev/usr/lib
+
 # Disable tests, as valgrind is failing when cross compiling for armhf, not
 # looked into it yet.
 override_dh_auto_test:
