@@ -23,6 +23,10 @@ override_dh_auto_install:
 
 override_dh_install:
 	make install-rtpmidid PREFIX=debian/rtpmidid/
+
+	# We shouldn't ship service file in /etc/systemd/system
+	rm -rf debian/rtpmidid/etc/systemd
+
 	make install-librtpmidid0 PREFIX=debian/librtpmidid0/
 	make install-librtpmidid0-dev PREFIX=debian/librtpmidid0-dev/
 
