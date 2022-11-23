@@ -21,7 +21,7 @@ set -e
 case "$1" in
     configure)
         adduser --disabled-password  --quiet --system \
-            --home /var/run/rtpmidid --no-create-home \
+            --home /run/rtpmidid --no-create-home \
             --gecos "rtpmidid daemon" rtpmidid
         adduser --quiet rtpmidid audio
     ;;
