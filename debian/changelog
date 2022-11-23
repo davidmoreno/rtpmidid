@@ -1,6 +1,6 @@
 rtpmidid (21.11) unstable; urgency=medium
 
-  * Several MIDI packets in a single packet. This solves several issues 
+  * Several MIDI packets in a single packet. This solves several issues
     with third party implementations.
   * Resassembly of SysEx packages
   * Internal improvements
@@ -13,7 +13,7 @@ rtpmidid (21.11) unstable; urgency=medium
 
 rtpmidid (21.07) unstable; urgency=medium
 
-  * Bugfix: bad ordering of events 
+  * Bugfix: bad ordering of events
   * More MIDI events
   * Bad acess initiator / ssrc
   * Bigger buffer size for sysex
