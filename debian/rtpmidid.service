@@ -1,6 +1,6 @@
 [Unit]
 Description=rtpmidid
-After=network.target
+After=avahi-daemon.service
 
 [Service]
 Type=simple
@@ -18,4 +18,4 @@ CPUSchedulingPolicy=fifo
 CPUSchedulingPriority=10 
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=network.target
