@@ -16,17 +16,26 @@ export DH_VERBOSE = 1
 %:
 	dh $@
 
-
-build:
+override_dh_auto_build:
 	make build
 
-install:
+override_dh_auto_install:
+
+override_dh_install:
 	make install-rtpmidid PREFIX=debian/rtpmidid/
+
+	# We shouldn't ship service file in /etc/systemd/system
+	rm -rf debian/rtpmidid/etc/systemd
+
 	make install-librtpmidid0 PREFIX=debian/librtpmidid0/
 	make install-librtpmidid0-dev PREFIX=debian/librtpmidid0-dev/
 
-# dh_make generated override targets
-# This is example for Cmake (See https://bugs.debian.org/641051 )
-#override_dh_auto_configure:
-#	dh_auto_configure -- #	-DCMAKE_LIBRARY_PATH=$(DEB_HOST_MULTIARCH)
+	# Move the unversioned symlink into the -dev package.
+	mv debian/librtpmidid0/usr/lib/*so debian/librtpmidid0-dev/usr/lib
 
+	# Remove unrequired LICENSE.txt files, copyright file suffices.
+	rm debian/*/usr/share/doc/*/LICENSE.txt
+
+# Disable tests, as valgrind is failing when cross compiling for armhf, not
+# looked into it yet.
+override_dh_auto_test:

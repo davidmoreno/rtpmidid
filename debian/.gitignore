@@ -1,5 +1,8 @@
-rtpmidid
 files
-rtpmidid.substvars
+*.substvars
+*.debhelper
+*-stamp
+tmp
+rtpmidid
 librtpmidid0
 librtpmidid0-dev

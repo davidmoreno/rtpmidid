@@ -1,13 +1,24 @@
 Source: rtpmidid
-Section: unknown
+Section: sound
 Priority: optional
 Maintainer: David Moreno <dmoreno@coralbits.com>
-Build-Depends: debhelper (>= 10), libavahi-client-dev, libfmt-dev, libasound2-dev, python3, cmake, pandoc
-Standards-Version: 4.1.2
+Build-Depends:
+ debhelper (>= 13~),
+ debhelper-compat (= 13),
+ libavahi-client-dev,
+ libfmt-dev,
+ libasound2-dev,
+ python3,
+ cmake,
+ pandoc,
+ git,
+Standards-Version: 4.6.1.0
+Rules-Requires-Root: no
 Homepage: https://github.com/davidmoreno/rtpmidid
 
 Package: rtpmidid
 Architecture: any
+Pre-Depends: adduser
 Depends: ${shlibs:Depends}, ${misc:Depends}, python3
 Description: Real Time Protocol Musical Instrument Digital Interface Daemon (RTP-MIDI)
  rtpmidid allows you to share ALSA sequencer devices on the network using RTP
@@ -20,10 +31,20 @@ Description: Real Time Protocol Musical Instrument Digital Interface Daemon (RTP
 Package: librtpmidid0
 Section: libs
 Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: RTP MIDI library
+ rtpmidid allows you to share ALSA sequencer devices on the network using RTP
+ MIDI, and import other network shared RTP MIDI devices.
+ .
+ This package provides the shared library for rtpmidi which allows you to
+ integrate RTP MIDI in your application.
 
 Package: librtpmidid0-dev
 Section: libdevel
 Architecture: any
-Depends: libfmt-dev, librtpmidid0
+Depends: ${shlibs:Depends}, ${misc:Depends}, libfmt-dev, librtpmidid0 (= ${binary:Version})
 Description: RTP MIDI library development files
+ rtpmidid allows you to share ALSA sequencer devices on the network using RTP
+ MIDI, and import other network shared RTP MIDI devices.
+ .
+ This package provides the development headers to librtpmidi0.

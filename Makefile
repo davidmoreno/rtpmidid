@@ -131,4 +131,4 @@ install-librtpmidid0-dev: build
 	cp README.librtpmidid.md $(PREFIX)/usr/share/doc/librtpmidid0-dev/
 	cp LICENSE-lib.txt $(PREFIX)/usr/share/doc/librtpmidid0-dev/LICENSE.txt
 
-	
+
