@@ -24,7 +24,7 @@ def main():
         data = readchangelog(fd)
 
     # this not an development version, create it
-    if '~' not in data[0]["version"]:
+    if '~' not in data[0]["version"] and '~' in version:
         data.insert(0, {**data[0]})  # prepend, reuse all possible data
         data[0]["items"] = ["Development version. Check `git log`."]
 
