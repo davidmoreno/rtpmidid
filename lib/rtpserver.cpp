@@ -246,12 +246,13 @@ void rtpserver::data_ready(rtppeer::port_e port) {
         buffer.start[3] == 'N') {
       create_peer_from(std::move(buffer), &cliaddr, port);
     } else {
-      char host[NI_MAXHOST] { 0 }, service[NI_MAXSERV] { 0 };
+      char host[NI_MAXHOST]{0}, service[NI_MAXSERV]{0};
       getnameinfo((const struct sockaddr *)&cliaddr, len, host, NI_MAXHOST,
-		      service, NI_MAXSERV, NI_NUMERICSERV);
+                  service, NI_MAXSERV, NI_NUMERICSERV);
 
-      DEBUG("Unknown peer ({}/{}), and not connect on control. Ignoring {} port.",
-            host, service, port == rtppeer::MIDI_PORT ? "MIDI" : "Control");
+      DEBUG(
+          "Unknown peer ({}/{}), and not connect on control. Ignoring {} port.",
+          host, service, port == rtppeer::MIDI_PORT ? "MIDI" : "Control");
 
       buffer.print_hex(true);
     }
@@ -271,15 +272,15 @@ void rtpserver::sendto(const io_bytes_reader &pb, rtppeer::port_e port,
   // address->sin6_family, inet_ntoa(address->sin6_addr),
   // htons(address->sin6_port));
 
-  for(;;) {
+  for (;;) {
     ssize_t res =
-      ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
-               (const struct sockaddr *)address, sizeof(struct sockaddr_in6));
+        ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
+                 (const struct sockaddr *)address, sizeof(struct sockaddr_in6));
 
     if (static_cast<uint32_t>(res) == pb.size())
       break;
 
-    char addr_buffer[INET6_ADDRSTRLEN] { 0 };
+    char addr_buffer[INET6_ADDRSTRLEN]{0};
     inet_ntop(AF_INET6, address, addr_buffer, sizeof(struct sockaddr_in6));
 
     if (res == -1) {
@@ -289,11 +290,11 @@ void rtpserver::sendto(const io_bytes_reader &pb, rtppeer::port_e port,
       }
 
       throw exception("Could not send all data to {}: {}", addr_buffer,
-		      strerror(errno));
+                      strerror(errno));
     }
 
-    DEBUG("Could not send whole message to {}: only {} of {}", addr_buffer,
-		    res, pb.size());
+    DEBUG("Could not send whole message to {}: only {} of {}", addr_buffer, res,
+          pb.size());
     break;
   }
 }
@@ -306,8 +307,10 @@ void rtpserver::create_peer_from(io_bytes_reader &&buffer,
   auto address = std::make_shared<struct sockaddr_in6>();
   ::memcpy(address.get(), cliaddr, sizeof(struct sockaddr_in6));
   auto remote_base_port = htons(cliaddr->sin6_port);
-  // DEBUG("Address family {} {}. From {}", cliaddr.sin6_family,
-  // address->sin6_family, socket);
+
+  char astring[INET6_ADDRSTRLEN];
+  inet_ntop(AF_INET6, &(address->sin6_addr), astring, INET6_ADDRSTRLEN);
+  DEBUG("Connected from {}:{}", astring, port);
 
   // This is the send to the proper ports
   peer->send_event.connect(

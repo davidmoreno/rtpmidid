@@ -227,39 +227,35 @@ static void resolve_callback(AvahiServiceResolver *r, AvahiIfIndex interface,
     break;
   case AVAHI_RESOLVER_FOUND: {
     if (!!(flags & AVAHI_LOOKUP_RESULT_OUR_OWN)) {
-      DEBUG("Received own announcement");
+      // DEBUG("Received own announcement");
       return;
     }
-    char a[AVAHI_ADDRESS_STR_MAX], *t;
-    DEBUG("Discovered service '{}' of type '{}' in domain '{}'", name, type,
-          domain);
+    char a[AVAHI_ADDRESS_STR_MAX];
     avahi_address_snprint(a, sizeof(a), address);
-    t = avahi_string_list_to_string(txt);
-    // DEBUG(
-    //         "\t{}:{} ({})\n"
-    //         "\tinterface={}\n"
-    //         "\tTXT={}\n"
-    //         "\tcookie is {}\n"
-    //         "\tis_local: {}\n"
-    //         "\tour_own: {}\n"
-    //         "\twide_area: {}\n"
-    //         "\tmulticast: {}\n"
-    //         "\tcached: {}",
-    //         host_name, port, a,
-    //         interface,
-    //         t,
-    //         avahi_string_list_get_service_cookie(txt),
-    //         !!(flags & AVAHI_LOOKUP_RESULT_WIDE_AREA),
-    //         !!(flags & AVAHI_LOOKUP_RESULT_LOCAL),
-    //         !!(flags & AVAHI_LOOKUP_RESULT_OUR_OWN),
-    //         !!(flags & AVAHI_LOOKUP_RESULT_MULTICAST),
-    //         !!(flags & AVAHI_LOOKUP_RESULT_CACHED));
+    DEBUG("Discovered service '{:<32}' in host ({}:{} ({}))", name, host_name,
+          port, a);
+    // char *t = avahi_string_list_to_string(txt);
+    // DEBUG("\t{}:{} ({})\n"
+    //       "\tinterface={}\n"
+    //       "\tTXT={}\n"
+    //       "\tcookie is {}\n"
+    //       "\tis_local: {}\n"
+    //       "\tour_own: {}\n"
+    //       "\twide_area: {}\n"
+    //       "\tmulticast: {}\n"
+    //       "\tcached: {}",
+    //       host_name, port, a, interface, t,
+    //       avahi_string_list_get_service_cookie(txt),
+    //       !!(flags & AVAHI_LOOKUP_RESULT_WIDE_AREA),
+    //       !!(flags & AVAHI_LOOKUP_RESULT_LOCAL),
+    //       !!(flags & AVAHI_LOOKUP_RESULT_OUR_OWN),
+    //       !!(flags & AVAHI_LOOKUP_RESULT_MULTICAST),
+    //       !!(flags & AVAHI_LOOKUP_RESULT_CACHED));
+    // avahi_free(t);
 
     // FIXME: address is not correct for interface (!), so is not unique, how to
     // make unique? or filter on interface?
     mr->discover_event(name, a, std::to_string(port));
-
-    avahi_free(t);
   }
   }
   avahi_service_resolver_free(r);
@@ -280,8 +276,8 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface,
                               avahi_service_browser_get_client(b))));
     return;
   case AVAHI_BROWSER_NEW:
-    INFO("(Browser) NEW: service '{}' of type '{}' in domain '{}'", name, type,
-         domain);
+    // INFO("(Browser) NEW: service '{}' of type '{}' in domain '{}' {}", name,
+    //      type, domain, interface);
     /* We ignore the returned resolver object. In the callback
        function we free it. If the server is terminated before
        the callback function is called the server will free
@@ -304,6 +300,8 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface,
                              ? "CACHE_EXHAUSTED"
                              : "ALL_FOR_NOW");
     break;
+  default:
+    WARNING("AVAHI unknown event: %s", event);
   }
 }
 
@@ -383,6 +381,7 @@ fail:;
 
 void rtpmidid::mdns_rtpmidi::announce_rtpmidi(const std::string &name,
                                               const int32_t port) {
+  DEBUG("Announce {}", name);
   announcements.push_back({name, port});
 
   announce_all();
@@ -390,6 +389,7 @@ void rtpmidid::mdns_rtpmidi::announce_rtpmidi(const std::string &name,
 
 void rtpmidid::mdns_rtpmidi::unannounce_rtpmidi(const std::string &name,
                                                 const int32_t port) {
+  DEBUG("Unannounce {}", name);
   announcements.erase(std::remove_if(announcements.begin(), announcements.end(),
                                      [port](const announcement_t &t) {
                                        return port == t.port;

@@ -257,7 +257,7 @@ rtpmidid_t::add_rtpmidi_client(const std::string &name,
 
   seq.subscribe_event[aseq_port].connect(
       [this, aseq_port](aseq::port_t port, const std::string &name) {
-        DEBUG("Callback on subscribe at rtpmidid: {}", name);
+        // DEBUG("Callback on subscribe at rtpmidid: {}", name);
         connect_client(fmt::format("{}/{}", this->name, name), aseq_port);
       });
   seq.unsubscribe_event[aseq_port].connect(
