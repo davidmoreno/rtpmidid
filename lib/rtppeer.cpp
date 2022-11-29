@@ -154,7 +154,8 @@ void rtppeer::parse_command_ok(io_bytes_reader &buffer, port_e port) {
        remote_name, initiator_id, this->initiator_id == initiator_id,
        remote_ssrc, remote_name,
        port == CONTROL_PORT ? "Control"
-                            : port == MIDI_PORT ? "MIDI" : "Unknown");
+       : port == MIDI_PORT  ? "MIDI"
+                            : "Unknown");
   if (port == MIDI_PORT) {
     status = status_e(int(status) | int(MIDI_CONNECTED));
   } else if (port == CONTROL_PORT) {
@@ -233,9 +234,9 @@ void rtppeer::parse_command_by(io_bytes_reader &buffer, port_e port) {
 
   DEBUG("status: {}, port {} (midi: %d)", status, port, port == MIDI_PORT);
 
-  status = (status_e)(
-      ((int)status) &
-      ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
+  status = (status_e)(((int)status) &
+                      ~((int)(port == MIDI_PORT ? MIDI_CONNECTED
+                                                : CONTROL_CONNECTED)));
   INFO("Disconnect from {}, {} port. Status {:X}", remote_name,
        port == MIDI_PORT ? "MIDI" : "Control", (int)status);
 
@@ -254,9 +255,9 @@ void rtppeer::parse_command_no(io_bytes_reader &buffer, port_e port) {
         protocol);
   }
 
-  status = (status_e)(
-      ((int)status) &
-      ~((int)(port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED)));
+  status = (status_e)(((int)status) &
+                      ~((int)(port == MIDI_PORT ? MIDI_CONNECTED
+                                                : CONTROL_CONNECTED)));
   WARNING("Invitation Rejected (NO) : remote ssrc {:X}", remote_ssrc);
   INFO("Disconnect from {}, {} port. Status {:X}", remote_name,
        port == MIDI_PORT ? "MIDI" : "Control", (int)status);
@@ -374,16 +375,16 @@ int rtppeer::next_midi_packet_length(io_bytes_reader &buffer) {
   int length = 0;
 
   // Update running status
-  // RealTime Category messages (0xF8 to 0xFF) do nothing to the running status state
-  if (0xF0 <= status && status <= 0xF7) { // System Common and System Exclusive messages 
-    running_status = 0;                   // cancel the running status state.
-  }
-  else if (0x80 <= status && status < 0xF0) { // Voice Category messages
-    running_status = status;                  // update the runnning status state.
-  }
-  else if (status < 0x80) {  // Abbreviated commands
-    status = running_status; // use the running status state
-    length = -1;             // and are 1 byte shorter.
+  // RealTime Category messages (0xF8 to 0xFF) do nothing to the running status
+  // state
+  if (0xF0 <= status &&
+      status <= 0xF7) { // System Common and System Exclusive messages
+    running_status = 0; // cancel the running status state.
+  } else if (0x80 <= status && status < 0xF0) { // Voice Category messages
+    running_status = status;  // update the runnning status state.
+  } else if (status < 0x80) { // Abbreviated commands
+    status = running_status;  // use the running status state
+    length = -1;              // and are 1 byte shorter.
   }
 
   auto first_byte_f0 = status & 0xF0;
@@ -408,7 +409,8 @@ int rtppeer::next_midi_packet_length(io_bytes_reader &buffer) {
     case 0xFA: // Start
     case 0xFB: // Continue
     case 0xFC: // Stop
-    case 0xFE: // Active sense (ping every 300ms or so, to advice still connected)
+    case 0xFE: // Active sense (ping every 300ms or so, to advice still
+               // connected)
     case 0xFF: // Reset (Panic)
       length = 1;
       break;
@@ -518,7 +520,8 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
   // Parse MIDI list structure
   // (May be several midi messages with delta time)
 
-  // The first MIDI channel command in the MIDI list MUST include a status octet. (RFC 6295, p.16)
+  // The first MIDI channel command in the MIDI list MUST include a status
+  // octet. (RFC 6295, p.16)
   running_status = 0;
 
   while (remaining) {
@@ -535,7 +538,7 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
       parse_sysex(buffer, length);
     } else if (*buffer.position < 0x80 && running_status) {
       // Abbreviated midi message using running status
-      io_bytes_managed midi(length+1);
+      io_bytes_managed midi(length + 1);
       io_bytes_writer midi_writer(midi);
       midi_writer.write_uint8(running_status);
       midi_writer.copy_from(buffer.position, length);
@@ -551,8 +554,8 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
     //       buffer.size() - buffer.pos());
 
     if (remaining) {
-      // DEBUG("Packet with several midi events. {} bytes remaining", remaining);
-      // Skip delta
+      // DEBUG("Packet with several midi events. {} bytes remaining",
+      // remaining); Skip delta
       uint32_t delta_time;
       remaining -= read_delta_time(buffer, delta_time);
       // DEBUG("Skip delta_time: {}", delta_time);
@@ -636,8 +639,9 @@ uint64_t rtppeer::get_timestamp() {
 
 void rtppeer::send_midi(const io_bytes_reader &events) {
   if (!is_connected()) { // Not connected yet.
-    DEBUG("Can not send MIDI data to {} yet, not connected ({:X}).",
-          remote_name, (int)status);
+    WARNING_RATE_LIMIT(
+        10, "Can not send MIDI data to {} yet, not connected ({:X}).",
+        remote_name, (int)status);
     return;
   }
 

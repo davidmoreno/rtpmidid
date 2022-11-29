@@ -19,6 +19,7 @@
 
 #pragma once
 #include <fmt/format.h>
+#include <time.h>
 
 #ifndef DEBUG_ENABLED
 #define DEBUG_ENABLED true
@@ -49,6 +50,16 @@
     static bool __warning_once_unseen_##__LINENO__ = true;                     \
     if (__warning_once_unseen_##__LINENO__) {                                  \
       __warning_once_unseen_##__LINENO__ = false;                              \
+      logger::log(__FILE__, __LINE__, logger::WARNING, __VA_ARGS__);           \
+    }                                                                          \
+  }
+// Will show only once every X seconds
+#define WARNING_RATE_LIMIT(seconds, ...)                                       \
+  {                                                                            \
+    static int __warning_skip_until_##__LINENO__ = 0;                          \
+    int __now = time(nullptr);                                                 \
+    if (__warning_skip_until_##__LINENO__ < __now) {                           \
+      __warning_skip_until_##__LINENO__ = __now + seconds;                     \
       logger::log(__FILE__, __LINE__, logger::WARNING, __VA_ARGS__);           \
     }                                                                          \
   }
