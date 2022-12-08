@@ -289,12 +289,9 @@ void rtpserver::sendto(const io_bytes_reader &pb, rtppeer::port_e port,
         continue;
       }
 
-      if (errno == 101) { // Network disconnected
-        WARNING("Network disconnected.");
-        throw network_disconnected();
-      }
-      throw exception("Server: Could not send all data to {}: {}", addr_buffer,
-                      strerror(errno));
+      ERROR("Server: Could not send all data to {}: {}", addr_buffer,
+            strerror(errno));
+      throw network_exception(errno);
     }
 
     DEBUG("Could not send whole message to {}: only {} of {}", addr_buffer, res,

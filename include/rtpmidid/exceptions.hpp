@@ -18,6 +18,7 @@
  */
 
 #pragma once
+#include <cstring>
 #include <exception>
 #include <fmt/format.h>
 #include <string>
@@ -37,8 +38,15 @@ class not_implemented : public std::exception {
 public:
   const char *what() const noexcept { return "Not Implemented"; }
 };
-class network_disconnected : public std::exception {
+class network_exception : public std::exception {
+  std::string str;
+
 public:
-  const char *what() const noexcept { return "Disconnected"; }
+  int errno_;
+  network_exception(int errno_) {
+    this->errno_ = errno_;
+    this->str = fmt::format("Network error %s (%d)", strerror(errno_), errno_);
+  }
+  const char *what() const noexcept { return str.c_str(); }
 };
 } // namespace rtpmidid

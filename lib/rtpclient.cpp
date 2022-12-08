@@ -17,6 +17,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include "rtpmidid/exceptions.hpp"
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/socket.h>
@@ -54,8 +55,13 @@ rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
 
 rtpclient::~rtpclient() {
   if (peer.is_connected()) {
-    peer.send_goodbye(rtppeer::CONTROL_PORT);
-    peer.send_goodbye(rtppeer::MIDI_PORT);
+    try {
+      peer.send_goodbye(rtppeer::CONTROL_PORT);
+      peer.send_goodbye(rtppeer::MIDI_PORT);
+    } catch (network_exception &e) {
+      ERROR("Removing client without sending proper goodbye. If reconnected "
+            "may misbehave.");
+    }
   }
 
   if (control_socket > 0) {
@@ -258,13 +264,9 @@ void rtpclient::sendto(const io_bytes &pb, rtppeer::port_e port) {
         continue;
       }
 
-      if (errno == 101) { // Network disconnected
-        WARNING("Network disconnected.");
-        throw network_disconnected();
-      }
-      throw exception(
-          "Client: Could not send all data to {}:{}. Sent {}. {} ({})",
-          peer.remote_name, remote_base_port, res, strerror(errno), errno);
+      ERROR("Client: Could not send all data to {}:{}. Sent {}. {} ({})",
+            peer.remote_name, remote_base_port, res, strerror(errno), errno);
+      throw network_exception(errno);
     }
 
     DEBUG("Could not send whole message: only {} of {}", res, pb.size());

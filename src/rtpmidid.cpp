@@ -23,6 +23,7 @@
 #include "./config.hpp"
 #include "./rtpmidid.hpp"
 #include "./stringpp.hpp"
+#include "rtpmidid/exceptions.hpp"
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/rtpclient.hpp>
