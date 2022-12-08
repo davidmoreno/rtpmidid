@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
+clap = { version = "^3.2", features = ["derive"] }

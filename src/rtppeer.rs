@@ -20,6 +20,7 @@ pub enum RtpPeerEventBasic {
 
 #[derive(Debug, Copy, Clone)]
 pub enum RtpPeerEvent<'a> {
+    DoNothing,
     ControlData(&'a [u8]),
     MidiData(&'a [u8]),
     SendCk,

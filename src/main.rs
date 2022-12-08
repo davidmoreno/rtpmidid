@@ -1,5 +1,3 @@
-mod rtppeer;
-
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
  * Copyright (C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
@@ -17,32 +15,76 @@ mod rtppeer;
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+mod rtppeer;
+
+use clap::Parser;
 use std::io;
-use std::str;
 use tokio::net::UdpSocket;
+use tokio::select;
 
 use crate::rtppeer::RtpPeerEvent;
 use crate::rtppeer::RtpPeerEventResponse;
 
+#[derive(Parser, Debug)]
+// #[command(author, version, about, long_about = None)]
+struct Arguments {
+    #[clap(short, long, default_value = "0.0.0.0")]
+    address: String,
+    #[clap(short, long, default_value = "5004")]
+    port: u16,
+}
+
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    println!("Hello, world!");
+    let args = Arguments::parse();
+    println!(
+        "Rtpmidi client monitor. Listening at {}:{}",
+        args.address, args.port
+    );
 
-    let socket = UdpSocket::bind("0.0.0.0:6789").await?;
+    listen_rtpmidi(&args.address, args.port).await?;
+    Ok(())
+}
+
+async fn listen_rtpmidi(address: &str, port: u16) -> io::Result<()> {
+    let control_socket = UdpSocket::bind(format!("{}:{}", address, port)).await?;
+    let midi_socket = UdpSocket::bind(format!("{}:{}", address, port + 1)).await?;
 
     let mut rtppeer = rtppeer::RtpPeer::new();
-    let mut buf = vec![0u8; 1500];
+    let mut control_data = vec![0u8; 1500];
+    let mut midi_data = vec![0u8; 1500];
+
     loop {
-        let (length, addr) = socket.recv_from(&mut buf).await?;
-        let event = RtpPeerEvent::MidiData(&buf[0..length as usize]);
+        let control_socket_recv = control_socket.recv_from(&mut control_data);
+        let midi_socket_recv = midi_socket.recv_from(&mut midi_data);
+        let mut event = RtpPeerEvent::DoNothing;
+
+        let addr = tokio::select! {
+            recv = control_socket_recv => {
+                let (length, addr) = recv?;
+                event = RtpPeerEvent::ControlData(&control_data[..length]);
+                // control_socket_recv = control_socket.recv_from(&mut control_data);
+                addr
+            },
+            recv = midi_socket_recv => {
+                let (length, addr) = recv?;
+                event = RtpPeerEvent::MidiData(&midi_data[..length]);
+                // midi_socket_recv = midi_socket.recv_from(&mut midi_data);
+                addr
+            }
+        };
+
         match rtppeer.event(&event) {
+            RtpPeerEventResponse::ControlData(data) => {
+                control_socket.send_to(data, addr).await?;
+            }
             RtpPeerEventResponse::MidiData(data) => {
-                socket.send_to(data, addr).await?;
+                midi_socket.send_to(data, addr).await?;
             }
             _ => {
                 println!("WIP");
             }
-        }
+        };
     }
 
     // Ok(())
