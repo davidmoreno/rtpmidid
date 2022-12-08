@@ -37,4 +37,8 @@ class not_implemented : public std::exception {
 public:
   const char *what() const noexcept { return "Not Implemented"; }
 };
+class network_disconnected : public std::exception {
+public:
+  const char *what() const noexcept { return "Disconnected"; }
+};
 } // namespace rtpmidid

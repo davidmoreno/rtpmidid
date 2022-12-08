@@ -99,7 +99,7 @@ void rtpclient::connect_to(const std::string &address,
     for (; serveraddr != nullptr; serveraddr = serveraddr->ai_next) {
       host[0] = service[0] = 0x00;
       getnameinfo(serveraddr->ai_addr, peer_addr_len, host, NI_MAXHOST, service,
-		      NI_MAXSERV, NI_NUMERICSERV);
+                  NI_MAXSERV, NI_NUMERICSERV);
       DEBUG("Try connect to resolved name: {}:{}", host, service);
       // remote_base_port = service;
 
@@ -184,14 +184,15 @@ void rtpclient::connect_to(const std::string &address,
     freeaddrinfo(sockaddress_list);
   }
 
-  DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address, remote_base_port + 1);
+  DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address,
+        remote_base_port + 1);
 
   // If not connected, connect now the MIDI port
   auto conn_event = peer.connected_event.connect(
       [this, address, port](const std::string &name, rtppeer::status_e status) {
         if (status == rtppeer::CONTROL_CONNECTED) {
-          DEBUG("Connected midi port {} to {}:{}", local_base_port + 1,
-                address, remote_base_port + 1);
+          DEBUG("Connected midi port {} to {}:{}", local_base_port + 1, address,
+                remote_base_port + 1);
           peer.connect_to(rtppeer::MIDI_PORT);
         } else if (status == rtppeer::CONNECTED) {
           connected();
@@ -243,10 +244,10 @@ void rtpclient::sendto(const io_bytes &pb, rtppeer::port_e port) {
 
   auto socket = rtppeer::MIDI_PORT == port ? midi_socket : control_socket;
 
-  for(;;) {
+  for (;;) {
     ssize_t res =
-      ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
-               (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
+        ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
+                 (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
 
     if (static_cast<uint32_t>(res) == pb.size())
       break;
@@ -257,8 +258,13 @@ void rtpclient::sendto(const io_bytes &pb, rtppeer::port_e port) {
         continue;
       }
 
-      throw exception("Could not send all data to {}:{}. Sent {}. {}",
-                    peer.remote_name, remote_base_port, res, strerror(errno));
+      if (errno == 101) { // Network disconnected
+        WARNING("Network disconnected.");
+        throw network_disconnected();
+      }
+      throw exception(
+          "Client: Could not send all data to {}:{}. Sent {}. {} ({})",
+          peer.remote_name, remote_base_port, res, strerror(errno), errno);
     }
 
     DEBUG("Could not send whole message: only {} of {}", res, pb.size());
