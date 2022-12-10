@@ -252,17 +252,15 @@ impl RtpPeer {
 
 #[cfg(test)]
 mod tests {
-    use crate::rtppeer::{Response, Status};
-
     use super::{Event, RtpPeer};
-    fn init() {
-        let _ = env_logger::builder()
-            .filter_level(log::LevelFilter::Debug)
-            .try_init();
-    }
+    use crate::{
+        rtppeer::{Response, Status},
+        setup_logging,
+    };
+
     #[test]
     fn test_rtppeer_new() {
-        init();
+        setup_logging();
         let mut rtppeer = RtpPeer::new("test".to_string());
 
         assert!(rtppeer.status == Status::Initial);

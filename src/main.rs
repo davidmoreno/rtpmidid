@@ -21,9 +21,12 @@ mod rtppeer;
 extern crate log;
 
 use clap::Parser;
+use env_logger::fmt::Color;
 use log::info;
+use log::Level;
 use log::LevelFilter;
 use std::io;
+use std::io::Write;
 use tokio::net::UdpSocket;
 
 use crate::rtppeer::Event;
@@ -40,17 +43,7 @@ struct Arguments {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    if cfg!(debug_assertions) {
-        env_logger::builder()
-            .filter_level(LevelFilter::Debug)
-            .try_init()
-            .unwrap();
-    } else {
-        env_logger::builder()
-            .filter_level(LevelFilter::Info)
-            .try_init()
-            .unwrap();
-    }
+    setup_logging();
 
     let args = Arguments::parse();
     info!(
@@ -60,6 +53,36 @@ async fn main() -> io::Result<()> {
 
     listen_rtpmidi(&args.address, args.port).await?;
     Ok(())
+}
+
+pub fn setup_logging() {
+    let mut logger_builder = env_logger::builder();
+    logger_builder.format(|buf, record| {
+        let mut style = buf.style();
+
+        match record.level() {
+            Level::Debug => style.set_color(Color::Blue),
+            Level::Error => style.set_color(Color::Red),
+            Level::Warn => style.set_color(Color::Yellow),
+            _ => &mut style,
+        };
+
+        writeln!(
+            buf,
+            "{} [{}] [{}:{}] - {}",
+            chrono::Local::now().format("%Y-%m-%dT%H:%M:%S"),
+            style.value(record.level()),
+            record.file().unwrap_or("unknown"),
+            record.line().unwrap_or(0),
+            record.args()
+        )
+    });
+    if cfg!(debug_assertions) {
+        logger_builder.filter_level(LevelFilter::Debug);
+    } else {
+        logger_builder.filter_level(LevelFilter::Info);
+    }
+    logger_builder.try_init().unwrap();
 }
 
 async fn listen_rtpmidi(address: &str, port: u16) -> io::Result<()> {
