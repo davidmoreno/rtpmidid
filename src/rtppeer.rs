@@ -1,25 +1,57 @@
+/**
+ * Real Time Protocol Music Instrument Digital Interface Daemon
+ * Copyright (C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+use byteorder::{BigEndian, WriteBytesExt};
 use std::{
-    io::{self, Cursor, Write},
+    convert::TryInto,
+    io::{Cursor, Write},
+    str,
     time::Duration,
 };
 
-#[derive(Debug, PartialEq)]
-enum RtpPeerStatus {
+#[derive(Debug, PartialEq, Copy, Clone)]
+enum Status {
     Initial,
     ControlConnected,
-    MidiConnected,
     Connected,
     WaitingCk,
     Disconnected,
 }
 
+#[derive(Debug, PartialEq)]
+enum Channel {
+    Midi,
+    Control,
+}
+
+pub enum PacketType {
+    Unknown,
+    IN,
+    NO,
+    OK,
+}
+
 #[derive(Debug, Copy, Clone)]
-pub enum RtpPeerEventBasic {
+pub enum BasicEvent {
     SendCk,
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum RtpPeerEvent<'a> {
+pub enum Event<'a> {
     DoNothing,
     ControlData(&'a [u8]),
     MidiData(&'a [u8]),
@@ -27,33 +59,51 @@ pub enum RtpPeerEvent<'a> {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum RtpPeerEventResponse<'a> {
+pub enum DisconnectReason {
+    BadPacket,
+    BadVersion,
+    BadPeer,
+    Requested,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum Response<'a> {
     DoNothing,
     MidiData(&'a [u8]),
     ControlData(&'a [u8]),
-    ScheduleTimeout(Duration, RtpPeerEventBasic),
-    Disconnect,
+    ScheduleTimeout(Duration, BasicEvent),
+    Disconnect(DisconnectReason),
 }
 
 #[derive(Debug)]
 pub(crate) struct RtpPeer {
-    status: RtpPeerStatus,
-    initiator_id: u16,
+    status: Status,
+    initiator_id: u32,
+    local_ssid: u32,
+    local_name: String,
+    remote_ssid: u32,
+    remote_name: String,
+
     sequence_nr: u32,
     sequence_ack: u32,
     remote_sequence_nr: u32,
     timestamp_start: u64,
     latency: u64,
+
     // Part of the struct, to prevent mallocs at return.
     // No mem management needed for this type.
     buffer: [u8; 1500],
 }
 
 impl RtpPeer {
-    pub fn new() -> RtpPeer {
+    pub fn new(name: String) -> RtpPeer {
         RtpPeer {
-            status: RtpPeerStatus::Initial,
+            status: Status::Initial,
             initiator_id: 0,
+            local_ssid: rand::random::<u32>(),
+            remote_ssid: 0,
+            local_name: name,
+            remote_name: String::from(""),
             sequence_nr: 0,
             sequence_ack: 0,
             remote_sequence_nr: 0,
@@ -63,61 +113,189 @@ impl RtpPeer {
         }
     }
 
-    pub fn event(&mut self, event: &RtpPeerEvent) -> RtpPeerEventResponse {
-        println!("Got event: {:?}", event);
+    pub fn event(&mut self, event: &Event) -> Response {
+        debug!("GOT Event {:?}", event);
         match event {
-            RtpPeerEvent::MidiData(data) => {
-                return self.parse_packet(data);
+            Event::ControlData(data) => {
+                return self.parse_packet(Channel::Control, data);
+            }
+            Event::MidiData(data) => {
+                return self.parse_packet(Channel::Midi, data);
             }
             _ => {
                 println!("Rest")
             }
         }
-        RtpPeerEventResponse::DoNothing
+        Response::DoNothing
     }
 
-    fn parse_packet(&mut self, data: &[u8]) -> RtpPeerEventResponse {
-        println!("GOT Data {:?}", data);
+    fn parse_packet(&mut self, channel: Channel, data: &[u8]) -> Response {
+        debug!("GOT Data {:?}", data);
 
-        let mut cursor = Cursor::new(&mut self.buffer[..]);
-        // Write::write(&mut cursor, b"test");
-        cursor.write(&[0xFF, 0xFF]).unwrap();
-        cursor.write(b"IN").unwrap();
-        cursor.write(&[0xFA, 0x57]).unwrap();
-        cursor.write(&[0xBE, 0xEF]).unwrap();
-        cursor.write(b"response").unwrap();
-        cursor.write(&[0x00]).unwrap();
+        if data.len() < 16 {
+            return Response::Disconnect(DisconnectReason::BadPacket);
+        }
+        let packet_type = Self::get_packet_type(&data[0..4].try_into().unwrap());
+        match packet_type {
+            PacketType::IN => {
+                return self.parse_command_in(channel, data);
+            }
+            PacketType::OK => {}
+            PacketType::NO => {}
+            PacketType::Unknown => {
+                return Response::Disconnect(DisconnectReason::BadPacket);
+            }
+        }
+        return Response::Disconnect(DisconnectReason::BadPacket);
+    }
 
-        let length = cursor.position() as usize;
-        return RtpPeerEventResponse::MidiData(&self.buffer[..length]);
+    fn get_packet_type(data: &[u8; 4]) -> PacketType {
+        if data[0] == 0xFF && data[1] == 0xFF && data[2] == b'I' && data[3] == b'N' {
+            return PacketType::IN;
+        }
+        if data[0] == 0xFF && data[1] == 0xFF && data[2] == b'O' && data[3] == b'K' {
+            return PacketType::OK;
+        }
+        if data[0] == 0xFF && data[1] == 0xFF && data[2] == b'N' && data[3] == b'O' {
+            return PacketType::NO;
+        }
+        PacketType::Unknown
+    }
+
+    fn parse_command_in(&mut self, channel: Channel, data: &[u8]) -> Response {
+        let fixedpart: [u8; 16] = data[0..16].try_into().unwrap();
+        let version: u32 = (fixedpart[4] as u32) << 24
+            | (fixedpart[5] as u32) << 16
+            | (fixedpart[6] as u32) << 8
+            | (fixedpart[7] as u32);
+        let initiator_id: u32 = (fixedpart[8] as u32) << 24
+            | (fixedpart[9] as u32) << 16
+            | (fixedpart[10] as u32) << 8
+            | (fixedpart[11] as u32);
+        let ssid: u32 = (fixedpart[12] as u32) << 24
+            | (fixedpart[13] as u32) << 16
+            | (fixedpart[14] as u32) << 8
+            | (fixedpart[15] as u32);
+
+        if version != 0x02 {
+            error!("Invalid protocol version {} (must be 2)", version);
+            return Response::Disconnect(DisconnectReason::BadVersion);
+        }
+
+        // println!(
+        //     "{:?} {:X} {:X} {:X} {:X}",
+        //     fixedpart, protocol, version, initiator_id, ssid
+        // );
+
+        let name = match str::from_utf8(&data[16..]) {
+            Ok(name) => name,
+            Err(_) => return Response::Disconnect(DisconnectReason::BadPacket),
+        };
+        // println!("Name is <{}>", name);
+
+        match (self.status, channel) {
+            (Status::Initial, Channel::Control) => {
+                self.initiator_id = initiator_id;
+                self.remote_ssid = ssid;
+                self.remote_name = String::from(name);
+                self.status = Status::ControlConnected;
+
+                debug!(
+                    "Connect request: initiator_id: {}, remote_ssid: {}, remote_name: {}",
+                    initiator_id, ssid, name
+                );
+                let len = {
+                    let mut cursor = Cursor::new(&mut self.buffer[..]);
+                    cursor.write(&[0xFF, 0xFF]).unwrap();
+                    cursor.write(b"OK").unwrap();
+                    cursor.write_u32::<BigEndian>(2).unwrap();
+                    cursor.write_u32::<BigEndian>(self.initiator_id).unwrap();
+                    cursor.write_u32::<BigEndian>(self.local_ssid).unwrap();
+                    cursor.write(self.local_name.as_bytes()).unwrap();
+                    cursor.write_u8(0).unwrap();
+                    cursor.position() as usize
+                };
+
+                Response::ControlData(&self.buffer[0..len])
+            }
+            (Status::ControlConnected, Channel::Midi) => {
+                if self.initiator_id != initiator_id || self.remote_ssid != ssid {
+                    warn!("Message for the worng peer, not me.");
+                    return Response::Disconnect(DisconnectReason::BadPeer);
+                }
+
+                let len = {
+                    let mut cursor = Cursor::new(&mut self.buffer[..]);
+                    cursor.write(&[0xFF, 0xFF]).unwrap();
+                    cursor.write(b"OK").unwrap();
+                    cursor.write_u32::<BigEndian>(2).unwrap();
+                    cursor.write_u32::<BigEndian>(self.initiator_id).unwrap();
+                    cursor.write_u32::<BigEndian>(self.local_ssid).unwrap();
+                    cursor.write(self.local_name.as_bytes()).unwrap();
+                    cursor.write_u8(0).unwrap();
+                    cursor.position() as usize
+                };
+                self.status = Status::Connected;
+
+                Response::MidiData(&self.buffer[0..len])
+            }
+            (_, channel) => {
+                error!(
+                    "Bad status, channel combo: {:?}, {:?}",
+                    self.status, channel
+                );
+                Response::Disconnect(DisconnectReason::BadPacket)
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::rtppeer::{RtpPeerEventResponse, RtpPeerStatus};
+    use crate::rtppeer::{Response, Status};
 
-    use super::{RtpPeer, RtpPeerEvent};
+    use super::{Event, RtpPeer};
+    fn init() {
+        let _ = env_logger::builder()
+            .filter_level(log::LevelFilter::Debug)
+            .try_init();
+    }
     #[test]
     fn test_rtppeer_new() {
-        let mut rtppeer = RtpPeer::new();
+        init();
+        let mut rtppeer = RtpPeer::new("test".to_string());
 
-        assert!(rtppeer.status == RtpPeerStatus::Initial);
-        let ret = rtppeer.event(&RtpPeerEvent::MidiData(&[
+        assert!(rtppeer.status == Status::Initial);
+        let ret = rtppeer.event(&Event::ControlData(&[
             // rtpmidi connect message
             0xFF, 0xFF, b'I', b'N', // command in
-            0xFA, 0x57, 0xBE, 0xEF, // Version, and Id
+            0x00, 0x00, 0x00, 0x02, // Version,
+            0x12, 0x34, 0x56, 0x78, // Initiator
+            0xAA, 0xBB, 0xCC, 0xDD, // SSID
             b't', b'e', b's', b't', b'i', b'n', b'g', 0x00, // The name
         ]));
         println!("{:?}", ret);
         let sdata = match ret {
-            RtpPeerEventResponse::MidiData(sdata) => sdata,
+            Response::ControlData(sdata) => sdata,
             _ => panic!("Bad type"),
         };
-        assert_eq!(sdata.len(), 3);
+        assert_eq!(sdata.len(), 21);
+        assert!(rtppeer.status == Status::ControlConnected);
 
-        let ret = rtppeer.event(&RtpPeerEvent::SendCk);
-
+        let ret = rtppeer.event(&Event::MidiData(&[
+            // rtpmidi connect message
+            0xFF, 0xFF, b'I', b'N', // command in
+            0x00, 0x00, 0x00, 0x02, // Version,
+            0x12, 0x34, 0x56, 0x78, // Initiator
+            0xAA, 0xBB, 0xCC, 0xDD, // SSID
+            b't', b'e', b's', b't', b'i', b'n', b'g', 0x00, // The name
+        ]));
         println!("{:?}", ret);
+        let sdata = match ret {
+            Response::ControlData(sdata) => sdata,
+            _ => panic!("Bad type"),
+        };
+        assert_eq!(sdata.len(), 21);
+        assert!(rtppeer.status == Status::Connected);
     }
 }
