@@ -92,10 +92,10 @@ rust:
 	cargo build
 
 rust-run:
-	cargo run
+	cargo run -- --port 9000
 
 rust-test:
-	cargo test	
+	cargo test	-- --nocapture
 
 .PHONY: deb
 deb:

@@ -15,10 +15,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-use byteorder::{BigEndian, WriteBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::{
     convert::TryInto,
-    io::{Cursor, Write},
+    io::{Cursor, Seek, SeekFrom, Write},
     str,
     time::{Duration, Instant},
 };
@@ -46,12 +46,12 @@ pub enum PacketType {
     CK,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BasicEvent {
     SendCk,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Event<'a> {
     DoNothing,
     ControlData(&'a [u8]),
@@ -59,7 +59,7 @@ pub enum Event<'a> {
     SendCk,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum DisconnectReason {
     BadPacket,
     BadVersion,
@@ -67,7 +67,7 @@ pub enum DisconnectReason {
     Requested,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Response<'a> {
     DoNothing,
     MidiData(&'a [u8]),
@@ -168,24 +168,25 @@ impl RtpPeer {
     }
 
     fn get_current_timestamp(&self) -> u64 {
-        let now = Instant::now();
-        now.elapsed().as_micros().try_into().unwrap()
+        self.timestamp_start
+            .elapsed()
+            .as_micros()
+            .try_into()
+            .unwrap()
     }
 
     fn parse_command_in(&mut self, channel: Channel, data: &[u8]) -> Response {
         let fixedpart: [u8; 16] = data[0..16].try_into().unwrap();
-        let version: u32 = (fixedpart[4] as u32) << 24
-            | (fixedpart[5] as u32) << 16
-            | (fixedpart[6] as u32) << 8
-            | (fixedpart[7] as u32);
-        let initiator_id: u32 = (fixedpart[8] as u32) << 24
-            | (fixedpart[9] as u32) << 16
-            | (fixedpart[10] as u32) << 8
-            | (fixedpart[11] as u32);
-        let ssid: u32 = (fixedpart[12] as u32) << 24
-            | (fixedpart[13] as u32) << 16
-            | (fixedpart[14] as u32) << 8
-            | (fixedpart[15] as u32);
+        let version: u32;
+        let initiator_id: u32;
+        let ssid: u32;
+        {
+            let mut cursor = Cursor::new(fixedpart);
+            cursor.seek(SeekFrom::Start(4)).unwrap();
+            version = cursor.read_u32::<BigEndian>().unwrap();
+            initiator_id = cursor.read_u32::<BigEndian>().unwrap();
+            ssid = cursor.read_u32::<BigEndian>().unwrap();
+        }
 
         if version != 0x02 {
             error!("Invalid protocol version {} (must be 2)", version);
@@ -301,7 +302,7 @@ impl RtpPeer {
                 let t2: u64 = self.get_current_timestamp();
 
                 self.latency = t2 - t1;
-                debug!("Latency is {} microseconds", self.latency);
+                debug!("Latency is {} - {} = {} microseconds", t2, t1, self.latency);
 
                 return Response::DoNothing;
             }
@@ -315,6 +316,9 @@ impl RtpPeer {
 
 #[cfg(test)]
 mod tests {
+    use byteorder::{BigEndian, ReadBytesExt};
+    use std::{convert::TryInto, io::Cursor, mem::transmute, thread, time::Duration};
+
     use super::{Event, RtpPeer};
     use crate::{
         rtppeer::{Response, Status},
@@ -341,6 +345,10 @@ mod tests {
             _ => panic!("Bad type"),
         };
         assert_eq!(sdata.len(), 21);
+        debug!("{:?}", &sdata[12..16]);
+        let remote_ssid = u32::from_be_bytes(sdata[12..16].try_into().unwrap());
+        debug!("Remote SSID: {:X} (random)", remote_ssid);
+
         assert!(rtppeer.status == Status::ControlConnected);
 
         let ret = rtppeer.event(&Event::MidiData(&[
@@ -353,10 +361,71 @@ mod tests {
         ]));
         println!("{:?}", ret);
         let sdata = match ret {
-            Response::ControlData(sdata) => sdata,
+            Response::MidiData(sdata) => sdata,
             _ => panic!("Bad type"),
         };
         assert_eq!(sdata.len(), 21);
         assert!(rtppeer.status == Status::Connected);
+
+        let ret = rtppeer.event(&Event::MidiData(&[
+            0xFF, 0xFF, b'C', b'K', // packet control, CK
+            0xAA, 0xBB, 0xCC, 0xDD, // SSID
+            0x01, 0, 0, 0, // Send only 1st time mark
+            0, 0, 0, 0, 0, 0x10, 0, 0, // 64 bits mark
+            0, 0, 0, 0, 0, 0, 0, 0, // empty
+            0, 0, 0, 0, 0, 0, 0, 0, // empty
+        ]));
+        let sdata = match ret {
+            Response::MidiData(sdata) => sdata,
+            _ => panic!("Bad type"),
+        };
+        debug!("Got midi CK answer: {:?}", &sdata);
+        let nextpacket = {
+            let mut cursor = Cursor::new(&sdata[..]);
+            let packet_type = cursor.read_u16::<BigEndian>().unwrap();
+            assert_eq!(packet_type, 0xFFFF);
+            let ck = cursor.read_u8().unwrap();
+            assert_eq!(ck, b'C');
+            let ck = cursor.read_u8().unwrap();
+            assert_eq!(ck, b'K');
+            let ssid = cursor.read_u32::<BigEndian>().unwrap();
+            debug!("SSID: {:X}", ssid);
+            assert_eq!(ssid, remote_ssid);
+            let packetnr = cursor.read_u8().unwrap();
+            assert_eq!(packetnr, 2);
+            // skip 3.. but better zeros
+            let zero = cursor.read_u8().unwrap();
+            assert_eq!(zero, 0);
+            cursor.read_u8().unwrap();
+            assert_eq!(zero, 0);
+            cursor.read_u8().unwrap();
+            assert_eq!(zero, 0);
+
+            // What I sent
+            let mytime = cursor.read_u64::<BigEndian>().unwrap();
+            assert_eq!(mytime, 0x100000);
+
+            // What the other side wanted to say
+            let othertime = cursor.read_u64::<BigEndian>().unwrap();
+            info!("Other side says time is {}", othertime);
+
+            // Lets manually prepare a packet
+            let mut midipacket: [u8; 36] = [
+                0xFF, 0xFF, b'C', b'K', // Send a CK
+                0xAA, 0xBB, 0xCC, 0xCC, // My SSID
+                3, 0, 0, 0, // Third packet
+                0, 0, 0, 0, 0, 0x10, 0, 0, // My first time
+                0, 0, 0, 0, 0, 0, 0, 0, // Will rewrite it later better
+                0, 0, 0, 0, 0, 0x20, 0, 0, // My last time. Now we both know both latencies
+            ];
+
+            midipacket[20..28].clone_from_slice(&othertime.to_be_bytes());
+
+            midipacket
+        };
+        // thread::sleep(Duration::from_millis(1000));
+        let ret = rtppeer.event(&Event::MidiData(&nextpacket));
+        assert_eq!(ret, Response::DoNothing);
+        assert_ne!(rtppeer.latency, 0);
     }
 }
