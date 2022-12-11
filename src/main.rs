@@ -101,23 +101,23 @@ async fn listen_rtpmidi(address: &str, port: u16) -> io::Result<()> {
         let addr = tokio::select! {
             recv = control_socket_recv => {
                 let (length, addr) = recv?;
-                event = Event::ControlData(&control_data[..length]);
+                event = Event::NetworkControlData(&control_data[..length]);
                 // control_socket_recv = control_socket.recv_from(&mut control_data);
                 addr
             },
             recv = midi_socket_recv => {
                 let (length, addr) = recv?;
-                event = Event::MidiData(&midi_data[..length]);
+                event = Event::NetworkMidiData(&midi_data[..length]);
                 // midi_socket_recv = midi_socket.recv_from(&mut midi_data);
                 addr
             }
         };
 
         match rtppeer.event(&event) {
-            Response::ControlData(data) => {
+            Response::NetworkControlData(data) => {
                 control_socket.send_to(data, addr).await?;
             }
-            Response::MidiData(data) => {
+            Response::NetworkMidiData(data) => {
                 midi_socket.send_to(data, addr).await?;
             }
             _ => {

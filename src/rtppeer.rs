@@ -54,8 +54,8 @@ pub enum BasicEvent {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Event<'a> {
     DoNothing,
-    ControlData(&'a [u8]),
-    MidiData(&'a [u8]),
+    NetworkControlData(&'a [u8]),
+    NetworkMidiData(&'a [u8]),
     SendCk,
 }
 
@@ -70,8 +70,8 @@ pub enum DisconnectReason {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Response<'a> {
     DoNothing,
-    MidiData(&'a [u8]),
-    ControlData(&'a [u8]),
+    NetworkMidiData(&'a [u8]),
+    NetworkControlData(&'a [u8]),
     ScheduleTimeout(Duration, BasicEvent),
     Disconnect(DisconnectReason),
 }
@@ -117,10 +117,10 @@ impl RtpPeer {
     pub fn event(&mut self, event: &Event) -> Response {
         debug!("GOT Event {:?}", event);
         match event {
-            Event::ControlData(data) => {
+            Event::NetworkControlData(data) => {
                 return self.parse_packet(Channel::Control, data);
             }
-            Event::MidiData(data) => {
+            Event::NetworkMidiData(data) => {
                 return self.parse_packet(Channel::Midi, data);
             }
             _ => {
@@ -227,7 +227,7 @@ impl RtpPeer {
                     cursor.position() as usize
                 };
 
-                Response::ControlData(&self.buffer[0..len])
+                Response::NetworkControlData(&self.buffer[0..len])
             }
             (Status::ControlConnected, Channel::Midi) => {
                 if self.initiator_id != initiator_id || self.remote_ssid != ssid {
@@ -248,7 +248,7 @@ impl RtpPeer {
                 };
                 self.status = Status::Connected;
 
-                Response::MidiData(&self.buffer[0..len])
+                Response::NetworkMidiData(&self.buffer[0..len])
             }
             (_, channel) => {
                 error!(
@@ -289,7 +289,7 @@ impl RtpPeer {
                     cursor.write_u64::<BigEndian>(0).unwrap();
                     cursor.position() as usize
                 };
-                return Response::MidiData(&self.buffer[0..len]);
+                return Response::NetworkMidiData(&self.buffer[0..len]);
             }
             // I dont send yet, so not implemented
             2 => {
@@ -331,7 +331,7 @@ mod tests {
         let mut rtppeer = RtpPeer::new("test".to_string());
 
         assert!(rtppeer.status == Status::Initial);
-        let ret = rtppeer.event(&Event::ControlData(&[
+        let ret = rtppeer.event(&Event::NetworkControlData(&[
             // rtpmidi connect message
             0xFF, 0xFF, b'I', b'N', // command in
             0x00, 0x00, 0x00, 0x02, // Version,
@@ -341,7 +341,7 @@ mod tests {
         ]));
         println!("{:?}", ret);
         let sdata = match ret {
-            Response::ControlData(sdata) => sdata,
+            Response::NetworkControlData(sdata) => sdata,
             _ => panic!("Bad type"),
         };
         assert_eq!(sdata.len(), 21);
@@ -351,7 +351,7 @@ mod tests {
 
         assert!(rtppeer.status == Status::ControlConnected);
 
-        let ret = rtppeer.event(&Event::MidiData(&[
+        let ret = rtppeer.event(&Event::NetworkMidiData(&[
             // rtpmidi connect message
             0xFF, 0xFF, b'I', b'N', // command in
             0x00, 0x00, 0x00, 0x02, // Version,
@@ -361,13 +361,13 @@ mod tests {
         ]));
         println!("{:?}", ret);
         let sdata = match ret {
-            Response::MidiData(sdata) => sdata,
+            Response::NetworkMidiData(sdata) => sdata,
             _ => panic!("Bad type"),
         };
         assert_eq!(sdata.len(), 21);
         assert!(rtppeer.status == Status::Connected);
 
-        let ret = rtppeer.event(&Event::MidiData(&[
+        let ret = rtppeer.event(&Event::NetworkMidiData(&[
             0xFF, 0xFF, b'C', b'K', // packet control, CK
             0xAA, 0xBB, 0xCC, 0xDD, // SSID
             0x01, 0, 0, 0, // Send only 1st time mark
@@ -376,7 +376,7 @@ mod tests {
             0, 0, 0, 0, 0, 0, 0, 0, // empty
         ]));
         let sdata = match ret {
-            Response::MidiData(sdata) => sdata,
+            Response::NetworkMidiData(sdata) => sdata,
             _ => panic!("Bad type"),
         };
         debug!("Got midi CK answer: {:?}", &sdata);
@@ -424,7 +424,7 @@ mod tests {
             midipacket
         };
         // thread::sleep(Duration::from_millis(1000));
-        let ret = rtppeer.event(&Event::MidiData(&nextpacket));
+        let ret = rtppeer.event(&Event::NetworkMidiData(&nextpacket));
         assert_eq!(ret, Response::DoNothing);
         assert_ne!(rtppeer.latency, 0);
     }
