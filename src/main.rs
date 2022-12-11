@@ -115,13 +115,24 @@ async fn listen_rtpmidi(address: &str, port: u16) -> io::Result<()> {
 
         match rtppeer.event(&event) {
             Response::NetworkControlData(data) => {
+                debug!("Send to control: {:02X?}", data);
                 control_socket.send_to(data, addr).await?;
             }
             Response::NetworkMidiData(data) => {
+                debug!("Send to midi: {:02X?}", data);
                 midi_socket.send_to(data, addr).await?;
             }
-            _ => {
-                println!("WIP");
+            Response::MidiData(data) => {
+                info!("MIDI DATA: {:02X?}", data);
+            }
+            Response::Disconnect(why) => {
+                error!(
+                    "Disconnect: {:?}. Ignoring at this phase of development.",
+                    why
+                );
+            }
+            response => {
+                println!("WIP Response: {:?}", response);
             }
         };
     }

@@ -18,7 +18,7 @@
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::{
     convert::TryInto,
-    io::{Cursor, Seek, SeekFrom, Write},
+    io::{Cursor, Read, Seek, SeekFrom, Write},
     str,
     time::{Duration, Instant},
 };
@@ -38,12 +38,14 @@ enum Channel {
     Control,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum PacketType {
     Unknown,
     IN,
     NO,
     OK,
     CK,
+    Midi,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -72,6 +74,7 @@ pub enum Response<'a> {
     DoNothing,
     NetworkMidiData(&'a [u8]),
     NetworkControlData(&'a [u8]),
+    MidiData(&'a [u8]),
     ScheduleTimeout(Duration, BasicEvent),
     Disconnect(DisconnectReason),
 }
@@ -115,7 +118,7 @@ impl RtpPeer {
     }
 
     pub fn event(&mut self, event: &Event) -> Response {
-        debug!("GOT Event {:?}", event);
+        debug!("GOT Event {:X?}", event);
         match event {
             Event::NetworkControlData(data) => {
                 return self.parse_packet(Channel::Control, data);
@@ -131,9 +134,8 @@ impl RtpPeer {
     }
 
     fn parse_packet(&mut self, channel: Channel, data: &[u8]) -> Response {
-        debug!("GOT Data {:?}", data);
-
-        if data.len() < 16 {
+        if data.len() < 12 {
+            error!("Packet too small, need 12 bytes, have {}", data.len());
             return Response::Disconnect(DisconnectReason::BadPacket);
         }
         let packet_type = Self::get_packet_type(&data[0..4].try_into().unwrap());
@@ -141,14 +143,24 @@ impl RtpPeer {
             PacketType::IN => {
                 return self.parse_command_in(channel, data);
             }
-            PacketType::OK => {}
+            //PacketType::OK => {}
             PacketType::CK => return self.parse_command_ck(channel, data),
-            PacketType::NO => {}
-            PacketType::Unknown => {
+            //PacketType::NO => {}
+            PacketType::Midi => {
+                if channel != Channel::Midi {
+                    error!("Received Midi data on control channel");
+                    return Response::Disconnect(DisconnectReason::BadPacket);
+                }
+                return self.parse_midi_data(data);
+            }
+            packet_type => {
+                // | PacketType::Unknown
+                error!("Unknown packet type ({:?})", packet_type);
                 return Response::Disconnect(DisconnectReason::BadPacket);
             }
         }
-        return Response::Disconnect(DisconnectReason::BadPacket);
+        // error!("Not implemented");
+        // return Response::Disconnect(DisconnectReason::BadPacket);
     }
 
     fn get_packet_type(data: &[u8; 4]) -> PacketType {
@@ -164,18 +176,32 @@ impl RtpPeer {
         if data[0] == 0xFF && data[1] == 0xFF && data[2] == b'C' && data[3] == b'K' {
             return PacketType::CK;
         }
+        debug!(
+            "{} {}",
+            (data[0] & 0b11_0_0_0000) == 0b100_0_0000,
+            (data[1] & 0b0111_1111) == 0x61,
+        );
+        if (data[0] & 0b11_0_0_0000) == 0b100_0_0000 && (data[1] & 0b0111_1111) == 0x61 {
+            return PacketType::Midi;
+        }
         PacketType::Unknown
     }
 
+    // Returns the time since start in 100s of microseconds. Ask the midi association as of why this resolution
     fn get_current_timestamp(&self) -> u64 {
-        self.timestamp_start
-            .elapsed()
-            .as_micros()
+        (self.timestamp_start.elapsed().as_micros() / 100)
             .try_into()
             .unwrap()
     }
 
     fn parse_command_in(&mut self, channel: Channel, data: &[u8]) -> Response {
+        if data.len() < 16 {
+            error!(
+                "Packet too small, expected more than 16 bytes, got {}",
+                data.len()
+            );
+            return Response::Disconnect(DisconnectReason::BadPacket);
+        }
         let fixedpart: [u8; 16] = data[0..16].try_into().unwrap();
         let version: u32;
         let initiator_id: u32;
@@ -194,13 +220,16 @@ impl RtpPeer {
         }
 
         // println!(
-        //     "{:?} {:X} {:X} {:X} {:X}",
+        //     "{:?} {:02X} {:02X} {:02X} {:02X}",
         //     fixedpart, protocol, version, initiator_id, ssid
         // );
 
         let name = match str::from_utf8(&data[16..]) {
             Ok(name) => name,
-            Err(_) => return Response::Disconnect(DisconnectReason::BadPacket),
+            Err(_) => {
+                error!("Can not parse peer name: {:?}", &data[16..]);
+                return Response::Disconnect(DisconnectReason::BadPacket);
+            }
         };
         // println!("Name is <{}>", name);
 
@@ -261,7 +290,10 @@ impl RtpPeer {
     }
     fn parse_command_ck(&mut self, channel: Channel, data: &[u8]) -> Response {
         if data.len() < 36 {
-            error!("Packet too small");
+            error!(
+                "Packet too small, expected 36 bytes, got {} bytes",
+                data.len()
+            );
             return Response::Disconnect(DisconnectReason::BadPacket);
         }
         if channel != Channel::Midi {
@@ -269,10 +301,11 @@ impl RtpPeer {
             return Response::Disconnect(DisconnectReason::BadPacket);
         }
         let fixedpart: [u8; 36] = data[0..36].try_into().unwrap();
+        debug!("CK {:02X?}", fixedpart);
 
         match fixedpart[8] {
             // receive first packet, just copy timestamp, add mine, and send
-            1 => {
+            0 => {
                 let len = {
                     let timestamp: u64 = self.get_current_timestamp();
                     let mut cursor = Cursor::new(&mut self.buffer[..]);
@@ -280,7 +313,7 @@ impl RtpPeer {
                     cursor.write_u8(0xFF).unwrap();
                     cursor.write(b"CK").unwrap();
                     cursor.write_u32::<BigEndian>(self.local_ssid).unwrap();
-                    cursor.write_u8(2).unwrap();
+                    cursor.write_u8(1).unwrap();
                     cursor.write_u8(0).unwrap();
                     cursor.write_u8(0).unwrap();
                     cursor.write_u8(0).unwrap();
@@ -292,25 +325,63 @@ impl RtpPeer {
                 return Response::NetworkMidiData(&self.buffer[0..len]);
             }
             // I dont send yet, so not implemented
-            2 => {
-                panic!("WIP");
+            1 => {
+                panic!("WIP CK as server not implemented");
             }
             // response, I can use current time - 2nd time, to know latency
-            3 => {
+            2 => {
                 // Get what I wrote there
                 let t1 = u64::from_be_bytes(fixedpart[20..28].try_into().unwrap());
                 let t2: u64 = self.get_current_timestamp();
 
                 self.latency = t2 - t1;
-                debug!("Latency is {} - {} = {} microseconds", t2, t1, self.latency);
+                debug!(
+                    "Latency is {} - {} = {} ms",
+                    (t2 as f32) / 10.0,
+                    (t1 as f32) / 10.0,
+                    (self.latency as f32) / 10.0
+                );
 
                 return Response::DoNothing;
             }
             _ => {
-                error!("Invalid ck count");
+                error!("Invalid CK count: {}", fixedpart[8]);
                 return Response::Disconnect(DisconnectReason::BadPacket);
             }
         }
+    }
+    fn parse_midi_data(&mut self, data: &[u8]) -> Response {
+        if data.len() < 13 {
+            error!("MIDI packet too small");
+            return Response::Disconnect(DisconnectReason::BadPacket);
+        }
+        let mut cursor = Cursor::new(&data[..]);
+
+        // Ignore first 32 bits, TODO
+        cursor.read_u32::<BigEndian>().unwrap();
+        let timestamp_us = cursor.read_u32::<BigEndian>().unwrap() * 100;
+        let ssrc = cursor.read_u32::<BigEndian>().unwrap();
+        if ssrc != self.remote_ssid {
+            println!(
+                "packet SSID: {:02X}, local: {:02X}, remote: {:02X}",
+                ssrc, self.local_ssid, self.remote_ssid
+            );
+            return Response::Disconnect(DisconnectReason::BadPeer);
+        }
+        let headers_len: usize = cursor.read_u8().unwrap() as usize;
+        if headers_len > 15 {
+            error!(
+                "Not implemented non midi packets and length > 15 bytes (header value {:02X})",
+                headers_len
+            );
+            return Response::Disconnect(DisconnectReason::BadPacket);
+        }
+        if data.len() < 13 + headers_len {
+            error!("Packet promised more data than currently has");
+            return Response::Disconnect(DisconnectReason::BadPacket);
+        }
+        cursor.read(&mut self.buffer[0..headers_len]).unwrap();
+        Response::MidiData(&self.buffer[0..headers_len])
     }
 }
 
@@ -347,7 +418,7 @@ mod tests {
         assert_eq!(sdata.len(), 21);
         debug!("{:?}", &sdata[12..16]);
         let remote_ssid = u32::from_be_bytes(sdata[12..16].try_into().unwrap());
-        debug!("Remote SSID: {:X} (random)", remote_ssid);
+        debug!("Remote SSID: {:02X} (random)", remote_ssid);
 
         assert!(rtppeer.status == Status::ControlConnected);
 
@@ -370,7 +441,7 @@ mod tests {
         let ret = rtppeer.event(&Event::NetworkMidiData(&[
             0xFF, 0xFF, b'C', b'K', // packet control, CK
             0xAA, 0xBB, 0xCC, 0xDD, // SSID
-            0x01, 0, 0, 0, // Send only 1st time mark
+            0, 0, 0, 0, // Send only 1st time mark
             0, 0, 0, 0, 0, 0x10, 0, 0, // 64 bits mark
             0, 0, 0, 0, 0, 0, 0, 0, // empty
             0, 0, 0, 0, 0, 0, 0, 0, // empty
@@ -389,10 +460,10 @@ mod tests {
             let ck = cursor.read_u8().unwrap();
             assert_eq!(ck, b'K');
             let ssid = cursor.read_u32::<BigEndian>().unwrap();
-            debug!("SSID: {:X}", ssid);
+            debug!("SSID: {:02X}", ssid);
             assert_eq!(ssid, remote_ssid);
             let packetnr = cursor.read_u8().unwrap();
-            assert_eq!(packetnr, 2);
+            assert_eq!(packetnr, 1);
             // skip 3.. but better zeros
             let zero = cursor.read_u8().unwrap();
             assert_eq!(zero, 0);
@@ -413,7 +484,7 @@ mod tests {
             let mut midipacket: [u8; 36] = [
                 0xFF, 0xFF, b'C', b'K', // Send a CK
                 0xAA, 0xBB, 0xCC, 0xCC, // My SSID
-                3, 0, 0, 0, // Third packet
+                2, 0, 0, 0, // Third packet
                 0, 0, 0, 0, 0, 0x10, 0, 0, // My first time
                 0, 0, 0, 0, 0, 0, 0, 0, // Will rewrite it later better
                 0, 0, 0, 0, 0, 0x20, 0, 0, // My last time. Now we both know both latencies
