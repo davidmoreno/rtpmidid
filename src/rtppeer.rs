@@ -20,7 +20,7 @@ use std::{
     convert::TryInto,
     io::{Cursor, Write},
     str,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -43,6 +43,7 @@ pub enum PacketType {
     IN,
     NO,
     OK,
+    CK,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -87,7 +88,7 @@ pub(crate) struct RtpPeer {
     sequence_nr: u32,
     sequence_ack: u32,
     remote_sequence_nr: u32,
-    timestamp_start: u64,
+    timestamp_start: Instant,
     latency: u64,
 
     // Part of the struct, to prevent mallocs at return.
@@ -107,7 +108,7 @@ impl RtpPeer {
             sequence_nr: 0,
             sequence_ack: 0,
             remote_sequence_nr: 0,
-            timestamp_start: 0,
+            timestamp_start: Instant::now(),
             latency: 0,
             buffer: [0; 1500],
         }
@@ -141,6 +142,7 @@ impl RtpPeer {
                 return self.parse_command_in(channel, data);
             }
             PacketType::OK => {}
+            PacketType::CK => return self.parse_command_ck(channel, data),
             PacketType::NO => {}
             PacketType::Unknown => {
                 return Response::Disconnect(DisconnectReason::BadPacket);
@@ -159,7 +161,15 @@ impl RtpPeer {
         if data[0] == 0xFF && data[1] == 0xFF && data[2] == b'N' && data[3] == b'O' {
             return PacketType::NO;
         }
+        if data[0] == 0xFF && data[1] == 0xFF && data[2] == b'C' && data[3] == b'K' {
+            return PacketType::CK;
+        }
         PacketType::Unknown
+    }
+
+    fn get_current_timestamp(&self) -> u64 {
+        let now = Instant::now();
+        now.elapsed().as_micros().try_into().unwrap()
     }
 
     fn parse_command_in(&mut self, channel: Channel, data: &[u8]) -> Response {
@@ -245,6 +255,59 @@ impl RtpPeer {
                     self.status, channel
                 );
                 Response::Disconnect(DisconnectReason::BadPacket)
+            }
+        }
+    }
+    fn parse_command_ck(&mut self, channel: Channel, data: &[u8]) -> Response {
+        if data.len() < 36 {
+            error!("Packet too small");
+            return Response::Disconnect(DisconnectReason::BadPacket);
+        }
+        if channel != Channel::Midi {
+            error!("CK packets should be on Midi channel only");
+            return Response::Disconnect(DisconnectReason::BadPacket);
+        }
+        let fixedpart: [u8; 36] = data[0..36].try_into().unwrap();
+
+        match fixedpart[8] {
+            // receive first packet, just copy timestamp, add mine, and send
+            1 => {
+                let len = {
+                    let timestamp: u64 = self.get_current_timestamp();
+                    let mut cursor = Cursor::new(&mut self.buffer[..]);
+                    cursor.write_u8(0xFF).unwrap();
+                    cursor.write_u8(0xFF).unwrap();
+                    cursor.write(b"CK").unwrap();
+                    cursor.write_u32::<BigEndian>(self.local_ssid).unwrap();
+                    cursor.write_u8(2).unwrap();
+                    cursor.write_u8(0).unwrap();
+                    cursor.write_u8(0).unwrap();
+                    cursor.write_u8(0).unwrap();
+                    cursor.write(&fixedpart[12..20]).unwrap();
+                    cursor.write_u64::<BigEndian>(timestamp).unwrap();
+                    cursor.write_u64::<BigEndian>(0).unwrap();
+                    cursor.position() as usize
+                };
+                return Response::MidiData(&self.buffer[0..len]);
+            }
+            // I dont send yet, so not implemented
+            2 => {
+                panic!("WIP");
+            }
+            // response, I can use current time - 2nd time, to know latency
+            3 => {
+                // Get what I wrote there
+                let t1 = u64::from_be_bytes(fixedpart[20..28].try_into().unwrap());
+                let t2: u64 = self.get_current_timestamp();
+
+                self.latency = t2 - t1;
+                debug!("Latency is {} microseconds", self.latency);
+
+                return Response::DoNothing;
+            }
+            _ => {
+                error!("Invalid ck count");
+                return Response::Disconnect(DisconnectReason::BadPacket);
             }
         }
     }
