@@ -49,11 +49,6 @@ pub enum PacketType {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum BasicEvent {
-    SendCk,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Event<'a> {
     DoNothing,
     NetworkControlData(&'a [u8]),
@@ -75,7 +70,6 @@ pub enum Response<'a> {
     NetworkMidiData(&'a [u8]),
     NetworkControlData(&'a [u8]),
     MidiData(&'a [u8]),
-    ScheduleTimeout(Duration, BasicEvent),
     Disconnect(DisconnectReason),
 }
 
@@ -88,14 +82,16 @@ pub(crate) struct RtpPeer {
     remote_ssid: u32,
     remote_name: String,
 
-    sequence_nr: u32,
-    sequence_ack: u32,
-    remote_sequence_nr: u32,
+    // This is as we send, and if now aknowledged, we can resend, maybe with journal TODO
+    sequence_nr: u16,
+    sequence_ack: u16,
+    // This is the last remote as seen, to know if we missed something
+    remote_sequence_nr: Option<u16>,
     timestamp_start: Instant,
     latency: u64,
 
     // Part of the struct, to prevent mallocs at return.
-    // No mem management needed for this type.
+    // No mem management needed for RtpPeer.
     buffer: [u8; 1500],
 }
 
@@ -110,7 +106,7 @@ impl RtpPeer {
             remote_name: String::from(""),
             sequence_nr: 0,
             sequence_ack: 0,
-            remote_sequence_nr: 0,
+            remote_sequence_nr: None,
             timestamp_start: Instant::now(),
             latency: 0,
             buffer: [0; 1500],
@@ -118,7 +114,6 @@ impl RtpPeer {
     }
 
     pub fn event(&mut self, event: &Event) -> Response {
-        debug!("GOT Event {:X?}", event);
         match event {
             Event::NetworkControlData(data) => {
                 return self.parse_packet(Channel::Control, data);
@@ -127,7 +122,7 @@ impl RtpPeer {
                 return self.parse_packet(Channel::Midi, data);
             }
             _ => {
-                println!("Rest")
+                panic!("Not implemented!")
             }
         }
         Response::DoNothing
@@ -139,6 +134,7 @@ impl RtpPeer {
             return Response::Disconnect(DisconnectReason::BadPacket);
         }
         let packet_type = Self::get_packet_type(&data[0..4].try_into().unwrap());
+        debug!("GOT packet {:?} [{:?}]: {:X?}", packet_type, channel, data);
         match packet_type {
             PacketType::IN => {
                 return self.parse_command_in(channel, data);
@@ -151,7 +147,7 @@ impl RtpPeer {
                     error!("Received Midi data on control channel");
                     return Response::Disconnect(DisconnectReason::BadPacket);
                 }
-                return self.parse_midi_data(data);
+                return self.parse_packet_midi(data);
             }
             packet_type => {
                 // | PacketType::Unknown
@@ -301,7 +297,7 @@ impl RtpPeer {
             return Response::Disconnect(DisconnectReason::BadPacket);
         }
         let fixedpart: [u8; 36] = data[0..36].try_into().unwrap();
-        debug!("CK {:02X?}", fixedpart);
+        // debug!("CK {:02X?}", fixedpart);
 
         match fixedpart[8] {
             // receive first packet, just copy timestamp, add mine, and send
@@ -335,7 +331,7 @@ impl RtpPeer {
                 let t2: u64 = self.get_current_timestamp();
 
                 self.latency = t2 - t1;
-                debug!(
+                info!(
                     "Latency is {} - {} = {} ms",
                     (t2 as f32) / 10.0,
                     (t1 as f32) / 10.0,
@@ -350,7 +346,7 @@ impl RtpPeer {
             }
         }
     }
-    fn parse_midi_data(&mut self, data: &[u8]) -> Response {
+    fn parse_packet_midi(&mut self, data: &[u8]) -> Response {
         if data.len() < 13 {
             error!("MIDI packet too small");
             return Response::Disconnect(DisconnectReason::BadPacket);
@@ -358,7 +354,24 @@ impl RtpPeer {
         let mut cursor = Cursor::new(&data[..]);
 
         // Ignore first 32 bits, TODO
-        cursor.read_u32::<BigEndian>().unwrap();
+        let _header = cursor.read_u16::<BigEndian>().unwrap();
+        let remote_sequence_nr = cursor.read_u16::<BigEndian>().unwrap();
+
+        debug!("Sequence nr: {}", remote_sequence_nr);
+        if let Some(current_sequence_nr) = self.remote_sequence_nr {
+            // Warparound || next in seq.
+            if (remote_sequence_nr == 0 && current_sequence_nr != 0xFFFF)
+                || (current_sequence_nr != remote_sequence_nr - 1)
+            {
+                warn!(
+                    "Lost packet! prev sequence: {}, current {}. No journal, so something has been lost.", 
+                    current_sequence_nr, 
+                    remote_sequence_nr
+                );
+            }
+        }
+        self.remote_sequence_nr = Some(remote_sequence_nr);
+
         let timestamp_us = cursor.read_u32::<BigEndian>().unwrap() * 100;
         let ssrc = cursor.read_u32::<BigEndian>().unwrap();
         if ssrc != self.remote_ssid {
