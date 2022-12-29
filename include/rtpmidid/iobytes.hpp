@@ -146,6 +146,8 @@ public:
     end = start + size;
   }
 
+  void clear() { position = start; }
+
   void write_uint8(uint16_t n) {
     check_enough(1);
     *position++ = (n & 0x0FF);

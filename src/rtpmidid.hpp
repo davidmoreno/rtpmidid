@@ -25,7 +25,6 @@
 #include <rtpmidid/poller.hpp>
 #include <set>
 #include <string>
-#include <optional>
 
 namespace rtpmidid {
 struct config_t;
@@ -80,7 +79,8 @@ public:
   void recv_rtpmidi_event(int port, io_bytes_reader &midi_data);
   void recv_alsamidi_event(int port, snd_seq_event_t *ev);
 
-  void alsamidi_to_midiprotocol(snd_seq_event_t *ev, io_bytes_writer &buffer);
+  void alsamidi_to_midiprotocol_and_send(
+      snd_seq_event_t *ev, std::function<void(io_bytes_writer &)> writer);
 
   void setup_alsa_seq();
   void setup_mdns();

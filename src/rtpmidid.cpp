@@ -121,19 +121,20 @@ rtpmidid_t::add_rtpmidid_import_server(const std::string &name,
         peer->midi_event.connect([this, aseq_port](io_bytes_reader pb) {
           this->recv_rtpmidi_event(aseq_port, pb);
         });
-        seq.midi_event[aseq_port].connect(
-            [this, aseq_port](snd_seq_event_t *ev) {
-              auto peer_it = known_servers_connections.find(aseq_port);
-              if (peer_it == std::end(known_servers_connections)) {
-                WARNING("Got MIDI event in an non existing anymore peer.");
-                return;
-              }
-              auto conn = &peer_it->second;
+        seq.midi_event[aseq_port].connect([this,
+                                           aseq_port](snd_seq_event_t *ev) {
+          auto peer_it = known_servers_connections.find(aseq_port);
+          if (peer_it == std::end(known_servers_connections)) {
+            WARNING("Got MIDI event in an non existing anymore peer.");
+            return;
+          }
+          auto conn = &peer_it->second;
 
-              io_bytes_writer_static<4096> stream;
-              alsamidi_to_midiprotocol(ev, stream);
-              conn->peer->send_midi(stream);
-            });
+          alsamidi_to_midiprotocol_and_send(ev,
+                                            [&conn](io_bytes_writer &stream) {
+                                              conn->peer->send_midi(stream);
+                                            });
+        });
         peer->disconnect_event.connect([this, aseq_port](auto reason) {
           DEBUG("Remove aseq port {}", aseq_port);
           seq.remove_port(aseq_port);
@@ -171,9 +172,9 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
   announce_rtpmidid_server(name, server->control_port);
 
   seq.midi_event[alsaport].connect([this, server](snd_seq_event_t *ev) {
-    io_bytes_writer_static<4096> buffer;
-    alsamidi_to_midiprotocol(ev, buffer);
-    server->send_midi_to_all_peers(buffer);
+    alsamidi_to_midiprotocol_and_send(ev, [&server](io_bytes_writer &buffer) {
+      server->send_midi_to_all_peers(buffer);
+    });
   });
 
   seq.unsubscribe_event[alsaport].connect(
@@ -531,6 +532,7 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
     } break;
     default:
       WARNING("MIDI command type {:02X} not implemented yet", type);
+      midi_data.print_hex();
       return;
       break;
     }
@@ -556,13 +558,15 @@ void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev) {
     return;
   }
 
-  io_bytes_writer_static<4096> stream;
-  alsamidi_to_midiprotocol(ev, stream);
-  peer_info->peer->peer.send_midi(stream);
+  alsamidi_to_midiprotocol_and_send(ev, [&peer_info](io_bytes_writer &stream) {
+    peer_info->peer->peer.send_midi(stream);
+  });
 }
 
-void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
-                                          io_bytes_writer &stream) {
+void rtpmidid_t::alsamidi_to_midiprotocol_and_send(
+    snd_seq_event_t *ev, std::function<void(io_bytes_writer &)> writer) {
+
+  io_bytes_writer_static<1450> stream;
   switch (ev->type) {
   // case SND_SEQ_EVENT_NOTE:
   case SND_SEQ_EVENT_NOTEON:
@@ -619,14 +623,37 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
     stream.write_uint8(ev->data.control.value & 0x0FF);
     break;
   case SND_SEQ_EVENT_SYSEX: {
-    ssize_t len = ev->data.ext.len, sz = stream.size();
-    if (len <= sz) {
-      uint8_t *data = (unsigned char *)ev->data.ext.ptr;
-      for (ssize_t i = 0; i < len; i++) {
-        stream.write_uint8(data[i]);
+    ssize_t len = ev->data.ext.len;
+    uint8_t *data = (unsigned char *)ev->data.ext.ptr;
+    INFO("TO SEND! {} bytes", len);
+    io_bytes_reader(data, len).print_hex(true);
+
+    bool last_was_partial = data[0] != 0xF7;
+    if (last_was_partial) {
+      stream.write_uint8(0xF7);
+    }
+
+    INFO("SENDING...");
+    for (ssize_t i = 0; i < len; i++) {
+      stream.write_uint8(data[i]);
+      // Just some sysex limit, smaller than ethernet frame.
+      // We send what we have so far, and start a new sysex
+      // continuation packet
+      if (i % 100 == 99) {
+        // Finish this packet, but will continue
+        stream.write_uint8(0xF0);
+        stream.print_hex(false);
+        writer(stream);
+
+        // Continuation of sysex
+        stream.clear();
+        stream.write_uint8(0xF7);
       }
-    } else {
-      WARNING("Sysex buffer overflow! Not sending. ({} bytes needed)", len);
+    }
+    if (data[len - 1] != 0xF7) {
+      DEBUG("Unfinished SysEX packet... send partial send, next sysex will be "
+            "continuation");
+      stream.write_uint8(0xF0);
     }
   } break;
   default:
@@ -634,6 +661,8 @@ void rtpmidid_t::alsamidi_to_midiprotocol(snd_seq_event_t *ev,
     return;
     break;
   }
+  stream.print_hex(false);
+  writer(stream);
 }
 
 void rtpmidid_t::remove_client(uint8_t port) {
