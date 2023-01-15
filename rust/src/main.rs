@@ -1,6 +1,8 @@
 mod filemidi;
 mod midiinout;
 mod midistream;
+mod rtpmidiclient;
+mod rtppeer;
 
 #[macro_use]
 extern crate log;
