@@ -12,6 +12,9 @@ help:
 	@echo " test    -- Runs all test"
 	@echo " install -- Installs to PREFIX or DESTDIR (default /usr/local/)"
 	@echo " man     -- Generate man pages"
+	@echo " rust    -- Compile rust version"
+	@echo " rust-run    -- Compile and run rust version"
+	@echo " rust-test   -- Compile rust tests and run"
 	@echo
 	@echo " gdb     -- Run inside gdb, to capture backtrace of failures (bt). Useful for bug reports."
 	@echo " capture -- Capture packets with tcpdump. Add this to bug reports."
@@ -84,6 +87,15 @@ test_rtppeer: build
 
 test_rtpserver: build
 	valgrind $(VALGRINDFLAGS) build/tests/test_rtpserver
+
+rust:
+	cargo build
+
+rust-run:
+	cargo run -- --port 9000
+
+rust-test:
+	cargo test	-- --nocapture
 
 .PHONY: deb
 deb:
