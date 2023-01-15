@@ -45,6 +45,17 @@ impl MidiStream {
     pub fn read_slice(&self) -> &[u8] {
         return &self.data[0..self.write_cursor];
     }
+    pub fn write_slice(&mut self) -> &mut [u8] {
+        return &mut self.data[self.write_cursor..];
+    }
+    pub fn advance_read(&mut self, length: usize) -> Result<()> {
+        if self.write_cursor + length > BUFFER_SIZE {
+            return Err(Error::from(ErrorKind::UnexpectedEof));
+        }
+
+        self.write_cursor += length;
+        Ok(())
+    }
 
     fn clear(&mut self) {
         self.read_cursor = 0;

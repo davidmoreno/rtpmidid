@@ -2,34 +2,59 @@ use async_trait::async_trait;
 use std::io::Result;
 use tokio::{
     fs::{File, OpenOptions},
-    io::AsyncWriteExt,
+    io::{AsyncReadExt, AsyncWriteExt},
 };
 
 use crate::{midiinout::MidiInOut, midistream::MidiStream};
 
 struct FileMidi {
-    file: File,
+    input: File,
+    // If has Some, use it, if not input is both input and output
+    output: Option<File>,
 }
 
 impl FileMidi {
-    pub async fn new(filename: &str) -> Result<FileMidi> {
+    pub async fn open(filename: &str) -> Result<FileMidi> {
         let mut options = OpenOptions::new();
-        // options.read(true);
+        options.read(true);
         options.write(true);
-        let mut file = options.open(filename).await?;
+        let input = options.open(filename).await?;
 
-        Ok(FileMidi { file: file })
+        Ok(FileMidi {
+            input,
+            output: None,
+        })
+    }
+    pub async fn open_io(input_filename: &str, output_filename: &str) -> Result<FileMidi> {
+        let mut options = OpenOptions::new();
+        options.read(true);
+        let input = options.open(input_filename).await?;
+
+        let mut options = OpenOptions::new();
+        options.write(true);
+        let output = options.open(input_filename).await?;
+
+        Ok(FileMidi {
+            input,
+            output: Some(output),
+        })
     }
 }
 
 #[async_trait]
 impl MidiInOut for FileMidi {
     async fn write(&mut self, data: &mut MidiStream) -> Result<()> {
+        let output = match &mut self.output {
+            Some(file) => file,
+            None => &mut self.input,
+        };
         debug!("Write {:?}", data.read_slice());
-        self.file.write(data.read_slice()).await?;
+        output.write(data.read_slice()).await?;
         Ok(())
     }
     async fn read(&mut self, data: &mut MidiStream) -> Result<()> {
+        let length = self.input.read(data.write_slice()).await?;
+        data.advance_read(length);
         Ok(())
     }
 }
@@ -54,7 +79,7 @@ mod tests {
         unistd::mkfifo(filename, stat::Mode::S_IRWXU).unwrap();
 
         tokio::spawn(async {
-            let mut filemidi = FileMidi::new(filename).await.unwrap();
+            let mut filemidi = FileMidi::open(filename).await.unwrap();
             let mut mididata = MidiStream::new();
             mididata.write(&[0x90, 0x64, 0x7f]).unwrap();
             info!("Writing");
