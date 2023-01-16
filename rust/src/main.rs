@@ -39,7 +39,12 @@ pub fn setup_logging() {
     } else {
         logger_builder.filter_level(LevelFilter::Info);
     }
-    logger_builder.try_init().unwrap();
+    match logger_builder.try_init() {
+        Ok(()) => (),
+        Err(msg) => {
+            warn!("Error setting up logging: {}", msg)
+        }
+    }
 }
 
 fn main() {}

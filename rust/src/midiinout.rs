@@ -24,7 +24,6 @@ mod tests {
             let mut bytes = vec![0; 1500];
             let len = data.read(&mut bytes)?;
             info!("Write data {}: {:?}", len, &bytes[0..len]);
-            println!("TEST");
             Ok(())
         }
         async fn read(&mut self, data: &mut MidiStream) -> Result<()> {

@@ -375,10 +375,10 @@ impl RtpPeer {
         let timestamp_us = cursor.read_u32::<BigEndian>().unwrap() * 100;
         let ssrc = cursor.read_u32::<BigEndian>().unwrap();
         if ssrc != self.remote_ssid {
-            println!(
-                "packet SSID: {:02X}, local: {:02X}, remote: {:02X}",
-                ssrc, self.local_ssid, self.remote_ssid
-            );
+            // println!(
+            //     "packet SSID: {:02X}, local: {:02X}, remote: {:02X}",
+            //     ssrc, self.local_ssid, self.remote_ssid
+            // );
             return Response::Disconnect(DisconnectReason::BadPeer);
         }
         let headers_len: usize = cursor.read_u8().unwrap() as usize;
@@ -423,7 +423,7 @@ mod tests {
             0xAA, 0xBB, 0xCC, 0xDD, // SSID
             b't', b'e', b's', b't', b'i', b'n', b'g', 0x00, // The name
         ]));
-        println!("{:?}", ret);
+        // println!("{:?}", ret);
         let sdata = match ret {
             Response::NetworkControlData(sdata) => sdata,
             _ => panic!("Bad type"),
@@ -443,7 +443,7 @@ mod tests {
             0xAA, 0xBB, 0xCC, 0xDD, // SSID
             b't', b'e', b's', b't', b'i', b'n', b'g', 0x00, // The name
         ]));
-        println!("{:?}", ret);
+        // println!("{:?}", ret);
         let sdata = match ret {
             Response::NetworkMidiData(sdata) => sdata,
             _ => panic!("Bad type"),
