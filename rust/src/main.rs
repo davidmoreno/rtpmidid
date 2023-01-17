@@ -2,6 +2,7 @@ mod filemidi;
 mod midiinout;
 mod midistream;
 mod rtpmidiclient;
+mod rtpmidiserver;
 mod rtppeer;
 
 #[macro_use]
@@ -10,7 +11,10 @@ extern crate log;
 use env_logger::fmt::Color;
 use log::Level;
 use log::LevelFilter;
+use std::io;
 use std::io::Write;
+
+use crate::rtpmidiserver::RtpMidiServer;
 
 pub fn setup_logging() {
     let mut logger_builder = env_logger::builder();
@@ -47,4 +51,11 @@ pub fn setup_logging() {
     }
 }
 
-fn main() {}
+#[tokio::main]
+async fn main() -> io::Result<()> {
+    let mut server = RtpMidiServer::new("rtpmidid", "0.0.0.0", 5014).await?;
+
+    info!("Done?");
+
+    Ok(())
+}

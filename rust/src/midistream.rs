@@ -57,6 +57,12 @@ impl MidiStream {
         Ok(())
     }
 
+    pub fn copy_to(&self, to: &mut MidiStream) -> Result<()> {
+        to.write_slice().copy_from_slice(self.read_slice());
+        to.advance_read(self.write_cursor)?;
+        Ok(())
+    }
+
     fn clear(&mut self) {
         self.read_cursor = 0;
         self.write_cursor = 0;

@@ -96,13 +96,13 @@ pub(crate) struct RtpPeer {
 }
 
 impl RtpPeer {
-    pub fn new(name: String) -> RtpPeer {
+    pub fn new(name: &str) -> RtpPeer {
         RtpPeer {
             status: Status::Initial,
             initiator_id: 0,
             local_ssid: rand::random::<u32>(),
             remote_ssid: 0,
-            local_name: name,
+            local_name: name.into(),
             remote_name: String::from(""),
             sequence_nr: 0,
             sequence_ack: 0,
@@ -412,7 +412,7 @@ mod tests {
     #[test]
     fn test_rtppeer_new() {
         setup_logging();
-        let mut rtppeer = RtpPeer::new("test".to_string());
+        let mut rtppeer = RtpPeer::new("test");
 
         assert!(rtppeer.status == Status::Initial);
         let ret = rtppeer.event(&Event::NetworkControlData(&[
