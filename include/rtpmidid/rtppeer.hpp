@@ -19,6 +19,7 @@
 
 #pragma once
 #include "exceptions.hpp"
+#include "poller.hpp"
 #include "signal.hpp"
 #include <arpa/inet.h>
 #include <functional>
@@ -39,6 +40,23 @@ public:
   bad_midi_packet(const char *what)
       : ::rtpmidid::exception("Bad MIDI packet: {}", what) {}
 };
+
+/*
+ * For time sensitive events, we may queue them to be sent together
+ * and improve jitter.
+ *
+ * This is only for note and cc events.
+ *
+ * Also internally it has a fixed size, so if more events
+ * arrive, it is inmediately sent
+ *
+ * For other events, just send them not queued.
+ */
+struct midi_event_t {
+  uint64_t timestamp;
+  uint8_t data[3];
+};
+const int MIDI_EVENT_QUEUE_LENGTH = 16;
 
 class rtppeer {
 public:
@@ -80,7 +98,7 @@ public:
   uint16_t seq_nr;
   uint16_t remote_seq_nr;
   uint64_t timestamp_start; // Time in ms
-  uint64_t latency;
+  uint64_t latency;         // In ts = 10ms
   bool waiting_ck;
   uint8_t running_status;
   // Need some buffer space for sysex. This may require memory alloc.
@@ -104,6 +122,9 @@ public:
 
   // Clock latency check received. in ms
   signal_t<float> ck_event;
+  midi_event_t event_queue[MIDI_EVENT_QUEUE_LENGTH];
+  uint event_queue_tail;
+  poller_t::timer_t send_later_timer;
 
   static bool is_command(io_bytes_reader &);
   static bool is_feedback(io_bytes_reader &);
@@ -128,6 +149,9 @@ public:
   void parse_sysex(io_bytes_reader &, int16_t length);
 
   void send_midi(const io_bytes_reader &buffer);
+  void send_queued_events();
+  void send_midi_timestamp(uint64_t timestamp, const io_bytes_reader &events);
+
   void send_goodbye(port_e to_port);
   void send_feedback(uint32_t seqnum);
   void connect_to(port_e rtp_port);

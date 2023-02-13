@@ -22,7 +22,6 @@
 #include <ctime>
 #include <functional>
 #include <map>
-#include <vector>
 #include <optional>
 
 namespace rtpmidid {
@@ -72,6 +71,7 @@ public:
   ~timer_t();
   timer_t &operator=(timer_t &&other);
   void disable();
+  bool is_disabled() { return id == 0; }
 
   // No copying
   timer_t(const timer_t &) = delete;

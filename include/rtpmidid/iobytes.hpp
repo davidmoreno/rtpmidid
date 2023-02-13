@@ -184,6 +184,21 @@ public:
     *position++ = '\0';
   }
 
+  // Writes a variable length quantity acording to MIDI spec
+  void write_vrq(uint32_t number) {
+    int septets = 0;
+    while (number >> (septets * 7)) {
+      septets++;
+    }
+    // Discount one, or the first will be 0x80 (an empty 0)
+    septets--;
+    for (; septets > 0; septets--) {
+      auto c = 0x80 | ((number >> (septets * 7)) & 0x7F);
+      write_uint8(c);
+    }
+    write_uint8(number & 0x7F);
+  }
+
   /// Copies from position to the end
   void copy_from_and_consume(io_bytes &from) {
     copy_from(from, from.end - from.position);
@@ -251,6 +266,11 @@ public:
     position += 4;
     return ((uint32_t)data[0] << 24) + ((uint32_t)data[1] << 16) +
            ((uint32_t)data[2] << 8) + ((uint32_t)data[3]);
+  }
+
+  uint8_t peek_uint8(uint ahead = 0) const {
+    check_enough(ahead + 1);
+    return position[ahead];
   }
 
   uint64_t read_uint64() {

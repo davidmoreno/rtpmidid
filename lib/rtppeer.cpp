@@ -17,6 +17,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include "rtpmidid/poller.hpp"
+#include <cassert>
+#include <chrono>
 #include <iterator>
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/iobytes.hpp>
@@ -637,7 +640,54 @@ uint64_t rtppeer::get_timestamp() {
   return uint32_t(now - timestamp_start);
 }
 
+void rtppeer::send_queued_events() {
+  send_later_timer.disable();
+
+  INFO("Send {} queued events", event_queue_tail);
+  if (event_queue_tail == 0) {
+    return;
+  }
+
+  io_bytes_writer_static<4096 + 12> events;
+  auto timestamp = event_queue[0].timestamp;
+  for (uint i = 0; i < event_queue_tail; i++) {
+    auto ts = event_queue[i].timestamp - timestamp;
+    timestamp = event_queue[i].timestamp;
+    events.write_vrq(ts);
+    events.copy_from(event_queue[i].data, 3);
+  }
+
+  send_midi_timestamp(timestamp, events);
+
+  event_queue_tail = 0;
+}
+
 void rtppeer::send_midi(const io_bytes_reader &events) {
+  // Under some conditions, just queue to be sent later
+  if (events.size() == 3) {
+    auto first_byte = events.peek_uint8() & 0xF0;
+    if (first_byte == 0x80 || first_byte == 0x90 || first_byte == 0xB0) {
+      if (event_queue_tail == MIDI_EVENT_QUEUE_LENGTH) {
+        send_queued_events();
+      }
+      auto timestamp = get_timestamp();
+      auto eventp = &event_queue[event_queue_tail];
+      event_queue_tail++;
+      eventp->timestamp = timestamp;
+      eventp->data[0] = events.peek_uint8();
+      eventp->data[1] = events.peek_uint8(1);
+      eventp->data[2] = events.peek_uint8(2);
+      if (send_later_timer.is_disabled()) { // already has events waiting, so
+                                            // will be called later
+        send_later_timer = poller.add_timer_event( //
+            std::chrono::milliseconds(latency * 10 / 2),
+            // std::chrono::milliseconds(1000),
+            [this] { this->send_queued_events(); });
+      }
+      return;
+    }
+  }
+
   if (!is_connected()) { // Not connected yet.
     WARNING_RATE_LIMIT(
         10, "Can not send MIDI data to {} yet, not connected ({:X}).",
@@ -645,9 +695,13 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
     return;
   }
 
+  send_midi_timestamp(get_timestamp(), events);
+}
+
+void rtppeer::send_midi_timestamp(uint64_t timestamp,
+                                  const io_bytes_reader &events) {
   io_bytes_writer_static<4096 + 12> buffer;
 
-  uint32_t timestamp = get_timestamp();
   seq_nr++;
 
   buffer.write_uint8(0x80);
@@ -674,6 +728,8 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
 
   // events.print_hex();
   // buffer.print_hex();
+
+  buffer.print_hex(false);
 
   send_event(buffer, MIDI_PORT);
 }

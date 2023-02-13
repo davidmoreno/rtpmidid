@@ -47,7 +47,7 @@ clean:
 VALGRINDFLAGS := --leak-check=full --error-exitcode=1
 RTPMIDID_ARGS := --port ${PORT} --name devel
 
-.PHONY: run run-valgrind gdb
+.PHONY: run run-valgrind gdb build/src/rtpmidid
 run: build
 	build/src/rtpmidid $(RTPMIDID_ARGS)
 
