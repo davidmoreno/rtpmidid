@@ -18,6 +18,7 @@
  */
 
 #include <arpa/inet.h>
+#include <chrono>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -338,10 +339,11 @@ void rtpserver::create_peer_from(io_bytes_reader &&buffer,
         connected_event(peer);
       });
 
-  peer->midi_event.connect([this](const io_bytes_reader &data) {
-    // DEBUG("Got MIDI from the remote peer into this server.");
-    midi_event(data);
-  });
+  peer->midi_event.connect(
+      [this](const io_bytes_reader &data, std::chrono::microseconds us) {
+        // DEBUG("Got MIDI from the remote peer into this server.");
+        midi_event(data, us);
+      });
 
   peer->disconnect_event.connect(
       [this, wpeer](rtpmidid::rtppeer::disconnect_reason_e dr) {

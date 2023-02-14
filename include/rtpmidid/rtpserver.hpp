@@ -20,6 +20,7 @@
 #pragma once
 
 #include "./rtppeer.hpp"
+#include <chrono>
 #include <map>
 #include <memory>
 
@@ -37,7 +38,7 @@ public:
 
   // Callbacks to call when new connections
   signal_t<std::shared_ptr<rtppeer>> connected_event;
-  signal_t<const io_bytes_reader &> midi_event;
+  signal_t<const io_bytes_reader &, std::chrono::microseconds> midi_event;
 
   std::string name;
 

@@ -19,6 +19,7 @@
 #include "../tests/test_utils.hpp"
 #include "./test_case.hpp"
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
@@ -170,7 +171,8 @@ void test_recv_some_midi() {
 
   // This will be called when I get some midi data.
   peer.midi_event.connect(
-      [&peer, &got_midi_nr](const rtpmidid::io_bytes_reader &data) {
+      [&peer, &got_midi_nr](const rtpmidid::io_bytes_reader &data,
+                            std::chrono::microseconds _us) {
         ASSERT_TRUE(peer.is_connected());
         ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
         data.print_hex(true);
@@ -190,13 +192,15 @@ void test_recv_some_midi() {
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
 
-  peer.data_ready(hex_to_bin("[1000 0001] [0110 0001] 'SQ'"
-                             "00 00 00 00"
-                             "'BEEF'"
-                             "0B"                               // No Journal, 11 bytes
-                             "90 64 7F 00 90 7F 71 80 80 00 F8" // Two note ons and one clock
-                             ),                                 // Delta times zero (2 different encodings)
-                  rtpmidid::rtppeer::MIDI_PORT);
+  peer.data_ready(
+      hex_to_bin(
+          "[1000 0001] [0110 0001] 'SQ'"
+          "00 00 00 00"
+          "'BEEF'"
+          "0B"                               // No Journal, 11 bytes
+          "90 64 7F 00 90 7F 71 80 80 00 F8" // Two note ons and one clock
+          ), // Delta times zero (2 different encodings)
+      rtpmidid::rtppeer::MIDI_PORT);
 
   ASSERT_EQUAL(got_midi_nr, 3);
 }
@@ -208,7 +212,8 @@ void test_recv_midi_with_running_status() {
 
   // This will be called when I get some midi data.
   peer.midi_event.connect(
-      [&peer, &got_midi_nr](const rtpmidid::io_bytes_reader &data) {
+      [&peer, &got_midi_nr](const rtpmidid::io_bytes_reader &data,
+                            std::chrono::microseconds _us) {
         ASSERT_TRUE(peer.is_connected());
         ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
         data.print_hex(true);
@@ -227,13 +232,15 @@ void test_recv_midi_with_running_status() {
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
 
-  peer.data_ready(hex_to_bin("[1000 0001] [0110 0001] 'SQ'"
-                             "00 00 00 00"
-                             "'BEEF'"
-                             "09"                          // No Journal, 9 bytes
-                             "BF 6D 24 00 37 01 00 6D 20"  // 3 CC commands on ch15 (running status)
-                             ),                            // Delta times are zero
-                  rtpmidid::rtppeer::MIDI_PORT);
+  peer.data_ready(
+      hex_to_bin(
+          "[1000 0001] [0110 0001] 'SQ'"
+          "00 00 00 00"
+          "'BEEF'"
+          "09"                         // No Journal, 9 bytes
+          "BF 6D 24 00 37 01 00 6D 20" // 3 CC commands on ch15 (running status)
+          ),                           // Delta times are zero
+      rtpmidid::rtppeer::MIDI_PORT);
 
   ASSERT_EQUAL(got_midi_nr, 3);
 }
@@ -247,9 +254,10 @@ void test_journal() {
   rtpmidid::io_bytes_writer_static<16> midi_io;
   rtpmidid::io_bytes_writer_static<256> network_io;
 
-  peer.midi_event.connect([&midi_io](const rtpmidid::io_bytes &pb) {
-    midi_io.copy_from(pb.start, pb.size());
-  });
+  peer.midi_event.connect(
+      [&midi_io](const rtpmidid::io_bytes &pb, std::chrono::microseconds _us) {
+        midi_io.copy_from(pb.start, pb.size());
+      });
   peer.send_event.connect([&network_io](const rtpmidid::io_bytes &pb,
                                         rtpmidid::rtppeer::port_e port) {
     DEBUG("Write to network: {} bytes", pb.size());
@@ -419,17 +427,17 @@ void test_send_large_sysex(void) {
 
   bool got_midi = false;
 
-  receiver.midi_event.connect(
-      [&got_midi](const rtpmidid::io_bytes_reader &midi) {
-        INFO("Got MIDI data, size: {}", midi.size());
-        // midi.print_hex();
-        ASSERT_EQUAL(*midi.position, 0xF0);
-        ASSERT_EQUAL(*(midi.end - 1), 0xF7);
-        INFO("Got MIDI data, size: {}", midi.size());
-        ASSERT_EQUAL(midi.size(), 1026);
+  receiver.midi_event.connect([&got_midi](const rtpmidid::io_bytes_reader &midi,
+                                          std::chrono::microseconds _us) {
+    INFO("Got MIDI data, size: {}", midi.size());
+    // midi.print_hex();
+    ASSERT_EQUAL(*midi.position, 0xF0);
+    ASSERT_EQUAL(*(midi.end - 1), 0xF7);
+    INFO("Got MIDI data, size: {}", midi.size());
+    ASSERT_EQUAL(midi.size(), 1026);
 
-        got_midi = true;
-      });
+    got_midi = true;
+  });
 
   sender.connect_to(rtpmidid::rtppeer::CONTROL_PORT);
   sender.connect_to(rtpmidid::rtppeer::MIDI_PORT);
@@ -463,7 +471,8 @@ void test_segmented_sysex(void) {
   });
   bool got_data = false;
   receiver.midi_event.connect(
-      [&got_data, &sysex](const rtpmidid::io_bytes_reader &midi) {
+      [&got_data, &sysex](const rtpmidid::io_bytes_reader &midi,
+                          std::chrono::microseconds _us) {
         INFO("Got MIDI data");
         // midi.print_hex();
         DEBUG("Got {} bytes, need {} bytes", midi.size(), sysex.size());

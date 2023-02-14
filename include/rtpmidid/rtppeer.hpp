@@ -22,6 +22,7 @@
 #include "poller.hpp"
 #include "signal.hpp"
 #include <arpa/inet.h>
+#include <chrono>
 #include <functional>
 #include <string>
 
@@ -99,6 +100,9 @@ public:
   uint16_t remote_seq_nr;
   uint64_t timestamp_start; // Time in ms
   uint64_t latency;         // In ts = 10ms
+  std::chrono::microseconds first_remote_timestamp;
+  std::chrono::high_resolution_clock::time_point first_local_timestamp;
+
   bool waiting_ck;
   uint8_t running_status;
   // Need some buffer space for sysex. This may require memory alloc.
@@ -116,7 +120,7 @@ public:
   // reader and conversion at connect:
   // `midi_event.connect([](io_bytes_reader reader){})`
   // And everybody happy.
-  signal_t<const io_bytes_reader &> midi_event;
+  signal_t<const io_bytes_reader &, std::chrono::microseconds> midi_event;
   /// Event for send data to network.
   signal_t<const io_bytes_reader &, port_e> send_event;
 
@@ -157,6 +161,7 @@ public:
   void connect_to(port_e rtp_port);
   void send_ck0();
   uint64_t get_timestamp();
+  std::chrono::microseconds latency_wait(std::chrono::microseconds timestamp);
 
   // Journal
   void parse_journal(io_bytes_reader &);

@@ -46,6 +46,7 @@ public:
   std::map<int, signal_t<port_t>> unsubscribe_event;
   std::map<int, signal_t<snd_seq_event_t *>> midi_event;
   uint8_t client_id;
+  int queue_id;
 
   aseq(std::string name);
   ~aseq();

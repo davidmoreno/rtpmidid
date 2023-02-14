@@ -79,15 +79,25 @@ aseq::aseq(std::string _name) : name(std::move(_name)) {
       this->read_ready();
     });
   }
+
+  queue_id = snd_seq_alloc_queue(seq);
+  if (queue_id < 0) {
+    ERROR("Error starting queue: {}", snd_strerror(queue_id));
+  }
+  auto ret = snd_seq_start_queue(seq, queue_id, NULL);
+  if (ret < 0) {
+    ERROR("Error starting queue: {}", snd_strerror(ret));
+  }
+  DEBUG("Started queue {}", queue_id);
+
   read_ready();
 }
 
 aseq::~aseq() {
   for (auto fd : fds) {
     try {
-       poller.remove_fd(fd);
-    }
-    catch(rtpmidid::exception & e) {
+      poller.remove_fd(fd);
+    } catch (rtpmidid::exception &e) {
       ERROR("Error removing aseq socket: {}", e.what());
     }
   }

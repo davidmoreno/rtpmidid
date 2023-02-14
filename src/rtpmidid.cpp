@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include <alsa/seq_event.h>
+#include <chrono>
 #include <stdlib.h>
 #include <string>
 
@@ -118,9 +119,11 @@ rtpmidid_t::add_rtpmidid_import_server(const std::string &name,
              port, peer->remote_name);
         auto aseq_port = seq.create_port(peer->remote_name);
 
-        peer->midi_event.connect([this, aseq_port](io_bytes_reader pb) {
-          this->recv_rtpmidi_event(aseq_port, pb);
-        });
+        peer->midi_event.connect(
+            [this, aseq_port](io_bytes_reader pb,
+                              std::chrono::microseconds us) {
+              this->recv_rtpmidi_event(aseq_port, pb, us);
+            });
         seq.midi_event[aseq_port].connect(
             [this, aseq_port](snd_seq_event_t *ev) {
               auto peer_it = known_servers_connections.find(aseq_port);
@@ -184,9 +187,10 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
         alsa_to_server.erase(from);
       });
 
-  server->midi_event.connect([this, alsaport](io_bytes_reader buffer) {
-    this->recv_rtpmidi_event(alsaport, buffer);
-  });
+  server->midi_event.connect(
+      [this, alsaport](io_bytes_reader buffer, std::chrono::microseconds us) {
+        this->recv_rtpmidi_event(alsaport, buffer, us);
+      });
 
   alsa_to_server[from] = server;
 
@@ -311,8 +315,8 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
     auto &address = peer_info->addresses[peer_info->addr_idx];
     peer_info->peer = std::make_shared<rtpclient>(name);
     peer_info->peer->peer.midi_event.connect(
-        [this, aseq_port](io_bytes_reader pb) {
-          this->recv_rtpmidi_event(aseq_port, pb);
+        [this, aseq_port](io_bytes_reader pb, std::chrono::microseconds us) {
+          this->recv_rtpmidi_event(aseq_port, pb, us);
         });
     peer_info->peer->peer.disconnect_event.connect(
         [this, aseq_port](rtppeer::disconnect_reason_e reason) {
@@ -403,9 +407,21 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
   }
 }
 
-void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
+void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data,
+                                    std::chrono::microseconds us) {
   uint8_t current_command = 0;
   snd_seq_event_t ev;
+  snd_seq_real_time_t ustimespec;
+  ustimespec.tv_sec =
+      std::chrono::duration_cast<std::chrono::seconds>(us).count();
+  ustimespec.tv_nsec =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(us).count() %
+      1'000'000'000;
+
+  // DEBUG("Queued for {}s {}ms {}ns ({} us)", ustimespec.tv_sec,
+  //       ustimespec.tv_nsec / 1'000'000, ustimespec.tv_nsec % 1'000'000,
+  //       us.count());
+  // midi_data.print_hex(true);
 
   while (midi_data.position < midi_data.end) {
     // MIDI may reuse the last command if appropiate. For example several
@@ -417,40 +433,39 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
       midi_data.position--;
     }
     auto type = current_command & 0xF0;
+    snd_seq_ev_clear(&ev);
+    if (us.count() <= 0) {
+      snd_seq_ev_set_direct(&ev);
+    } else {
+      snd_seq_ev_schedule_real(&ev, seq.queue_id, 1, &ustimespec);
+    }
 
     switch (type) {
     case 0xB0: // CC
-      snd_seq_ev_clear(&ev);
       snd_seq_ev_set_controller(&ev, current_command & 0x0F,
                                 midi_data.read_uint8(), midi_data.read_uint8());
       break;
     case 0x90:
-      snd_seq_ev_clear(&ev);
       snd_seq_ev_set_noteon(&ev, current_command & 0x0F, midi_data.read_uint8(),
                             midi_data.read_uint8());
       break;
     case 0x80:
-      snd_seq_ev_clear(&ev);
       snd_seq_ev_set_noteoff(&ev, current_command & 0x0F,
                              midi_data.read_uint8(), midi_data.read_uint8());
       break;
     case 0xA0:
-      snd_seq_ev_clear(&ev);
       snd_seq_ev_set_keypress(&ev, current_command & 0x0F,
                               midi_data.read_uint8(), midi_data.read_uint8());
       break;
     case 0xC0:
-      snd_seq_ev_clear(&ev);
       snd_seq_ev_set_pgmchange(&ev, current_command & 0x0F,
                                midi_data.read_uint8());
       break;
     case 0xD0:
-      snd_seq_ev_clear(&ev);
       snd_seq_ev_set_chanpress(&ev, current_command & 0x0F,
                                midi_data.read_uint8());
       break;
     case 0xE0: {
-      snd_seq_ev_clear(&ev);
       auto lsb = midi_data.read_uint8();
       auto msb = midi_data.read_uint8();
       auto pitch_bend = ((msb << 7) + lsb) - 8192;
@@ -470,58 +485,47 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
           WARNING("Malformed SysEx message in buffer has no end byte");
           break;
         }
-        snd_seq_ev_clear(&ev);
         snd_seq_ev_set_sysex(&ev, len, &midi_data.start[start]);
       } break;
       case 0xF1: // MTC Quarter Frame package
-        snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.data.control.value = midi_data.read_uint8();
         ev.type = SND_SEQ_EVENT_QFRAME;
         break;
       case 0xF3: // Song select
-        snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.data.control.value = midi_data.read_uint8();
         ev.type = SND_SEQ_EVENT_SONGSEL;
         break;
       case 0xFE: // Active sense
-        snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_SENSING;
         break;
       case 0xF6: // Tune request
-        snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_TUNE_REQUEST;
         break;
       case 0xF8: // Clock
-        snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_CLOCK;
         break;
       case 0xF9: // Tick
-        snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_TICK;
         break;
       case 0xFF: // Clock
-        snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_RESET;
         break;
       case 0xFA: // start
-        snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_START;
         break;
       case 0xFC: // stop
-        snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_STOP;
         break;
       case 0xFB: // continue
-        snd_seq_ev_clear(&ev);
         snd_seq_ev_set_fixed(&ev);
         ev.type = SND_SEQ_EVENT_CONTINUE;
         break;
@@ -536,14 +540,16 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data) {
     }
     snd_seq_ev_set_source(&ev, port);
     snd_seq_ev_set_subs(&ev);
-    snd_seq_ev_set_direct(&ev);
-    snd_seq_event_output_direct(seq.seq, &ev);
+    // snd_seq_ev_set_direct(&ev);
+    // snd_seq_event_output_direct(seq.seq, &ev);
+    snd_seq_event_output(seq.seq, &ev);
+
     // There is one delta time byte following, if there are multiple commands in
     // one frame. We ignore this
     if (midi_data.position < midi_data.end)
       midi_data.read_uint8();
-    ;
   }
+  snd_seq_drain_output(seq.seq);
 }
 
 void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev) {

@@ -291,7 +291,7 @@ void rtppeer::parse_command_ck(io_bytes_reader &buffer, port_e port) {
     ck2 = buffer.read_uint64();
     ck3 = get_timestamp();
     count = 2;
-    latency = ck3 - ck1;
+    latency = (latency + (ck3 - ck1)) / 2;
     waiting_ck = false;
     INFO("Latency {}: {:.2f} ms (client / 2)", remote_name, latency / 10.0);
     ck_event(latency / 10.0);
@@ -300,7 +300,7 @@ void rtppeer::parse_command_ck(io_bytes_reader &buffer, port_e port) {
     // Receive the other side CK, I can calculate latency
     ck2 = buffer.read_uint64();
     // ck3 = buffer.read_uint64();
-    latency = get_timestamp() - ck2;
+    latency = latency + (get_timestamp() - ck2) / 2;
     INFO("Latency {}: {:.2f} ms (server / 3)", remote_name, latency / 10.0);
     // No need to send message
     ck_event(latency / 10.0);
@@ -476,7 +476,8 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
   remote_seq_nr = buffer.read_uint16(); // Ignore RTP sequence no.
   // TODO In the future we may use a journal.
   // auto _remote_timestamp =
-  buffer.read_uint32();                    // Ignore timestamp
+  // Time comes in 1/100 of ms  (or 10's of us), out precission is only ms
+  auto timestamp = std::chrono::microseconds(buffer.read_uint32() * 100);
   auto remote_ssrc = buffer.read_uint32(); // SSRC
   if (remote_ssrc != this->remote_ssrc) {
     WARNING("Got message for unknown remote SSRC on this port. (from {:04X}, "
@@ -526,6 +527,7 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
   // The first MIDI channel command in the MIDI list MUST include a status
   // octet. (RFC 6295, p.16)
   running_status = 0;
+  auto waitus = latency_wait(timestamp);
 
   while (remaining) {
     length = next_midi_packet_length(buffer);
@@ -545,11 +547,11 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
       io_bytes_writer midi_writer(midi);
       midi_writer.write_uint8(running_status);
       midi_writer.copy_from(buffer.position, length);
-      midi_event(midi);
+      midi_event(midi, waitus);
     } else {
       // Normal flow, simple midi data
       io_bytes midi(buffer.position, length);
-      midi_event(midi);
+      midi_event(midi, waitus);
     }
     buffer.skip(length);
 
@@ -593,7 +595,7 @@ void rtppeer::parse_sysex(io_bytes_reader &buffer, int16_t length) {
       auto sysexreader = io_bytes_reader(&sysex[1], sysex.size() - 1);
       // DEBUG("Send sysex {}", sysex.size());
       // sysexreader.print_hex();
-      midi_event(sysexreader);
+      midi_event(sysexreader, std::chrono::microseconds(0));
       sysex.clear();
 
     } break;
@@ -614,7 +616,7 @@ void rtppeer::parse_sysex(io_bytes_reader &buffer, int16_t length) {
     if (last_byte == 0xF7) { // Normal packet
       // DEBUG("Read normal sysex packet");
       io_bytes midi(buffer.position, length);
-      midi_event(midi);
+      midi_event(midi, std::chrono::microseconds(0));
     } else {
       // DEBUG("First part");
       sysex.clear();
@@ -790,6 +792,94 @@ void rtppeer::connect_to(port_e rtp_port) {
   send_event(buffer, rtp_port);
 }
 
+std::string to_string_ns(const std::chrono::nanoseconds &us) {
+  return fmt::format(
+      "{}s {}ms {}us {}ns",
+      std::chrono::duration_cast<std::chrono::seconds>(us).count(),
+      std::chrono::duration_cast<std::chrono::milliseconds>(us).count() % 1000,
+      std::chrono::duration_cast<std::chrono::microseconds>(us).count() % 1000,
+      std::chrono::duration_cast<std::chrono::nanoseconds>(us).count() % 1000);
+}
+
+std::chrono::microseconds
+rtppeer::latency_wait(std::chrono::microseconds timestamp) {
+  auto now = std::chrono::high_resolution_clock::now();
+  auto latency = std::chrono::microseconds(this->latency * 10) * 4;
+
+  if (first_remote_timestamp.count() == 0) {
+    first_remote_timestamp = timestamp;
+    first_local_timestamp =
+        std::move(std::chrono::high_resolution_clock::now());
+  }
+
+  auto event_localtime =
+      first_local_timestamp - first_remote_timestamp + timestamp;
+  auto relative_to_now = event_localtime - now + latency;
+
+  if (relative_to_now < std::chrono::microseconds(0)) {
+    auto newlat =
+        (latency -
+         std::chrono::duration_cast<std::chrono::microseconds>(relative_to_now))
+            .count() /
+        10;
+    // We missed once, we think it was fluke, but increase latency. If happens
+    // more, it will go there. But if it was a fluke of 1s, then latency go to
+    // trash very fast, better a bit slower.
+    this->latency = (this->latency + newlat) / 2;
+
+    WARNING("Latency jump. Our latency was not good enough, so we had to "
+            "increase it. Missed by {}, increased to {}ms",
+            to_string_ns(-relative_to_now), this->latency / 100.0);
+  }
+
+  // DEBUG("Event is in {}  // latency {}", to_string_ns(relative_to_now),
+  //       to_string_ns(latency));
+  return std::chrono::duration_cast<std::chrono::microseconds>(relative_to_now);
+
+  // auto remote = (timestamp - last_remote_timestamp);
+  // // I expect to come with latency delay, the idea is that I can wait up to
+  // // latency, but if comes late just release it
+
+  // auto local = std::chrono::duration_cast<std::chrono::microseconds>(
+  //     now - last_local_time);
+
+  // if (timestamp < last_remote_timestamp) {
+  //   WARNING("Out of order packets! WIP");
+  // }
+
+  // auto diffus = remote - local + latency;
+  // auto maxdiff = 20 * latency;
+
+  // if (timestamp > last_remote_timestamp)
+  //   last_remote_timestamp = timestamp;
+  // last_local_time = now;
+
+  // static auto START = now;
+
+  // if (remote != local) {
+  //   DEBUG(
+  //       "{} Got bad timed event. REMOTE D: {}ms, LOCAL D: {}ms. LATENCY:
+  //       {}ms. " "WAIT {}ms. MAXWAIT {}ms. -- FINAL: {}", to_string_ns(now -
+  //       START), remote.count() / 1000.0, local.count() / 1000.0,
+  //       latency.count() / 1000.0, diffus.count() / 1000.0, maxdiff.count() /
+  //       1000.0, to_string_ns(now - START + diffus));
+  // }
+  // // If between 0 and 2xlatency wait. Else is an outlier, just release it.
+  // if (diffus >= maxdiff) {
+  //   WARNING("Too long diff by: {}us", diffus.count() - maxdiff.count());
+  // }
+  // if (diffus.count() > 0 && diffus < maxdiff) {
+  //   DEBUG("WAIT {} us", diffus.count());
+  //   return diffus;
+  // }
+  // // if (diffus.count() < 0) {
+  // //   latency = diffus * 2;
+  // //   DEBUG("Correct latency, now is {}");
+  // // }
+
+  // return std::chrono::microseconds(0);
+}
+
 void rtppeer::parse_journal(io_bytes_reader &journal_data) {
   journal_data.print_hex();
 
@@ -868,7 +958,7 @@ void rtppeer::parse_journal_chapter_N(uint8_t channel,
       tmp[1] = notenum & 0x7f;
       tmp[2] = notevel & 0x7f;
       io_bytes event(tmp, 3);
-      midi_event(event);
+      midi_event(event, std::chrono::microseconds(0));
     }
   }
 
@@ -881,7 +971,7 @@ void rtppeer::parse_journal_chapter_N(uint8_t channel,
         tmp[1] = minnote;
         tmp[2] = 0;
         io_bytes event(tmp, 3);
-        midi_event(event);
+        midi_event(event, std::chrono::microseconds(0));
       }
     }
   }
