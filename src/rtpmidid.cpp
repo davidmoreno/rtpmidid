@@ -421,7 +421,7 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data,
   // DEBUG("Queued for {}s {}ms {}ns ({} us)", ustimespec.tv_sec,
   //       ustimespec.tv_nsec / 1'000'000, ustimespec.tv_nsec % 1'000'000,
   //       us.count());
-  // midi_data.print_hex(true);
+  midi_data.print_hex();
 
   while (midi_data.position < midi_data.end) {
     // MIDI may reuse the last command if appropiate. For example several

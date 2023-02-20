@@ -96,7 +96,14 @@ public:
 
   void print_hex(bool to_end = true, bool ascii = false) const {
     auto data = start;
+    if (end <= position) {
+      return;
+    }
     auto n = (to_end ? end : position) - data;
+    printf("%ld bytes\n", long(n));
+    if (n > 1024) {
+      return;
+    }
     printf("\033[1;34m");
     for (int i = 0; i < n; i++) {
       if (data == position) {

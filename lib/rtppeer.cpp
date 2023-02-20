@@ -29,6 +29,9 @@
 
 using namespace rtpmidid;
 
+std::chrono::nanoseconds timestamp_to_ns(uint64_t timestamp_t);
+std::string to_string_ns(const std::chrono::nanoseconds &us);
+
 /**
  * @short Generic peer constructor
  *
@@ -48,7 +51,7 @@ rtppeer::rtppeer(std::string _name) : local_name(std::move(_name)) {
   timestamp_start = 0;
   timestamp_start = get_timestamp();
   initiator_id = 0;
-  latency = 0;
+  latency = 10; // default 1ms.. jus tin case can not properly know it
   waiting_ck = false;
 }
 
@@ -387,7 +390,7 @@ int rtppeer::next_midi_packet_length(io_bytes_reader &buffer) {
     running_status = status;  // update the runnning status state.
   } else if (status < 0x80) { // Abbreviated commands
     status = running_status;  // use the running status state
-    length = -1;              // and are 1 byte shorter.
+    length -= 1;              // and are 1 byte shorter.
   }
 
   auto first_byte_f0 = status & 0xF0;
@@ -529,9 +532,10 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
   running_status = 0;
   auto waitus = latency_wait(timestamp);
 
-  while (remaining) {
+  while (remaining > 0) {
     length = next_midi_packet_length(buffer);
-    if (length == 0) {
+    DEBUG("MIDI PACKET LENGTH {}", length);
+    if (length <= 0) {
       throw bad_midi_packet(
           fmt::format("Unexpected MIDI data: {}", *buffer.position).c_str());
     }
@@ -559,11 +563,10 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
     //       buffer.size() - buffer.pos());
 
     if (remaining) {
-      // DEBUG("Packet with several midi events. {} bytes remaining",
-      // remaining); Skip delta
+      DEBUG("Packet with several midi events. {} bytes remaining", remaining);
       uint32_t delta_time;
       remaining -= read_delta_time(buffer, delta_time);
-      // DEBUG("Skip delta_time: {}", delta_time);
+      DEBUG("Skip delta_time: {}", delta_time);
     }
   }
 }
@@ -645,17 +648,22 @@ uint64_t rtppeer::get_timestamp() {
 void rtppeer::send_queued_events() {
   send_later_timer.disable();
 
-  INFO("Send {} queued events", event_queue_tail);
   if (event_queue_tail == 0) {
     return;
   }
+  INFO("Send {} queued events. Wait {}. latency: {}", event_queue_tail,
+       to_string_ns(timestamp_to_ns(
+           get_timestamp() - event_queue[event_queue_tail - 1].timestamp)),
+       to_string_ns(timestamp_to_ns(latency)));
 
   io_bytes_writer_static<4096 + 12> events;
   auto timestamp = event_queue[0].timestamp;
   for (uint i = 0; i < event_queue_tail; i++) {
     auto ts = event_queue[i].timestamp - timestamp;
     timestamp = event_queue[i].timestamp;
-    events.write_vrq(ts);
+    if (i != 0) {
+      events.write_vrq(ts);
+    }
     events.copy_from(event_queue[i].data, 3);
   }
 
@@ -668,7 +676,8 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
   // Under some conditions, just queue to be sent later
   if (events.size() == 3) {
     auto first_byte = events.peek_uint8() & 0xF0;
-    if (first_byte == 0x80 || first_byte == 0x90 || first_byte == 0xB0) {
+    if (first_byte == 0x80 || first_byte == 0x90 || first_byte == 0xB0 ||
+        first_byte == 0xA0) {
       if (event_queue_tail == MIDI_EVENT_QUEUE_LENGTH) {
         send_queued_events();
       }
@@ -682,7 +691,7 @@ void rtppeer::send_midi(const io_bytes_reader &events) {
       if (send_later_timer.is_disabled()) { // already has events waiting, so
                                             // will be called later
         send_later_timer = poller.add_timer_event( //
-            std::chrono::milliseconds(latency * 10 / 2),
+            std::chrono::milliseconds(latency),
             // std::chrono::milliseconds(1000),
             [this] { this->send_queued_events(); });
       }
@@ -731,7 +740,7 @@ void rtppeer::send_midi_timestamp(uint64_t timestamp,
   // events.print_hex();
   // buffer.print_hex();
 
-  buffer.print_hex(false);
+  // buffer.print_hex(false);
 
   send_event(buffer, MIDI_PORT);
 }
@@ -792,6 +801,10 @@ void rtppeer::connect_to(port_e rtp_port) {
   send_event(buffer, rtp_port);
 }
 
+std::chrono::nanoseconds timestamp_to_ns(uint64_t timestamp_t) {
+  return std::chrono::nanoseconds(timestamp_t * 100'000);
+}
+
 std::string to_string_ns(const std::chrono::nanoseconds &us) {
   return fmt::format(
       "{}s {}ms {}us {}ns",
@@ -804,7 +817,7 @@ std::string to_string_ns(const std::chrono::nanoseconds &us) {
 std::chrono::microseconds
 rtppeer::latency_wait(std::chrono::microseconds timestamp) {
   auto now = std::chrono::high_resolution_clock::now();
-  auto latency = std::chrono::microseconds(this->latency * 10) * 4;
+  auto latency = std::chrono::microseconds(this->latency) * 4;
 
   if (first_remote_timestamp.count() == 0) {
     first_remote_timestamp = timestamp;
@@ -814,7 +827,7 @@ rtppeer::latency_wait(std::chrono::microseconds timestamp) {
 
   auto event_localtime =
       first_local_timestamp - first_remote_timestamp + timestamp;
-  auto relative_to_now = event_localtime - now + latency;
+  auto relative_to_now = event_localtime - now;
 
   if (relative_to_now < std::chrono::microseconds(0)) {
     auto newlat =
@@ -832,52 +845,7 @@ rtppeer::latency_wait(std::chrono::microseconds timestamp) {
             to_string_ns(-relative_to_now), this->latency / 100.0);
   }
 
-  // DEBUG("Event is in {}  // latency {}", to_string_ns(relative_to_now),
-  //       to_string_ns(latency));
   return std::chrono::duration_cast<std::chrono::microseconds>(relative_to_now);
-
-  // auto remote = (timestamp - last_remote_timestamp);
-  // // I expect to come with latency delay, the idea is that I can wait up to
-  // // latency, but if comes late just release it
-
-  // auto local = std::chrono::duration_cast<std::chrono::microseconds>(
-  //     now - last_local_time);
-
-  // if (timestamp < last_remote_timestamp) {
-  //   WARNING("Out of order packets! WIP");
-  // }
-
-  // auto diffus = remote - local + latency;
-  // auto maxdiff = 20 * latency;
-
-  // if (timestamp > last_remote_timestamp)
-  //   last_remote_timestamp = timestamp;
-  // last_local_time = now;
-
-  // static auto START = now;
-
-  // if (remote != local) {
-  //   DEBUG(
-  //       "{} Got bad timed event. REMOTE D: {}ms, LOCAL D: {}ms. LATENCY:
-  //       {}ms. " "WAIT {}ms. MAXWAIT {}ms. -- FINAL: {}", to_string_ns(now -
-  //       START), remote.count() / 1000.0, local.count() / 1000.0,
-  //       latency.count() / 1000.0, diffus.count() / 1000.0, maxdiff.count() /
-  //       1000.0, to_string_ns(now - START + diffus));
-  // }
-  // // If between 0 and 2xlatency wait. Else is an outlier, just release it.
-  // if (diffus >= maxdiff) {
-  //   WARNING("Too long diff by: {}us", diffus.count() - maxdiff.count());
-  // }
-  // if (diffus.count() > 0 && diffus < maxdiff) {
-  //   DEBUG("WAIT {} us", diffus.count());
-  //   return diffus;
-  // }
-  // // if (diffus.count() < 0) {
-  // //   latency = diffus * 2;
-  // //   DEBUG("Correct latency, now is {}");
-  // // }
-
-  // return std::chrono::microseconds(0);
 }
 
 void rtppeer::parse_journal(io_bytes_reader &journal_data) {
