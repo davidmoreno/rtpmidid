@@ -124,11 +124,12 @@ void test_connect_disconnect_send() {
   test_client_t midi_client(control_client.local_port + 1, server.midi_port);
 
   auto nmidievents = std::make_shared<int>(0);
-  server.midi_event.connect([&nmidievents](const rtpmidid::io_bytes_reader &,
-                                           std::chrono::microseconds _us) {
-    *nmidievents += 1;
-    DEBUG("Got MIDI Event");
-  });
+  server.midi_event.connect(
+      [&nmidievents](const rtpmidid::io_bytes_reader &,
+                     std::chrono::high_resolution_clock::time_point _us) {
+        *nmidievents += 1;
+        DEBUG("Got MIDI Event");
+      });
 
   control_client.send(connect_msg);
   midi_client.send(connect_msg);

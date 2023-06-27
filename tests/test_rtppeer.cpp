@@ -171,8 +171,9 @@ void test_recv_some_midi() {
 
   // This will be called when I get some midi data.
   peer.midi_event.connect(
-      [&peer, &got_midi_nr](const rtpmidid::io_bytes_reader &data,
-                            std::chrono::microseconds _us) {
+      [&peer,
+       &got_midi_nr](const rtpmidid::io_bytes_reader &data,
+                     std::chrono::high_resolution_clock::time_point _us) {
         ASSERT_TRUE(peer.is_connected());
         ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
         data.print_hex(true);
@@ -212,8 +213,9 @@ void test_recv_midi_with_running_status() {
 
   // This will be called when I get some midi data.
   peer.midi_event.connect(
-      [&peer, &got_midi_nr](const rtpmidid::io_bytes_reader &data,
-                            std::chrono::microseconds _us) {
+      [&peer,
+       &got_midi_nr](const rtpmidid::io_bytes_reader &data,
+                     std::chrono::high_resolution_clock::time_point _us) {
         ASSERT_TRUE(peer.is_connected());
         ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
         data.print_hex(true);
@@ -255,7 +257,8 @@ void test_journal() {
   rtpmidid::io_bytes_writer_static<256> network_io;
 
   peer.midi_event.connect(
-      [&midi_io](const rtpmidid::io_bytes &pb, std::chrono::microseconds _us) {
+      [&midi_io](const rtpmidid::io_bytes &pb,
+                 std::chrono::high_resolution_clock::time_point _us) {
         midi_io.copy_from(pb.start, pb.size());
       });
   peer.send_event.connect([&network_io](const rtpmidid::io_bytes &pb,
@@ -427,17 +430,18 @@ void test_send_large_sysex(void) {
 
   bool got_midi = false;
 
-  receiver.midi_event.connect([&got_midi](const rtpmidid::io_bytes_reader &midi,
-                                          std::chrono::microseconds _us) {
-    INFO("Got MIDI data, size: {}", midi.size());
-    // midi.print_hex();
-    ASSERT_EQUAL(*midi.position, 0xF0);
-    ASSERT_EQUAL(*(midi.end - 1), 0xF7);
-    INFO("Got MIDI data, size: {}", midi.size());
-    ASSERT_EQUAL(midi.size(), 1026);
+  receiver.midi_event.connect(
+      [&got_midi](const rtpmidid::io_bytes_reader &midi,
+                  std::chrono::high_resolution_clock::time_point _us) {
+        INFO("Got MIDI data, size: {}", midi.size());
+        // midi.print_hex();
+        ASSERT_EQUAL(*midi.position, 0xF0);
+        ASSERT_EQUAL(*(midi.end - 1), 0xF7);
+        INFO("Got MIDI data, size: {}", midi.size());
+        ASSERT_EQUAL(midi.size(), 1026);
 
-    got_midi = true;
-  });
+        got_midi = true;
+      });
 
   sender.connect_to(rtpmidid::rtppeer::CONTROL_PORT);
   sender.connect_to(rtpmidid::rtppeer::MIDI_PORT);
@@ -472,7 +476,7 @@ void test_segmented_sysex(void) {
   bool got_data = false;
   receiver.midi_event.connect(
       [&got_data, &sysex](const rtpmidid::io_bytes_reader &midi,
-                          std::chrono::microseconds _us) {
+                          std::chrono::high_resolution_clock::time_point _us) {
         INFO("Got MIDI data");
         // midi.print_hex();
         DEBUG("Got {} bytes, need {} bytes", midi.size(), sysex.size());

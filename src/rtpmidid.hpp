@@ -19,6 +19,7 @@
 #pragma once
 
 #include "./aseq.hpp"
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <rtpmidid/mdns_rtpmidi.hpp>
@@ -77,7 +78,7 @@ public:
   void remove_rtpmidi_client(const std::string &name);
 
   void recv_rtpmidi_event(int port, io_bytes_reader &midi_data,
-                          std::chrono::microseconds us);
+                          std::chrono::high_resolution_clock::time_point us);
   void recv_alsamidi_event(int port, snd_seq_event_t *ev);
 
   void alsamidi_to_midiprotocol(snd_seq_event_t *ev, io_bytes_writer &buffer);

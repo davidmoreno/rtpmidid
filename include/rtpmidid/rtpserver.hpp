@@ -38,7 +38,9 @@ public:
 
   // Callbacks to call when new connections
   signal_t<std::shared_ptr<rtppeer>> connected_event;
-  signal_t<const io_bytes_reader &, std::chrono::microseconds> midi_event;
+  signal_t<const io_bytes_reader &,
+           std::chrono::high_resolution_clock::time_point>
+      midi_event;
 
   std::string name;
 

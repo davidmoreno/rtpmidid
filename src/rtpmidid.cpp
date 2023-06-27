@@ -25,6 +25,7 @@
 #include "./rtpmidid.hpp"
 #include "./stringpp.hpp"
 #include "rtpmidid/exceptions.hpp"
+#include "rtpmidid/rtppeer.hpp"
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/rtpclient.hpp>
@@ -120,8 +121,9 @@ rtpmidid_t::add_rtpmidid_import_server(const std::string &name,
         auto aseq_port = seq.create_port(peer->remote_name);
 
         peer->midi_event.connect(
-            [this, aseq_port](io_bytes_reader pb,
-                              std::chrono::microseconds us) {
+            [this,
+             aseq_port](io_bytes_reader pb,
+                        std::chrono::high_resolution_clock::time_point us) {
               this->recv_rtpmidi_event(aseq_port, pb, us);
             });
         seq.midi_event[aseq_port].connect(
@@ -188,7 +190,8 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
       });
 
   server->midi_event.connect(
-      [this, alsaport](io_bytes_reader buffer, std::chrono::microseconds us) {
+      [this, alsaport](io_bytes_reader buffer,
+                       std::chrono::high_resolution_clock::time_point us) {
         this->recv_rtpmidi_event(alsaport, buffer, us);
       });
 
@@ -315,7 +318,8 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
     auto &address = peer_info->addresses[peer_info->addr_idx];
     peer_info->peer = std::make_shared<rtpclient>(name);
     peer_info->peer->peer.midi_event.connect(
-        [this, aseq_port](io_bytes_reader pb, std::chrono::microseconds us) {
+        [this, aseq_port](io_bytes_reader pb,
+                          std::chrono::high_resolution_clock::time_point us) {
           this->recv_rtpmidi_event(aseq_port, pb, us);
         });
     peer_info->peer->peer.disconnect_event.connect(
@@ -407,20 +411,25 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
   }
 }
 
-void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data,
-                                    std::chrono::microseconds us) {
+void rtpmidid_t::recv_rtpmidi_event(
+    int port, io_bytes_reader &midi_data,
+    std::chrono::high_resolution_clock::time_point tp) {
   uint8_t current_command = 0;
   snd_seq_event_t ev;
   snd_seq_real_time_t ustimespec;
+
+  // We should use absolute timepoint, but for now this is easier
+  auto us = tp - std::chrono::high_resolution_clock::now();
+
   ustimespec.tv_sec =
       std::chrono::duration_cast<std::chrono::seconds>(us).count();
   ustimespec.tv_nsec =
       std::chrono::duration_cast<std::chrono::nanoseconds>(us).count() %
       1'000'000'000;
 
-  // DEBUG("Queued for {}s {}ms {}ns ({} us)", ustimespec.tv_sec,
-  //       ustimespec.tv_nsec / 1'000'000, ustimespec.tv_nsec % 1'000'000,
-  //       us.count());
+  DEBUG("Queued for {}s {}ms {}ns ({} us)", ustimespec.tv_sec,
+        ustimespec.tv_nsec / 1'000'000, ustimespec.tv_nsec % 1'000'000,
+        us.count());
   midi_data.print_hex();
 
   while (midi_data.position < midi_data.end) {
@@ -546,8 +555,10 @@ void rtpmidid_t::recv_rtpmidi_event(int port, io_bytes_reader &midi_data,
 
     // There is one delta time byte following, if there are multiple commands in
     // one frame. We ignore this
-    if (midi_data.position < midi_data.end)
+    if (midi_data.position < midi_data.end) {
+      WARNING("More midi data, with possible timestamps!");
       midi_data.read_uint8();
+    }
   }
   snd_seq_drain_output(seq.seq);
 }

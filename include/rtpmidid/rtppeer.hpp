@@ -89,6 +89,8 @@ public:
     CK_TIMEOUT,
   };
 
+  static std::chrono::high_resolution_clock::time_point START_OF_TIME;
+
   status_e status;
   uint32_t initiator_id;
   uint32_t remote_ssrc;
@@ -120,7 +122,9 @@ public:
   // reader and conversion at connect:
   // `midi_event.connect([](io_bytes_reader reader){})`
   // And everybody happy.
-  signal_t<const io_bytes_reader &, std::chrono::microseconds> midi_event;
+  signal_t<const io_bytes_reader &,
+           std::chrono::high_resolution_clock::time_point>
+      midi_event;
   /// Event for send data to network.
   signal_t<const io_bytes_reader &, port_e> send_event;
 
@@ -161,7 +165,8 @@ public:
   void connect_to(port_e rtp_port);
   void send_ck0();
   uint64_t get_timestamp();
-  std::chrono::microseconds latency_wait(std::chrono::microseconds timestamp);
+  std::chrono::high_resolution_clock::time_point
+  latency_wait(std::chrono::microseconds timestamp);
 
   // Journal
   void parse_journal(io_bytes_reader &);

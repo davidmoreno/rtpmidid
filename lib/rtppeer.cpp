@@ -29,6 +29,9 @@
 
 using namespace rtpmidid;
 
+std::chrono::high_resolution_clock::time_point rtppeer::START_OF_TIME =
+    std::chrono::high_resolution_clock::now();
+
 std::chrono::nanoseconds timestamp_to_ns(uint64_t timestamp_t);
 std::string to_string_ns(const std::chrono::nanoseconds &us);
 
@@ -514,11 +517,13 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
 
     parse_journal(journal_data);
   }
+
+  running_status = 0;
+  auto waitus = latency_wait(timestamp);
   if ((header & 0x20) != 0) {
-    WARNING("This RTP MIDI payload has delta time for the first command. "
-            "Ignoring.");
     uint32_t delta_time;
     remaining -= read_delta_time(buffer, delta_time);
+    waitus += timestamp_to_ns(delta_time);
   }
   if ((header & 0x10) != 0) {
     WARNING("There was no status byte in original MIDI command. Ignoring.");
@@ -529,8 +534,6 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
 
   // The first MIDI channel command in the MIDI list MUST include a status
   // octet. (RFC 6295, p.16)
-  running_status = 0;
-  auto waitus = latency_wait(timestamp);
 
   while (remaining > 0) {
     length = next_midi_packet_length(buffer);
@@ -566,7 +569,9 @@ void rtppeer::parse_midi(io_bytes_reader &buffer) {
       DEBUG("Packet with several midi events. {} bytes remaining", remaining);
       uint32_t delta_time;
       remaining -= read_delta_time(buffer, delta_time);
-      DEBUG("Skip delta_time: {}", delta_time);
+      waitus += timestamp_to_ns(delta_time);
+      DEBUG("Skip delta_time: {}, waitus: {}", delta_time,
+            to_string_ns(waitus - START_OF_TIME));
     }
   }
 }
@@ -598,7 +603,7 @@ void rtppeer::parse_sysex(io_bytes_reader &buffer, int16_t length) {
       auto sysexreader = io_bytes_reader(&sysex[1], sysex.size() - 1);
       // DEBUG("Send sysex {}", sysex.size());
       // sysexreader.print_hex();
-      midi_event(sysexreader, std::chrono::microseconds(0));
+      midi_event(sysexreader, std::chrono::high_resolution_clock::now());
       sysex.clear();
 
     } break;
@@ -619,7 +624,7 @@ void rtppeer::parse_sysex(io_bytes_reader &buffer, int16_t length) {
     if (last_byte == 0xF7) { // Normal packet
       // DEBUG("Read normal sysex packet");
       io_bytes midi(buffer.position, length);
-      midi_event(midi, std::chrono::microseconds(0));
+      midi_event(midi, std::chrono::high_resolution_clock::now());
     } else {
       // DEBUG("First part");
       sysex.clear();
@@ -814,20 +819,19 @@ std::string to_string_ns(const std::chrono::nanoseconds &us) {
       std::chrono::duration_cast<std::chrono::nanoseconds>(us).count() % 1000);
 }
 
-std::chrono::microseconds
+std::chrono::high_resolution_clock::time_point
 rtppeer::latency_wait(std::chrono::microseconds timestamp) {
   auto now = std::chrono::high_resolution_clock::now();
   auto latency = std::chrono::microseconds(this->latency) * 4;
 
   if (first_remote_timestamp.count() == 0) {
     first_remote_timestamp = timestamp;
-    first_local_timestamp =
-        std::move(std::chrono::high_resolution_clock::now());
+    first_local_timestamp = now;
   }
 
   auto event_localtime =
       first_local_timestamp - first_remote_timestamp + timestamp;
-  auto relative_to_now = event_localtime - now;
+  auto relative_to_now = event_localtime - now + latency;
 
   if (relative_to_now < std::chrono::microseconds(0)) {
     auto newlat =
@@ -845,7 +849,9 @@ rtppeer::latency_wait(std::chrono::microseconds timestamp) {
             to_string_ns(-relative_to_now), this->latency / 100.0);
   }
 
-  return std::chrono::duration_cast<std::chrono::microseconds>(relative_to_now);
+  return std::chrono::duration_cast<std::chrono::microseconds>(
+             relative_to_now) +
+         START_OF_TIME;
 }
 
 void rtppeer::parse_journal(io_bytes_reader &journal_data) {
@@ -926,7 +932,7 @@ void rtppeer::parse_journal_chapter_N(uint8_t channel,
       tmp[1] = notenum & 0x7f;
       tmp[2] = notevel & 0x7f;
       io_bytes event(tmp, 3);
-      midi_event(event, std::chrono::microseconds(0));
+      midi_event(event, std::chrono::high_resolution_clock::now());
     }
   }
 
@@ -939,7 +945,7 @@ void rtppeer::parse_journal_chapter_N(uint8_t channel,
         tmp[1] = minnote;
         tmp[2] = 0;
         io_bytes event(tmp, 3);
-        midi_event(event, std::chrono::microseconds(0));
+        midi_event(event, std::chrono::high_resolution_clock::now());
       }
     }
   }

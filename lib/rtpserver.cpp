@@ -340,7 +340,8 @@ void rtpserver::create_peer_from(io_bytes_reader &&buffer,
       });
 
   peer->midi_event.connect(
-      [this](const io_bytes_reader &data, std::chrono::microseconds us) {
+      [this](const io_bytes_reader &data,
+             std::chrono::high_resolution_clock::time_point us) {
         // DEBUG("Got MIDI from the remote peer into this server.");
         midi_event(data, us);
       });
