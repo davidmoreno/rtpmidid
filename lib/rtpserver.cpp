@@ -163,7 +163,6 @@ std::shared_ptr<rtppeer> rtpserver::get_peer_by_packet(io_bytes_reader &buffer,
   switch (command) {
   case rtppeer::IN:
   case rtppeer::OK:
-  case rtppeer::BY:
   case rtppeer::NO: {
     buffer.position = buffer.start + 8;
     auto initiator_id = buffer.read_uint32();
@@ -174,6 +173,13 @@ std::shared_ptr<rtppeer> rtpserver::get_peer_by_packet(io_bytes_reader &buffer,
       return nullptr;
     }
     return peer->second;
+  }
+  case rtppeer::BY: {
+    buffer.position = buffer.start + 12;
+    auto ssrc_id = buffer.read_uint32();
+    buffer.position = buffer.start;
+
+    return get_peer_by_ssrc(ssrc_id);
   }
   case rtppeer::CK:
   case rtppeer::RS: {
@@ -203,22 +209,23 @@ std::shared_ptr<rtppeer> rtpserver::get_peer_by_packet(io_bytes_reader &buffer,
 
 //   20210130 -- Always has to be at ssrc_to_peer.
 // No need, so a simple getter is more efficient
-// std::shared_ptr<rtppeer> rtpserver::get_peer_by_ssrc(uint32_t ssrc) {
-//   auto peer = ssrc_to_peer[ssrc];
-//   if (peer)
-//     return peer;
+// This is required because a BY message doesn't include the iniator id,
+// but it does include the ssrc
+std::shared_ptr<rtppeer> rtpserver::get_peer_by_ssrc(uint32_t ssrc) {
+   auto peer = ssrc_to_peer[ssrc];
+  if (peer)
+    return peer;
 
-//   // If just connected, maybe we dont know the SSRC yet. Check all the peers
-//   to
-//   // update
-//   for (auto &initiator_peer : initiator_to_peer) {
-//     if (initiator_peer.second->remote_ssrc == ssrc) {
-//       ssrc_to_peer[ssrc] = initiator_peer.second;
-//       return initiator_peer.second;
-//     }
-//   }
-//   return nullptr;
-// }
+  // If just connected, maybe we dont know the SSRC yet. Check all the peers
+  // to update
+  for (auto &initiator_peer : initiator_to_peer) {
+    if (initiator_peer.second->remote_ssrc == ssrc) {
+      ssrc_to_peer[ssrc] = initiator_peer.second;
+      return initiator_peer.second;
+    }
+  }
+  return nullptr;
+}
 
 void rtpserver::data_ready(rtppeer::port_e port) {
   uint8_t raw[1500];
