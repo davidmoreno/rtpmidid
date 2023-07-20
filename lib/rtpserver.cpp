@@ -207,12 +207,10 @@ std::shared_ptr<rtppeer> rtpserver::get_peer_by_packet(io_bytes_reader &buffer,
   }
 }
 
-//   20210130 -- Always has to be at ssrc_to_peer.
-// No need, so a simple getter is more efficient
 // This is required because a BY message doesn't include the iniator id,
 // but it does include the ssrc
 std::shared_ptr<rtppeer> rtpserver::get_peer_by_ssrc(uint32_t ssrc) {
-   auto peer = ssrc_to_peer[ssrc];
+  auto peer = ssrc_to_peer[ssrc];
   if (peer)
     return peer;
 
