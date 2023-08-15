@@ -20,20 +20,37 @@
 #pragma once
 
 #include "logger.hpp"
+#include <assert.h>
+#include <cstdint>
 #include <functional>
 #include <map>
 
+template <typename... Args> class connection_t;
+
 template <typename... Args> class signal_t {
 public:
-  int connect(std::function<void(Args...)> const &&f) {
+  ~signal_t() { disconnect_all(); }
+
+  // Must keep the connection, when deleted will be disconnected
+  [[nodiscard]] connection_t<Args...>
+  connect(std::function<void(Args...)> const &&f) {
     auto cid = max_id++;
     slots[cid] = std::move(f);
-    return cid;
+    return connection_t(this, cid);
   }
 
-  void disconnect(int id) { slots.erase(id); }
+  void disconnect(int id) {
+    slots.erase(id);
+    connections.erase(id);
+  }
 
-  void disconnect_all() { slots.clear(); }
+  void disconnect_all() {
+    for (auto &conn : connections) {
+      conn.second->disconnect();
+    }
+    assert(slots.size() == 0);
+    assert(connections.size() == 0);
+  }
 
   void operator()(Args... args) {
     for (auto const &f : slots) {
@@ -44,6 +61,44 @@ public:
   size_t count() { return slots.size(); }
 
 private:
-  uint32_t max_id = 0;
+  uint32_t max_id = 1;
   std::map<uint32_t, std::function<void(Args...)>> slots;
+  std::map<uint32_t, connection_t<Args...> *> connections;
+};
+
+template <typename... Args> class connection_t {
+  signal_t<Args...> *signal;
+  int id;
+
+public:
+  connection_t() : signal(nullptr), id(0) {}
+  connection_t(signal_t<Args...> *signal_, int id_)
+      : signal(signal_), id(id_) {}
+  connection_t(connection_t<Args...> &other) = delete;
+  connection_t(connection_t<Args...> &&other) {
+    disconnect();
+    signal = other.signal;
+    id = other.id;
+
+    other.signal = nullptr;
+    other.id = 0;
+  }
+
+  ~connection_t() { disconnect(); }
+
+  void operator=(connection_t<Args...> &&other) {
+    disconnect();
+    signal = other.signal;
+    id = other.id;
+
+    other.signal = nullptr;
+    other.id = 0;
+  }
+
+  void disconnect() {
+    if (id && signal)
+      signal->disconnect(id);
+    signal = nullptr;
+    id = 0;
+  }
 };

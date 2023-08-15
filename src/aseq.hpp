@@ -32,10 +32,14 @@ public:
     uint8_t client;
     uint8_t port;
 
+    port_t() : client(0), port(0) {}
     port_t(uint8_t a, uint8_t b) : client(a), port(b) {}
 
     bool operator<(const port_t &other) const {
       return client < other.client && port < other.port;
+    }
+    bool operator==(const port_t &other) const {
+      return client == other.client && port == other.port;
     }
   };
 

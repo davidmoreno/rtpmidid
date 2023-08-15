@@ -154,11 +154,10 @@ static json status(rtpmidid::rtpmidid_t &rtpmidid, time_t start_time) {
       json{{"version", rtpmidid::VERSION}, {"uptime", time(NULL) - start_time}};
 
   std::vector<json> clients;
-  for (auto port_client : rtpmidid.known_clients) {
-    auto client = port_client.second;
+  for (auto &client : rtpmidid.known_clients) {
     json cl = {{"name", client.name},
                {"use_count", client.use_count},
-               {"alsa_port", port_client.first}};
+               {"alsa_port", client.aseq_port}};
     std::vector<json> addresses;
     for (auto &address : client.addresses) {
       addresses.push_back({{"host", address.address}, {"port", address.port}});
@@ -176,8 +175,7 @@ static json status(rtpmidid::rtpmidid_t &rtpmidid, time_t start_time) {
   js["clients"] = clients;
 
   std::vector<json> connections;
-  for (auto port_client : rtpmidid.known_servers_connections) {
-    auto client = port_client.second;
+  for (auto &client : rtpmidid.known_servers) {
     json cl = {
         {"name", client.name},
     };
@@ -186,12 +184,12 @@ static json status(rtpmidid::rtpmidid_t &rtpmidid, time_t start_time) {
   js["connections"] = connections;
 
   std::vector<json> servers;
-  for (auto server : rtpmidid.servers) {
+  for (auto &server : rtpmidid.known_servers) {
     json data = {
-        {"name", server->name},
-        {"port", server->midi_port},
-        {"connect_listeners", server->connected_event.count()},
-        {"midi_listeners", server->midi_event.count()},
+        {"name", server.server->name},
+        {"port", server.server->midi_port},
+        {"connect_listeners", server.server->connected_event.count()},
+        {"midi_listeners", server.server->midi_event.count()},
     };
     servers.push_back(data);
   }

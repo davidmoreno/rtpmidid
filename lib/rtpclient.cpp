@@ -48,9 +48,10 @@ rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
   timerstate = 0;
   midi_socket = -1;
   peer.initiator_id = ::rtpmidid::rand_u32();
-  peer.send_event.connect([this](const io_bytes &data, rtppeer::port_e port) {
-    this->sendto(data, port);
-  });
+  send_connection = peer.send_event.connect(
+      [this](const io_bytes_reader &data, rtppeer::port_e port) {
+        this->sendto(data, port);
+      });
 }
 
 rtpclient::~rtpclient() {
@@ -207,8 +208,9 @@ void rtpclient::connect_to(const std::string &address,
 
   peer.connect_to(rtppeer::CONTROL_PORT);
 
-  connect_timer = poller.add_timer_event(5s, [this, conn_event] {
-    peer.connected_event.disconnect(conn_event);
+  connect_timer = poller.add_timer_event(5s, [this, &conn_event] {
+    auto _conn_event_scoped = std::move(conn_event);
+    // ce will be scope removed at end or destruction of lambda
     peer.disconnect_event(rtppeer::CONNECT_TIMEOUT);
   });
 }
@@ -224,7 +226,7 @@ void rtpclient::connect_to(const std::string &address,
 void rtpclient::connected() {
   connect_timer.disable();
 
-  peer.ck_event.connect([this](float ms) {
+  ck_connection = peer.ck_event.connect([this](float ms) {
     ck_timeout.disable();
     if (timerstate < 6) {
       timer_ck =
