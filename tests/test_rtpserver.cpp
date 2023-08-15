@@ -64,7 +64,7 @@ void test_several_connect_to_server() {
   midi_client.send(connect_msg);
 
   // wait 1 event loop cycle (all pending events)
-  ASSERT_EQUAL(server.initiator_to_peer.size(), 1);
+  ASSERT_EQUAL(server.peers.size(), 1);
 
   // And reverse order, first arrives the midi event
   test_client_t control_client2(0, server.control_port);
@@ -73,48 +73,44 @@ void test_several_connect_to_server() {
   midi_client2.send(connect_msg2);
   control_client2.send(connect_msg2);
 
-  ASSERT_EQUAL(server.initiator_to_peer.size(), 2);
-  for (auto &x : server.initiator_to_peer) {
-    DEBUG("PEER {:#04x} - {}", x.first, (void *)&x.second);
+  ASSERT_EQUAL(server.peers.size(), 2);
+  for (auto &x : server.peers) {
+    DEBUG("PEER {:#04x} - {}", x.peer->initiator_id, (void *)&x);
     DEBUG("InitID {:#04x}, SSRC local {:#04x} remote {:#04x} ",
-          x.second->initiator_id, x.second->local_ssrc, x.second->remote_ssrc);
+          x.peer->initiator_id, x.peer->local_ssrc, x.peer->remote_ssrc);
   }
-  ASSERT_EQUAL(server.ssrc_to_peer.size(), 2);
+  ASSERT_EQUAL(server.peers.size(), 2);
 
-  for (auto &peer : server.initiator_to_peer) {
-    ASSERT_TRUE(peer.second->is_connected());
+  for (auto &peer : server.peers) {
+    ASSERT_TRUE(peer.peer->is_connected());
   }
 
   control_client.send(disconnect_msg2);
 
   // Removed ok
-  ASSERT_EQUAL(server.initiator_to_peer.size(), 1);
-  ASSERT_EQUAL(server.ssrc_to_peer.size(), 1);
+  ASSERT_EQUAL(server.peers.size(), 1);
 
   // Should do nothing, no add, no remove
   midi_client.send(disconnect_msg2); // This may provoke a warning, but can be
                                      // sent by remote side
 
-  DEBUG("{} {} {}", (void *)&server, server.initiator_to_peer.size(),
-        server.ssrc_to_peer.size());
-  ASSERT_EQUAL(server.initiator_to_peer.size(), 1);
-  ASSERT_EQUAL(server.ssrc_to_peer.size(), 1);
+  DEBUG("{} {} {}", (void *)&server, server.peers.size(), server.peers.size());
+  ASSERT_EQUAL(server.peers.size(), 1);
 
   // Disconnect reverse order, same result
   midi_client.send(disconnect_msg);
   control_client.send(disconnect_msg); // This may provoke a warning, but can
                                        // be sent by remote side
 
-  for (auto &x : server.initiator_to_peer) {
-    DEBUG("TIP FOR ERROR: STILL HERE? PEER {:#04x} - {}", x.first,
-          (void *)&x.second);
+  for (auto &x : server.peers) {
+    DEBUG("TIP FOR ERROR: STILL HERE? PEER {:#04x} - {}", x.peer->initiator_id,
+          (void *)&x.peer);
     DEBUG("TIP FOR ERROR: STILL HERE? InitID {:#04x}, SSRC local {:#04x} "
           "remote {:#04x} ",
-          x.second->initiator_id, x.second->local_ssrc, x.second->remote_ssrc);
+          x.peer->initiator_id, x.peer->local_ssrc, x.peer->remote_ssrc);
   }
 
-  ASSERT_EQUAL(server.initiator_to_peer.size(), 0);
-  ASSERT_EQUAL(server.ssrc_to_peer.size(), 0);
+  ASSERT_EQUAL(server.peers.size(), 0);
 }
 
 void test_connect_disconnect_send() {
@@ -124,10 +120,11 @@ void test_connect_disconnect_send() {
   test_client_t midi_client(control_client.local_port + 1, server.midi_port);
 
   auto nmidievents = std::make_shared<int>(0);
-  server.midi_event.connect([&nmidievents](const rtpmidid::io_bytes_reader &) {
-    *nmidievents += 1;
-    DEBUG("Got MIDI Event");
-  });
+  auto midi_event_c1 = server.midi_event.connect(
+      [&nmidievents](const rtpmidid::io_bytes_reader &) {
+        *nmidievents += 1;
+        DEBUG("Got MIDI Event");
+      });
 
   control_client.send(connect_msg);
   midi_client.send(connect_msg);

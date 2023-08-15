@@ -39,21 +39,23 @@ void test_connect_disconnect() {
 
   rtpmidid::rtppeer::status_e connected =
       rtpmidid::rtppeer::status_e::NOT_CONNECTED;
-  peer.connected_event.connect(
+  auto connected_event_c1 = peer.connected_event.connect(
       [&connected](const std::string &name, rtpmidid::rtppeer::status_e st) {
         DEBUG("Connected from {}, status: {}", name, st);
         connected = st;
       });
-  peer.disconnect_event.connect([&connected](auto reason) {
-    DEBUG("Disconnected. Reason: {}", reason);
-    connected = rtpmidid::rtppeer::status_e::NOT_CONNECTED;
-  });
-  peer.send_event.connect([](const rtpmidid::io_bytes_reader &data,
-                             rtpmidid::rtppeer::port_e port) {
-    DEBUG("Send to {}:",
-          port == rtpmidid::rtppeer::CONTROL_PORT ? "Control" : "MIDI");
-    data.print_hex();
-  });
+  auto connected_event_c2 =
+      peer.disconnect_event.connect([&connected](auto reason) {
+        DEBUG("Disconnected. Reason: {}", reason);
+        connected = rtpmidid::rtppeer::status_e::NOT_CONNECTED;
+      });
+  auto connected_event_c3 =
+      peer.send_event.connect([](const rtpmidid::io_bytes_reader &data,
+                                 rtpmidid::rtppeer::port_e port) {
+        DEBUG("Send to {}:",
+              port == rtpmidid::rtppeer::CONTROL_PORT ? "Control" : "MIDI");
+        data.print_hex();
+      });
 
   ASSERT_EQUAL(connected, rtpmidid::rtppeer::status_e::NOT_CONNECTED);
 
@@ -77,19 +79,21 @@ void test_connect_disconnect_reverse_order() {
   ASSERT_EQUAL(peer.is_connected(), false);
 
   auto connected = rtpmidid::rtppeer::status_e::NOT_CONNECTED;
-  peer.connected_event.connect(
+  auto connected_event_c1 = peer.connected_event.connect(
       [&connected](const std::string &_name, rtpmidid::rtppeer::status_e st) {
         connected = st;
       });
-  peer.disconnect_event.connect([&connected](auto reason) {
-    connected = rtpmidid::rtppeer::status_e::NOT_CONNECTED;
-  });
-  peer.send_event.connect([](const rtpmidid::io_bytes_reader &data,
-                             rtpmidid::rtppeer::port_e port) {
-    DEBUG("Send to {}:",
-          port == rtpmidid::rtppeer::CONTROL_PORT ? "Control" : "MIDI");
-    data.print_hex();
-  });
+  auto disconnected_event_c1 =
+      peer.disconnect_event.connect([&connected](auto reason) {
+        connected = rtpmidid::rtppeer::status_e::NOT_CONNECTED;
+      });
+  auto send_event_c1 =
+      peer.send_event.connect([](const rtpmidid::io_bytes_reader &data,
+                                 rtpmidid::rtppeer::port_e port) {
+        DEBUG("Send to {}:",
+              port == rtpmidid::rtppeer::CONTROL_PORT ? "Control" : "MIDI");
+        data.print_hex();
+      });
 
   ASSERT_EQUAL(connected, rtpmidid::rtppeer::status_e::NOT_CONNECTED);
 
@@ -115,18 +119,19 @@ void test_send_short_midi() {
   rtpmidid::rtppeer peer("test");
 
   bool sent_midi = false;
-  peer.send_event.connect([&peer,
-                           &sent_midi](const rtpmidid::io_bytes_reader &data,
-                                       rtpmidid::rtppeer::port_e port) {
-    if (peer.is_connected()) {
-      data.print_hex();
+  auto send_event_c1 = peer.send_event.connect(
+      [&peer, &sent_midi](const rtpmidid::io_bytes_reader &data,
+                          rtpmidid::rtppeer::port_e port) {
+        if (peer.is_connected()) {
+          data.print_hex();
 
-      auto midi_buffer =
-          rtpmidid::io_bytes_reader(data.start + 12, data.size() - 12);
-      ASSERT_TRUE(midi_buffer.compare(hex_to_bin("07 90 64 7F 68 7F 71 7F")));
-      sent_midi = true;
-    }
-  });
+          auto midi_buffer =
+              rtpmidid::io_bytes_reader(data.start + 12, data.size() - 12);
+          ASSERT_TRUE(
+              midi_buffer.compare(hex_to_bin("07 90 64 7F 68 7F 71 7F")));
+          sent_midi = true;
+        }
+      });
 
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
@@ -140,7 +145,7 @@ void test_send_long_midi() {
   rtpmidid::rtppeer peer("test");
 
   bool sent_midi = false;
-  peer.send_event.connect(
+  auto send_event_c1 = peer.send_event.connect(
       [&peer, &sent_midi](const rtpmidid::io_bytes_reader &data,
                           rtpmidid::rtppeer::port_e port) {
         if (peer.is_connected()) {
@@ -169,7 +174,7 @@ void test_recv_some_midi() {
   int got_midi_nr = 0;
 
   // This will be called when I get some midi data.
-  peer.midi_event.connect(
+  auto midi_event_c1 = peer.midi_event.connect(
       [&peer, &got_midi_nr](const rtpmidid::io_bytes_reader &data) {
         ASSERT_TRUE(peer.is_connected());
         ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
@@ -190,13 +195,15 @@ void test_recv_some_midi() {
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
 
-  peer.data_ready(hex_to_bin("[1000 0001] [0110 0001] 'SQ'"
-                             "00 00 00 00"
-                             "'BEEF'"
-                             "0B"                               // No Journal, 11 bytes
-                             "90 64 7F 00 90 7F 71 80 80 00 F8" // Two note ons and one clock
-                             ),                                 // Delta times zero (2 different encodings)
-                  rtpmidid::rtppeer::MIDI_PORT);
+  peer.data_ready(
+      hex_to_bin(
+          "[1000 0001] [0110 0001] 'SQ'"
+          "00 00 00 00"
+          "'BEEF'"
+          "0B"                               // No Journal, 11 bytes
+          "90 64 7F 00 90 7F 71 80 80 00 F8" // Two note ons and one clock
+          ), // Delta times zero (2 different encodings)
+      rtpmidid::rtppeer::MIDI_PORT);
 
   ASSERT_EQUAL(got_midi_nr, 3);
 }
@@ -207,7 +214,7 @@ void test_recv_midi_with_running_status() {
   int got_midi_nr = 0;
 
   // This will be called when I get some midi data.
-  peer.midi_event.connect(
+  auto midi_event_c1 = peer.midi_event.connect(
       [&peer, &got_midi_nr](const rtpmidid::io_bytes_reader &data) {
         ASSERT_TRUE(peer.is_connected());
         ASSERT_EQUAL(peer.status, rtpmidid::rtppeer::status_e::CONNECTED);
@@ -227,13 +234,15 @@ void test_recv_midi_with_running_status() {
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::CONTROL_PORT);
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer::MIDI_PORT);
 
-  peer.data_ready(hex_to_bin("[1000 0001] [0110 0001] 'SQ'"
-                             "00 00 00 00"
-                             "'BEEF'"
-                             "09"                          // No Journal, 9 bytes
-                             "BF 6D 24 00 37 01 00 6D 20"  // 3 CC commands on ch15 (running status)
-                             ),                            // Delta times are zero
-                  rtpmidid::rtppeer::MIDI_PORT);
+  peer.data_ready(
+      hex_to_bin(
+          "[1000 0001] [0110 0001] 'SQ'"
+          "00 00 00 00"
+          "'BEEF'"
+          "09"                         // No Journal, 9 bytes
+          "BF 6D 24 00 37 01 00 6D 20" // 3 CC commands on ch15 (running status)
+          ),                           // Delta times are zero
+      rtpmidid::rtppeer::MIDI_PORT);
 
   ASSERT_EQUAL(got_midi_nr, 3);
 }
@@ -247,14 +256,16 @@ void test_journal() {
   rtpmidid::io_bytes_writer_static<16> midi_io;
   rtpmidid::io_bytes_writer_static<256> network_io;
 
-  peer.midi_event.connect([&midi_io](const rtpmidid::io_bytes &pb) {
-    midi_io.copy_from(pb.start, pb.size());
-  });
-  peer.send_event.connect([&network_io](const rtpmidid::io_bytes &pb,
-                                        rtpmidid::rtppeer::port_e port) {
-    DEBUG("Write to network: {} bytes", pb.size());
-    network_io.copy_from(pb.start, pb.size());
-  });
+  auto midi_event_c1 =
+      peer.midi_event.connect([&midi_io](const rtpmidid::io_bytes &pb) {
+        midi_io.copy_from(pb.start, pb.size());
+      });
+  auto midi_event_c2 =
+      peer.send_event.connect([&network_io](const rtpmidid::io_bytes &pb,
+                                            rtpmidid::rtppeer::port_e port) {
+        DEBUG("Write to network: {} bytes", pb.size());
+        network_io.copy_from(pb.start, pb.size());
+      });
 
   // I send seq 0, no notes, just to set the sequence
   peer.data_ready(hex_to_bin("[1000 0001] [0110 0001] "
@@ -403,23 +414,25 @@ void test_send_large_sysex(void) {
   rtpmidid::rtppeer sender("sender");
   rtpmidid::rtppeer receiver("receiver");
 
-  sender.send_event.connect([&receiver](const rtpmidid::io_bytes_reader &data,
-                                        rtpmidid::rtppeer::port_e port) {
-    rtpmidid::io_bytes_reader datar(data);
-    DEBUG("Write {} bytes to receiver data_ready", data.size());
-    receiver.data_ready(std::move(datar), port);
-  });
+  auto send_event_c1 = sender.send_event.connect(
+      [&receiver](const rtpmidid::io_bytes_reader &data,
+                  rtpmidid::rtppeer::port_e port) {
+        rtpmidid::io_bytes_reader datar(data);
+        DEBUG("Write {} bytes to receiver data_ready", data.size());
+        receiver.data_ready(std::move(datar), port);
+      });
 
-  receiver.send_event.connect([&sender](const rtpmidid::io_bytes_reader &data,
-                                        rtpmidid::rtppeer::port_e port) {
-    rtpmidid::io_bytes_reader datar(data);
-    DEBUG("Write {} bytes to sender data_ready", data.size());
-    sender.data_ready(std::move(datar), port);
-  });
+  auto send_event_c2 = receiver.send_event.connect(
+      [&sender](const rtpmidid::io_bytes_reader &data,
+                rtpmidid::rtppeer::port_e port) {
+        rtpmidid::io_bytes_reader datar(data);
+        DEBUG("Write {} bytes to sender data_ready", data.size());
+        sender.data_ready(std::move(datar), port);
+      });
 
   bool got_midi = false;
 
-  receiver.midi_event.connect(
+  auto send_event_c3 = receiver.midi_event.connect(
       [&got_midi](const rtpmidid::io_bytes_reader &midi) {
         INFO("Got MIDI data, size: {}", midi.size());
         // midi.print_hex();
@@ -448,21 +461,23 @@ void test_segmented_sysex(void) {
   rtpmidid::rtppeer sender("sender");
   rtpmidid::rtppeer receiver("receiver");
 
-  sender.send_event.connect([&receiver](const rtpmidid::io_bytes_reader &data,
-                                        rtpmidid::rtppeer::port_e port) {
-    rtpmidid::io_bytes_reader datar(data);
-    DEBUG("Write {} bytes to receiver data_ready", data.size());
-    receiver.data_ready(std::move(datar), port);
-  });
+  auto send_event_c1 = sender.send_event.connect(
+      [&receiver](const rtpmidid::io_bytes_reader &data,
+                  rtpmidid::rtppeer::port_e port) {
+        rtpmidid::io_bytes_reader datar(data);
+        DEBUG("Write {} bytes to receiver data_ready", data.size());
+        receiver.data_ready(std::move(datar), port);
+      });
 
-  receiver.send_event.connect([&sender](const rtpmidid::io_bytes_reader &data,
-                                        rtpmidid::rtppeer::port_e port) {
-    rtpmidid::io_bytes_reader datar(data);
-    DEBUG("Write {} bytes to sender data_ready", data.size());
-    sender.data_ready(std::move(datar), port);
-  });
+  auto send_event_c2 = receiver.send_event.connect(
+      [&sender](const rtpmidid::io_bytes_reader &data,
+                rtpmidid::rtppeer::port_e port) {
+        rtpmidid::io_bytes_reader datar(data);
+        DEBUG("Write {} bytes to sender data_ready", data.size());
+        sender.data_ready(std::move(datar), port);
+      });
   bool got_data = false;
-  receiver.midi_event.connect(
+  auto send_event_c3 = receiver.midi_event.connect(
       [&got_data, &sysex](const rtpmidid::io_bytes_reader &midi) {
         INFO("Got MIDI data");
         // midi.print_hex();
