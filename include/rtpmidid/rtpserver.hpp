@@ -20,6 +20,8 @@
 #pragma once
 
 #include "./rtppeer.hpp"
+#include "rtpmidid/signal.hpp"
+#include <cstdint>
 #include <map>
 #include <memory>
 
@@ -30,17 +32,29 @@ class rtpserver {
 public:
   // Stupid RTPMIDI uses initiator_id sometimes and ssrc other times.
 
-  // Maps the peers to the initiator_id.
-  std::map<uint32_t, std::shared_ptr<rtppeer>> initiator_to_peer;
-  // Maps the peers to the ssrc.
-  std::map<uint32_t, std::shared_ptr<rtppeer>> ssrc_to_peer;
+  // // Maps the peers to the initiator_id.
+  // std::map<uint32_t, std::shared_ptr<rtppeer>> initiator_to_peer;
+  // // Maps the peers to the ssrc.
+  // std::map<uint32_t, std::shared_ptr<rtppeer>> ssrc_to_peer;
 
   // Callbacks to call when new connections
   signal_t<std::shared_ptr<rtppeer>> connected_event;
   signal_t<const io_bytes_reader &> midi_event;
 
-  std::string name;
+  struct peer_data_t {
+    std::shared_ptr<rtppeer> peer;
 
+    connection_t<const io_bytes_reader &, rtppeer::port_e>
+        send_event_connection;
+    connection_t<const std::string &, rtppeer::status_e>
+        connected_event_connection;
+    connection_t<const io_bytes_reader &> midi_event_connection;
+    connection_t<rtpmidid::rtppeer::disconnect_reason_e>
+        disconnect_event_connection;
+  };
+  std::vector<peer_data_t> peers;
+
+  std::string name;
   int midi_socket;
   int control_socket;
 
@@ -53,6 +67,7 @@ public:
   // Returns the peer for that packet, or nullptr
   std::shared_ptr<rtppeer> get_peer_by_packet(io_bytes_reader &b,
                                               rtppeer::port_e port);
+  std::shared_ptr<rtppeer> get_peer_by_initiator_id(uint32_t initiator_id);
   std::shared_ptr<rtppeer> get_peer_by_ssrc(uint32_t ssrc);
 
   void create_peer_from(io_bytes_reader &&buffer, struct sockaddr_in6 *cliaddr,

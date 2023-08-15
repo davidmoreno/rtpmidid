@@ -58,6 +58,8 @@ public:
   /// A simple state machine. We need to send 6 CK one after another, and then
   /// every 10 secs.
   uint8_t timerstate;
+  connection_t<const io_bytes_reader &, rtppeer::port_e> send_connection;
+  connection_t<float> ck_connection;
 
   rtpclient(std::string name);
   ~rtpclient();

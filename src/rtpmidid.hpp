@@ -19,13 +19,15 @@
 #pragma once
 
 #include "./aseq.hpp"
+#include "rtpmidid/rtppeer.hpp"
+#include "rtpmidid/signal.hpp"
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <rtpmidid/mdns_rtpmidi.hpp>
 #include <rtpmidid/poller.hpp>
 #include <set>
 #include <string>
-#include <optional>
 
 namespace rtpmidid {
 struct config_t;
@@ -39,7 +41,8 @@ struct address_t {
   std::string port;
 };
 
-struct client_info {
+struct client_info_t {
+  uint32_t client_id;
   std::string name;
   std::vector<address_t> addresses;
   int addr_idx; // Current try address, if any.
@@ -48,12 +51,28 @@ struct client_info {
   std::shared_ptr<::rtpmidid::rtpclient> peer;
   uint8_t aseq_port;
   uint connect_attempts = 0;
+
+  connection_t<aseq::port_t, const std::string &> subscribe_connection;
+  connection_t<aseq::port_t> unsubscribe_connection;
+  connection_t<snd_seq_event_t *> midi_from_alsaseq;
+  connection_t<const io_bytes_reader &> midi_from_network;
+  connection_t<rtppeer::disconnect_reason_e> disconnect_event;
 };
-struct server_conn_info {
+
+struct server_info_t {
+  uint32_t server_id;
   std::string name;
   // This might be not intialized if not really connected yet.
   std::shared_ptr<::rtpmidid::rtppeer> peer;
   std::shared_ptr<::rtpmidid::rtpserver> server;
+  std::vector<aseq::port_t> connected_to;
+  uint8_t alsa_port;
+
+  connection_t<std::shared_ptr<::rtpmidid::rtppeer>> connected_event;
+  connection_t<const io_bytes_reader &> midi_from_network;
+  connection_t<snd_seq_event_t *> midi_from_alsaseq;
+  connection_t<rtppeer::disconnect_reason_e> disconnect_event;
+  connection_t<aseq::port_t> seq_unsubscribe;
 };
 
 class rtpmidid_t {
@@ -62,11 +81,37 @@ public:
   ::rtpmidid::aseq seq;
   ::rtpmidid::mdns_rtpmidi mdns_rtpmidi;
   // Local port id to client_info for connections
-  std::map<uint8_t, client_info> known_clients;
-  std::map<uint8_t, server_conn_info> known_servers_connections;
-  std::vector<std::shared_ptr<::rtpmidid::rtpserver>> servers;
-  std::map<aseq::port_t, std::shared_ptr<::rtpmidid::rtpserver>> alsa_to_server;
+  std::vector<client_info_t> known_clients;
+  std::vector<server_info_t> known_servers;
+  uint32_t max_peer_id;
+
+  std::vector<server_info_t>::iterator find_known_server(uint32_t id) {
+    return std::find_if(
+        known_servers.begin(), known_servers.end(),
+        [id](server_info_t &serverinfo) { return id == serverinfo.server_id; });
+  }
+  std::vector<client_info_t>::iterator find_known_client(uint32_t id) {
+    return std::find_if(
+        known_clients.begin(), known_clients.end(),
+        [id](client_info_t &serverinfo) { return id == serverinfo.client_id; });
+  }
+  std::vector<client_info_t>::iterator
+  find_known_client_by_alsa_port(uint8_t port) {
+    return std::find_if(known_clients.begin(), known_clients.end(),
+                        [port](client_info_t &serverinfo) {
+                          return port == serverinfo.aseq_port;
+                        });
+  }
+
+  // std::vector<std::shared_ptr<::rtpmidid::rtpserver>> servers;
+  // std::map<aseq::port_t, std::shared_ptr<::rtpmidid::rtpserver>>
+  // alsa_to_server;
   std::set<std::string> known_mdns_peers;
+
+  connection_t<aseq::port_t, const std::string &> alsaport_subscribe_connection;
+  connection_t<const std::string &, const std::string &, const std::string &>
+      mdns_discover_connection;
+  connection_t<const std::string &> mdns_remove_connection;
 
   rtpmidid_t(const config_t &config);
 
