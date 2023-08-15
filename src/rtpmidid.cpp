@@ -577,7 +577,10 @@ void rtpmidid_t::recv_alsamidi_event(int aseq_port, snd_seq_event *ev) {
   // DEBUG("Callback on midi event at rtpmidid, port {}", aseq_port);
   auto peer_info = find_known_client_by_alsa_port(aseq_port);
   assert(peer_info != known_clients.end());
-
+  if (!peer_info->peer) {
+    DEBUG("Sending to a peer which is not ready");
+    return;
+  }
   io_bytes_writer_static<4096> stream;
   alsamidi_to_midiprotocol(ev, stream);
   peer_info->peer->peer.send_midi(stream);

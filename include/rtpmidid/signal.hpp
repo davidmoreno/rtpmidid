@@ -26,36 +26,65 @@
 #include <map>
 
 namespace rtpmidid {
+// #define DEBUG0 DEBUG
+#define DEBUG0(...)
+
 template <typename... Args> class connection_t;
 
 template <typename... Args> class signal_t {
 public:
-  ~signal_t() { disconnect_all(); }
+  signal_t() { DEBUG0("{}::signal_t()", (void *)this); }
+  ~signal_t() {
+    DEBUG0("{}::~signal_t()", (void *)this);
+    disconnect_all();
+    DEBUG0("{}::~signal_t()~", (void *)this);
+  }
 
   // Must keep the connection, when deleted will be disconnected
   [[nodiscard]] connection_t<Args...>
   connect(std::function<void(Args...)> const &&f) {
     auto cid = max_id++;
     slots_[cid] = std::move(f);
+    DEBUG0("{}::signal_t::connect(f) -> {}", (void *)this, cid);
+    connections[cid] = nullptr;
     return connection_t(this, cid);
   }
 
   void disconnect(int id) {
+    DEBUG0("{}::signal_t::disconnect({})", (void *)this, id);
     slots_.erase(id);
     connections.erase(id);
   }
 
   void disconnect_all() {
-    for (auto &conn : connections) {
-      conn.second->disconnect();
+    while (connections.begin() != connections.end()) {
+      auto conn = connections.begin();
+      DEBUG0("{}::signal_t::disconnect_all() {}", (void *)this,
+             (void *)conn->second);
+      conn->second->disconnect();
     }
+    DEBUG0("{}::signal_t::disconnect_all(), has {}", (void *)this,
+           slots_.size());
     assert(slots_.size() == 0);
     assert(connections.size() == 0);
   }
 
   void operator()(Args... args) {
+    DEBUG0("{}::signal_t::()", (void *)this);
     for (auto const &f : slots_) {
       f.second(std::forward<Args>(args)...);
+    }
+  }
+
+  void replace_connection_ptr(int id, connection_t<Args...> *ptr) {
+    DEBUG0("{}::replace_connection_ptr::({})", (void *)this, id);
+    for (auto &f : connections) {
+      DEBUG0("Got {}", f.first);
+      if (f.first == id) {
+        DEBUG0("{}::replace_connection_ptr::({} -> {})", (void *)this,
+               (void *)f.second, (void *)ptr);
+        f.second = ptr;
+      }
     }
   }
 
@@ -72,31 +101,43 @@ template <typename... Args> class connection_t {
   int id;
 
 public:
-  connection_t() : signal(nullptr), id(0) {}
-  connection_t(signal_t<Args...> *signal_, int id_)
-      : signal(signal_), id(id_) {}
+  connection_t() : signal(nullptr), id(0) {
+    DEBUG0("{}::connection_t()", (void *)this);
+  }
+  connection_t(signal_t<Args...> *signal_, int id_) : signal(signal_), id(id_) {
+    DEBUG0("{}::connection_t({})", (void *)this, id_);
+    signal->replace_connection_ptr(id, this);
+  }
   connection_t(connection_t<Args...> &other) = delete;
   connection_t(connection_t<Args...> &&other) {
-    disconnect();
+    DEBUG0("{}::connection_t({})", (void *)this, (void *)&other);
     signal = other.signal;
     id = other.id;
+    if (signal)
+      signal->replace_connection_ptr(id, this);
 
     other.signal = nullptr;
     other.id = 0;
   }
 
-  ~connection_t() { disconnect(); }
+  ~connection_t() {
+    DEBUG0("{}::~connection_t()", (void *)this);
+    disconnect();
+  }
 
   void operator=(connection_t<Args...> &&other) {
+    DEBUG0("{}::=({})", (void *)this, (void *)&other);
     disconnect();
     signal = other.signal;
     id = other.id;
+    signal->replace_connection_ptr(id, this);
 
     other.signal = nullptr;
     other.id = 0;
   }
 
   void disconnect() {
+    DEBUG0("{}::disconnect()", (void *)this);
     if (id && signal)
       signal->disconnect(id);
     signal = nullptr;

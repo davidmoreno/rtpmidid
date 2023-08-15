@@ -157,7 +157,6 @@ AvahiTimeout *poller_adapter_timeout_new(const AvahiPoll *api,
 /// timeout is disabled. More...
 void poller_adapter_timeout_update(AvahiTimeout *to, const struct timeval *tv) {
   rtpmidid::poller.remove_timer(to->timer_id);
-  to->timer_id = 0;
   if (tv) {
     to->timer_id = rtpmidid::poller.add_timer_event(
         std::chrono::seconds(tv->tv_sec),

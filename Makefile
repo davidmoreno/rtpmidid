@@ -4,17 +4,18 @@ PORT := 10000
 help:
 	@echo "Makefile for rtpmidid"
 	@echo
-	@echo " build   -- Creates the build directory and builds the rtpmidid"
-	@echo " run     -- builds and runs the daemon"
-	@echo " setup   -- Creates the socket control file"
-	@echo " clean   -- Cleans project"
-	@echo " deb     -- Generate deb package"
-	@echo " test    -- Runs all test"
-	@echo " install -- Installs to PREFIX or DESTDIR (default /usr/local/)"
-	@echo " man     -- Generate man pages"
+	@echo " build     -- Creates the build directory and builds the rtpmidid"
+	@echo " build-dev -- Creates the build directory and builds the rtpmidid for debugging"
+	@echo " run       -- builds and runs the daemon"
+	@echo " setup     -- Creates the socket control file"
+	@echo " clean     -- Cleans project"
+	@echo " deb       -- Generate deb package"
+	@echo " test      -- Runs all test"
+	@echo " install   -- Installs to PREFIX or DESTDIR (default /usr/local/)"
+	@echo " man       -- Generate man pages"
 	@echo
-	@echo " gdb     -- Run inside gdb, to capture backtrace of failures (bt). Useful for bug reports."
-	@echo " capture -- Capture packets with tcpdump. Add this to bug reports."
+	@echo " gdb      -- Run inside gdb, to capture backtrace of failures (bt). Useful for bug reports."
+	@echo " capture  -- Capture packets with tcpdump. Add this to bug reports."
 	@echo
 	@echo "Variables:"
 	@echo 
