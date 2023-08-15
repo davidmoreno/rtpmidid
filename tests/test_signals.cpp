@@ -71,7 +71,8 @@ void test_signal_disconnect() {
   // copy connection
   {
     callcount = 0;
-    connection_t<int> conn2;
+    connection_t<int> conn0;
+    connection_t<int> conn2(std::move(conn0));
     {
       auto conn = signal.connect([&callcount](int x) { callcount += x; });
       conn2 = std::move(conn);
