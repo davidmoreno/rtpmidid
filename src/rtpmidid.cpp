@@ -157,6 +157,8 @@ rtpmidid_t::add_rtpmidid_export_server(const std::string &name,
 
   for (auto &alsa_server : known_servers) {
     auto server = alsa_server.server;
+    if (!server)
+      continue;
     if (server->name == name) {
       INFO("Already a rtpserver for this ALSA name at {}:{} / {}. RTPMidi "
            "port: {}",
