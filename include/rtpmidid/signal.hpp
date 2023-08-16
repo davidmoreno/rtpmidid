@@ -23,27 +23,29 @@
 #include <functional>
 #include <map>
 
+namespace rtpmidid {
 template <typename... Args> class signal_t {
 public:
   int connect(std::function<void(Args...)> const &&f) {
     auto cid = max_id++;
-    slots[cid] = std::move(f);
+    slots_[cid] = std::move(f);
     return cid;
   }
 
-  void disconnect(int id) { slots.erase(id); }
+  void disconnect(int id) { slots_.erase(id); }
 
-  void disconnect_all() { slots.clear(); }
+  void disconnect_all() { slots_.clear(); }
 
   void operator()(Args... args) {
-    for (auto const &f : slots) {
+    for (auto const &f : slots_) {
       f.second(std::forward<Args>(args)...);
     }
   }
 
-  size_t count() { return slots.size(); }
+  size_t count() { return slots_.size(); }
 
 private:
   uint32_t max_id = 0;
-  std::map<uint32_t, std::function<void(Args...)>> slots;
+  std::map<uint32_t, std::function<void(Args...)>> slots_;
 };
+} // namespace rtpmidid
