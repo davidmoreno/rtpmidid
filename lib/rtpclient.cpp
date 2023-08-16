@@ -195,7 +195,7 @@ void rtpclient::connect_to(const std::string &address,
         remote_base_port + 1);
 
   // If not connected, connect now the MIDI port
-  auto conn_event = peer.connected_event.connect(
+  connected_connection = peer.connected_event.connect(
       [this, address, port](const std::string &name, rtppeer::status_e status) {
         if (status == rtppeer::CONTROL_CONNECTED) {
           DEBUG("Connected midi port {} to {}:{}", local_base_port + 1, address,
@@ -208,10 +208,10 @@ void rtpclient::connect_to(const std::string &address,
 
   peer.connect_to(rtppeer::CONTROL_PORT);
 
-  connect_timer = poller.add_timer_event(5s, [this, &conn_event] {
-    auto _conn_event_scoped = std::move(conn_event);
+  connect_timer = poller.add_timer_event(5s, [this] {
     // ce will be scope removed at end or destruction of lambda
     peer.disconnect_event(rtppeer::CONNECT_TIMEOUT);
+    connected_connection.disconnect();
   });
 }
 
