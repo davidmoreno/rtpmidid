@@ -22,8 +22,8 @@
 #include <ctime>
 #include <functional>
 #include <map>
-#include <vector>
 #include <optional>
+#include <vector>
 
 namespace rtpmidid {
 /**

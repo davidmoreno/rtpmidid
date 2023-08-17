@@ -39,5 +39,12 @@ add_executable(test_signals
 target_link_libraries(test_signals -lfmt -pthread)
 add_test(NAME test_signals COMMAND test_signals)
 
+
+add_executable(test_midirouter
+    test_midirouter.cpp test_utils.cpp ../src/midirouter.cpp 
+)
+target_link_libraries(test_midirouter -lfmt -pthread rtpmidid-shared)
+add_test(NAME test_midirouter COMMAND test_midirouter)
+
 # disabled as failing 
 # add_test(NAME test_rtpmidid COMMAND test_rtpmidid)

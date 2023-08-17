@@ -197,9 +197,8 @@ public:
     from.position += count;
   }
 
-  void copy_from(const io_bytes &from) {
-    copy_from(from, from.end - from.position);
-  }
+  void copy_from(const io_bytes &from) { copy_from(from, from.size()); }
+
   void copy_from(const io_bytes &from, uint32_t count) {
     check_enough(count);
     from.check_enough(count);
