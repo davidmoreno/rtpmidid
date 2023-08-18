@@ -22,19 +22,14 @@
 #include "test_utils.hpp"
 #include <memory>
 
-class rtpmididns::mididata_t : public rtpmidid::io_bytes_reader {
-public:
-  mididata_t(uint8_t *data, uint32_t size)
-      : rtpmidid::io_bytes_reader(data, size) {}
-};
-
 class test_midiio_t : public rtpmididns::midipeer_t {
 public:
   rtpmidid::io_bytes_managed recv;
   rtpmidid::io_bytes_writer writer;
   test_midiio_t() : recv(1024), writer(recv) {}
 
-  void send_midi(const rtpmididns::mididata_t &data) override {
+  void send_midi(rtpmididns::midipeer_id_t from,
+                 const rtpmididns::mididata_t &data) override {
     writer.copy_from(data);
   }
 };

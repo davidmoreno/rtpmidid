@@ -22,6 +22,9 @@
 #include <memory>
 
 namespace rtpmididns {
+
+using midipeer_id_t = uint32_t;
+
 class mididata_t;
 class midirouter_t;
 /**
@@ -32,9 +35,10 @@ class midirouter_t;
 class midipeer_t : std::enable_shared_from_this<midipeer_t> {
 public:
   midirouter_t *router;
-  uint32_t id;
+  midipeer_id_t id;
 
+  midipeer_t() : router(nullptr), id(0) {}
   virtual ~midipeer_t(){};
-  virtual void send_midi(const mididata_t &) = 0;
+  virtual void send_midi(midipeer_id_t from, const mididata_t &) = 0;
 };
 } // namespace rtpmididns

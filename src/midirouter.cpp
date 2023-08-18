@@ -49,7 +49,7 @@ void midirouter_t::send_midi(uint32_t from, const mididata_t &data) {
       continue; // Maybe better delete
     }
 
-    send_to_peer->second.peer->send_midi(data);
+    send_to_peer->second.peer->send_midi(from, data);
   }
 }
 

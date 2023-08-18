@@ -17,6 +17,7 @@
  */
 
 #pragma once
+#include "rtpmidid/iobytes.hpp"
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -32,6 +33,12 @@ struct peerconnection_t {
   uint32_t id;
   std::shared_ptr<midipeer_t> peer;
   std::vector<peer_id_t> send_to;
+};
+
+class mididata_t : public rtpmidid::io_bytes_reader {
+public:
+  mididata_t(uint8_t *data, uint32_t size)
+      : rtpmidid::io_bytes_reader(data, size) {}
 };
 
 class midirouter_t {
