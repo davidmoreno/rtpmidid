@@ -17,7 +17,9 @@
  */
 
 #pragma once
+#include "rtpmidid/iobytes.hpp"
 #include <alsa/asoundlib.h>
+#include <alsa/seq_midi_event.h>
 #include <functional>
 #include <map>
 #include <string>
@@ -65,4 +67,30 @@ public:
 };
 
 std::vector<std::string> get_ports(aseq *);
+
+/**
+ * @short This class allows to feed midi data and loops over the given function
+ *
+ * As the midi data can be partial, it keeps some state to allow several calls
+ * Its just a intermediary to alsa functions
+ */
+class mididata_to_alsaevents_t {
+public:
+  snd_midi_event_t *buffer;
+  mididata_to_alsaevents_t();
+  ~mididata_to_alsaevents_t();
+
+  // Gets a data bunch of bytes, and calls a callback with all found events.
+  void read(rtpmidid::io_bytes_reader &data,
+            std::function<void(snd_seq_event_t *)>);
+  void write(snd_seq_event_t *, rtpmidid::io_bytes_writer &data);
+};
 } // namespace rtpmidid
+
+namespace std {
+template <> struct hash<rtpmidid::aseq::port_t> {
+  size_t operator()(const rtpmidid::aseq::port_t &key) const {
+    return (key.client << 8) + key.port;
+  }
+};
+} // namespace std

@@ -39,6 +39,9 @@ class mididata_t : public rtpmidid::io_bytes_reader {
 public:
   mididata_t(uint8_t *data, uint32_t size)
       : rtpmidid::io_bytes_reader(data, size) {}
+  mididata_t(rtpmidid::io_bytes_writer &writer)
+      : rtpmidid::io_bytes_reader(writer.start,
+                                  writer.position - writer.start) {}
 };
 
 class midirouter_t {

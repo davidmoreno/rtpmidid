@@ -17,6 +17,8 @@
  */
 #include "./aseq.hpp"
 #include <alsa/seq.h>
+#include <alsa/seq_event.h>
+#include <alsa/seq_midi_event.h>
 #include <fmt/format.h>
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/logger.hpp>
@@ -85,9 +87,8 @@ aseq::aseq(std::string _name) : name(std::move(_name)) {
 aseq::~aseq() {
   for (auto fd : fds) {
     try {
-       poller.remove_fd(fd);
-    }
-    catch(rtpmidid::exception & e) {
+      poller.remove_fd(fd);
+    } catch (rtpmidid::exception &e) {
       ERROR("Error removing aseq socket: {}", e.what());
     }
   }
@@ -285,4 +286,39 @@ void aseq::disconnect_port(uint8_t port) {
 
   disconnect_port_at_subs(seq, subs, port);
 }
+
+mididata_to_alsaevents_t::mididata_to_alsaevents_t() {
+  snd_midi_event_new(1024, &buffer);
+}
+mididata_to_alsaevents_t::~mididata_to_alsaevents_t() {
+  snd_midi_event_free(buffer);
+}
+
+void mididata_to_alsaevents_t::read(
+    rtpmidid::io_bytes_reader &data,
+    std::function<void(snd_seq_event_t *)> func) {
+  snd_seq_event_t ev;
+  while (data.position <= data.end) {
+    auto used = snd_midi_event_encode(buffer, data.position,
+                                      data.end - data.position, &ev);
+    if (used <= 0) {
+      break;
+    }
+    data.position += used;
+    func(&ev);
+  }
+}
+
+void mididata_to_alsaevents_t::write(snd_seq_event_t *ev,
+                                     rtpmidid::io_bytes_writer &data) {
+  auto ret = snd_midi_event_decode(buffer, data.position,
+                                   data.end - data.position, ev);
+  data.position += ret;
+  if (ret < 0) {
+    ERROR("Could not translate alsa seq event. Do nothing.");
+    return;
+  }
+  DEBUG("WRITTEN: {}", ret);
+}
+
 } // namespace rtpmidid
