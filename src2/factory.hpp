@@ -16,18 +16,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "alsapeer.hpp"
-#include "aseq.hpp"
-#include "midipeer.hpp"
-#include "rtpmidid.hpp"
+#pragma once
 
-using namespace rtpmididns;
-
-alsapeer_t::alsapeer_t(const std::string &name, rtpmidid::aseq &seq_)
-    : seq(seq_) {
-  port = seq.create_port(name);
+#include <memory>
+namespace rtpmidid {
+class aseq;
 }
+namespace rtpmididns {
+class midirouter_t;
+class midipeer_t;
 
-alsapeer_t::~alsapeer_t() { seq.remove_port(port); }
+// Many factory creators, basically to allow testing of the different parts
+std::shared_ptr<midipeer_t> make_alsapeer(const std::string &name,
+                                          rtpmidid::aseq &);
+std::shared_ptr<midipeer_t> make_rtpmidiserver(const std::string &name);
 
-void alsapeer_t::send_midi(midipeer_id_t from, const mididata_t &) {}
+} // namespace rtpmididns

@@ -24,7 +24,7 @@
 #include "midirouter.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/logger.hpp"
-#include "rtpmidiserver.hpp"
+#include "rtpmidiserverpeer.hpp"
 #include <memory>
 #include <utility>
 

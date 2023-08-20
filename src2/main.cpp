@@ -16,21 +16,43 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#include "alsanetwork.hpp"
+#include "rtpmidid/poller.hpp"
+#include <signal.h>
+#include <unistd.h>
 
-#include <memory>
-namespace rtpmidid {
-class aseq;
+using namespace rtpmididns;
+
+static bool exiting = false;
+
+void sigterm_f(int) {
+  if (exiting) {
+    exit(1);
+  }
+  exiting = true;
+  INFO("SIGTERM received. Closing.");
+  rtpmidid::poller.close();
 }
-namespace rtpmididns {
-class midirouter_t;
-class midipeer_t;
+void sigint_f(int) {
+  if (exiting) {
+    exit(1);
+  }
+  exiting = true;
+  INFO("SIGINT received. Closing.");
+  rtpmidid::poller.close();
+}
 
-// Many factory creators, basically to allow testing of the different parts
-std::shared_ptr<midipeer_t> make_alsanetwork(const std::string &name,
-                                             midirouter_t *router);
-std::shared_ptr<midipeer_t> make_alsapeer(const std::string &name,
-                                          rtpmidid::aseq &);
-std::shared_ptr<midipeer_t> make_rtpmidiserver(const std::string &name);
+int main(int argc, char **argv) {
+  signal(SIGINT, sigint_f);
+  signal(SIGTERM, sigterm_f);
 
-} // namespace rtpmididns
+  midirouter_t router;
+  alsanetwork_t alsanetwork("rtpmidid", &router);
+
+  INFO("Waiting for connections.");
+  while (rtpmidid::poller.is_open()) {
+    rtpmidid::poller.wait();
+  }
+
+  INFO("FIN");
+}

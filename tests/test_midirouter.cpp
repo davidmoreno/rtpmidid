@@ -16,15 +16,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "../src/midirouter.hpp"
+#include "../src2/alsanetwork.hpp"
+#include "../src2/alsapeer.hpp"
+#include "../src2/aseq.hpp"
+#include "../src2/factory.hpp"
+#include "../src2/midipeer.hpp"
+#include "../src2/midirouter.hpp"
 #include "../tests/test_case.hpp"
-#include "alsanetwork.hpp"
-#include "alsapeer.hpp"
-#include "aseq.hpp"
-#include "factory.hpp"
-#include "midipeer.hpp"
 #include "rtpmidid/iobytes.hpp"
-#include "rtpmidiserver.hpp"
 #include "test_utils.hpp"
 #include <alsa/seq_event.h>
 #include <alsa/seqmid.h>
