@@ -26,6 +26,7 @@
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidiserver.hpp"
 #include "test_utils.hpp"
+#include <alsa/seq_event.h>
 #include <alsa/seqmid.h>
 #include <memory>
 
@@ -37,7 +38,9 @@ public:
 
   void send_midi(rtpmididns::midipeer_id_t from,
                  const rtpmididns::mididata_t &data) override {
+    DEBUG("Data at {} to {}", (void *)data.start, (void *)data.end);
     DEBUG("{} got some data: {}", (void *)this, data.size());
+    ASSERT_LT(data.start, data.end);
     writer.copy_from(data);
   }
 };
@@ -91,12 +94,15 @@ void test_midirouter_from_alsa() {
   // This must have created a rtpmidid network connection
   auto pair = alsanetwork.new_alsa_connection({128, 0}, "KB01");
   rtpmidid::mididata_to_alsaevents_t mididata_to_alsaevents;
-  auto data = rtpmidid::io_bytes_reader(hex_to_bin("90 64 7F"));
-  mididata_to_alsaevents.read(data, [&alsanetwork](snd_seq_event_t *ev) {
-    DEBUG("Got event!");
+  auto mididata =
+      hex_to_bin("90 64 7F"); // Tis must be in a variable to outlive its use
+  auto data = rtpmidid::io_bytes_reader(mididata);
+  mididata_to_alsaevents.encode(data, [&alsanetwork](snd_seq_event_t *ev) {
     // proper source
     ev->source.client = 128;
     ev->source.port = 0;
+    // This test the encoder works
+    ASSERT_EQUAL(ev->type, SND_SEQ_EVENT_NOTEON);
     alsanetwork.alsaseq_event(ev);
 
     // unknown source

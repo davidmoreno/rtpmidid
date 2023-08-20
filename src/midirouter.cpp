@@ -22,6 +22,8 @@
 
 using namespace rtpmididns;
 
+midirouter_t::midirouter_t() : max_id(1) {}
+
 uint32_t midirouter_t::add_peer(std::shared_ptr<midipeer_t> ptr) {
   auto id = max_id++;
   ptr->id = id;

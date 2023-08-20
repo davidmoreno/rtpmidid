@@ -23,6 +23,7 @@
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/iobytes.hpp"
+#include "rtpmidid/logger.hpp"
 #include "rtpmidiserver.hpp"
 #include <memory>
 #include <utility>
@@ -66,10 +67,9 @@ void alsanetwork_t::alsaseq_event(snd_seq_event_t *event) {
     }
     return;
   }
-
   uint8_t buffer[1024];
   rtpmidid::io_bytes_writer writer(buffer, sizeof(buffer));
-  alsatrans.write(event, writer);
+  alsatrans.decode(event, writer);
   auto midi = mididata_t(writer);
 
   router->send_midi(peerI->second, midi);

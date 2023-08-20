@@ -294,31 +294,34 @@ mididata_to_alsaevents_t::~mididata_to_alsaevents_t() {
   snd_midi_event_free(buffer);
 }
 
-void mididata_to_alsaevents_t::read(
+void mididata_to_alsaevents_t::encode(
     rtpmidid::io_bytes_reader &data,
     std::function<void(snd_seq_event_t *)> func) {
   snd_seq_event_t ev;
+
   while (data.position <= data.end) {
+    // memset(&ev, 0, sizeof(ev));
+    snd_seq_ev_clear(&ev);
     auto used = snd_midi_event_encode(buffer, data.position,
                                       data.end - data.position, &ev);
     if (used <= 0) {
-      break;
+      return;
     }
     data.position += used;
     func(&ev);
   }
 }
 
-void mididata_to_alsaevents_t::write(snd_seq_event_t *ev,
-                                     rtpmidid::io_bytes_writer &data) {
+void mididata_to_alsaevents_t::decode(snd_seq_event_t *ev,
+                                      rtpmidid::io_bytes_writer &data) {
   auto ret = snd_midi_event_decode(buffer, data.position,
                                    data.end - data.position, ev);
-  data.position += ret;
   if (ret < 0) {
     ERROR("Could not translate alsa seq event. Do nothing.");
     return;
   }
-  DEBUG("WRITTEN: {}", ret);
+
+  data.position += ret;
 }
 
 } // namespace rtpmidid
