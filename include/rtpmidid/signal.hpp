@@ -90,9 +90,9 @@ public:
   size_t count() { return slots.size(); }
 
 private:
-  uint32_t max_id = 1;
-  std::map<uint32_t, std::function<void(Args...)>> slots;
-  std::map<uint32_t, connection_t<Args...> *> connections;
+  int max_id = 1;
+  std::map<int, std::function<void(Args...)>> slots;
+  std::map<int, connection_t<Args...> *> connections;
 };
 
 template <typename... Args> class connection_t {

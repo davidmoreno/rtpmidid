@@ -1,4 +1,5 @@
 PORT := 10000
+CXX:= /usr/bin/g++-12
 
 .PHONY: help
 help:
@@ -27,12 +28,12 @@ build: build/bin/rtpmidid
 
 build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${CXX}
 	cd build && make -j
 
 build-dev: 
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=${CXX}
 	cd build && make -j
 
 
