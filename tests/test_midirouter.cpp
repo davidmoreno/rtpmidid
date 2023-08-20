@@ -63,7 +63,8 @@ rtpmididns::make_rtpmidiserver(const std::string &name) {
   return std::make_shared<test_midiio_t>();
 }
 std::shared_ptr<rtpmididns::midipeer_t>
-rtpmididns::make_alsapeer(const std::string &name, rtpmidid::aseq &seq) {
+rtpmididns::make_alsapeer(const std::string &name,
+                          std::shared_ptr<rtpmidid::aseq> seq) {
   return std::make_shared<test_midiio_t>();
 }
 

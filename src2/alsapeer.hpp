@@ -24,14 +24,14 @@ namespace rtpmididns {
 class alsapeer_t : public midipeer_t {
 public:
   uint8_t port;
-  rtpmidid::aseq &seq;
+  std::shared_ptr<rtpmidid::aseq> seq;
 
   connection_t<rtpmidid::aseq::port_t, const std::string &>
       subscribe_connection;
   connection_t<rtpmidid::aseq::port_t> unsubscibe_connection;
   connection_t<snd_seq_event_t *> midi_connection;
 
-  alsapeer_t(const std::string &name, rtpmidid::aseq &seq);
+  alsapeer_t(const std::string &name, std::shared_ptr<rtpmidid::aseq> seq);
   virtual ~alsapeer_t();
   virtual void send_midi(midipeer_id_t from, const mididata_t &) override;
 };

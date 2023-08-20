@@ -22,12 +22,13 @@
 
 using namespace rtpmididns;
 
-alsapeer_t::alsapeer_t(const std::string &name, rtpmidid::aseq &seq_)
+alsapeer_t::alsapeer_t(const std::string &name,
+                       std::shared_ptr<rtpmidid::aseq> seq_)
     : seq(seq_) {
-  port = seq.create_port(name);
+  port = seq->create_port(name);
   INFO("Created alsapeer {}, port {}", name, port);
 }
 
-alsapeer_t::~alsapeer_t() { seq.remove_port(port); }
+alsapeer_t::~alsapeer_t() { seq->remove_port(port); }
 
 void alsapeer_t::send_midi(midipeer_id_t from, const mididata_t &) {}

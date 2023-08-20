@@ -44,7 +44,7 @@ namespace rtpmididns {
  */
 class alsanetwork_t {
 public:
-  rtpmidid::aseq seq;
+  std::shared_ptr<rtpmidid::aseq> seq;
   midirouter_t *router;
   uint8_t port;
   rtpmidid::mididata_to_alsaevents_t alsatrans;
@@ -56,6 +56,7 @@ public:
   connection_t<snd_seq_event_t *> midi_connection;
 
   alsanetwork_t(const std::string &name, midirouter_t *router_);
+  ~alsanetwork_t();
 
   // Returns the ALSA id and the RTPSERVER id. Useful for testing.
   std::pair<midipeer_id_t, midipeer_id_t>

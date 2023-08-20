@@ -18,11 +18,14 @@
 
 #pragma once
 #include "midipeer.hpp"
+#include <string>
 
 namespace rtpmididns {
 class rtpmidiserverpeer_t : public midipeer_t {
 public:
+  std::string name;
   rtpmidiserverpeer_t(const std::string &name);
+  virtual ~rtpmidiserverpeer_t();
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
 };

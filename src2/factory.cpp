@@ -25,8 +25,8 @@
 
 namespace rtpmididns {
 
-std::shared_ptr<midipeer_t> make_alsapeer(const std::string &name,
-                                          rtpmidid::aseq &aseq) {
+std::shared_ptr<midipeer_t>
+make_alsapeer(const std::string &name, std::shared_ptr<rtpmidid::aseq> aseq) {
   return std::make_shared<alsapeer_t>(name, aseq);
 }
 

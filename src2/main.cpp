@@ -17,11 +17,14 @@
  */
 
 #include "alsanetwork.hpp"
+#include "rtpmidid/mdns_rtpmidi.hpp"
 #include "rtpmidid/poller.hpp"
 #include <signal.h>
 #include <unistd.h>
 
-using namespace rtpmididns;
+namespace rtpmididns {
+std::unique_ptr<::rtpmidid::mdns_rtpmidi> mdns;
+}
 
 static bool exiting = false;
 
@@ -46,13 +49,19 @@ int main(int argc, char **argv) {
   signal(SIGINT, sigint_f);
   signal(SIGTERM, sigterm_f);
 
-  midirouter_t router;
-  alsanetwork_t alsanetwork("rtpmidid", &router);
-
   INFO("Waiting for connections.");
-  while (rtpmidid::poller.is_open()) {
-    rtpmidid::poller.wait();
+  try {
+    rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi>();
+    rtpmididns::midirouter_t router;
+    rtpmididns::alsanetwork_t alsanetwork("rtpmidid", &router);
+
+    while (rtpmidid::poller.is_open()) {
+      rtpmidid::poller.wait();
+    }
+  } catch (...) {
+    ERROR("Unhandled exception!");
   }
+  rtpmididns::mdns.reset(nullptr);
 
   INFO("FIN");
 }

@@ -17,9 +17,20 @@
  */
 
 #include "rtpmidiserverpeer.hpp"
+#include "rtpmidid/mdns_rtpmidi.hpp"
 
-using namespace rtpmididns;
+namespace rtpmididns {
+extern std::unique_ptr<::rtpmidid::mdns_rtpmidi> mdns;
 
-rtpmidiserverpeer_t::rtpmidiserverpeer_t(const std::string &name) {}
+rtpmidiserverpeer_t::rtpmidiserverpeer_t(const std::string &name_)
+    : name(name_) {
+  if (mdns)
+    mdns->announce_rtpmidi(name, 10999);
+}
+rtpmidiserverpeer_t::~rtpmidiserverpeer_t() {
+  if (mdns)
+    mdns->unannounce_rtpmidi(name, 10999);
+}
 
 void rtpmidiserverpeer_t::send_midi(midipeer_id_t from, const mididata_t &) {}
+} // namespace rtpmididns

@@ -28,17 +28,20 @@
 #include <memory>
 #include <utility>
 
-using namespace rtpmididns;
+namespace rtpmididns {
 
 alsanetwork_t::alsanetwork_t(const std::string &name, midirouter_t *router_)
-    : seq(name), router(router_) {
-  port = seq.create_port("Network");
-  subscribe_connection = seq.subscribe_event[port].connect(
+    : router(router_) {
+  seq = std::make_shared<rtpmidid::aseq>(name);
+
+  port = seq->create_port("Network");
+  subscribe_connection = seq->subscribe_event[port].connect(
       [this](rtpmidid::aseq::port_t port, const std::string &name) {
         new_alsa_connection(port, name);
       });
   // TODO unsubscribe and midi data
 };
+alsanetwork_t::~alsanetwork_t() { seq->remove_port(port); }
 
 std::pair<midipeer_id_t, midipeer_id_t>
 alsanetwork_t::new_alsa_connection(const rtpmidid::aseq::port_t &port,
@@ -74,3 +77,4 @@ void alsanetwork_t::alsaseq_event(snd_seq_event_t *event) {
 
   router->send_midi(peerI->second, midi);
 }
+} // namespace rtpmididns
