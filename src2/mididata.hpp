@@ -15,36 +15,18 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 #pragma once
 #include "rtpmidid/iobytes.hpp"
-#include <cstdint>
-#include <memory>
-#include <unordered_map>
-#include <vector>
 
 namespace rtpmididns {
-class mididata_t;
-class midipeer_t;
 
-using peer_id_t = uint32_t;
-
-struct peerconnection_t {
-  uint32_t id;
-  std::shared_ptr<midipeer_t> peer;
-  std::vector<peer_id_t> send_to;
-};
-
-class midirouter_t {
+class mididata_t : public rtpmidid::io_bytes_reader {
 public:
-  peer_id_t max_id;
-  std::unordered_map<uint32_t, peerconnection_t> peers;
-  midirouter_t();
+  mididata_t(uint8_t *data, uint32_t size)
+      : rtpmidid::io_bytes_reader(data, size) {}
 
-  peer_id_t add_peer(std::shared_ptr<midipeer_t>);
-  void connect(peer_id_t from, peer_id_t to);
-
-  void send_midi(peer_id_t from, const mididata_t &data);
-  void send_midi(peer_id_t from, peer_id_t to, const mididata_t &data);
+  mididata_t(rtpmidid::io_bytes_writer &writer)
+      : rtpmidid::io_bytes_reader(writer.start,
+                                  writer.position - writer.start) {}
 };
 } // namespace rtpmididns

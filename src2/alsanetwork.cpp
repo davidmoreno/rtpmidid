@@ -20,6 +20,7 @@
 #include "alsapeer.hpp"
 #include "aseq.hpp"
 #include "factory.hpp"
+#include "mididata.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/iobytes.hpp"
@@ -39,24 +40,28 @@ alsanetwork_t::alsanetwork_t(const std::string &name, midirouter_t *router_)
       [this](rtpmidid::aseq::port_t port, const std::string &name) {
         new_alsa_connection(port, name);
       });
-  // TODO unsubscribe and midi data
+
+  midi_connection = seq->midi_event[port].connect(
+      [this](snd_seq_event_t *ev) { alsaseq_event(ev); });
+  // TODO unsubscribe
 };
 alsanetwork_t::~alsanetwork_t() { seq->remove_port(port); }
 
-std::pair<midipeer_id_t, midipeer_id_t>
+midipeer_id_t
 alsanetwork_t::new_alsa_connection(const rtpmidid::aseq::port_t &port,
                                    const std::string &name) {
-  std::shared_ptr<midipeer_t> alsapeer = make_alsapeer(name, seq);
+  // std::shared_ptr<midipeer_t> alsapeer = make_alsapeer(name, seq);
   std::shared_ptr<midipeer_t> networkpeer = make_rtpmidiserver(name);
-  auto alsapeer_id = router->add_peer(alsapeer);
+  // auto alsapeer_id = router->add_peer(alsapeer);
   auto networkpeer_id = router->add_peer(networkpeer);
 
-  router->connect(alsapeer_id, networkpeer_id);
-  router->connect(networkpeer_id, alsapeer_id);
+  // router->connect(alsapeer_id, networkpeer_id);
+  // router->connect(networkpeer_id, alsapeer_id);
 
-  aseqpeers[port] = alsapeer_id;
+  aseqpeers[port] = networkpeer_id;
 
-  return std::make_pair(alsapeer_id, networkpeer_id);
+  // return std::make_pair(alsapeer_id, networkpeer_id);
+  return networkpeer_id;
 }
 
 void alsanetwork_t::alsaseq_event(snd_seq_event_t *event) {
@@ -75,6 +80,6 @@ void alsanetwork_t::alsaseq_event(snd_seq_event_t *event) {
   alsatrans.decode(event, writer);
   auto midi = mididata_t(writer);
 
-  router->send_midi(peerI->second, midi);
+  router->send_midi(0, peerI->second, midi);
 }
 } // namespace rtpmididns

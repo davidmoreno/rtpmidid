@@ -309,9 +309,10 @@ void rtpserver::create_peer_from(io_bytes_reader &&buffer,
 
   char astring[INET6_ADDRSTRLEN];
   inet_ntop(AF_INET6, &(address->sin6_addr), astring, INET6_ADDRSTRLEN);
-  DEBUG("Connected from {}:{}", astring, port);
+  DEBUG("Connected from {}:{}", astring, remote_base_port);
 
-  peer_data_t peerdata;
+  auto &peerdata = peers.emplace_back();
+  // peer_data_t peerdata;
 
   // This is the send to the proper ports
   peerdata.send_event_connection = peer->send_event.connect(
@@ -339,7 +340,7 @@ void rtpserver::create_peer_from(io_bytes_reader &&buffer,
 
   peerdata.midi_event_connection =
       peer->midi_event.connect([this](const io_bytes_reader &data) {
-        // DEBUG("Got MIDI from the remote peer into this server.");
+        DEBUG("Got MIDI from the remote peer into this server.");
         midi_event(data);
       });
 

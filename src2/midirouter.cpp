@@ -44,15 +44,20 @@ void midirouter_t::send_midi(uint32_t from, const mididata_t &data) {
     return;
   }
 
-  for (auto conn_id : peer->second.send_to) {
-    auto send_to_peer = peers.find(conn_id);
-    if (send_to_peer == peers.end()) {
-      WARNING("Sending to uknown peer {} -> {}", from, conn_id);
-      continue; // Maybe better delete
-    }
-
-    send_to_peer->second.peer->send_midi(from, data);
+  for (auto to : peer->second.send_to) {
+    send_midi(from, to, data);
   }
+}
+
+void midirouter_t::send_midi(peer_id_t from, peer_id_t to,
+                             const mididata_t &data) {
+  auto send_to_peer = peers.find(to);
+  if (send_to_peer == peers.end()) {
+    WARNING("Sending to uknown peer {} -> {}", from, to);
+    return; // Maybe better delete
+  }
+
+  send_to_peer->second.peer->send_midi(from, data);
 }
 
 void midirouter_t::connect(peer_id_t from, peer_id_t to) {

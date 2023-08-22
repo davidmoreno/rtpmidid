@@ -30,13 +30,6 @@ struct sockaddr_in6;
 namespace rtpmidid {
 class rtpserver {
 public:
-  // Stupid RTPMIDI uses initiator_id sometimes and ssrc other times.
-
-  // // Maps the peers to the initiator_id.
-  // std::map<uint32_t, std::shared_ptr<rtppeer>> initiator_to_peer;
-  // // Maps the peers to the ssrc.
-  // std::map<uint32_t, std::shared_ptr<rtppeer>> ssrc_to_peer;
-
   // Callbacks to call when new connections
   signal_t<std::shared_ptr<rtppeer>> connected_event;
   signal_t<const io_bytes_reader &> midi_event;

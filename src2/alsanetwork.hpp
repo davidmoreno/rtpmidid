@@ -58,10 +58,9 @@ public:
   alsanetwork_t(const std::string &name, midirouter_t *router_);
   ~alsanetwork_t();
 
-  // Returns the ALSA id and the RTPSERVER id. Useful for testing.
-  std::pair<midipeer_id_t, midipeer_id_t>
-  new_alsa_connection(const rtpmidid::aseq::port_t &port,
-                      const std::string &name);
+  // Returns the RTPSERVER id. Useful for testing.
+  midipeer_id_t new_alsa_connection(const rtpmidid::aseq::port_t &port,
+                                    const std::string &name);
 
   // received data from the alsa side, look who is the aseqpeer_t
   // and send pretending its it.

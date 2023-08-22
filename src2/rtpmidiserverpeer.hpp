@@ -18,12 +18,26 @@
 
 #pragma once
 #include "midipeer.hpp"
+#include "rtpmidid/rtpserver.hpp"
+#include "rtpmidid/signal.hpp"
 #include <string>
 
 namespace rtpmididns {
+/**
+ * @short Creates a new rtpmidi server, all connections share the data bus
+ *
+ * The idea is that ALSA connected a port, so we export the rtpmidi connection.
+ *
+ * This is this connection. As several clients can connect, any data goes to
+ * the ALSA side, and any data from ALSA goes to all the clients.
+ */
 class rtpmidiserverpeer_t : public midipeer_t {
 public:
   std::string name;
+  rtpmidid::rtpserver server;
+
+  connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
+
   rtpmidiserverpeer_t(const std::string &name);
   virtual ~rtpmidiserverpeer_t();
 
