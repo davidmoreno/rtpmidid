@@ -25,16 +25,23 @@ using namespace rtpmididns;
 midirouter_t::midirouter_t() : max_id(1) {}
 
 uint32_t midirouter_t::add_peer(std::shared_ptr<midipeer_t> ptr) {
-  auto id = max_id++;
-  ptr->id = id;
+  auto peer_id = max_id++;
+  ptr->id = peer_id;
   ptr->router = this;
 
-  peers[id] = peerconnection_t{
-      id,
+  peers[peer_id] = peerconnection_t{
+      peer_id,
       ptr,
       {},
   };
-  return id;
+  INFO("Added peer {}", peer_id);
+
+  return peer_id;
+}
+
+void midirouter_t::remove_peer(peer_id_t peer_id) {
+  peers.erase(peer_id);
+  INFO("Removed peer {}", peer_id);
 }
 
 void midirouter_t::send_midi(uint32_t from, const mididata_t &data) {

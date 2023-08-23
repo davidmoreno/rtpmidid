@@ -61,6 +61,7 @@ public:
   // Returns the RTPSERVER id. Useful for testing.
   midipeer_id_t new_alsa_connection(const rtpmidid::aseq::port_t &port,
                                     const std::string &name);
+  void remove_alsa_connection(const rtpmidid::aseq::port_t &port);
 
   // received data from the alsa side, look who is the aseqpeer_t
   // and send pretending its it.

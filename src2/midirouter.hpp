@@ -42,6 +42,7 @@ public:
   midirouter_t();
 
   peer_id_t add_peer(std::shared_ptr<midipeer_t>);
+  void remove_peer(peer_id_t);
   void connect(peer_id_t from, peer_id_t to);
 
   void send_midi(peer_id_t from, const mididata_t &data);

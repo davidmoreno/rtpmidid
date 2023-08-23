@@ -43,6 +43,9 @@ alsanetwork_t::alsanetwork_t(const std::string &name, midirouter_t *router_)
 
   midi_connection = seq->midi_event[port].connect(
       [this](snd_seq_event_t *ev) { alsaseq_event(ev); });
+
+  unsubscibe_connection = seq->unsubscribe_event[port].connect(
+      [this](rtpmidid::aseq::port_t port) { remove_alsa_connection(port); });
   // TODO unsubscribe
 };
 alsanetwork_t::~alsanetwork_t() { seq->remove_port(port); }
@@ -50,6 +53,7 @@ alsanetwork_t::~alsanetwork_t() { seq->remove_port(port); }
 midipeer_id_t
 alsanetwork_t::new_alsa_connection(const rtpmidid::aseq::port_t &port,
                                    const std::string &name) {
+  DEBUG("Create network peer {}", name);
   // std::shared_ptr<midipeer_t> alsapeer = make_alsapeer(name, seq);
   std::shared_ptr<midipeer_t> networkpeer = make_rtpmidiserver(name);
   // auto alsapeer_id = router->add_peer(alsapeer);
@@ -62,6 +66,14 @@ alsanetwork_t::new_alsa_connection(const rtpmidid::aseq::port_t &port,
 
   // return std::make_pair(alsapeer_id, networkpeer_id);
   return networkpeer_id;
+}
+
+void alsanetwork_t::remove_alsa_connection(const rtpmidid::aseq::port_t &port) {
+  DEBUG("Removed ALSA port {}:{}, removing midipeer", port.client, port.port);
+  auto networkpeerI = aseqpeers.find(port);
+  if (networkpeerI != aseqpeers.end()) {
+    router->remove_peer(networkpeerI->second);
+  }
 }
 
 void alsanetwork_t::alsaseq_event(snd_seq_event_t *event) {
