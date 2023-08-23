@@ -19,12 +19,21 @@
 #include "alsanetwork.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "rtpmidid/poller.hpp"
+#include "settings.hpp"
+#include <chrono>
 #include <signal.h>
 #include <unistd.h>
 
 namespace rtpmididns {
 std::unique_ptr<::rtpmidid::mdns_rtpmidi> mdns;
-}
+
+// Default settings
+settings_t settings{
+    //
+    .alsa_name = "rtpmidid",
+    //
+};
+} // namespace rtpmididns
 
 static bool exiting = false;
 
@@ -53,7 +62,8 @@ int main(int argc, char **argv) {
   try {
     rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi>();
     rtpmididns::midirouter_t router;
-    rtpmididns::alsanetwork_t alsanetwork("rtpmidid", &router);
+    rtpmididns::alsanetwork_t alsanetwork(rtpmididns::settings.alsa_name,
+                                          &router);
 
     while (rtpmidid::poller.is_open()) {
       rtpmidid::poller.wait();
