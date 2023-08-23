@@ -42,8 +42,8 @@ public:
   ~poller_t();
 
   // Call this function in X seconds
-  timer_t add_timer_event(std::chrono::milliseconds ms,
-                          std::function<void(void)> event_f);
+  [[nodiscard]] timer_t add_timer_event(std::chrono::milliseconds ms,
+                                        std::function<void(void)> event_f);
   void remove_timer(timer_t &tid);
   void clear_timers(); // This is used for destruction, and also for cleanup at
                        // tests.
