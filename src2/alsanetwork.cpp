@@ -69,10 +69,18 @@ alsanetwork_t::new_alsa_connection(const rtpmidid::aseq::port_t &port,
 }
 
 void alsanetwork_t::remove_alsa_connection(const rtpmidid::aseq::port_t &port) {
-  DEBUG("Removed ALSA port {}:{}, removing midipeer", port.client, port.port);
   auto networkpeerI = aseqpeers.find(port);
   if (networkpeerI != aseqpeers.end()) {
+    DEBUG("Removed ALSA port {}:{}, removing midipeer {}", port.client,
+          port.port, networkpeerI->second);
     router->remove_peer(networkpeerI->second);
+    aseqpeers.erase(port);
+  } else {
+    DEBUG("Removed ALSA port {}:{}, removing midipeer. NOT FOUND!", port.client,
+          port.port);
+    for (auto &peers : aseqpeers) {
+      DEBUG("Known peer {}:{}", peers.first.port, peers.first.client);
+    }
   }
 }
 

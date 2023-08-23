@@ -49,6 +49,23 @@ void error_handler(const char *file, int line, const char *function, int err,
   logger::__logger.log(filename.c_str(), line, ::logger::LogLevel::ERROR, msg);
 }
 
+snd_seq_addr_t *get_other_ev_client_port(snd_seq_event_t *ev,
+                                         uint8_t client_id) {
+  auto &connect = ev->data.connect;
+  if (connect.sender.client != client_id) {
+    return &connect.sender;
+  } else {
+    return &connect.dest;
+  }
+}
+snd_seq_addr_t *get_my_ev_client_port(snd_seq_event_t *ev, uint8_t client_id) {
+  auto &connect = ev->data.connect;
+  if (connect.sender.client == client_id) {
+    return &connect.sender;
+  } else {
+    return &connect.dest;
+  }
+}
 aseq::aseq(std::string _name) : name(std::move(_name)) {
   snd_lib_error_set_handler(error_handler);
   if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0) {
@@ -115,25 +132,23 @@ void aseq::read_ready() {
       // auto client = std::make_shared<rtpmidid::rtpclient>(name);
       uint8_t client, port;
       std::string name;
-      snd_seq_addr_t *addr;
-      if (ev->data.connect.sender.client != client_id) {
-        addr = &ev->data.connect.sender;
-      } else {
-        addr = &ev->data.connect.dest;
-      }
+      snd_seq_addr_t *other_addr = get_other_ev_client_port(ev, client_id);
+      snd_seq_addr_t *my_addr = get_my_ev_client_port(ev, client_id);
 
-      name = get_client_name(addr);
-      client = addr->client;
-      port = addr->port;
-      auto myport = ev->dest.port;
+      name = get_client_name(other_addr);
+      client = other_addr->client;
+      port = other_addr->port;
+      auto myport = my_addr->port;
       INFO("New ALSA connection from port {} ({}:{})", name, client, port);
 
       subscribe_event[myport](port_t(client, port), name);
     } break;
     case SND_SEQ_EVENT_PORT_UNSUBSCRIBED: {
-      auto addr = &ev->data.addr;
-      auto myport = ev->dest.port;
-      unsubscribe_event[myport](port_t(addr->client, addr->port));
+      snd_seq_addr_t *other_addr = get_other_ev_client_port(ev, client_id);
+      snd_seq_addr_t *my_addr = get_my_ev_client_port(ev, client_id);
+
+      unsubscribe_event[my_addr->port](
+          port_t(other_addr->client, other_addr->port));
       DEBUG("Disconnected");
     } break;
     // case SND_SEQ_EVENT_NOTE:
