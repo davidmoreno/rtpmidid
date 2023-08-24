@@ -16,17 +16,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#pragma once
-#include <chrono>
-#include <string>
+#include "rtpmidinetwork.hpp"
+#include "rtpmidid/mdns_rtpmidi.hpp"
 
 namespace rtpmididns {
 
-struct settings_t {
-  std::string alsa_name = "rtpmidid";
-  std::string rtpmidid_name = "rtpmidid";
-  std::string rtpmidid_port = "5004";
-};
+extern std::unique_ptr<::rtpmidid::mdns_rtpmidi> mdns;
 
-extern settings_t settings;
+rtpmidinetwork_t::rtpmidinetwork_t(const std::string &name,
+                                   const std::string &port,
+                                   rtpmididns::midirouter_t *router)
+    : server(name, port) {
+  if (mdns)
+    mdns->announce_rtpmidi(name, server.control_port);
+}
 } // namespace rtpmididns

@@ -7,6 +7,7 @@ add_executable(
   aseq.cpp
   alsapeer.cpp
   rtpmidiserverpeer.cpp
+  rtpmidinetwork.cpp
 )
 
 target_link_libraries(rtpmidid2-daemon ${AVAHI_LIBRARIES})

@@ -210,7 +210,7 @@ looking for new projects.
 
 ## Use Cases
 
-* [ ] a. There is an ALSA `alsa / Network` port. If any conection `alsa / a` 
+* [x] a. There is an ALSA `alsa / Network` port. If any conection `alsa / a` 
       is made to this `alsa / Network` port, it is exported at the rtpmidi 
       side, avahi export too. Connections to this `rtpmidid / a` port goes to 
       the connected `alsa / a`.

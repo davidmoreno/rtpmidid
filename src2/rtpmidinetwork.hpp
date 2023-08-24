@@ -17,16 +17,16 @@
  */
 
 #pragma once
-#include <chrono>
+#include "rtpmidid/rtpserver.hpp"
 #include <string>
-
 namespace rtpmididns {
 
-struct settings_t {
-  std::string alsa_name = "rtpmidid";
-  std::string rtpmidid_name = "rtpmidid";
-  std::string rtpmidid_port = "5004";
-};
+class midirouter_t;
 
-extern settings_t settings;
+class rtpmidinetwork_t {
+public:
+  rtpmidid::rtpserver server;
+  rtpmidinetwork_t(const std::string &name, const std::string &port,
+                   rtpmididns::midirouter_t *router);
+};
 } // namespace rtpmididns
