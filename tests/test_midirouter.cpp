@@ -20,6 +20,7 @@
 #include "../src2/alsapeer.hpp"
 #include "../src2/aseq.hpp"
 #include "../src2/factory.hpp"
+#include "../src2/mididata.hpp"
 #include "../src2/midipeer.hpp"
 #include "../src2/midirouter.hpp"
 #include "../tests/test_case.hpp"
@@ -92,7 +93,7 @@ void test_midirouter_from_alsa() {
   rtpmididns::alsanetwork_t alsanetwork("test", &router);
 
   // This must have created a rtpmidid network connection
-  auto pair = alsanetwork.new_alsa_connection({128, 0}, "KB01");
+  auto rtpmidinetwork_id = alsanetwork.new_alsa_connection({128, 0}, "KB01");
   rtpmidid::mididata_to_alsaevents_t mididata_to_alsaevents;
   auto mididata =
       hex_to_bin("90 64 7F"); // Tis must be in a variable to outlive its use
@@ -112,7 +113,7 @@ void test_midirouter_from_alsa() {
   });
 
   test_midiio_t *rtppeer =
-      dynamic_cast<test_midiio_t *>(router.peers[pair.second].peer.get());
+      dynamic_cast<test_midiio_t *>(router.peers[rtpmidinetwork_id].peer.get());
   // rtppeer->writer.print_hex();
   ASSERT_EQUAL(rtppeer->writer.pos(), 3);
 }
