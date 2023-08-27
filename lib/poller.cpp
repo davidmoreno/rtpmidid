@@ -83,7 +83,8 @@ void poller_t::close() {
   }
 }
 
-void poller_t::add_fd_inout(int fd, std::function<void(int)> f) {
+poller_t::listener_t poller_t::add_fd_inout(int fd,
+                                            std::function<void(int)> f) {
   auto pd = static_cast<poller_private_data_t *>(private_data);
 
   pd->fd_events[fd] = f;
@@ -97,8 +98,10 @@ void poller_t::add_fd_inout(int fd, std::function<void(int)> f) {
     throw exception("Can't add fd {} to poller: {} ({})", fd, strerror(errno),
                     errno);
   }
+  return poller_t::listener_t(fd);
 }
-void poller_t::add_fd_in(int fd, std::function<void(int)> f) {
+
+poller_t::listener_t poller_t::add_fd_in(int fd, std::function<void(int)> f) {
   auto pd = static_cast<poller_private_data_t *>(private_data);
 
   pd->fd_events[fd] = f;
@@ -112,8 +115,10 @@ void poller_t::add_fd_in(int fd, std::function<void(int)> f) {
     throw exception("Can't add fd {} to poller: {} ({}, ep {})", fd,
                     strerror(errno), errno);
   }
+  return poller_t::listener_t(fd);
 }
-void poller_t::add_fd_out(int fd, std::function<void(int)> f) {
+
+poller_t::listener_t poller_t::add_fd_out(int fd, std::function<void(int)> f) {
   auto pd = static_cast<poller_private_data_t *>(private_data);
 
   pd->fd_events[fd] = f;
@@ -127,6 +132,7 @@ void poller_t::add_fd_out(int fd, std::function<void(int)> f) {
     throw exception("Can't add fd {} to poller: {} ({})", fd, strerror(errno),
                     errno);
   }
+  return poller_t::listener_t(fd);
 }
 
 poller_t::timer_t poller_t::add_timer_event(std::chrono::milliseconds ms,
@@ -165,7 +171,7 @@ void poller_t::call_later(std::function<void(void)> later_f) {
   pd->later_events.push_back(std::move(later_f));
 }
 
-void poller_t::remove_fd(int fd) {
+void poller_t::__remove_fd(int fd) {
   auto pd = static_cast<poller_private_data_t *>(private_data);
 
   pd->fd_events.erase(fd);

@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "./poller.hpp"
 #include "./rtppeer.hpp"
 #include "rtpmidid/signal.hpp"
 #include <cstdint>
@@ -53,6 +54,9 @@ public:
 
   uint16_t midi_port;
   uint16_t control_port;
+
+  poller_t::listener_t midi_poller;
+  poller_t::listener_t control_poller;
 
   rtpserver(std::string name, const std::string &port);
   ~rtpserver();

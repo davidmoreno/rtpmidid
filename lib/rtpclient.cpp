@@ -66,11 +66,11 @@ rtpclient::~rtpclient() {
   }
 
   if (control_socket > 0) {
-    poller.remove_fd(control_socket);
+    control_poller.stop();
     close(control_socket);
   }
   if (midi_socket > 0) {
-    poller.remove_fd(midi_socket);
+    midi_poller.stop();
     close(midi_socket);
   }
 }
@@ -138,8 +138,9 @@ void rtpclient::connect_to(const std::string &address,
     DEBUG("Control port, local: {}, remote at {}:{}", local_base_port, host,
           service);
 
-    poller.add_fd_in(control_socket,
-                     [this](int) { this->data_ready(rtppeer::CONTROL_PORT); });
+    control_poller = poller.add_fd_in(control_socket, [this](int) {
+      this->data_ready(rtppeer::CONTROL_PORT);
+    });
 
     midi_socket = socket(serveraddr->ai_family, serveraddr->ai_socktype,
                          serveraddr->ai_protocol);
@@ -167,17 +168,17 @@ void rtpclient::connect_to(const std::string &address,
     auto midi_port = htons(servaddr.sin6_port);
     DEBUG("MIDI PORT at port {}", midi_port);
 
-    poller.add_fd_in(midi_socket,
-                     [this](int) { this->data_ready(rtppeer::MIDI_PORT); });
+    midi_poller = poller.add_fd_in(
+        midi_socket, [this](int) { this->data_ready(rtppeer::MIDI_PORT); });
   } catch (const std::exception &excp) {
     ERROR("Error creating rtp client: {}", excp.what());
     if (control_socket >= 0) {
-      poller.remove_fd(control_socket);
+      control_poller.stop();
       ::close(control_socket);
       control_socket = -1;
     }
     if (midi_socket >= 0) {
-      poller.remove_fd(midi_socket);
+      midi_poller.stop();
       ::close(midi_socket);
       midi_socket = -1;
     }

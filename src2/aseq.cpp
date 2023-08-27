@@ -91,24 +91,24 @@ aseq::aseq(std::string _name) : name(std::move(_name)) {
   }
   // DEBUG("Got {} pollers", poller_count);
   for (int i = 0; i < poller_count; i++) {
-    fds.push_back(pfds[i].fd);
+    // fds.push_back(pfds[i].fd);
     // DEBUG("Adding fd {} as alsa seq", pfds[i].fd);
-    poller.add_fd_in(pfds[i].fd, [this](int) {
+    aseq_listener.emplace_back(poller.add_fd_in(pfds[i].fd, [this](int) {
       // INFO("New event at alsa seq");
       this->read_ready();
-    });
+    }));
   }
   read_ready();
 }
 
 aseq::~aseq() {
-  for (auto fd : fds) {
-    try {
-      poller.remove_fd(fd);
-    } catch (rtpmidid::exception &e) {
-      ERROR("Error removing aseq socket: {}", e.what());
-    }
-  }
+  // for (auto fd : fds) {
+  //   try {
+  //     poller.remove_fd(fd);
+  //   } catch (rtpmidid::exception &e) {
+  //     ERROR("Error removing aseq socket: {}", e.what());
+  //   }
+  // }
   snd_seq_close(seq);
   snd_config_update_free_global();
 }

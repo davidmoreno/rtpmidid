@@ -95,8 +95,9 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
     DEBUG("Control port at {}:{}", host, control_port);
     midi_port = control_port + 1;
 
-    poller.add_fd_in(control_socket,
-                     [this](int) { this->data_ready(rtppeer::CONTROL_PORT); });
+    control_poller = poller.add_fd_in(control_socket, [this](int) {
+      this->data_ready(rtppeer::CONTROL_PORT);
+    });
 
     midi_socket = socket(listenaddr->ai_family, listenaddr->ai_socktype,
                          listenaddr->ai_protocol);
@@ -109,17 +110,17 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
       throw rtpmidid::exception("Can not open MIDI socket. {}.",
                                 strerror(errno));
     }
-    poller.add_fd_in(midi_socket,
-                     [this](int) { this->data_ready(rtppeer::MIDI_PORT); });
+    midi_poller = poller.add_fd_in(
+        midi_socket, [this](int) { this->data_ready(rtppeer::MIDI_PORT); });
   } catch (const std::exception &e) {
     ERROR("Error creating server at port {}: {}", control_port, e.what());
     if (control_socket != -1) {
-      poller.remove_fd(control_socket);
+      control_poller.stop();
       ::close(control_socket);
       control_socket = -1;
     }
     if (midi_socket != -1) {
-      poller.remove_fd(midi_socket);
+      midi_poller.stop();
       ::close(midi_socket);
       midi_socket = -1;
     }
@@ -137,20 +138,13 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
 }
 
 rtpserver::~rtpserver() {
+  DEBUG("~rtpserver({})", name);
   if (control_socket >= 0) {
-    try {
-      poller.remove_fd(control_socket);
-    } catch (rtpmidid::exception &e) {
-      ERROR("Error removing control socket: {}", e.what());
-    }
+    control_poller.stop();
     close(control_socket);
   }
   if (midi_socket >= 0) {
-    try {
-      poller.remove_fd(midi_socket);
-    } catch (rtpmidid::exception &e) {
-      ERROR("Error removing midi socket: {}", e.what());
-    }
+    midi_poller.stop();
     close(midi_socket);
   }
 }

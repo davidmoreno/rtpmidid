@@ -18,6 +18,7 @@
  */
 
 #pragma once
+#include "logger.hpp"
 #include <chrono>
 #include <ctime>
 #include <functional>
@@ -37,6 +38,7 @@ class poller_t {
 
 public:
   class timer_t;
+  class listener_t;
 
   poller_t();
   ~poller_t();
@@ -51,16 +53,19 @@ public:
   // Just call it later. after finishing current round of event loop
   void call_later(std::function<void(void)> later_f);
 
-  void add_fd_in(int fd, std::function<void(int)> event_f);
-  void add_fd_out(int fd, std::function<void(int)> event_f);
-  void add_fd_inout(int fd, std::function<void(int)> event_f);
-  void remove_fd(int fd);
+  [[nodiscard]] listener_t add_fd_in(int fd, std::function<void(int)> event_f);
+  [[nodiscard]] listener_t add_fd_out(int fd, std::function<void(int)> event_f);
+  [[nodiscard]] listener_t add_fd_inout(int fd,
+                                        std::function<void(int)> event_f);
+  void __remove_fd(int fd);
 
   void wait(std::optional<std::chrono::milliseconds> wait_ms = {});
 
   void close();
   bool is_open();
 };
+// Singleton for all events on the system.
+extern poller_t poller;
 
 class poller_t::timer_t {
 public:
@@ -77,6 +82,36 @@ public:
   timer_t(const timer_t &) = delete;
 };
 
-// Singleton for all events on the system.
-extern poller_t poller;
+class poller_t::listener_t {
+public:
+  int fd = -1;
+
+  listener_t(int fd_) : fd(fd_) { DEBUG("Create from fd {}", fd); };
+  listener_t() : fd(-1) { DEBUG("Create without fd {}", fd); };
+  listener_t(listener_t &&other) {
+    DEBUG("Create from other {}", other.fd);
+    fd = other.fd;
+    other.fd = -1;
+  };
+  ~listener_t() {
+    if (fd >= 0)
+      poller.__remove_fd(fd);
+  }
+
+  listener_t &operator=(listener_t &other) = delete;
+  listener_t &operator=(const listener_t &other) = delete;
+  listener_t &operator=(listener_t &&other) {
+    if (fd >= 0)
+      poller.__remove_fd(fd);
+    fd = other.fd;
+    other.fd = -1;
+    return *this;
+  }
+  void stop() {
+    if (fd >= 0)
+      poller.__remove_fd(fd);
+    fd = -1;
+  }
+};
+
 } // namespace rtpmidid

@@ -232,7 +232,7 @@ void rtppeer::parse_command_by(io_bytes_reader &buffer, port_e port) {
     return;
   }
 
-  DEBUG("status: {}, port {} (midi: %d)", status, port, port == MIDI_PORT);
+  DEBUG("status: {}, port {} (midi: {})", status, port, port == MIDI_PORT);
 
   status = (status_e)(((int)status) &
                       ~((int)(port == MIDI_PORT ? MIDI_CONNECTED

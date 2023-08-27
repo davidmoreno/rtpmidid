@@ -24,7 +24,7 @@
 #include "rtpmidid/mdns_rtpmidi.hpp"
 
 namespace rtpmididns {
-extern std::unique_ptr<::rtpmidid::mdns_rtpmidi> mdns;
+extern std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 
 rtpmidiserverpeer_t::rtpmidiserverpeer_t(const std::string &name_)
     : name(name_), server(name, "") {

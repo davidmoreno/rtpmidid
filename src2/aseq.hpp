@@ -18,6 +18,7 @@
 
 #pragma once
 #include "rtpmidid/iobytes.hpp"
+#include "rtpmidid/poller.hpp"
 #include <alsa/asoundlib.h>
 #include <alsa/seq_midi_event.h>
 #include <functional>
@@ -47,11 +48,12 @@ public:
 
   std::string name;
   snd_seq_t *seq;
-  std::vector<int> fds; // Normally 1?
+  // std::vector<int> fds; // Normally 1?
   std::map<int, signal_t<port_t, const std::string &>> subscribe_event;
   std::map<int, signal_t<port_t>> unsubscribe_event;
   std::map<int, signal_t<snd_seq_event_t *>> midi_event;
   uint8_t client_id;
+  std::vector<poller_t::listener_t> aseq_listener;
 
   aseq(std::string name);
   ~aseq();

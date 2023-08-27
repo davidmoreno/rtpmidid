@@ -21,7 +21,7 @@
 
 namespace rtpmididns {
 
-extern std::unique_ptr<::rtpmidid::mdns_rtpmidi> mdns;
+extern std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 
 rtpmidinetwork_t::rtpmidinetwork_t(const std::string &name,
                                    const std::string &port,

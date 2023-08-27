@@ -28,7 +28,7 @@
 #include <unistd.h>
 
 namespace rtpmididns {
-std::unique_ptr<::rtpmidid::mdns_rtpmidi> mdns;
+std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 settings_t settings;
 void parse_argv(int argc, char **argv);
 } // namespace rtpmididns
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 
   INFO("Waiting for connections.");
   try {
-    rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi>();
+    rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>();
     rtpmididns::midirouter_t router;
 
     router.add_peer(

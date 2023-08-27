@@ -61,6 +61,8 @@ public:
   connection_t<const io_bytes_reader &, rtppeer::port_e> send_connection;
   connection_t<float> ck_connection;
   connection_t<const std::string &, rtppeer::status_e> connected_connection;
+  poller_t::listener_t midi_poller;
+  poller_t::listener_t control_poller;
 
   rtpclient(std::string name);
   ~rtpclient();
