@@ -137,6 +137,9 @@ void parse_argv(int argc, char **argv) {
       fn(argv[cargc + 1]);
       cargc += 2;
     }
+    if (cargc >= argc) {
+      return;
+    }
     auto key = std::string(argv[cargc]);
     auto keyeq = fmt::format("{}=", name);
     if (key.substr(0, keyeq.length()) == keyeq) {
