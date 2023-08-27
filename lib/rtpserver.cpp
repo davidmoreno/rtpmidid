@@ -57,7 +57,7 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
                                 strerror(errno));
     }
     // Get addr info may return several options, try them in order.
-    // we asusme that if the ocntrol success to be created the midi will too.
+    // we asume that if the control success to be created the midi will too.
     char host[NI_MAXHOST], service[NI_MAXSERV];
     socklen_t peer_addr_len = NI_MAXHOST;
     auto listenaddr = sockaddress_list;
@@ -340,7 +340,7 @@ void rtpserver::create_peer_from(io_bytes_reader &&buffer,
 
   peerdata.midi_event_connection =
       peer->midi_event.connect([this](const io_bytes_reader &data) {
-        DEBUG("Got MIDI from the remote peer into this server.");
+        // DEBUG("Got MIDI from the remote peer into this server.");
         midi_event(data);
       });
 

@@ -17,6 +17,7 @@
  */
 
 #include "midirouter.hpp"
+#include "mididata.hpp"
 #include "midipeer.hpp"
 #include "rtpmidid/logger.hpp"
 
@@ -26,7 +27,7 @@ midirouter_t::midirouter_t() : max_id(1) {}
 
 uint32_t midirouter_t::add_peer(std::shared_ptr<midipeer_t> ptr) {
   auto peer_id = max_id++;
-  ptr->id = peer_id;
+  ptr->peer_id = peer_id;
   ptr->router = this;
 
   peers[peer_id] = peerconnection_t{
@@ -51,7 +52,9 @@ void midirouter_t::send_midi(uint32_t from, const mididata_t &data) {
     return;
   }
 
+  // DEBUG("Send data to {} peers", peer->second.send_to.size());
   for (auto to : peer->second.send_to) {
+    // DEBUG("Send data {} to {}", from, to);
     send_midi(from, to, data);
   }
 }

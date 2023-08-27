@@ -26,13 +26,13 @@
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/logger.hpp"
 #include "rtpmidiserverpeer.hpp"
+#include <alsa/seqmid.h>
 #include <memory>
 #include <utility>
 
 namespace rtpmididns {
 
-alsanetwork_t::alsanetwork_t(const std::string &name, midirouter_t *router_)
-    : router(router_) {
+alsanetwork_t::alsanetwork_t(const std::string &name) {
   seq = std::make_shared<rtpmidid::aseq>(name);
 
   port = seq->create_port("Network");
@@ -63,6 +63,7 @@ alsanetwork_t::new_alsa_connection(const rtpmidid::aseq::port_t &port,
   // router->connect(networkpeer_id, alsapeer_id);
 
   aseqpeers[port] = networkpeer_id;
+  router->connect(networkpeer_id, peer_id);
 
   // return std::make_pair(alsapeer_id, networkpeer_id);
   return networkpeer_id;
@@ -97,9 +98,30 @@ void alsanetwork_t::alsaseq_event(snd_seq_event_t *event) {
   }
   uint8_t buffer[1024];
   rtpmidid::io_bytes_writer writer(buffer, sizeof(buffer));
-  alsatrans.decode(event, writer);
+  alsatrans_decoder.decode(event, writer);
   auto midi = mididata_t(writer);
 
   router->send_midi(0, peerI->second, midi);
 }
+
+void alsanetwork_t::send_midi(midipeer_id_t from, const mididata_t &data) {
+  for (auto &peer : aseqpeers) {
+    // DEBUG("Look for dest alsa peer: {} == {} ? {}", peer.second, from,
+    //       peer.second == from);
+    if (peer.second == from) {
+      auto mididata_copy =
+          mididata_t(data); // Its just the pointers, not the data itself
+      auto port = peer.first;
+      alsatrans_encoder.encode(
+          mididata_copy, [this, port](snd_seq_event_t *ev) {
+            DEBUG("Send to ALSA port {}:{}", port.client, port.port);
+            snd_seq_ev_set_source(ev, this->port);
+            snd_seq_ev_set_dest(ev, port.client, port.port);
+            snd_seq_ev_set_direct(ev);
+            snd_seq_event_output_direct(seq->seq, ev);
+          });
+    }
+  }
+}
+
 } // namespace rtpmididns

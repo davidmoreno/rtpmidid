@@ -27,6 +27,7 @@ class midirouter_t;
 class midipeer_t;
 
 // Many factory creators, basically to allow testing of the different parts
+std::shared_ptr<midipeer_t> make_alsanetwork(const std::string &name);
 std::shared_ptr<midipeer_t> make_alsapeer(const std::string &name,
                                           std::shared_ptr<rtpmidid::aseq>);
 std::shared_ptr<midipeer_t> make_rtpmidiserver(const std::string &name);

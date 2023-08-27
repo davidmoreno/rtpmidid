@@ -35,9 +35,9 @@ class midirouter_t;
 class midipeer_t : std::enable_shared_from_this<midipeer_t> {
 public:
   midirouter_t *router;
-  midipeer_id_t id;
+  midipeer_id_t peer_id;
 
-  midipeer_t() : router(nullptr), id(0) {}
+  midipeer_t() : router(nullptr), peer_id(0) {}
   virtual ~midipeer_t(){};
   virtual void send_midi(midipeer_id_t from, const mididata_t &) = 0;
 };

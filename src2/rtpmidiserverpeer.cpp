@@ -19,6 +19,7 @@
 #include "rtpmidiserverpeer.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
+#include "midirouter.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 
@@ -31,8 +32,14 @@ rtpmidiserverpeer_t::rtpmidiserverpeer_t(const std::string &name_)
     mdns->announce_rtpmidi(name, server.control_port);
 
   midi_connection =
-      server.midi_event.connect([](const rtpmidid::io_bytes_reader &data) {
-        DEBUG("Got data: {}", data.size());
+      server.midi_event.connect([this](const rtpmidid::io_bytes_reader &data) {
+        // DEBUG("Got data: {}", data.size());
+        if (!router) {
+          WARNING("Bad configured peer");
+          return;
+        }
+        // rtpmididns::mididata_t mididata(data.start, data.pos());
+        router->send_midi(this->peer_id, data);
       });
 }
 rtpmidiserverpeer_t::~rtpmidiserverpeer_t() {

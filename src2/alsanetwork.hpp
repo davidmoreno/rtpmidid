@@ -42,12 +42,12 @@ namespace rtpmididns {
  * origin port and use that port to match to the ALSA connection
  * and send the data as if it comes from there to the midirouter.
  */
-class alsanetwork_t {
+class alsanetwork_t : public midipeer_t {
 public:
   std::shared_ptr<rtpmidid::aseq> seq;
-  midirouter_t *router;
   uint8_t port;
-  rtpmidid::mididata_to_alsaevents_t alsatrans;
+  rtpmidid::mididata_to_alsaevents_t alsatrans_decoder;
+  rtpmidid::mididata_to_alsaevents_t alsatrans_encoder;
 
   std::unordered_map<rtpmidid::aseq::port_t, midipeer_id_t> aseqpeers;
   connection_t<rtpmidid::aseq::port_t, const std::string &>
@@ -55,8 +55,10 @@ public:
   connection_t<rtpmidid::aseq::port_t> unsubscibe_connection;
   connection_t<snd_seq_event_t *> midi_connection;
 
-  alsanetwork_t(const std::string &name, midirouter_t *router_);
+  alsanetwork_t(const std::string &name);
   ~alsanetwork_t();
+
+  void send_midi(midipeer_id_t from, const mididata_t &) override;
 
   // Returns the RTPSERVER id. Useful for testing.
   midipeer_id_t new_alsa_connection(const rtpmidid::aseq::port_t &port,

@@ -17,6 +17,7 @@
  */
 
 #include "alsanetwork.hpp"
+#include "factory.hpp"
 #include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "rtpmidid/poller.hpp"
@@ -61,11 +62,13 @@ int main(int argc, char **argv) {
   try {
     rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi>();
     rtpmididns::midirouter_t router;
-    rtpmididns::alsanetwork_t alsanetwork(rtpmididns::settings.alsa_name,
-                                          &router);
-    rtpmididns::rtpmidinetwork_t rtpmidinetwork(
-        rtpmididns::settings.rtpmidid_name, rtpmididns::settings.rtpmidid_port,
-        &router);
+
+    router.add_peer(
+        rtpmididns::make_alsanetwork(rtpmididns::settings.alsa_name));
+
+    // rtpmididns::rtpmidinetwork_t rtpmidinetwork(
+    //     rtpmididns::settings.rtpmidid_name,
+    //     rtpmididns::settings.rtpmidid_port, &router);
 
     while (rtpmidid::poller.is_open()) {
       rtpmidid::poller.wait();
