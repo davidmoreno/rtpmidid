@@ -40,7 +40,7 @@ public:
       : ::rtpmidid::exception("Bad MIDI packet: {}", what) {}
 };
 
-class rtppeer {
+class rtppeer_t {
 public:
   // Commands, the id is the same chars as the name
   enum commands_e {
@@ -108,8 +108,8 @@ public:
   static bool is_command(io_bytes_reader &);
   static bool is_feedback(io_bytes_reader &);
 
-  rtppeer(std::string _name);
-  ~rtppeer();
+  rtppeer_t(std::string _name);
+  ~rtppeer_t();
 
   bool is_connected() { return status == CONNECTED; }
   void reset();

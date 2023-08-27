@@ -40,7 +40,7 @@ struct address_port_t {
 class rtpclient {
 
 public:
-  rtppeer peer;
+  rtppeer_t peer;
   // signal_t<> connect_failed_event;
   poller_t::timer_t connect_timer;
   poller_t::timer_t ck_timeout;
@@ -58,21 +58,21 @@ public:
   /// A simple state machine. We need to send 6 CK one after another, and then
   /// every 10 secs.
   uint8_t timerstate;
-  connection_t<const io_bytes_reader &, rtppeer::port_e> send_connection;
+  connection_t<const io_bytes_reader &, rtppeer_t::port_e> send_connection;
   connection_t<float> ck_connection;
-  connection_t<const std::string &, rtppeer::status_e> connected_connection;
+  connection_t<const std::string &, rtppeer_t::status_e> connected_connection;
   poller_t::listener_t midi_poller;
   poller_t::listener_t control_poller;
 
   rtpclient(std::string name);
   ~rtpclient();
   void reset();
-  void sendto(const io_bytes &pb, rtppeer::port_e port);
+  void sendto(const io_bytes &pb, rtppeer_t::port_e port);
 
   void connect_to(const std::string &address, const std::string &port);
   void connected();
   void send_ck0_with_timeout();
 
-  void data_ready(rtppeer::port_e port);
+  void data_ready(rtppeer_t::port_e port);
 };
 } // namespace rtpmidid

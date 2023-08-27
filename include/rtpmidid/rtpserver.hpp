@@ -32,18 +32,18 @@ namespace rtpmidid {
 class rtpserver {
 public:
   // Callbacks to call when new connections
-  signal_t<std::shared_ptr<rtppeer>> connected_event;
+  signal_t<std::shared_ptr<rtppeer_t>> connected_event;
   signal_t<const io_bytes_reader &> midi_event;
 
   struct peer_data_t {
-    std::shared_ptr<rtppeer> peer;
+    std::shared_ptr<rtppeer_t> peer;
 
-    connection_t<const io_bytes_reader &, rtppeer::port_e>
+    connection_t<const io_bytes_reader &, rtppeer_t::port_e>
         send_event_connection;
-    connection_t<const std::string &, rtppeer::status_e>
+    connection_t<const std::string &, rtppeer_t::status_e>
         connected_event_connection;
     connection_t<const io_bytes_reader &> midi_event_connection;
-    connection_t<rtpmidid::rtppeer::disconnect_reason_e>
+    connection_t<rtpmidid::rtppeer_t::disconnect_reason_e>
         disconnect_event_connection;
   };
   std::vector<peer_data_t> peers;
@@ -62,18 +62,18 @@ public:
   ~rtpserver();
 
   // Returns the peer for that packet, or nullptr
-  std::shared_ptr<rtppeer> get_peer_by_packet(io_bytes_reader &b,
-                                              rtppeer::port_e port);
-  std::shared_ptr<rtppeer> get_peer_by_initiator_id(uint32_t initiator_id);
-  std::shared_ptr<rtppeer> get_peer_by_ssrc(uint32_t ssrc);
+  std::shared_ptr<rtppeer_t> get_peer_by_packet(io_bytes_reader &b,
+                                                rtppeer_t::port_e port);
+  std::shared_ptr<rtppeer_t> get_peer_by_initiator_id(uint32_t initiator_id);
+  std::shared_ptr<rtppeer_t> get_peer_by_ssrc(uint32_t ssrc);
 
   void create_peer_from(io_bytes_reader &&buffer, struct sockaddr_in6 *cliaddr,
-                        rtppeer::port_e port);
+                        rtppeer_t::port_e port);
 
   void send_midi_to_all_peers(const io_bytes_reader &bufer);
 
-  void data_ready(rtppeer::port_e port);
-  void sendto(const io_bytes_reader &b, rtppeer::port_e port,
+  void data_ready(rtppeer_t::port_e port);
+  void sendto(const io_bytes_reader &b, rtppeer_t::port_e port,
               struct sockaddr_in6 *, int remote_base_port);
 };
 } // namespace rtpmidid

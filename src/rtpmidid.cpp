@@ -111,7 +111,7 @@ rtpmidid_t::add_rtpmidid_import_server(const std::string &name,
   server_conn.server_id = server_id;
 
   server_conn.connected_event = rtpserver->connected_event.connect(
-      [this, port, server_id](std::shared_ptr<::rtpmidid::rtppeer> peer) {
+      [this, port, server_id](std::shared_ptr<::rtpmidid::rtppeer_t> peer) {
         auto server_conn = find_known_server(server_id);
         assert(server_conn != known_servers.end());
 
@@ -138,7 +138,7 @@ rtpmidid_t::add_rtpmidid_import_server(const std::string &name,
               server_conn->peer->send_midi(stream);
             });
         server_conn->disconnect_event = peer->disconnect_event.connect(
-            [this, server_id](rtpmidid::rtppeer::disconnect_reason_e reason) {
+            [this, server_id](rtpmidid::rtppeer_t::disconnect_reason_e reason) {
               auto server_conn = find_known_server(server_id);
               assert(server_conn != known_servers.end());
 
@@ -327,7 +327,7 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
   assert(peer_info != known_clients.end());
 
   if (peer_info->peer) {
-    if (peer_info->peer->peer.status == rtppeer::CONNECTED) {
+    if (peer_info->peer->peer.status == rtppeer_t::CONNECTED) {
       peer_info->use_count++;
       DEBUG("Already connected {}. (users {})", peer_info->name,
             peer_info->use_count);
@@ -344,7 +344,7 @@ void rtpmidid_t::connect_client(const std::string &name, int aseq_port) {
         });
     peer_info->disconnect_event =
         peer_info->peer->peer.disconnect_event.connect(
-            [this, aseq_port](rtppeer::disconnect_reason_e reason) {
+            [this, aseq_port](rtppeer_t::disconnect_reason_e reason) {
               this->disconnect_client(aseq_port, reason);
             });
     peer_info->use_count++;
@@ -365,15 +365,15 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
                                              "CK timeout"};
   auto peer_info = find_known_client_by_alsa_port(aseq_port);
   assert(peer_info != known_clients.end());
-  auto reason = static_cast<rtppeer::disconnect_reason_e>(reasoni);
+  auto reason = static_cast<rtppeer_t::disconnect_reason_e>(reasoni);
 
   DEBUG("Disconnect aseq port {}, signal: {}({})", aseq_port,
         failure_reasons[reason], reason);
   // If cant connec t(network problem) or rejected, try again in next
   // address.
   switch (reason) {
-  case rtppeer::disconnect_reason_e::CANT_CONNECT:
-  case rtppeer::disconnect_reason_e::CONNECTION_REJECTED:
+  case rtppeer_t::disconnect_reason_e::CANT_CONNECT:
+  case rtppeer_t::disconnect_reason_e::CONNECTION_REJECTED:
     if (peer_info->connect_attempts >= (3 * peer_info->addresses.size())) {
       ERROR("Too many attempts to connect. Not trying again. Attempted "
             "{} times.",
@@ -394,16 +394,16 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
     });
     break;
 
-  case rtppeer::disconnect_reason_e::CONNECT_TIMEOUT:
-  case rtppeer::disconnect_reason_e::CK_TIMEOUT:
+  case rtppeer_t::disconnect_reason_e::CONNECT_TIMEOUT:
+  case rtppeer_t::disconnect_reason_e::CK_TIMEOUT:
     WARNING("Timeout (during {}). Keep trying.",
-            reason == rtppeer::disconnect_reason_e::CK_TIMEOUT ? "handshake"
-                                                               : "setup");
+            reason == rtppeer_t::disconnect_reason_e::CK_TIMEOUT ? "handshake"
+                                                                 : "setup");
     // remove_client(peer_info->aseq_port);
     return;
     break;
 
-  case rtppeer::disconnect_reason_e::PEER_DISCONNECTED:
+  case rtppeer_t::disconnect_reason_e::PEER_DISCONNECTED:
     seq.disconnect_port(peer_info->aseq_port);
     if (peer_info->use_count > 0)
       peer_info->use_count--;
@@ -422,7 +422,7 @@ void rtpmidid_t::disconnect_client(int aseq_port, int reasoni) {
     // remove_client(peer_info->aseq_port);
     break;
 
-  case rtppeer::disconnect_reason_e::DISCONNECT:
+  case rtppeer_t::disconnect_reason_e::DISCONNECT:
     // Do nothing, another client may connect
     break;
 
