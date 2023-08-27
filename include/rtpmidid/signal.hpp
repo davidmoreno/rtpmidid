@@ -29,6 +29,7 @@ namespace rtpmidid {
 // #define DEBUG0 DEBUG
 #define DEBUG0(...)
 
+using signal_id_t = uint32_t;
 template <typename... Args> class connection_t;
 
 template <typename... Args> class signal_t {
@@ -50,7 +51,7 @@ public:
     return connection_t(this, cid);
   }
 
-  void disconnect(int id) {
+  void disconnect(signal_id_t id) {
     DEBUG0("{}::signal_t::disconnect({})", (void *)this, id);
     slots_.erase(id);
     connections.erase(id);
@@ -76,7 +77,7 @@ public:
     }
   }
 
-  void replace_connection_ptr(int id, connection_t<Args...> *ptr) {
+  void replace_connection_ptr(signal_id_t id, connection_t<Args...> *ptr) {
     DEBUG0("{}::replace_connection_ptr::({})", (void *)this, id);
     for (auto &f : connections) {
       DEBUG0("Got {}", f.first);
@@ -91,20 +92,21 @@ public:
   size_t count() { return slots_.size(); }
 
 private:
-  uint32_t max_id = 1;
-  std::map<uint32_t, std::function<void(Args...)>> slots_;
-  std::map<uint32_t, connection_t<Args...> *> connections;
+  signal_id_t max_id = 1;
+  std::map<signal_id_t, std::function<void(Args...)>> slots_;
+  std::map<signal_id_t, connection_t<Args...> *> connections;
 };
 
 template <typename... Args> class connection_t {
   signal_t<Args...> *signal;
-  int id;
+  signal_id_t id;
 
 public:
   connection_t() : signal(nullptr), id(0) {
     DEBUG0("{}::connection_t()", (void *)this);
   }
-  connection_t(signal_t<Args...> *signal_, int id_) : signal(signal_), id(id_) {
+  connection_t(signal_t<Args...> *signal_, signal_id_t id_)
+      : signal(signal_), id(id_) {
     DEBUG0("{}::connection_t({})", (void *)this, id_);
     signal->replace_connection_ptr(id, this);
   }

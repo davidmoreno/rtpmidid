@@ -281,9 +281,10 @@ public:
 struct ServerAB {
   rtpmidid::rtpmidid_t A;
   rtpmidid::rtpmidid_t B;
-  connection_t<const std::string &, const std::string &, const std::string &>
+  rtpmidid::connection_t<const std::string &, const std::string &,
+                         const std::string &>
       discover_connection;
-  connection_t<const std::string &> remote_connection;
+  rtpmidid::connection_t<const std::string &> remote_connection;
 
   ServerAB()
       : A(parse_cmd_args({"--port", "10000", "--name", "TEST-SERVER-A",

@@ -19,6 +19,7 @@
 #include <memory>
 #include <rtpmidid/signal.hpp>
 
+using namespace rtpmidid;
 void test_signal_disconnect() {
   signal_t<int> signal;
 
