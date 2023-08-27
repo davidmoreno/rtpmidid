@@ -148,7 +148,11 @@ AvahiWatchEvent poller_adapter_watch_get_events(AvahiWatch *w) {
 /// Free a watch. More...
 void poller_adapter_watch_free(AvahiWatch *w) {
   // rtpmidid::poller.remove_fd(w->fd);
-  WARNING("TODO! If its only at program end, no problem.");
+  // WARNING("TODO! If its only at program end, no problem.");
+  if (current) {
+    current->watch_in_poller.stop();
+    current->watch_out_poller.stop();
+  }
   delete w;
 }
 
@@ -360,7 +364,10 @@ void rtpmidid::mdns_rtpmidi_t::setup_mdns_browser() {
   }
 }
 
-rtpmidid::mdns_rtpmidi_t::~mdns_rtpmidi_t() { avahi_client_free(client); }
+rtpmidid::mdns_rtpmidi_t::~mdns_rtpmidi_t() {
+  current = nullptr;
+  avahi_client_free(client);
+}
 
 void rtpmidid::mdns_rtpmidi_t::announce_all() {
   if (!group) {

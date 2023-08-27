@@ -50,6 +50,10 @@ rtppeer_t::rtppeer_t(std::string _name) : local_name(std::move(_name)) {
 }
 
 rtppeer_t::~rtppeer_t() {
+  if (status == CONNECTED) {
+    send_goodbye(CONTROL_PORT);
+    send_goodbye(MIDI_PORT);
+  }
   DEBUG("~rtppeer '{}' (local) <-> '{}' (remote)", local_name, remote_name);
 }
 
@@ -679,6 +683,7 @@ void rtppeer_t::send_midi(const io_bytes_reader &events) {
 }
 
 void rtppeer_t::send_goodbye(port_e to_port) {
+  DEBUG("Send goodbye to {}", to_port);
   io_bytes_writer_static<64> buffer;
 
   buffer.write_uint16(0x0FFFF);
@@ -689,11 +694,20 @@ void rtppeer_t::send_goodbye(port_e to_port) {
 
   send_event(buffer, to_port);
 
-  status =
-      status_e(int(status) &
-               ~int(to_port == MIDI_PORT ? MIDI_CONNECTED : CONTROL_CONNECTED));
+  // Keep track of state
+  if (status == CONNECTED) {
+    if (to_port == MIDI_PORT)
+      status = CONTROL_CONNECTED;
+    else
+      status = MIDI_CONNECTED;
+  }
+  if (status == MIDI_CONNECTED && to_port == MIDI_PORT)
+    status = NOT_CONNECTED;
+  if (status == CONTROL_CONNECTED && to_port == CONTROL_PORT)
+    status = NOT_CONNECTED;
 
   if (status == NOT_CONNECTED) {
+    DEBUG("Sent both goodbyes and is peer is disconected ({})", remote_name);
     disconnect_event(DISCONNECT);
   }
 }

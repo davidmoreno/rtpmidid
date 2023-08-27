@@ -26,6 +26,9 @@
 #include <optional>
 #include <vector>
 
+// #define DEBUG0 DEBUG
+#define DEBUG0(...)
+
 namespace rtpmidid {
 /**
  * Simplified fd poller
@@ -86,10 +89,10 @@ class poller_t::listener_t {
 public:
   int fd = -1;
 
-  listener_t(int fd_) : fd(fd_) { DEBUG("Create from fd {}", fd); };
-  listener_t() : fd(-1) { DEBUG("Create without fd {}", fd); };
+  listener_t(int fd_) : fd(fd_) { DEBUG0("Create from fd {}", fd); };
+  listener_t() : fd(-1) { DEBUG0("Create without fd {}", fd); };
   listener_t(listener_t &&other) {
-    DEBUG("Create from other {}", other.fd);
+    DEBUG0("Create from other {}", other.fd);
     fd = other.fd;
     other.fd = -1;
   };

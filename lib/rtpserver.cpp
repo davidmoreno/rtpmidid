@@ -17,6 +17,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include "rtpmidid/rtppeer.hpp"
 #include <algorithm>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -138,6 +139,12 @@ rtpserver::rtpserver(std::string _name, const std::string &port)
 }
 
 rtpserver::~rtpserver() {
+  // Must clear here, to be able to use the control and midi
+  // sockets
+  for (auto &peerinfo : peers) {
+    peerinfo.peer->send_goodbye(rtppeer_t::CONTROL_PORT);
+    peerinfo.peer->send_goodbye(rtppeer_t::MIDI_PORT);
+  }
   DEBUG("~rtpserver({})", name);
   if (control_socket >= 0) {
     control_poller.stop();
