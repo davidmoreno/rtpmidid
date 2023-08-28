@@ -15,30 +15,33 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#pragma once
 
+#pragma once
+#include "midirouter.hpp"
+#include "rtpmidid/poller.hpp"
 #include <string>
 #include <vector>
 
-namespace rtpmidid {
-class rtpmidid_t;
-
-/**
- * @short Opens a control socket that receives commands to control the rtpmidid
- *
- * See the /CONTROL.md file for known commands and protocol.
- */
+namespace rtpmididns {
 class control_socket_t {
-  time_t start_time;
-  int listen_socket;
-  std::vector<int> clients;
-  rtpmidid_t &rtpmidid;
+  class client_t {
+  public:
+    int fd;
+    rtpmidid::poller_t::listener_t listener;
+  };
 
 public:
-  control_socket_t(rtpmidid::rtpmidid_t &rtpmidid, const std::string &filename);
+  int socket;
+  std::vector<client_t> clients;
+  rtpmidid::poller_t::listener_t connection_listener;
+  time_t start_time;
+  midirouter_t *router = nullptr;
+
+public:
+  control_socket_t();
   ~control_socket_t();
   void connection_ready();
   void data_ready(int fd);
-  std::string parse_command(const std::string &);
+  std::string parse_command(const std::string &command);
 };
-} // namespace rtpmidid
+} // namespace rtpmididns

@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include "json.hpp"
 #include <cstdint>
 #include <memory>
 
@@ -39,6 +40,7 @@ public:
 
   midipeer_t() : router(nullptr), peer_id(0) {}
   virtual ~midipeer_t(){};
+  virtual json_t status() = 0;
   virtual void send_midi(midipeer_id_t from, const mididata_t &) = 0;
 };
 } // namespace rtpmididns

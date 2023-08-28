@@ -17,6 +17,7 @@
  */
 
 #include "rtpmidiserverpeer.hpp"
+#include "json.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
@@ -26,8 +27,8 @@
 namespace rtpmididns {
 extern std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 
-rtpmidiserverpeer_t::rtpmidiserverpeer_t(const std::string &name_)
-    : name(name_), server(name, "") {
+rtpmidiserverpeer_t::rtpmidiserverpeer_t(const std::string &name)
+    : name_(name), server(name, "") {
   if (mdns)
     mdns->announce_rtpmidi(name, server.control_port);
 
@@ -44,11 +45,18 @@ rtpmidiserverpeer_t::rtpmidiserverpeer_t(const std::string &name_)
 }
 rtpmidiserverpeer_t::~rtpmidiserverpeer_t() {
   if (mdns)
-    mdns->unannounce_rtpmidi(name, server.control_port);
+    mdns->unannounce_rtpmidi(name_, server.control_port);
 }
 
 void rtpmidiserverpeer_t::send_midi(midipeer_id_t from,
                                     const mididata_t &mididata) {
   server.send_midi_to_all_peers(mididata);
+}
+
+json_t rtpmidiserverpeer_t::status() {
+  return json_t{
+      {"name", name_},                //
+      {"type", "rtpmidiserverpeer_t"} //
+  };
 }
 } // namespace rtpmididns

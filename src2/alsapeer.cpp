@@ -18,13 +18,14 @@
 
 #include "alsapeer.hpp"
 #include "aseq.hpp"
+#include "json.hpp"
 #include "midipeer.hpp"
 
 using namespace rtpmididns;
 
 alsapeer_t::alsapeer_t(const std::string &name,
                        std::shared_ptr<rtpmidid::aseq> seq_)
-    : seq(seq_) {
+    : seq(seq_), name_(name) {
   port = seq->create_port(name);
   INFO("Created alsapeer {}, port {}", name, port);
 }
@@ -32,3 +33,5 @@ alsapeer_t::alsapeer_t(const std::string &name,
 alsapeer_t::~alsapeer_t() { seq->remove_port(port); }
 
 void alsapeer_t::send_midi(midipeer_id_t from, const mididata_t &) {}
+
+json_t alsapeer_t::status() { return json_t{{"type", "alsapeer_t"}}; }

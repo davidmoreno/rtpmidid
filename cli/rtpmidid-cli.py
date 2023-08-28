@@ -22,11 +22,13 @@ class Connection:
         return json.loads(data)
 
 
-socketpath = os.environ.get(
-    "RTPMIDID_SOCKET") or "/var/run/rtpmidid/control.sock"
-
-
 def main(argv):
+    socketpath = os.environ.get(
+        "RTPMIDID_SOCKET"
+    ) or "/var/run/rtpmidid/control.sock"
+    if len(argv) > 1 and argv[1].startswith("/"):
+        socketpath = argv[1]
+        argv = argv[1:]
     try:
         conn = Connection(socketpath)
     except Exception as e:

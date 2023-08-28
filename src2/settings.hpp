@@ -26,6 +26,7 @@ struct settings_t {
   std::string alsa_name = "rtpmidid";
   std::string rtpmidid_name = "rtpmidid";
   std::string rtpmidid_port = "5004";
+  std::string control_filename = "/var/run/rtpmidid/control.sock";
 };
 
 extern settings_t settings;

@@ -15,30 +15,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 #pragma once
+#include "../third_party/nlohmann/json.hpp"
 
-#include <string>
-#include <vector>
-
-namespace rtpmidid {
-class rtpmidid_t;
-
-/**
- * @short Opens a control socket that receives commands to control the rtpmidid
- *
- * See the /CONTROL.md file for known commands and protocol.
- */
-class control_socket_t {
-  time_t start_time;
-  int listen_socket;
-  std::vector<int> clients;
-  rtpmidid_t &rtpmidid;
-
-public:
-  control_socket_t(rtpmidid::rtpmidid_t &rtpmidid, const std::string &filename);
-  ~control_socket_t();
-  void connection_ready();
-  void data_ready(int fd);
-  std::string parse_command(const std::string &);
-};
-} // namespace rtpmidid
+namespace rtpmididns {
+using json_t = ::nlohmann::json;
+} // namespace rtpmididns

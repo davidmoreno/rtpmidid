@@ -25,6 +25,7 @@ class alsapeer_t : public midipeer_t {
 public:
   uint8_t port;
   std::shared_ptr<rtpmidid::aseq> seq;
+  std::string name_;
 
   connection_t<rtpmidid::aseq::port_t, const std::string &>
       subscribe_connection;
@@ -33,6 +34,7 @@ public:
 
   alsapeer_t(const std::string &name, std::shared_ptr<rtpmidid::aseq> seq);
   virtual ~alsapeer_t();
+  json_t status() override;
   virtual void send_midi(midipeer_id_t from, const mididata_t &) override;
 };
 } // namespace rtpmididns

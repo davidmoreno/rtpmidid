@@ -20,6 +20,7 @@
 #include "alsapeer.hpp"
 #include "aseq.hpp"
 #include "factory.hpp"
+#include "json.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
@@ -122,6 +123,9 @@ void alsanetwork_t::send_midi(midipeer_id_t from, const mididata_t &data) {
           });
     }
   }
+}
+json_t alsanetwork_t::status() {
+  return json_t{{"type", "alsanetwork_t"}, {"name", seq->name}};
 }
 
 } // namespace rtpmididns

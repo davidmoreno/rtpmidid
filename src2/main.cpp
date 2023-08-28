@@ -17,6 +17,7 @@
  */
 
 #include "alsanetwork.hpp"
+#include "control_socket.hpp"
 #include "factory.hpp"
 #include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
@@ -62,6 +63,8 @@ int main(int argc, char **argv) {
   try {
     rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>();
     rtpmididns::midirouter_t router;
+    rtpmididns::control_socket_t control;
+    control.router = &router;
 
     router.add_peer(
         rtpmididns::make_alsanetwork(rtpmididns::settings.alsa_name));
@@ -182,6 +185,9 @@ void parse_argv(int argc, char **argv) {
     parse_arg2("--rtpmidid-name", [](const std::string &value) {
       settings.rtpmidid_name = std::string(value);
       settings.alsa_name = std::string(value);
+    });
+    parse_arg2("--control", [](const std::string &value) {
+      settings.control_filename = std::string(value);
     });
     parse_arg1("--version", []() {
       fmt::print("rtpmidid version {}/2\n", VERSION);

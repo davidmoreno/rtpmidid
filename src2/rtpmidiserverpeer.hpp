@@ -33,7 +33,7 @@ namespace rtpmididns {
  */
 class rtpmidiserverpeer_t : public midipeer_t {
 public:
-  std::string name;
+  std::string name_;
   rtpmidid::rtpserver server;
 
   connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
@@ -42,5 +42,6 @@ public:
   virtual ~rtpmidiserverpeer_t();
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
+  json_t status() override;
 };
 } // namespace rtpmididns

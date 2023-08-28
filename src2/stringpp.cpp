@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,30 +15,20 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#pragma once
 
-#include <string>
-#include <vector>
+#include "./stringpp.hpp"
 
-namespace rtpmidid {
-class rtpmidid_t;
+namespace rtpmididns {
 
-/**
- * @short Opens a control socket that receives commands to control the rtpmidid
- *
- * See the /CONTROL.md file for known commands and protocol.
- */
-class control_socket_t {
-  time_t start_time;
-  int listen_socket;
-  std::vector<int> clients;
-  rtpmidid_t &rtpmidid;
+std::vector<std::string> split(std::string const &str, const char delim) {
+  std::vector<std::string> ret;
+  size_t I;
+  size_t endI = 0;
 
-public:
-  control_socket_t(rtpmidid::rtpmidid_t &rtpmidid, const std::string &filename);
-  ~control_socket_t();
-  void connection_ready();
-  void data_ready(int fd);
-  std::string parse_command(const std::string &);
-};
-} // namespace rtpmidid
+  while ((I = str.find_first_not_of(delim, endI)) != std::string::npos) {
+    endI = str.find(delim, I);
+    ret.push_back(str.substr(I, endI - I));
+  }
+  return ret;
+}
+} // namespace rtpmididns

@@ -59,6 +59,7 @@ public:
   ~alsanetwork_t();
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
+  json_t status() override;
 
   // Returns the RTPSERVER id. Useful for testing.
   midipeer_id_t new_alsa_connection(const rtpmidid::aseq::port_t &port,
