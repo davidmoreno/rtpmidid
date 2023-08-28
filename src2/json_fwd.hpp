@@ -17,30 +17,8 @@
  */
 
 #pragma once
-
-#include "json_fwd.hpp"
-#include <cstdint>
-#include <memory>
+#include "../third_party/nlohmann/json_fwd.hpp"
 
 namespace rtpmididns {
-
-using midipeer_id_t = uint32_t;
-
-class mididata_t;
-class midirouter_t;
-/**
- * @short Any peer that can read and write midi
- *
- * Must be inherited by the real clients
- */
-class midipeer_t : std::enable_shared_from_this<midipeer_t> {
-public:
-  midirouter_t *router;
-  midipeer_id_t peer_id;
-
-  midipeer_t() : router(nullptr), peer_id(0) {}
-  virtual ~midipeer_t(){};
-  virtual json_t status() = 0;
-  virtual void send_midi(midipeer_id_t from, const mididata_t &) = 0;
-};
+using json_t = ::nlohmann::json;
 } // namespace rtpmididns
