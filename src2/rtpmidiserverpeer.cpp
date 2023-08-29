@@ -50,7 +50,6 @@ rtpmidiserverpeer_t::~rtpmidiserverpeer_t() {
 
 void rtpmidiserverpeer_t::send_midi(midipeer_id_t from,
                                     const mididata_t &mididata) {
-  packets_recv++;
   server.send_midi_to_all_peers(mididata);
 }
 
@@ -83,11 +82,6 @@ json_t rtpmidiserverpeer_t::status() {
   return json_t{
       {"name", name_},                 //
       {"type", "rtpmidiserverpeer_t"}, //
-      {
-          "stats", //
-          {{"recv", packets_recv}, {"sent", packets_sent}}
-          //
-      },
       {"port", server.midi_port},
       {"peers", //
        peers}

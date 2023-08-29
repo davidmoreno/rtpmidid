@@ -25,9 +25,7 @@ class alsapeer_t : public midipeer_t {
 public:
   uint8_t port;
   std::shared_ptr<rtpmidid::aseq> seq;
-  std::string name_;
-  int packets_sent = 0;
-  int packets_recv = 0;
+  std::string name;
   rtpmidid::mididata_to_alsaevents_t mididata_trans;
 
   connection_t<rtpmidid::aseq::port_t, const std::string &>

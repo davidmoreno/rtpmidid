@@ -29,7 +29,6 @@ rtppeer_t::rtppeer_t(std::shared_ptr<rtpmidid::rtppeer_t> peer_) : peer(peer_) {
 
   midi_connection =
       peer->midi_event.connect([this](const rtpmidid::io_bytes_reader &data) {
-        packets_recv++;
         router->send_midi(peer_id, mididata_t{data});
       });
 }
@@ -37,7 +36,6 @@ rtppeer_t::rtppeer_t(std::shared_ptr<rtpmidid::rtppeer_t> peer_) : peer(peer_) {
 rtppeer_t::~rtppeer_t() {}
 
 void rtppeer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
-  packets_sent++;
   peer->send_midi(data);
 };
 
@@ -46,11 +44,6 @@ json_t rtppeer_t::status() {
       {"name", peer->remote_name}, //
       {"type", "rtppeer_t"},       //
       {"latency_ms", peer->latency / 10.0},
-      {
-          "stats", //
-          {{"recv", packets_recv}, {"sent", packets_sent}}
-          //
-      },
   };
 };
 

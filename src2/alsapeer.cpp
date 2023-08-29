@@ -25,9 +25,9 @@
 
 using namespace rtpmididns;
 
-alsapeer_t::alsapeer_t(const std::string &name,
+alsapeer_t::alsapeer_t(const std::string &name_,
                        std::shared_ptr<rtpmidid::aseq> seq_)
-    : seq(seq_), name_(name) {
+    : seq(seq_), name(name_) {
   port = seq->create_port(name);
   INFO("Created alsapeer {}, port {}", name, port);
 }
@@ -47,12 +47,7 @@ void alsapeer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
 
 json_t alsapeer_t::status() {
   return json_t{
-      {"type", "alsapeer_t"},
-      {
-          "stats", //
-          {{"recv", packets_recv}, {"sent", packets_sent}}
-          //
-      }
+      {"type", "alsapeer_t"}, {"name", name},
       //
   };
 }

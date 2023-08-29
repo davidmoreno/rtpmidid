@@ -31,8 +31,6 @@ class rtppeer_t : public midipeer_t {
 public:
   std::shared_ptr<rtpmidid::rtppeer_t> peer;
   connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
-  int packets_sent = 0;
-  int packets_recv = 0;
 
   rtppeer_t(std::shared_ptr<rtpmidid::rtppeer_t> peer);
   ~rtppeer_t();

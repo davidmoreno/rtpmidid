@@ -160,6 +160,12 @@ std::vector<control_socket_ns::command_t> commands{
            auto status = peer.second.peer->status();
            status["id"] = peer.first;
            status["send_to"] = peer.second.send_to;
+           status["stats"] = {
+               //
+               {"recv", peer.second.peer->packets_recv},
+               {"sent", peer.second.peer->packets_sent} //
+           };
+
            routerdata.push_back(status);
          } catch (const std::exception &exc) {
            routerdata.push_back(json_t{{"error", exc.what()}});

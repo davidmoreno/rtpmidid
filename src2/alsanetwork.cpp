@@ -103,12 +103,10 @@ void alsanetwork_t::alsaseq_event(snd_seq_event_t *event) {
   alsatrans_decoder.decode(event, writer);
   auto midi = mididata_t(writer);
 
-  router->send_midi(0, peerI->second, midi);
-  packets_sent++;
+  router->send_midi(peer_id, peerI->second, midi);
 }
 
 void alsanetwork_t::send_midi(midipeer_id_t from, const mididata_t &data) {
-  packets_recv++;
   for (auto &peer : aseqpeers) {
     // DEBUG("Look for dest alsa peer: {} == {} ? {}", peer.second, from,
     //       peer.second == from);
@@ -142,11 +140,6 @@ json_t alsanetwork_t::status() {
   return json_t{
       {"type", "alsanetwork_t"}, //
       {"name", seq->name},       //
-      {
-          "stats", //
-          {{"recv", packets_recv}, {"sent", packets_sent}}
-          //
-      },
       {"connections", connections}
       //
   };

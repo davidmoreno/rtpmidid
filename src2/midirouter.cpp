@@ -66,6 +66,14 @@ void midirouter_t::send_midi(peer_id_t from, peer_id_t to,
     WARNING("Sending to uknown peer {} -> {}", from, to);
     return; // Maybe better delete
   }
+  auto send_from_peer = peers.find(from);
+  if (send_from_peer == peers.end()) {
+    WARNING("Sending to uknown peer {} -> {}", from, to);
+    return; // Maybe better delete
+  }
+
+  send_from_peer->second.peer->packets_sent++;
+  send_to_peer->second.peer->packets_recv++;
 
   send_to_peer->second.peer->send_midi(from, data);
 }
