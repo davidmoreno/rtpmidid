@@ -178,6 +178,15 @@ std::vector<control_socket_ns::command_t> commands{
            {"router", routerdata} //
        };
      }},
+    {"router.remove",
+     [](control_socket_t &control, const json_t &params) {
+       DEBUG("Params {}", params.dump());
+       peer_id_t peer_id;
+       peer_id = params[0];
+       DEBUG("Remove peer_id {}", peer_id);
+       control.router->remove_peer(peer_id);
+       return "ok";
+     }}
     //
 };
 
@@ -187,6 +196,18 @@ std::string control_socket_t::parse_command(const std::string &command) {
 
   auto method = js["method"];
   try {
+    if (method == "list") {
+      auto res = std::vector<std::string>{};
+      for (const auto &cmd : commands) {
+        res.push_back(cmd.name);
+      }
+      json_t retdata = {
+          {"id", js["id"]}, {"result", res},
+          //
+      };
+
+      return retdata.dump();
+    }
     for (const auto &cmd : commands) {
       if (cmd.name == method) {
         auto res = cmd.func(*this, js["params"]);

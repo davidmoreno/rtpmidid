@@ -41,16 +41,24 @@ def main(argv):
         print(json.dumps(ret, indent=2))
 
 
+def maybe_int(txt: str):
+    try:
+        return int(txt)
+    except:
+        pass
+    return txt
+
+
 def parse_commands(argv):
     cmd = []
     for x in argv:
         if x == '.':
-            yield {"method": cmd[0], "params": cmd[1:]}
+            yield {"method": cmd[0], "params": [maybe_int(x) for x in cmd[1:]]}
             cmd = []
         else:
             cmd.append(x)
     if cmd:
-        yield {"method": cmd[0], "params": cmd[1:]}
+        yield {"method": cmd[0], "params":  [maybe_int(x) for x in cmd[1:]]}
 
 
 if __name__ == '__main__':
