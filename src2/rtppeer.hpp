@@ -15,30 +15,28 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 #pragma once
+
 #include "midipeer.hpp"
-#include "rtpmidid/rtpserver.hpp"
-#include <memory>
-#include <string>
+#include "rtpmidid/signal.hpp"
 
 namespace rtpmidid {
-class aseq;
-}
+class rtppeer_t;
+class io_bytes_reader;
+} // namespace rtpmidid
 
 namespace rtpmididns {
 
-class midirouter_t;
-
-class rtpmidinetwork_t : public midipeer_t {
+class rtppeer_t : public midipeer_t {
 public:
-  std::shared_ptr<rtpmidid::aseq> aseq;
-  rtpmidid::rtpserver_t server;
+  std::shared_ptr<rtpmidid::rtppeer_t> peer;
   connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
-  connection_t<std::shared_ptr<rtpmidid::rtppeer_t>> connected_connection;
+  int packets_sent = 0;
+  int packets_recv = 0;
 
-  rtpmidinetwork_t(const std::string &name, const std::string &port,
-                   std::shared_ptr<rtpmidid::aseq> aseq);
+  rtppeer_t(std::shared_ptr<rtpmidid::rtppeer_t> peer);
+  ~rtppeer_t();
+
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;
 };

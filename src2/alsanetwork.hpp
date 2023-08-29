@@ -57,7 +57,7 @@ public:
   connection_t<rtpmidid::aseq::port_t> unsubscibe_connection;
   connection_t<snd_seq_event_t *> midi_connection;
 
-  alsanetwork_t(const std::string &name);
+  alsanetwork_t(const std::string &name, std::shared_ptr<rtpmidid::aseq> aseq);
   ~alsanetwork_t();
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;

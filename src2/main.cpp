@@ -61,17 +61,19 @@ int main(int argc, char **argv) {
 
   INFO("Waiting for connections.");
   try {
+    auto aseq =
+        std::make_shared<rtpmidid::aseq>(rtpmididns::settings.alsa_name);
     rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>();
     rtpmididns::midirouter_t router;
     rtpmididns::control_socket_t control;
     control.router = &router;
 
     router.add_peer(
-        rtpmididns::make_alsanetwork(rtpmididns::settings.alsa_name));
+        rtpmididns::make_alsanetwork(rtpmididns::settings.alsa_name, aseq));
 
-    // rtpmididns::rtpmidinetwork_t rtpmidinetwork(
-    //     rtpmididns::settings.rtpmidid_name,
-    //     rtpmididns::settings.rtpmidid_port, &router);
+    router.add_peer(rtpmididns::make_rtpmididnetwork(
+        rtpmididns::settings.rtpmidid_name, rtpmididns::settings.rtpmidid_port,
+        aseq));
 
     while (rtpmidid::poller.is_open()) {
       rtpmidid::poller.wait();

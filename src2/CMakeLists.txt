@@ -1,14 +1,16 @@
 add_executable(
   rtpmidid2-daemon  
+  main.cpp
+
   alsanetwork.cpp
   alsapeer.cpp
   aseq.cpp
   control_socket.cpp
   factory.cpp
-  main.cpp
   midirouter.cpp
   rtpmidinetwork.cpp
   rtpmidiserverpeer.cpp
+  rtppeer.cpp
   stringpp.cpp
 )
 

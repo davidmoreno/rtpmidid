@@ -33,8 +33,9 @@
 
 namespace rtpmididns {
 
-alsanetwork_t::alsanetwork_t(const std::string &name) {
-  seq = std::make_shared<rtpmidid::aseq>(name);
+alsanetwork_t::alsanetwork_t(const std::string &name,
+                             std::shared_ptr<rtpmidid::aseq> aseq_)
+    : seq(aseq_) {
 
   port = seq->create_port("Network");
   subscribe_connection = seq->subscribe_event[port].connect(
@@ -117,7 +118,7 @@ void alsanetwork_t::send_midi(midipeer_id_t from, const mididata_t &data) {
       auto port = peer.first;
       alsatrans_encoder.encode(
           mididata_copy, [this, port](snd_seq_event_t *ev) {
-            DEBUG("Send to ALSA port {}:{}", port.client, port.port);
+            // DEBUG("Send to ALSA port {}:{}", port.client, port.port);
             snd_seq_ev_set_source(ev, this->port);
             snd_seq_ev_set_dest(ev, port.client, port.port);
             snd_seq_ev_set_direct(ev);

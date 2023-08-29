@@ -20,13 +20,26 @@
 #include "alsanetwork.hpp"
 #include "alsapeer.hpp"
 #include "midipeer.hpp"
+#include "rtpmidinetwork.hpp"
 #include "rtpmidiserverpeer.hpp"
+#include "rtppeer.hpp"
 #include <memory>
 
 namespace rtpmididns {
 
-std::shared_ptr<midipeer_t> make_alsanetwork(const std::string &name) {
-  return std::make_shared<alsanetwork_t>(name);
+std::shared_ptr<midipeer_t>
+make_alsanetwork(const std::string &name,
+                 std::shared_ptr<rtpmidid::aseq> aseq) {
+  return std::make_shared<alsanetwork_t>(name, aseq);
+}
+std::shared_ptr<midipeer_t>
+make_rtpmididnetwork(const std::string &name, const std::string &port,
+                     std::shared_ptr<rtpmidid::aseq> aseq) {
+  return std::make_shared<rtpmidinetwork_t>(name, port, aseq);
+}
+std::shared_ptr<midipeer_t>
+make_rtppeer(std::shared_ptr<rtpmidid::rtppeer_t> peer) {
+  return std::make_shared<rtppeer_t>(peer);
 }
 
 std::shared_ptr<midipeer_t>
