@@ -29,7 +29,7 @@
 struct sockaddr_in6;
 
 namespace rtpmidid {
-class rtpserver {
+class rtpserver_t {
 public:
   // Callbacks to call when new connections
   signal_t<std::shared_ptr<rtppeer_t>> connected_event;
@@ -37,6 +37,8 @@ public:
 
   struct peer_data_t {
     std::shared_ptr<rtppeer_t> peer;
+    std::string address;
+    int port;
 
     connection_t<const io_bytes_reader &, rtppeer_t::port_e>
         send_event_connection;
@@ -58,8 +60,8 @@ public:
   poller_t::listener_t midi_poller;
   poller_t::listener_t control_poller;
 
-  rtpserver(std::string name, const std::string &port);
-  ~rtpserver();
+  rtpserver_t(std::string name, const std::string &port);
+  ~rtpserver_t();
 
   // Returns the peer for that packet, or nullptr
   std::shared_ptr<rtppeer_t> get_peer_by_packet(io_bytes_reader &b,

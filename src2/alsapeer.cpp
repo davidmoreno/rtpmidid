@@ -32,6 +32,18 @@ alsapeer_t::alsapeer_t(const std::string &name,
 
 alsapeer_t::~alsapeer_t() { seq->remove_port(port); }
 
-void alsapeer_t::send_midi(midipeer_id_t from, const mididata_t &) {}
+void alsapeer_t::send_midi(midipeer_id_t from, const mididata_t &) {
+  packets_recv += 1;
+}
 
-json_t alsapeer_t::status() { return json_t{{"type", "alsapeer_t"}}; }
+json_t alsapeer_t::status() {
+  return json_t{
+      {"type", "alsapeer_t"},
+      {
+          "stats", //
+          {{"recv", packets_recv}, {"sent", packets_sent}}
+          //
+      }
+      //
+  };
+}

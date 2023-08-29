@@ -25,7 +25,7 @@ class midirouter_t;
 
 class rtpmidinetwork_t {
 public:
-  rtpmidid::rtpserver server;
+  rtpmidid::rtpserver_t server;
   rtpmidinetwork_t(const std::string &name, const std::string &port,
                    rtpmididns::midirouter_t *router);
 };

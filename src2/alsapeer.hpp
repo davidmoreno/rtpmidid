@@ -26,6 +26,8 @@ public:
   uint8_t port;
   std::shared_ptr<rtpmidid::aseq> seq;
   std::string name_;
+  int packets_sent = 0;
+  int packets_recv = 0;
 
   connection_t<rtpmidid::aseq::port_t, const std::string &>
       subscribe_connection;

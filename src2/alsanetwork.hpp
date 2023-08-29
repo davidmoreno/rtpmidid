@@ -48,6 +48,8 @@ public:
   uint8_t port;
   rtpmidid::mididata_to_alsaevents_t alsatrans_decoder;
   rtpmidid::mididata_to_alsaevents_t alsatrans_encoder;
+  int packets_sent = 0;
+  int packets_recv = 0;
 
   std::unordered_map<rtpmidid::aseq::port_t, midipeer_id_t> aseqpeers;
   connection_t<rtpmidid::aseq::port_t, const std::string &>

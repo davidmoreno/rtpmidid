@@ -103,9 +103,11 @@ void alsanetwork_t::alsaseq_event(snd_seq_event_t *event) {
   auto midi = mididata_t(writer);
 
   router->send_midi(0, peerI->second, midi);
+  packets_sent++;
 }
 
 void alsanetwork_t::send_midi(midipeer_id_t from, const mididata_t &data) {
+  packets_recv++;
   for (auto &peer : aseqpeers) {
     // DEBUG("Look for dest alsa peer: {} == {} ? {}", peer.second, from,
     //       peer.second == from);
@@ -125,7 +127,28 @@ void alsanetwork_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   }
 }
 json_t alsanetwork_t::status() {
-  return json_t{{"type", "alsanetwork_t"}, {"name", seq->name}};
+  json_t connections{};
+  for (auto &peer : aseqpeers) {
+    auto port = peer.first;
+    auto to = peer.second;
+    connections.push_back({
+        //
+        {"alsa", fmt::format("{}:{}", port.client, port.port)},
+        {"local", to} //
+    });
+  }
+
+  return json_t{
+      {"type", "alsanetwork_t"}, //
+      {"name", seq->name},       //
+      {
+          "stats", //
+          {{"recv", packets_recv}, {"sent", packets_sent}}
+          //
+      },
+      {"connections", connections}
+      //
+  };
 }
 
 } // namespace rtpmididns

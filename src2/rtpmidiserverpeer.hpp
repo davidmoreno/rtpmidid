@@ -34,7 +34,9 @@ namespace rtpmididns {
 class rtpmidiserverpeer_t : public midipeer_t {
 public:
   std::string name_;
-  rtpmidid::rtpserver server;
+  rtpmidid::rtpserver_t server;
+  int packets_sent = 0;
+  int packets_recv = 0;
 
   connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
 

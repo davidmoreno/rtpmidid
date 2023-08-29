@@ -50,13 +50,48 @@ rtpmidiserverpeer_t::~rtpmidiserverpeer_t() {
 
 void rtpmidiserverpeer_t::send_midi(midipeer_id_t from,
                                     const mididata_t &mididata) {
+  packets_recv++;
   server.send_midi_to_all_peers(mididata);
 }
 
 json_t rtpmidiserverpeer_t::status() {
+  std::vector<json_t> peers;
+  for (auto &peer : server.peers) {
+    auto &peerpeer = peer.peer;
+    peers.push_back({
+        //
+        {"latency_ms", peerpeer->latency / 10.0},
+        {"status", peerpeer->status},
+        {"sequence_number", peerpeer->seq_nr},
+        {"sequence_number_ack", peerpeer->seq_nr_ack},
+        {"local",
+         {
+             {"name", peerpeer->local_name}, {"ssrc", peerpeer->local_ssrc}, //
+         }},                                                                 //
+        {
+            "remote",
+            {
+                {"name", peerpeer->remote_name},
+                {"ssrc", peerpeer->remote_ssrc},
+                {"port", peer.port},
+                {"address", peer.address} //
+            }                             //
+        }
+        //
+    });
+  }
   return json_t{
-      {"name", name_},                //
-      {"type", "rtpmidiserverpeer_t"} //
+      {"name", name_},                 //
+      {"type", "rtpmidiserverpeer_t"}, //
+      {
+          "stats", //
+          {{"recv", packets_recv}, {"sent", packets_sent}}
+          //
+      },
+      {"port", server.midi_port},
+      {"peers", //
+       peers}
+      //
   };
 }
 } // namespace rtpmididns
