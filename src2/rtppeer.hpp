@@ -18,10 +18,10 @@
 #pragma once
 
 #include "midipeer.hpp"
+#include "rtpmidid/rtppeer.hpp"
 #include "rtpmidid/signal.hpp"
 
 namespace rtpmidid {
-class rtppeer_t;
 class io_bytes_reader;
 } // namespace rtpmidid
 
@@ -31,6 +31,7 @@ class rtppeer_t : public midipeer_t {
 public:
   std::shared_ptr<rtpmidid::rtppeer_t> peer;
   connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
+  connection_t<rtpmidid::rtppeer_t::disconnect_reason_e> disconnect_connection;
 
   rtppeer_t(std::shared_ptr<rtpmidid::rtppeer_t> peer);
   ~rtppeer_t();

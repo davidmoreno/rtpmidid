@@ -19,6 +19,7 @@
 #pragma once
 #include "rtpmidid/iobytes.hpp"
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -42,8 +43,13 @@ public:
   midirouter_t();
 
   peer_id_t add_peer(std::shared_ptr<midipeer_t>);
+  std::shared_ptr<midipeer_t> get_peer_by_id(peer_id_t peer_id);
+  peerconnection_t *get_peerdata_by_id(peer_id_t peer_id);
+
   void remove_peer(peer_id_t);
   void connect(peer_id_t from, peer_id_t to);
+  void peer_connection_loop(peer_id_t peer_id,
+                            std::function<void(std::shared_ptr<midipeer_t>)>);
 
   void send_midi(peer_id_t from, const mididata_t &data);
   void send_midi(peer_id_t from, peer_id_t to, const mididata_t &data);

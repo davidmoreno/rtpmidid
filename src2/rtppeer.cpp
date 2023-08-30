@@ -21,6 +21,7 @@
 #include "mididata.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/iobytes.hpp"
+#include "rtpmidid/poller.hpp"
 #include "rtpmidid/rtppeer.hpp"
 #include <memory>
 
@@ -30,6 +31,18 @@ rtppeer_t::rtppeer_t(std::shared_ptr<rtpmidid::rtppeer_t> peer_) : peer(peer_) {
   midi_connection =
       peer->midi_event.connect([this](const rtpmidid::io_bytes_reader &data) {
         router->send_midi(peer_id, mididata_t{data});
+      });
+
+  disconnect_connection = peer->disconnect_event.connect(
+      [this](rtpmidid::rtppeer_t::disconnect_reason_e reason) {
+        DEBUG("Peer disconnected: {}. Remove rtpmidi peer and alsa port too.",
+              reason);
+        rtpmidid::poller.call_later([this] {
+          router->peer_connection_loop(peer_id, [this](auto other_peer) {
+            router->remove_peer(other_peer->peer_id);
+          });
+          router->remove_peer(peer_id);
+        });
       });
 }
 
