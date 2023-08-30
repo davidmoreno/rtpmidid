@@ -26,7 +26,8 @@ public:
   uint8_t port;
   std::shared_ptr<rtpmidid::aseq> seq;
   std::string name;
-  rtpmidid::mididata_to_alsaevents_t mididata_trans;
+  rtpmidid::mididata_to_alsaevents_t mididata_encoder;
+  rtpmidid::mididata_to_alsaevents_t mididata_decoder;
 
   connection_t<rtpmidid::aseq::port_t, const std::string &>
       subscribe_connection;

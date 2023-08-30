@@ -214,7 +214,7 @@ looking for new projects.
       is made to this `alsa / Network` port, it is exported at the rtpmidi 
       side, avahi export too. Connections to this `rtpmidid / a` port goes to 
       the connected `alsa / a`.
-* [ ] b. There is an exported `rtpmidid / Network` port. If an rtpmidi 
+* [x] b. There is an exported `rtpmidid / Network` port. If an rtpmidi 
       connection `rtpmidid / b`is made to this port, a new ALSA port appears in 
       the ALSA side with the rtpmidi name `alsa / b`.
 * [ ] c. Create a new server to connect to from the CLI `rtpmidid / c` and 

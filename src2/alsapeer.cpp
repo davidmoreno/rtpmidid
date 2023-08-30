@@ -21,6 +21,7 @@
 #include "json.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
+#include "midirouter.hpp"
 #include "rtpmidid/iobytes.hpp"
 
 using namespace rtpmididns;
@@ -30,6 +31,14 @@ alsapeer_t::alsapeer_t(const std::string &name_,
     : seq(seq_), name(name_) {
   port = seq->create_port(name);
   INFO("Created alsapeer {}, port {}", name, port);
+
+  midi_connection = seq->midi_event[port].connect([this](snd_seq_event *ev) {
+    rtpmidid::io_bytes_static<1024> data;
+    auto datawriter = rtpmidid::io_bytes_writer(data);
+    mididata_decoder.decode(ev, datawriter);
+    auto mididata = mididata_t(datawriter);
+    router->send_midi(peer_id, mididata);
+  });
 }
 
 alsapeer_t::~alsapeer_t() { seq->remove_port(port); }
@@ -37,7 +46,7 @@ alsapeer_t::~alsapeer_t() { seq->remove_port(port); }
 void alsapeer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   packets_recv += 1;
   auto readerdata = rtpmidid::io_bytes_reader(data);
-  mididata_trans.encode(readerdata, [this](snd_seq_event_t *ev) {
+  mididata_encoder.encode(readerdata, [this](snd_seq_event_t *ev) {
     snd_seq_ev_set_source(ev, this->port);
     snd_seq_ev_set_subs(ev); // to all subscribers
     snd_seq_ev_set_direct(ev);
