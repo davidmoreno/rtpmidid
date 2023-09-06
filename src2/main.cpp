@@ -118,9 +118,8 @@ const char *CMDLINE_HELP =
     "  --port <port>         Opens local port as server. Default 5004.\n"
     // "  --connect <address> Connects the given address. This is default, no "
     // "need for --connect\n"
-    // "  --control <path>    Creates a control socket. Check CONTROL.md.
-    // Default "
-    // "`/var/run/rtpmidid/control.sock`\n"
+    "  --control <path>    Creates a control socket. Check CONTROL.md. Default "
+    "`/var/run/rtpmidid/control.sock`\n"
     // "  address for connect:\n"
     // "  hostname            Connects to hostname:5004 port using rtpmidi\n"
     // "  hostname:port       Connects to a hostname on a given port\n"
