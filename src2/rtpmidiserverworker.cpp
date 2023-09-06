@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "rtpmidiserverpeer.hpp"
+#include "rtpmidiserverworker.hpp"
 #include "json.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
@@ -27,7 +27,7 @@
 namespace rtpmididns {
 extern std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 
-rtpmidiserverpeer_t::rtpmidiserverpeer_t(const std::string &name)
+rtpmidiserverworker_t::rtpmidiserverworker_t(const std::string &name)
     : name_(name), server(name, "") {
   if (mdns)
     mdns->announce_rtpmidi(name, server.control_port);
@@ -43,17 +43,17 @@ rtpmidiserverpeer_t::rtpmidiserverpeer_t(const std::string &name)
         router->send_midi(this->peer_id, data);
       });
 }
-rtpmidiserverpeer_t::~rtpmidiserverpeer_t() {
+rtpmidiserverworker_t::~rtpmidiserverworker_t() {
   if (mdns)
     mdns->unannounce_rtpmidi(name_, server.control_port);
 }
 
-void rtpmidiserverpeer_t::send_midi(midipeer_id_t from,
-                                    const mididata_t &mididata) {
+void rtpmidiserverworker_t::send_midi(midipeer_id_t from,
+                                      const mididata_t &mididata) {
   server.send_midi_to_all_peers(mididata);
 }
 
-json_t rtpmidiserverpeer_t::status() {
+json_t rtpmidiserverworker_t::status() {
   std::vector<json_t> peers;
   for (auto &peer : server.peers) {
     auto &peerpeer = peer.peer;
@@ -80,8 +80,8 @@ json_t rtpmidiserverpeer_t::status() {
     });
   }
   return json_t{
-      {"name", name_},                 //
-      {"type", "rtpmidiserverpeer_t"}, //
+      {"name", name_},                   //
+      {"type", "rtpmidi_server_worker"}, //
       {"port", server.midi_port},
       {"peers", //
        peers}

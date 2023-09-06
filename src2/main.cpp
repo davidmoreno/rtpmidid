@@ -16,13 +16,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "alsanetwork.hpp"
+#include "aseq.hpp"
 #include "control_socket.hpp"
 #include "factory.hpp"
 #include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "rtpmidid/poller.hpp"
-#include "rtpmidinetwork.hpp"
 #include "settings.hpp"
 #include <chrono>
 #include <signal.h>
@@ -62,7 +61,7 @@ int main(int argc, char **argv) {
   INFO("Waiting for connections.");
   try {
     auto aseq =
-        std::make_shared<rtpmidid::aseq>(rtpmididns::settings.alsa_name);
+        std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
     rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>();
     rtpmididns::midirouter_t router;
     rtpmididns::control_socket_t control;

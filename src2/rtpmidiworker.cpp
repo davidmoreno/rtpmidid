@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "rtppeer.hpp"
+#include "rtpmidiworker.hpp"
 #include "json.hpp"
 #include "mididata.hpp"
 #include "midirouter.hpp"
@@ -26,7 +26,8 @@
 #include <memory>
 
 namespace rtpmididns {
-rtppeer_t::rtppeer_t(std::shared_ptr<rtpmidid::rtppeer_t> peer_) : peer(peer_) {
+rtpmidiworker_t::rtpmidiworker_t(std::shared_ptr<rtpmidid::rtppeer_t> peer_)
+    : peer(peer_) {
 
   midi_connection =
       peer->midi_event.connect([this](const rtpmidid::io_bytes_reader &data) {
@@ -46,16 +47,16 @@ rtppeer_t::rtppeer_t(std::shared_ptr<rtpmidid::rtppeer_t> peer_) : peer(peer_) {
       });
 }
 
-rtppeer_t::~rtppeer_t() {}
+rtpmidiworker_t::~rtpmidiworker_t() {}
 
-void rtppeer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
+void rtpmidiworker_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   peer->send_midi(data);
 };
 
-json_t rtppeer_t::status() {
+json_t rtpmidiworker_t::status() {
   return json_t{
       {"name", peer->remote_name}, //
-      {"type", "rtppeer_t"},       //
+      {"type", "rtpmidi_worker"},  //
       {"latency_ms", peer->latency / 10.0},
   };
 };

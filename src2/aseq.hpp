@@ -28,8 +28,8 @@
 
 #include <rtpmidid/signal.hpp>
 
-namespace rtpmidid {
-class aseq {
+namespace rtpmididns {
+class aseq_t {
 public:
   struct port_t {
     uint8_t client;
@@ -53,10 +53,10 @@ public:
   std::map<int, signal_t<port_t>> unsubscribe_event;
   std::map<int, signal_t<snd_seq_event_t *>> midi_event;
   uint8_t client_id;
-  std::vector<poller_t::listener_t> aseq_listener;
+  std::vector<rtpmidid::poller_t::listener_t> aseq_listener;
 
-  aseq(std::string name);
-  ~aseq();
+  aseq_t(std::string name);
+  ~aseq_t();
 
   void read_ready();
   std::string get_client_name(snd_seq_addr_t *addr);
@@ -68,7 +68,7 @@ public:
   void disconnect_port(uint8_t port);
 };
 
-std::vector<std::string> get_ports(aseq *);
+std::vector<std::string> get_ports(aseq_t *);
 
 /**
  * @short This class allows to feed midi data and loops over the given function
@@ -87,11 +87,11 @@ public:
               std::function<void(snd_seq_event_t *)>);
   void decode(snd_seq_event_t *, rtpmidid::io_bytes_writer &data);
 };
-} // namespace rtpmidid
+} // namespace rtpmididns
 
 namespace std {
-template <> struct hash<rtpmidid::aseq::port_t> {
-  size_t operator()(const rtpmidid::aseq::port_t &key) const {
+template <> struct hash<rtpmididns::aseq_t::port_t> {
+  size_t operator()(const rtpmididns::aseq_t::port_t &key) const {
     return (key.client << 8) + key.port;
   }
 };

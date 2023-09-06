@@ -16,8 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "../src2/alsanetwork.hpp"
-#include "../src2/alsapeer.hpp"
+#include "../src2/alsalistener.hpp"
+#include "../src2/alsaworker.hpp"
 #include "../src2/aseq.hpp"
 #include "../src2/factory.hpp"
 #include "../src2/mididata.hpp"
@@ -65,7 +65,7 @@ rtpmididns::make_rtpmidiserver(const std::string &name) {
 }
 std::shared_ptr<rtpmididns::midipeer_t>
 rtpmididns::make_alsapeer(const std::string &name,
-                          std::shared_ptr<rtpmidid::aseq> seq) {
+                          std::shared_ptr<rtpmidid::aseq_t> seq) {
   return std::make_shared<test_midiio_t>();
 }
 
@@ -90,7 +90,8 @@ void test_basic_midirouter() {
 
 void test_midirouter_from_alsa() {
   rtpmididns::midirouter_t router;
-  rtpmididns::alsanetwork_t alsanetwork("test", &router);
+  auto aseq = std::make_shared<rtpmidid::aseq_t>("Test");
+  rtpmididns::alsalistener_t alsanetwork("test", aseq);
 
   // This must have created a rtpmidid network connection
   auto rtpmidinetwork_id = alsanetwork.new_alsa_connection({128, 0}, "KB01");

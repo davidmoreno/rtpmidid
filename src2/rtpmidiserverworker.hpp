@@ -17,26 +17,31 @@
  */
 
 #pragma once
-#include "aseq.hpp"
 #include "midipeer.hpp"
+#include "rtpmidid/rtpserver.hpp"
+#include "rtpmidid/signal.hpp"
+#include <string>
 
 namespace rtpmididns {
-class alsapeer_t : public midipeer_t {
+/**
+ * @short Creates a new rtpmidi server, all connections share the data bus
+ *
+ * The idea is that ALSA connected a port, so we export the rtpmidi connection.
+ *
+ * This is this connection. As several clients can connect, any data goes to
+ * the ALSA side, and any data from ALSA goes to all the clients.
+ */
+class rtpmidiserverworker_t : public midipeer_t {
 public:
-  uint8_t port;
-  std::shared_ptr<rtpmidid::aseq> seq;
-  std::string name;
-  rtpmidid::mididata_to_alsaevents_t mididata_encoder;
-  rtpmidid::mididata_to_alsaevents_t mididata_decoder;
+  std::string name_;
+  rtpmidid::rtpserver_t server;
 
-  connection_t<rtpmidid::aseq::port_t, const std::string &>
-      subscribe_connection;
-  connection_t<rtpmidid::aseq::port_t> unsubscibe_connection;
-  connection_t<snd_seq_event_t *> midi_connection;
+  connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
 
-  alsapeer_t(const std::string &name, std::shared_ptr<rtpmidid::aseq> seq);
-  virtual ~alsapeer_t();
+  rtpmidiserverworker_t(const std::string &name);
+  virtual ~rtpmidiserverworker_t();
+
+  void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;
-  virtual void send_midi(midipeer_id_t from, const mididata_t &) override;
 };
 } // namespace rtpmididns

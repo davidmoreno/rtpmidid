@@ -1,17 +1,18 @@
 add_executable(
   rtpmidid2-daemon  
   main.cpp
-
-  alsanetwork.cpp
-  alsapeer.cpp
   aseq.cpp
   control_socket.cpp
+  stringpp.cpp
+
   factory.cpp
   midirouter.cpp
-  rtpmidinetwork.cpp
-  rtpmidiserverpeer.cpp
-  rtppeer.cpp
-  stringpp.cpp
+
+  alsalistener.cpp
+  alsaworker.cpp
+  rtpmidilistener.cpp
+  rtpmidiserverworker.cpp
+  rtpmidiworker.cpp
 )
 
 target_link_libraries(rtpmidid2-daemon ${AVAHI_LIBRARIES})

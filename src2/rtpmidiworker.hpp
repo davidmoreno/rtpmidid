@@ -15,31 +15,26 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 #pragma once
+
 #include "midipeer.hpp"
-#include "rtpmidid/rtpserver.hpp"
+#include "rtpmidid/rtppeer.hpp"
 #include "rtpmidid/signal.hpp"
-#include <string>
+
+namespace rtpmidid {
+class io_bytes_reader;
+} // namespace rtpmidid
 
 namespace rtpmididns {
-/**
- * @short Creates a new rtpmidi server, all connections share the data bus
- *
- * The idea is that ALSA connected a port, so we export the rtpmidi connection.
- *
- * This is this connection. As several clients can connect, any data goes to
- * the ALSA side, and any data from ALSA goes to all the clients.
- */
-class rtpmidiserverpeer_t : public midipeer_t {
+
+class rtpmidiworker_t : public midipeer_t {
 public:
-  std::string name_;
-  rtpmidid::rtpserver_t server;
-
+  std::shared_ptr<rtpmidid::rtppeer_t> peer;
   connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
+  connection_t<rtpmidid::rtppeer_t::disconnect_reason_e> disconnect_connection;
 
-  rtpmidiserverpeer_t(const std::string &name);
-  virtual ~rtpmidiserverpeer_t();
+  rtpmidiworker_t(std::shared_ptr<rtpmidid::rtppeer_t> peer);
+  ~rtpmidiworker_t();
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;

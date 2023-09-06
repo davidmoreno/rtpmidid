@@ -41,7 +41,7 @@ add_test(NAME test_signals COMMAND test_signals)
 
 
 add_executable(test_midirouter
-    test_midirouter.cpp test_utils.cpp ../src2/midirouter.cpp ../src2/alsanetwork.cpp ../src2/aseq.cpp
+    test_midirouter.cpp test_utils.cpp ../src2/midirouter.cpp ../src2/alsalistener.cpp ../src2/aseq.cpp
 )
 target_link_libraries(test_midirouter -lfmt -pthread rtpmidid-shared)
 add_test(NAME test_midirouter COMMAND test_midirouter)

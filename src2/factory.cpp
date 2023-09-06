@@ -17,38 +17,37 @@
  */
 
 #include "factory.hpp"
-#include "alsanetwork.hpp"
-#include "alsapeer.hpp"
+#include "alsalistener.hpp"
+#include "alsaworker.hpp"
 #include "midipeer.hpp"
-#include "rtpmidinetwork.hpp"
-#include "rtpmidiserverpeer.hpp"
-#include "rtppeer.hpp"
+#include "rtpmidilistener.hpp"
+#include "rtpmidiserverworker.hpp"
+#include "rtpmidiworker.hpp"
 #include <memory>
 
 namespace rtpmididns {
 
-std::shared_ptr<midipeer_t>
-make_alsanetwork(const std::string &name,
-                 std::shared_ptr<rtpmidid::aseq> aseq) {
-  return std::make_shared<alsanetwork_t>(name, aseq);
+std::shared_ptr<midipeer_t> make_alsanetwork(const std::string &name,
+                                             std::shared_ptr<aseq_t> aseq) {
+  return std::make_shared<alsalistener_t>(name, aseq);
 }
-std::shared_ptr<midipeer_t>
-make_rtpmididnetwork(const std::string &name, const std::string &port,
-                     std::shared_ptr<rtpmidid::aseq> aseq) {
-  return std::make_shared<rtpmidinetwork_t>(name, port, aseq);
+std::shared_ptr<midipeer_t> make_rtpmididnetwork(const std::string &name,
+                                                 const std::string &port,
+                                                 std::shared_ptr<aseq_t> aseq) {
+  return std::make_shared<rtpmidilistener_t>(name, port, aseq);
 }
 std::shared_ptr<midipeer_t>
 make_rtppeer(std::shared_ptr<rtpmidid::rtppeer_t> peer) {
-  return std::make_shared<rtppeer_t>(peer);
+  return std::make_shared<rtpmidiworker_t>(peer);
 }
 
-std::shared_ptr<midipeer_t>
-make_alsapeer(const std::string &name, std::shared_ptr<rtpmidid::aseq> aseq) {
-  return std::make_shared<alsapeer_t>(name, aseq);
+std::shared_ptr<midipeer_t> make_alsapeer(const std::string &name,
+                                          std::shared_ptr<aseq_t> aseq) {
+  return std::make_shared<alsaworker_t>(name, aseq);
 }
 
 std::shared_ptr<midipeer_t> make_rtpmidiserver(const std::string &name) {
-  return std::make_shared<rtpmidiserverpeer_t>(name);
+  return std::make_shared<rtpmidiserverworker_t>(name);
 }
 
 } // namespace rtpmididns

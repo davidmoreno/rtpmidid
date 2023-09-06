@@ -21,24 +21,24 @@
 #include "rtpmidid/rtppeer.hpp"
 #include <memory>
 namespace rtpmidid {
-class aseq;
 class rtppeer_t;
 } // namespace rtpmidid
 
 namespace rtpmididns {
+class aseq_t;
 class midirouter_t;
 class midipeer_t;
 
 // Many factory creators, basically to allow testing of the different parts
-std::shared_ptr<midipeer_t>
-make_alsanetwork(const std::string &name, std::shared_ptr<rtpmidid::aseq> aseq);
-std::shared_ptr<midipeer_t>
-make_rtpmididnetwork(const std::string &name, const std::string &port,
-                     std::shared_ptr<rtpmidid::aseq> aseq);
+std::shared_ptr<midipeer_t> make_alsanetwork(const std::string &name,
+                                             std::shared_ptr<aseq_t> aseq);
+std::shared_ptr<midipeer_t> make_rtpmididnetwork(const std::string &name,
+                                                 const std::string &port,
+                                                 std::shared_ptr<aseq_t> aseq);
 std::shared_ptr<midipeer_t>
 make_rtppeer(std::shared_ptr<rtpmidid::rtppeer_t> peer);
 std::shared_ptr<midipeer_t> make_alsapeer(const std::string &name,
-                                          std::shared_ptr<rtpmidid::aseq>);
+                                          std::shared_ptr<aseq_t>);
 std::shared_ptr<midipeer_t> make_rtpmidiserver(const std::string &name);
 
 } // namespace rtpmididns

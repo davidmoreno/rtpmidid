@@ -15,28 +15,27 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 #pragma once
-
+#include "aseq.hpp"
 #include "midipeer.hpp"
-#include "rtpmidid/rtppeer.hpp"
-#include "rtpmidid/signal.hpp"
-
-namespace rtpmidid {
-class io_bytes_reader;
-} // namespace rtpmidid
 
 namespace rtpmididns {
-
-class rtppeer_t : public midipeer_t {
+class alsaworker_t : public midipeer_t {
 public:
-  std::shared_ptr<rtpmidid::rtppeer_t> peer;
-  connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
-  connection_t<rtpmidid::rtppeer_t::disconnect_reason_e> disconnect_connection;
+  uint8_t port;
+  std::shared_ptr<aseq_t> seq;
+  std::string name;
+  mididata_to_alsaevents_t mididata_encoder;
+  mididata_to_alsaevents_t mididata_decoder;
 
-  rtppeer_t(std::shared_ptr<rtpmidid::rtppeer_t> peer);
-  ~rtppeer_t();
+  connection_t<aseq_t::port_t, const std::string &> subscribe_connection;
+  connection_t<aseq_t::port_t> unsubscibe_connection;
+  connection_t<snd_seq_event_t *> midi_connection;
 
-  void send_midi(midipeer_id_t from, const mididata_t &) override;
+  alsaworker_t(const std::string &name, std::shared_ptr<aseq_t> seq);
+  virtual ~alsaworker_t();
   json_t status() override;
+  virtual void send_midi(midipeer_id_t from, const mididata_t &) override;
 };
 } // namespace rtpmididns

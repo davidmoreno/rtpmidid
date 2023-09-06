@@ -26,7 +26,7 @@
 #include <rtpmidid/rtpclient.hpp>
 #include <stdio.h>
 
-namespace rtpmidid {
+namespace rtpmididns {
 void error_handler(const char *file, int line, const char *function, int err,
                    const char *fmt, ...) {
   va_list arg;
@@ -66,7 +66,7 @@ snd_seq_addr_t *get_my_ev_client_port(snd_seq_event_t *ev, uint8_t client_id) {
     return &connect.dest;
   }
 }
-aseq::aseq(std::string _name) : name(std::move(_name)) {
+aseq_t::aseq_t(std::string _name) : name(std::move(_name)) {
   snd_lib_error_set_handler(error_handler);
   if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0) {
     throw rtpmidid::exception(
@@ -86,22 +86,23 @@ aseq::aseq(std::string _name) : name(std::move(_name)) {
   auto poller_count_check =
       snd_seq_poll_descriptors(seq, pfds.get(), poller_count, POLLIN);
   if (poller_count != poller_count_check) {
-    throw exception("ALSA seq poller count does not match. {} != {}",
-                    poller_count, poller_count_check);
+    throw rtpmidid::exception("ALSA seq poller count does not match. {} != {}",
+                              poller_count, poller_count_check);
   }
   // DEBUG("Got {} pollers", poller_count);
   for (int i = 0; i < poller_count; i++) {
     // fds.push_back(pfds[i].fd);
     // DEBUG("Adding fd {} as alsa seq", pfds[i].fd);
-    aseq_listener.emplace_back(poller.add_fd_in(pfds[i].fd, [this](int) {
-      // INFO("New event at alsa seq");
-      this->read_ready();
-    }));
+    aseq_listener.emplace_back(
+        rtpmidid::poller.add_fd_in(pfds[i].fd, [this](int) {
+          // INFO("New event at alsa seq");
+          this->read_ready();
+        }));
   }
   read_ready();
 }
 
-aseq::~aseq() {
+aseq_t::~aseq_t() {
   // for (auto fd : fds) {
   //   try {
   //     poller.remove_fd(fd);
@@ -120,7 +121,7 @@ aseq::~aseq() {
  *                      groups that go to the same port. This will save some
  *                      bandwidth.
  */
-void aseq::read_ready() {
+void aseq_t::read_ready() {
   snd_seq_event_t *ev;
   int pending;
   while ((pending = snd_seq_event_input(seq, &ev)) > 0) {
@@ -182,7 +183,7 @@ void aseq::read_ready() {
   }
 }
 
-uint8_t aseq::create_port(const std::string &name) {
+uint8_t aseq_t::create_port(const std::string &name) {
   auto caps = SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE |
               SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ;
   auto type = SND_SEQ_TYPE_INET;
@@ -192,12 +193,12 @@ uint8_t aseq::create_port(const std::string &name) {
   return port;
 }
 
-void aseq::remove_port(uint8_t port) {
+void aseq_t::remove_port(uint8_t port) {
   snd_seq_delete_port(seq, port);
   midi_event.erase(port);
 }
 
-std::vector<std::string> get_ports(aseq *seq) {
+std::vector<std::string> get_ports(aseq_t *seq) {
   std::vector<std::string> ret;
 
   snd_seq_client_info_t *cinfo;
@@ -230,7 +231,7 @@ std::vector<std::string> get_ports(aseq *seq) {
   return ret;
 }
 
-std::string aseq::get_client_name(snd_seq_addr_t *addr) {
+std::string aseq_t::get_client_name(snd_seq_addr_t *addr) {
   snd_seq_client_info_t *client_info = nullptr;
   snd_seq_client_info_malloc(&client_info);
   snd_seq_get_any_client_info(seq, addr->client, client_info);
@@ -286,7 +287,7 @@ static void disconnect_port_at_subs(snd_seq_t *seq,
   }
 }
 
-void aseq::disconnect_port(uint8_t port) {
+void aseq_t::disconnect_port(uint8_t port) {
   DEBUG("Disconnect alsa port {}", port);
   snd_seq_query_subscribe_t *subs;
   snd_seq_port_info_t *portinfo;
@@ -339,4 +340,4 @@ void mididata_to_alsaevents_t::decode(snd_seq_event_t *ev,
   data.position += ret;
 }
 
-} // namespace rtpmidid
+} // namespace rtpmididns

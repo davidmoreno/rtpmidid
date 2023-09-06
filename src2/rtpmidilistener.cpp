@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "rtpmidinetwork.hpp"
+#include "rtpmidilistener.hpp"
 #include "factory.hpp"
 #include "json.hpp"
 #include "midirouter.hpp"
@@ -26,9 +26,9 @@ namespace rtpmididns {
 
 extern std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 
-rtpmidinetwork_t::rtpmidinetwork_t(const std::string &name,
-                                   const std::string &port,
-                                   std::shared_ptr<rtpmidid::aseq> aseq_)
+rtpmidilistener_t::rtpmidilistener_t(const std::string &name,
+                                     const std::string &port,
+                                     std::shared_ptr<aseq_t> aseq_)
     : aseq(aseq_), server(name, port) {
   if (mdns)
     mdns->announce_rtpmidi(name, server.control_port);
@@ -43,9 +43,9 @@ rtpmidinetwork_t::rtpmidinetwork_t(const std::string &name,
       });
 }
 
-void rtpmidinetwork_t::send_midi(midipeer_id_t from, const mididata_t &) {}
+void rtpmidilistener_t::send_midi(midipeer_id_t from, const mididata_t &) {}
 
-json_t rtpmidinetwork_t::status() {
+json_t rtpmidilistener_t::status() {
   std::vector<json_t> peers;
   for (auto &peer : server.peers) {
     auto &peerpeer = peer.peer;
@@ -74,7 +74,7 @@ json_t rtpmidinetwork_t::status() {
   }
 
   return json_t{
-      {"type", "rtpmidinetwork_t"}, //
+      {"type", "rtpmidi_listener"}, //
       {"peers", peers}              //
   };
 }

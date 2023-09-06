@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "alsapeer.hpp"
+#include "alsaworker.hpp"
 #include "aseq.hpp"
 #include "json.hpp"
 #include "mididata.hpp"
@@ -26,8 +26,8 @@
 
 using namespace rtpmididns;
 
-alsapeer_t::alsapeer_t(const std::string &name_,
-                       std::shared_ptr<rtpmidid::aseq> seq_)
+alsaworker_t::alsaworker_t(const std::string &name_,
+                           std::shared_ptr<aseq_t> seq_)
     : seq(seq_), name(name_) {
   port = seq->create_port(name);
   INFO("Created alsapeer {}, port {}", name, port);
@@ -41,9 +41,9 @@ alsapeer_t::alsapeer_t(const std::string &name_,
   });
 }
 
-alsapeer_t::~alsapeer_t() { seq->remove_port(port); }
+alsaworker_t::~alsaworker_t() { seq->remove_port(port); }
 
-void alsapeer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
+void alsaworker_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   packets_recv += 1;
   auto readerdata = rtpmidid::io_bytes_reader(data);
   mididata_encoder.encode(readerdata, [this](snd_seq_event_t *ev) {
@@ -54,9 +54,9 @@ void alsapeer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   });
 }
 
-json_t alsapeer_t::status() {
+json_t alsaworker_t::status() {
   return json_t{
-      {"type", "alsapeer_t"}, {"name", name},
+      {"type", "alsa_worker"}, {"name", name},
       //
   };
 }
