@@ -217,7 +217,7 @@ looking for new projects.
 * [x] b. There is an exported `rtpmidid / Network` port. If an rtpmidi 
       connection `rtpmidid / b`is made to this port, a new ALSA port appears in 
       the ALSA side with the rtpmidi name `alsa / b`.
-* [ ] c. Create a new server to connect to from the CLI `rtpmidid / c` and 
+* [ ] c. Create a new server to connect to from the CLI. Creates `rtpmidid / c` and 
       `alsa / c`
 
 
