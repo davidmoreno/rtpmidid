@@ -7,6 +7,7 @@ add_executable(
 
   factory.cpp
   midirouter.cpp
+  midipeer.cpp
 
   alsalistener.cpp
   alsaworker.cpp

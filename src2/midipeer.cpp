@@ -16,33 +16,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#pragma once
-
-#include "json_fwd.hpp"
-#include <cstdint>
-#include <memory>
+#include "midipeer.hpp"
+#include "midirouter.hpp"
 
 namespace rtpmididns {
 
-using midipeer_id_t = uint32_t;
-
-class mididata_t;
-class midirouter_t;
-/**
- * @short Any peer that can read and write midi
- *
- * Must be inherited by the real clients
- */
-class midipeer_t : std::enable_shared_from_this<midipeer_t> {
-public:
-  midirouter_t *router;
-  midipeer_id_t peer_id;
-  int packets_sent = 0;
-  int packets_recv = 0;
-
-  midipeer_t() : router(nullptr), peer_id(0) {}
-  virtual ~midipeer_t();
-  virtual json_t status() = 0;
-  virtual void send_midi(midipeer_id_t from, const mididata_t &) = 0;
-};
+midipeer_t::~midipeer_t() {
+  if (router) {
+    router->remove_peer(peer_id);
+  }
+}
 } // namespace rtpmididns
