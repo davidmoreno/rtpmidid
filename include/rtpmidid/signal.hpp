@@ -25,8 +25,8 @@
 #include <functional>
 #include <map>
 
-#define DEBUG0 DEBUG
-// #define DEBUG0(...)
+// #define DEBUG0 DEBUG
+#define DEBUG0(...)
 
 template <typename... Args> class connection_t;
 
