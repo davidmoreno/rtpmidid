@@ -178,6 +178,7 @@ void poller_t::__remove_fd(int fd) {
   if (is_open()) {
     auto r = epoll_ctl(pd->epollfd, EPOLL_CTL_DEL, fd, NULL);
     if (r == -1) {
+      ERROR("Error from poller! fd: {}, error: {}", fd, strerror(errno));
       throw exception("Can't remove fd {} from poller: {} ({})", fd,
                       strerror(errno), errno);
     }

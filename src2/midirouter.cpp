@@ -24,15 +24,23 @@
 using namespace rtpmididns;
 
 midirouter_t::midirouter_t() : max_id(1) {}
+midirouter_t::~midirouter_t() {}
 
-uint32_t midirouter_t::add_peer(std::shared_ptr<midipeer_t> ptr) {
+uint32_t midirouter_t::add_peer(std::shared_ptr<midipeer_t> peer) {
   auto peer_id = max_id++;
-  ptr->peer_id = peer_id;
-  ptr->router = this;
+  peer->peer_id = peer_id;
+  try {
+    peer->router = shared_from_this();
+  } catch (const std::exception &exc) {
+    ERROR("Error on SHARED FROM THIS! Make sure that the router is a "
+          "std::shared_ptr. {} {}",
+          (void *)this, exc.what());
+    throw;
+  }
 
   peers[peer_id] = peerconnection_t{
       peer_id,
-      ptr,
+      peer,
       {},
   };
   INFO("Added peer {}", peer_id);

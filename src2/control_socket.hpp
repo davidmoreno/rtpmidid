@@ -35,7 +35,7 @@ public:
   std::vector<client_t> clients;
   rtpmidid::poller_t::listener_t connection_listener;
   time_t start_time;
-  midirouter_t *router = nullptr;
+  std::shared_ptr<midirouter_t> router = nullptr;
 
 public:
   control_socket_t();

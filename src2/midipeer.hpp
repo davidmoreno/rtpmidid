@@ -35,7 +35,7 @@ class midirouter_t;
  */
 class midipeer_t : std::enable_shared_from_this<midipeer_t> {
 public:
-  midirouter_t *router;
+  std::shared_ptr<midirouter_t> router;
   midipeer_id_t peer_id;
   int packets_sent = 0;
   int packets_recv = 0;

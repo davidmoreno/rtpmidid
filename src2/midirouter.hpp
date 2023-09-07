@@ -36,11 +36,12 @@ struct peerconnection_t {
   std::vector<peer_id_t> send_to;
 };
 
-class midirouter_t {
+class midirouter_t : public std::enable_shared_from_this<midirouter_t> {
 public:
   peer_id_t max_id;
   std::unordered_map<uint32_t, peerconnection_t> peers;
   midirouter_t();
+  ~midirouter_t();
 
   peer_id_t add_peer(std::shared_ptr<midipeer_t>);
   std::shared_ptr<midipeer_t> get_peer_by_id(peer_id_t peer_id);

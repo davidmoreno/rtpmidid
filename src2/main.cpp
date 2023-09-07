@@ -63,14 +63,15 @@ int main(int argc, char **argv) {
     auto aseq =
         std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
     rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>();
-    rtpmididns::midirouter_t router;
+    auto router = std::make_shared<rtpmididns::midirouter_t>();
+    DEBUG("Router: {}, count: {}", (void *)router.get(), router.use_count());
     rtpmididns::control_socket_t control;
-    control.router = &router;
+    control.router = router;
 
-    router.add_peer(
+    router->add_peer(
         rtpmididns::make_alsanetwork(rtpmididns::settings.alsa_name, aseq));
 
-    router.add_peer(rtpmididns::make_rtpmididnetwork(
+    router->add_peer(rtpmididns::make_rtpmididnetwork(
         rtpmididns::settings.rtpmidid_name, rtpmididns::settings.rtpmidid_port,
         aseq));
 
