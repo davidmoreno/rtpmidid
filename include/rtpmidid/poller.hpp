@@ -116,5 +116,5 @@ public:
     fd = -1;
   }
 };
-
+#undef DEBUG0
 } // namespace rtpmidid

@@ -25,8 +25,8 @@
 #include <functional>
 #include <map>
 
-// #define DEBUG0 DEBUG
-#define DEBUG0(...)
+#define DEBUG0 DEBUG
+// #define DEBUG0(...)
 
 template <typename... Args> class connection_t;
 
@@ -68,11 +68,24 @@ public:
     assert(connections.size() == 0);
   }
 
+  /**
+   * @short Calls the callback
+   *
+   * It has to be carefull to call all callbacks that are at call moment, if
+   * they are still valid at call moment.
+   *
+   * This is as new callbacks can be added, or removed, and we should absolutely
+   * not call a not valid callback anymore.
+   */
   void operator()(Args... args) {
     DEBUG0("{}::signal_t::()", (void *)this);
-    for (auto const &f : slots) {
+    auto initial_list = slots;
+    for (auto const &f : initial_list) {
+      if (slots.find(f.first) == slots.end())
+        continue; // this element was removed while looping, do not call
       f.second(std::forward<Args>(args)...);
     }
+    DEBUG0("{}::signal_t::() END", (void *)this);
   }
 
   void replace_connection_ptr(int id, connection_t<Args...> *ptr) {
@@ -142,4 +155,5 @@ public:
     signal = nullptr;
     id = 0;
   }
+#undef DEBUG0
 };
