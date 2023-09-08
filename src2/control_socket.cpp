@@ -17,6 +17,7 @@
  */
 #include "control_socket.hpp"
 #include "config.hpp"
+#include "factory.hpp"
 #include "settings.hpp"
 #include <algorithm>
 #include <functional>
@@ -192,6 +193,50 @@ std::vector<control_socket_ns::command_t> commands{
        DEBUG("Remove peer_id {}", peer_id);
        control.router->remove_peer(peer_id);
        return "ok";
+     }},
+    {"connect",
+     [](control_socket_t &control, const json_t &params) {
+       std::string name, hostname, port;
+       bool error = false;
+       if (params.is_array()) {
+         switch (params.size()) {
+         case 1:
+           name = hostname = params[0];
+           port = "5004";
+           break;
+         case 2:
+           name = hostname = params[0];
+           port = params[1];
+           break;
+         case 3:
+           name = params[0];
+           hostname = params[1];
+           port = to_string(params[2]);
+           break;
+         default:
+           error = true;
+         }
+       } else if (params.is_object()) {
+         name = params["name"];
+         hostname = params["hostname"];
+         port = to_string(params["port"]);
+
+         if (name.empty() || hostname.empty() || port.empty()) {
+           error = true;
+         }
+       } else {
+         error = true;
+       }
+       if (error)
+         return json_t{"error",
+                       "Need 1 param (hostname:hostname:5004), 2 params "
+                       "(hostname:port), "
+                       "3 params (name,hostname,port) or a dict{name, "
+                       "hostname, port}"};
+
+       control.router->add_peer(
+           make_alsawaiter(name, hostname, port, control.aseq));
+       return json_t{"ok"};
      }}
     //
 };

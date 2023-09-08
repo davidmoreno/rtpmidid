@@ -17,6 +17,7 @@
  */
 
 #pragma once
+#include "aseq.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/poller.hpp"
 #include <string>
@@ -36,6 +37,7 @@ public:
   rtpmidid::poller_t::listener_t connection_listener;
   time_t start_time;
   std::shared_ptr<midirouter_t> router = nullptr;
+  std::shared_ptr<aseq_t> aseq = nullptr;
 
 public:
   control_socket_t();

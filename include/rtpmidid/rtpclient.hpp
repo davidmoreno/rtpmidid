@@ -37,7 +37,7 @@ struct address_port_t {
  * It connects to a remote address and port, do all the connection parts,
  * and emits midi events or on_disconnect if not valid.
  */
-class rtpclient {
+class rtpclient_t {
 
 public:
   rtppeer_t peer;
@@ -64,8 +64,8 @@ public:
   poller_t::listener_t midi_poller;
   poller_t::listener_t control_poller;
 
-  rtpclient(std::string name);
-  ~rtpclient();
+  rtpclient_t(std::string name);
+  ~rtpclient_t();
   void reset();
   void sendto(const io_bytes &pb, rtppeer_t::port_e port);
 

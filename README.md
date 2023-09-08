@@ -242,21 +242,17 @@ Exports an ALSA `Network` port. Any ALSA connection there creates a new
 It does an impersonated send of data to the `rtpmidiserverworker_t` and from
 it to the right ALSA port.
 
-## `alsawaiter_t`
+## `alsawaiter_t` (remove midipeer_t)
 
 Created manually or via mDNS/Avahi/Bounjour it creates a local ALSA port
-which, when a connection is kept, connects to a remote rtpmidi server via a
-`rtpmidiclient_t`.
+which, when a connection is kept, connects to a remote rtpmidi server.
+Connects to a `rtpmidiworker_t`.
 
 ## `alsaworker_t`
 
 Just redirects MIDI to/from an ALSA port. Used by `rtpmidilistener_t`
 
-## `rtpmidiclient_t`
-
-Connects to a remote port and send/receive the MIDI data.
-
-## `rtpmidilistener_t`
+## `rtpmidilistener_t`  (remove midipeer_t)
 
 Creates a RTP server port on which whenever an RTP peer connects creates
 both a `alsaworker_t` and a `rtpmidiworker_t` and connects them.

@@ -18,6 +18,7 @@
 
 #include "factory.hpp"
 #include "alsalistener.hpp"
+#include "alsawaiter.hpp"
 #include "alsaworker.hpp"
 #include "midipeer.hpp"
 #include "rtpmidilistener.hpp"
@@ -48,6 +49,13 @@ std::shared_ptr<midipeer_t> make_alsaworker(const std::string &name,
 
 std::shared_ptr<midipeer_t> make_rtpmidiserverworker(const std::string &name) {
   return std::make_shared<rtpmidiserverworker_t>(name);
+}
+
+std::shared_ptr<midipeer_t> make_alsawaiter(const std::string &name,
+                                            const std::string &hostname,
+                                            const std::string &port,
+                                            std::shared_ptr<aseq_t> aseq) {
+  return std::make_shared<alsawaiter_t>(name, hostname, port, aseq);
 }
 
 } // namespace rtpmididns

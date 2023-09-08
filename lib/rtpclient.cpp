@@ -39,7 +39,7 @@
 using namespace std::chrono_literals;
 using namespace rtpmidid;
 
-rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
+rtpclient_t::rtpclient_t(std::string name) : peer(std::move(name)) {
   local_base_port = 0;
   remote_base_port = -1; // Not defined
   control_socket = -1;
@@ -54,7 +54,7 @@ rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
       });
 }
 
-rtpclient::~rtpclient() {
+rtpclient_t::~rtpclient_t() {
   if (peer.is_connected()) {
     try {
       peer.send_goodbye(rtppeer_t::CONTROL_PORT);
@@ -75,8 +75,8 @@ rtpclient::~rtpclient() {
   }
 }
 
-void rtpclient::connect_to(const std::string &address,
-                           const std::string &port) {
+void rtpclient_t::connect_to(const std::string &address,
+                             const std::string &port) {
   struct addrinfo hints;
   struct addrinfo *sockaddress_list = nullptr;
   char host[NI_MAXHOST], service[NI_MAXSERV];
@@ -225,7 +225,7 @@ void rtpclient::connect_to(const std::string &address,
  *
  * This just checks timeout and sends the ck.
  */
-void rtpclient::connected() {
+void rtpclient_t::connected() {
   connect_timer.disable();
 
   ck_connection = peer.ck_event.connect([this](float ms) {
@@ -242,14 +242,14 @@ void rtpclient::connected() {
   send_ck0_with_timeout();
 }
 
-void rtpclient::send_ck0_with_timeout() {
+void rtpclient_t::send_ck0_with_timeout() {
   peer.send_ck0();
   ck_timeout = poller.add_timer_event(5s, [this] {
     peer.disconnect_event(rtppeer_t::disconnect_reason_e::CK_TIMEOUT);
   });
 }
 
-void rtpclient::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
+void rtpclient_t::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
   auto peer_addr = (port == rtppeer_t::MIDI_PORT) ? midi_addr : control_addr;
 
   auto socket = rtppeer_t::MIDI_PORT == port ? midi_socket : control_socket;
@@ -278,12 +278,12 @@ void rtpclient::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
   }
 }
 
-void rtpclient::reset() {
+void rtpclient_t::reset() {
   remote_base_port = 0;
   peer.reset();
 }
 
-void rtpclient::data_ready(rtppeer_t::port_e port) {
+void rtpclient_t::data_ready(rtppeer_t::port_e port) {
   uint8_t raw[1500];
   struct sockaddr_in6 cliaddr;
   unsigned int len = sizeof(cliaddr);

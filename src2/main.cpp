@@ -67,6 +67,7 @@ int main(int argc, char **argv) {
     DEBUG("Router: {}, count: {}", (void *)router.get(), router.use_count());
     rtpmididns::control_socket_t control;
     control.router = router;
+    control.aseq = aseq;
 
     router->add_peer(
         rtpmididns::make_alsalistener(rtpmididns::settings.alsa_name, aseq));
