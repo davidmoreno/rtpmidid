@@ -27,6 +27,14 @@ class io_bytes_reader;
 
 namespace rtpmididns {
 
+/**
+ * @short A remote peer connection
+ *
+ * Just does the basic communication with the given remote peer.
+ *
+ * Data from network to the peer is managed somewhere else, normally
+ * a rtpmidid::rtpclient_t or rtpmidid::rtpserver_t object.
+ */
 class rtpmidiworker_t : public midipeer_t {
 public:
   std::shared_ptr<rtpmidid::rtppeer_t> peer;

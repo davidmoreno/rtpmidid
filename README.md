@@ -217,9 +217,60 @@ looking for new projects.
 * [x] b. There is an exported `rtpmidid / Network` port. If an rtpmidi 
       connection `rtpmidid / b`is made to this port, a new ALSA port appears in 
       the ALSA side with the rtpmidi name `alsa / b`.
-* [ ] c. Create a new server to connect to from the CLI. Creates `rtpmidid / c` and 
+* [ ] c. Another computer announces though mDNS/Avahi/Bonjour a `remote` server,
+      we announce a new ALSA `ALSA / remote` and when some client connects,
+      we do the real rtpmidi connection.
+* [ ] d. Create a new server to connect to from the CLI. Creates `rtpmidid / c` and 
       `alsa / c`
 
+# MIDIPeer zoo
+
+Internally all connections to ALSA, to network, to rtpmidi... anything that can 
+send or receive MIDI are a `midipeer_t`. Each one has a specific mission and
+they coordinate to accomplish all the possible actions.
+
+All `midipeer_t` are stored (`std::shared_ptr`) at the `midirouter_t` that
+also is in charge of keeping tabs on connections and resending midi packets 
+from one peer to the connected ones.
+
+## `alsalistener_t`
+
+Exports an ALSA `Network` port. Any ALSA connection there creates a new 
+`rtpmidiserverworker_t` server. Data is properly routed to/from that 
+`rtpmidiserverworker_t`.
+
+It does an impersonated send of data to the `rtpmidiserverworker_t` and from
+it to the right ALSA port.
+
+## `alsawaiter_t`
+
+Created manually or via mDNS/Avahi/Bounjour it creates a local ALSA port
+which, when a connection is kept, connects to a remote rtpmidi server via a
+`rtpmidiclient_t`.
+
+## `alsaworker_t`
+
+Just redirects MIDI to/from an ALSA port. Used by `rtpmidilistener_t`
+
+## `rtpmidiclient_t`
+
+Connects to a remote port and send/receive the MIDI data.
+
+## `rtpmidilistener_t`
+
+Creates a RTP server port on which whenever an RTP peer connects creates
+both a `alsaworker_t` and a `rtpmidiworker_t` and connects them.
+
+It does not send nor receive MIDI data.
+
+## `rtpmidiserverworker_t`
+
+Exports a RTP MIDI port and mDNS, so that any external rtpmidi client can
+connect. All connected peers send/receive data from this peer.
+
+## `rtpmidiworker_t`
+
+A connection to a rtppeer_t that send/receives MIDI.
 
 
 ## Resources

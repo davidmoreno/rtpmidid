@@ -36,8 +36,9 @@ rtpmidilistener_t::rtpmidilistener_t(const std::string &name,
   connected_connection = server.connected_event.connect(
       [this](std::shared_ptr<rtpmidid::rtppeer_t> peer) {
         DEBUG("Got connection from {}", peer->remote_name);
-        auto alsa_id = router->add_peer(make_alsapeer(peer->remote_name, aseq));
-        auto peer_id = router->add_peer(make_rtppeer(peer));
+        auto alsa_id =
+            router->add_peer(make_alsaworker(peer->remote_name, aseq));
+        auto peer_id = router->add_peer(make_rtpmidiworker(peer));
         router->connect(alsa_id, peer_id);
         router->connect(peer_id, alsa_id);
       });

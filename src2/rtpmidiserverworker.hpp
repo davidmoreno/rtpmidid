@@ -26,7 +26,8 @@ namespace rtpmididns {
 /**
  * @short Creates a new rtpmidi server, all connections share the data bus
  *
- * The idea is that ALSA connected a port, so we export the rtpmidi connection.
+ * The idea is that ALSA connected a port to Network, so we export the rtpmidi
+ * connection.
  *
  * This is this connection. As several clients can connect, any data goes to
  * the ALSA side, and any data from ALSA goes to all the clients.

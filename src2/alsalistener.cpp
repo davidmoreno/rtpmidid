@@ -56,7 +56,7 @@ midipeer_id_t alsalistener_t::new_alsa_connection(const aseq_t::port_t &port,
                                                   const std::string &name) {
   DEBUG("Create network peer {}", name);
   // std::shared_ptr<midipeer_t> alsapeer = make_alsapeer(name, seq);
-  std::shared_ptr<midipeer_t> networkpeer = make_rtpmidiserver(name);
+  std::shared_ptr<midipeer_t> networkpeer = make_rtpmidiserverworker(name);
   // auto alsapeer_id = router->add_peer(alsapeer);
   auto networkpeer_id = router->add_peer(networkpeer);
 

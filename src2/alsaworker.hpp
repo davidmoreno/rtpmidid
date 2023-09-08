@@ -21,6 +21,9 @@
 #include "midipeer.hpp"
 
 namespace rtpmididns {
+/**
+ * @short ALSA port that just receives data and send to another midipeer_t
+ */
 class alsaworker_t : public midipeer_t {
 public:
   uint8_t port;

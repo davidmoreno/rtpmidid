@@ -250,10 +250,11 @@ static void resolve_callback(AvahiServiceResolver *r, AvahiIfIndex interface,
       // DEBUG("Received own announcement");
       return;
     }
-    char a[AVAHI_ADDRESS_STR_MAX];
-    avahi_address_snprint(a, sizeof(a), address);
+    char avahi_address_str[AVAHI_ADDRESS_STR_MAX];
+    avahi_address_snprint(avahi_address_str, sizeof(avahi_address_str),
+                          address);
     DEBUG("Discovered service '{:<32}' in host ({}:{} ({}))", name, host_name,
-          port, a);
+          port, avahi_address_str);
     // char *t = avahi_string_list_to_string(txt);
     // DEBUG("\t{}:{} ({})\n"
     //       "\tinterface={}\n"
@@ -275,7 +276,7 @@ static void resolve_callback(AvahiServiceResolver *r, AvahiIfIndex interface,
 
     // FIXME: address is not correct for interface (!), so is not unique, how to
     // make unique? or filter on interface?
-    mr->discover_event(name, a, std::to_string(port));
+    mr->discover_event(name, avahi_address_str, std::to_string(port));
   }
   }
   avahi_service_resolver_free(r);

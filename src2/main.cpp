@@ -69,9 +69,9 @@ int main(int argc, char **argv) {
     control.router = router;
 
     router->add_peer(
-        rtpmididns::make_alsanetwork(rtpmididns::settings.alsa_name, aseq));
+        rtpmididns::make_alsalistener(rtpmididns::settings.alsa_name, aseq));
 
-    router->add_peer(rtpmididns::make_rtpmididnetwork(
+    router->add_peer(rtpmididns::make_rtpmidilistener(
         rtpmididns::settings.rtpmidid_name, rtpmididns::settings.rtpmidid_port,
         aseq));
 
