@@ -37,9 +37,15 @@ namespace rtpmididns {
  */
 class alsawaiter_t : public midipeer_t {
 public:
+  struct endpoint_t {
+    std::string hostname;
+    std::string port;
+  };
+
   std::string name;
-  std::string hostname;
-  std::string port;
+  std::vector<endpoint_t> endpoints;
+  int endpoint_connect_index = 0;
+
   // For each ALSA port connected, when arrives to 0, it disconnects
   int connection_count = 0;
   uint8_t alsaport;
@@ -57,6 +63,7 @@ public:
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;
 
+  void add_endpoint(const std::string &hostname, const std::string &port);
   void connect_to_remote_server();
   void disconnect_from_remote_server();
 };

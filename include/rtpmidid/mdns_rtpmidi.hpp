@@ -49,7 +49,8 @@ public:
   // name, address, port
   signal_t<const std::string &, const std::string &, const std::string &>
       discover_event;
-  signal_t<const std::string &> remove_event;
+  signal_t<const std::string &, const std::string &, const std::string &>
+      remove_event;
   poller_t::listener_t watch_in_poller;
   poller_t::listener_t watch_out_poller;
 

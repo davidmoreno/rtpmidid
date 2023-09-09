@@ -8,6 +8,7 @@ add_executable(
   factory.cpp
   midirouter.cpp
   midipeer.cpp
+  rtpmidiremotehandler.cpp
 
   alsalistener.cpp
   alsaworker.cpp

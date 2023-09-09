@@ -22,6 +22,7 @@
 #include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "rtpmidid/poller.hpp"
+#include "rtpmidiremotehandler.hpp"
 #include "settings.hpp"
 #include <chrono>
 #include <signal.h>
@@ -58,7 +59,6 @@ int main(int argc, char **argv) {
   signal(SIGINT, sigint_f);
   signal(SIGTERM, sigterm_f);
 
-  INFO("Waiting for connections.");
   try {
     auto aseq =
         std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
@@ -68,6 +68,7 @@ int main(int argc, char **argv) {
     rtpmididns::control_socket_t control;
     control.router = router;
     control.aseq = aseq;
+    rtpmididns::rtpmidi_remote_handler_t rtpmidi_remote_handler(router, aseq);
 
     router->add_peer(
         rtpmididns::make_alsalistener(rtpmididns::settings.alsa_name, aseq));
@@ -76,6 +77,7 @@ int main(int argc, char **argv) {
         rtpmididns::settings.rtpmidid_name, rtpmididns::settings.rtpmidid_port,
         aseq));
 
+    INFO("Waiting for connections.");
     while (rtpmidid::poller.is_open()) {
       rtpmidid::poller.wait();
     }
