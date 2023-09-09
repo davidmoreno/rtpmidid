@@ -21,6 +21,7 @@
 #include "json.hpp"
 #include "rtpmidid/rtpclient.hpp"
 #include "settings.hpp"
+#include "utils.hpp"
 #include <cstddef>
 
 namespace rtpmididns {
@@ -45,6 +46,8 @@ alsawaiter_t::alsawaiter_t(const std::string &name_,
         if (connection_count <= 0)
           disconnect_from_remote_server();
       });
+  alsamidi_connection = aseq->midi_event[alsaport].connect(
+      [this](snd_seq_event_t *ev) { DEBUG("ALSA EVENT"); });
 }
 
 alsawaiter_t::~alsawaiter_t() { aseq->remove_port(alsaport); }
@@ -68,29 +71,51 @@ void alsawaiter_t::connect_to_remote_server() {
 
   // External index, in the future if first conneciton fails, try next
   // and so on. If all fail then real fail.
-  endpoint_connect_index = 0;
-  auto &endpoint = endpoints[endpoint_connect_index];
-
-  DEBUG("Connect to remote server at {}:{}", endpoint.hostname, endpoint.port);
   rtpclient = std::make_shared<rtpmidid::rtpclient_t>(settings.rtpmidid_name);
 
-  rtpclient->connect_to(endpoint.hostname, endpoint.port);
+  auto connected = false;
+  for (uint i = 0; i < endpoints.size(); i++) {
+    auto &endpoint = endpoints[i];
+
+    DEBUG("Try connect to remote server at {}:{} (option {}/{})",
+          endpoint.hostname, endpoint.port, i + 1, endpoints.size());
+
+    try {
+      // FIX: This only ensure can create ports, not that could really conenct.
+      // For that use disconnect_event.
+      if (rtpclient->connect_to(endpoint.hostname, endpoint.port)) {
+        connected = true;
+        hostname = endpoint.hostname;
+        port = endpoint.port;
+        break;
+      }
+    } catch (const rtpmidid::exception &exc) {
+      WARNING("Connecting to {}:{} failed: {}", endpoint.hostname,
+              endpoint.port, exc.what());
+    }
+  }
+  if (!connected) {
+    ERROR("Could not connect to remote rtpmidi server at any of the advertised "
+          "addresses.");
+    throw rtpmidid::exception("Could not connect to remote rtpmidi server at "
+                              "any of the advertised addresses.");
+  }
+
   // TODO connect all signals
   disconnect_connection = rtpclient->peer.disconnect_event.connect(
       [this](rtpmidid::rtppeer_t::disconnect_reason_e reason) {
-        auto &endpoint = endpoints[endpoint_connect_index];
         // There was a conn failure, disconnect ALSA ports
-        ERROR("Disconnected from peer: {}:{} reason: {}", endpoint.hostname,
-              endpoint.port, reason);
+        ERROR("Disconnected from peer: {}:{} reason: {}", hostname, port,
+              reason);
         connection_count = 0;
         aseq->disconnect_port(alsaport);
       });
+  rtpmidi_connection = rtpclient->peer.midi_event.connect(
+      [](const rtpmidid::io_bytes_reader &data) { DEBUG("RTP DATA"); });
 }
 
 void alsawaiter_t::disconnect_from_remote_server() {
-  auto &endpoint = endpoints[endpoint_connect_index];
-  DEBUG("Disconnect from remote server at {}:{}", endpoint.hostname,
-        endpoint.port);
+  DEBUG("Disconnect from remote server at {}:{}", hostname, port);
   rtpclient = nullptr; // for me, this is dead
 }
 
@@ -102,12 +127,18 @@ json_t alsawaiter_t::status() {
         json_t{{"hostname", endpoint.hostname}, {"port", endpoint.port}});
   }
 
+  json_t jpeer;
+  if (rtpclient) {
+    jpeer = peer_status(rtpclient->peer, hostname, port);
+  }
+
   return json_t{
       //
       {"name", name},
       {"type", "alsa_waiter"},
       {"endpoints", jendpoints},
-      {"connection_count", connection_count}
+      {"connection_count", connection_count},
+      {"peer", jpeer},
       //
   };
 }

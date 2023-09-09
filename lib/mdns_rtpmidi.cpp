@@ -243,7 +243,8 @@ static void resolve_callback(AvahiServiceResolver *r, AvahiIfIndex interface,
           name, type, domain,
           avahi_strerror(
               avahi_client_errno(avahi_service_resolver_get_client(r))));
-    mr->remove_event(name, host_name, std::to_string(port));
+    mr->remove_event(name, std::to_string(host_name || ""),
+                     std::to_string(port));
     break;
   case AVAHI_RESOLVER_FOUND: {
     if (!!(flags & AVAHI_LOOKUP_RESULT_OUR_OWN)) {

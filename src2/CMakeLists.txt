@@ -9,6 +9,7 @@ add_executable(
   midirouter.cpp
   midipeer.cpp
   rtpmidiremotehandler.cpp
+  utils.cpp
 
   alsalistener.cpp
   alsaworker.cpp

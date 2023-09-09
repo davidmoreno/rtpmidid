@@ -44,7 +44,9 @@ public:
 
   std::string name;
   std::vector<endpoint_t> endpoints;
-  int endpoint_connect_index = 0;
+  // Currently connected, if any
+  std::string hostname;
+  std::string port;
 
   // For each ALSA port connected, when arrives to 0, it disconnects
   int connection_count = 0;
@@ -52,6 +54,8 @@ public:
   std::shared_ptr<aseq_t> aseq;
   connection_t<aseq_t::port_t, const std::string &> subscribe_connection;
   connection_t<aseq_t::port_t> unsubscribe_connection;
+  connection_t<snd_seq_event_t *> alsamidi_connection;
+  connection_t<const rtpmidid::io_bytes_reader &> rtpmidi_connection;
 
   std::shared_ptr<rtpmidid::rtpclient_t> rtpclient;
   connection_t<rtpmidid::rtppeer_t::disconnect_reason_e> disconnect_connection;

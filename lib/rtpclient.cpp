@@ -75,7 +75,7 @@ rtpclient_t::~rtpclient_t() {
   }
 }
 
-void rtpclient_t::connect_to(const std::string &address,
+bool rtpclient_t::connect_to(const std::string &address,
                              const std::string &port) {
   struct addrinfo hints;
   struct addrinfo *sockaddress_list = nullptr;
@@ -186,7 +186,7 @@ void rtpclient_t::connect_to(const std::string &address,
       freeaddrinfo(sockaddress_list);
     }
     peer.disconnect_event(rtppeer_t::disconnect_reason_e::CANT_CONNECT);
-    return;
+    return false;
   }
   if (sockaddress_list) {
     freeaddrinfo(sockaddress_list);
@@ -215,6 +215,8 @@ void rtpclient_t::connect_to(const std::string &address,
     peer.disconnect_event(rtppeer_t::CONNECT_TIMEOUT);
     connected_connection.disconnect();
   });
+
+  return true;
 }
 
 /**

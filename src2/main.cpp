@@ -81,6 +81,8 @@ int main(int argc, char **argv) {
     while (rtpmidid::poller.is_open()) {
       rtpmidid::poller.wait();
     }
+  } catch (const std::exception &exc) {
+    ERROR("Unhandled exception: {}!", exc.what());
   } catch (...) {
     ERROR("Unhandled exception!");
   }
