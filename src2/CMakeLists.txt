@@ -14,6 +14,7 @@ add_executable(
   alsalistener.cpp
   alsaworker.cpp
   alsawaiter.cpp
+  rtpmidiclientworker.cpp
   rtpmidilistener.cpp
   rtpmidiserverworker.cpp
   rtpmidiworker.cpp

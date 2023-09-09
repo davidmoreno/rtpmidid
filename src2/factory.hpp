@@ -22,6 +22,7 @@
 #include <memory>
 namespace rtpmidid {
 class rtppeer_t;
+class rtpclient_t;
 } // namespace rtpmidid
 
 namespace rtpmididns {
@@ -42,6 +43,11 @@ make_rtpmidiworker(std::shared_ptr<rtpmidid::rtppeer_t> peer);
 //
 std::shared_ptr<midipeer_t> make_alsaworker(const std::string &name,
                                             std::shared_ptr<aseq_t>);
+
+//
+std::shared_ptr<midipeer_t>
+make_rtpmidiclientworker(std::shared_ptr<rtpmidid::rtpclient_t> peer);
+
 //
 std::shared_ptr<midipeer_t> make_rtpmidiserverworker(const std::string &name);
 //

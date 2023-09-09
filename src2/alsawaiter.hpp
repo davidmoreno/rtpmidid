@@ -55,12 +55,12 @@ public:
   connection_t<aseq_t::port_t, const std::string &> subscribe_connection;
   connection_t<aseq_t::port_t> unsubscribe_connection;
   connection_t<snd_seq_event_t *> alsamidi_connection;
-  connection_t<const rtpmidid::io_bytes_reader &> rtpmidi_connection;
 
   mididata_to_alsaevents_t mididata_decoder;
   mididata_to_alsaevents_t mididata_encoder;
 
-  std::shared_ptr<rtpmidid::rtpclient_t> rtpclient;
+  midipeer_id_t rtpmidiclientworker_peer_id;
+  // std::shared_ptr<rtpmidid::rtpclient_t> rtpclient;
   connection_t<rtpmidid::rtppeer_t::disconnect_reason_e> disconnect_connection;
 
   alsawaiter_t(const std::string &name, const std::string &hostname,

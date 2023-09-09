@@ -246,11 +246,19 @@ it to the right ALSA port.
 
 Created manually or via mDNS/Avahi/Bounjour it creates a local ALSA port
 which, when a connection is kept, connects to a remote rtpmidi server.
-Connects to a `rtpmidiworker_t`.
+Connects to a `rtpmidiclientworker_t`.
 
 ## `alsaworker_t`
 
 Just redirects MIDI to/from an ALSA port. Used by `rtpmidilistener_t`
+
+## `rtpmidiclientworker_t`
+
+Stores an `rtpclient_t` RTP client that connects to a remote peer and redirecs all 
+MIDI data as needed.
+
+It's used by `alsawaiter_t` and is ver similar to `rtpmidiworker_t`, but this
+is for a `rtpmidiclient_t`.
 
 ## `rtpmidilistener_t`  (remove midipeer_t)
 

@@ -81,6 +81,12 @@ void midirouter_t::peer_connection_loop(
 
 void midirouter_t::remove_peer(peer_id_t peer_id) {
   peers.erase(peer_id);
+  for (auto &peer : peers) {
+    auto &send_to = peer.second.send_to;
+    auto I = std::find(send_to.begin(), send_to.end(), peer_id);
+    if (I != send_to.end())
+      send_to.erase(I);
+  }
   INFO("Removed peer {}", peer_id);
 }
 

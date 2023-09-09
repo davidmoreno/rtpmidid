@@ -21,6 +21,7 @@
 #include "alsawaiter.hpp"
 #include "alsaworker.hpp"
 #include "midipeer.hpp"
+#include "rtpmidiclientworker.hpp"
 #include "rtpmidilistener.hpp"
 #include "rtpmidiserverworker.hpp"
 #include "rtpmidiworker.hpp"
@@ -32,11 +33,18 @@ std::shared_ptr<midipeer_t> make_alsalistener(const std::string &name,
                                               std::shared_ptr<aseq_t> aseq) {
   return std::make_shared<alsalistener_t>(name, aseq);
 }
+
+std::shared_ptr<midipeer_t>
+make_rtpmidiclientworker(std::shared_ptr<rtpmidid::rtpclient_t> peer) {
+  return std::make_shared<rtpmidiclientworker_t>(peer);
+}
+
 std::shared_ptr<midipeer_t> make_rtpmidilistener(const std::string &name,
                                                  const std::string &port,
                                                  std::shared_ptr<aseq_t> aseq) {
   return std::make_shared<rtpmidilistener_t>(name, port, aseq);
 }
+
 std::shared_ptr<midipeer_t>
 make_rtpmidiworker(std::shared_ptr<rtpmidid::rtppeer_t> peer) {
   return std::make_shared<rtpmidiworker_t>(peer);

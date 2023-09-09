@@ -18,6 +18,7 @@
 
 #include "alsawaiter.hpp"
 #include "aseq.hpp"
+#include "factory.hpp"
 #include "json.hpp"
 #include "mididata.hpp"
 #include "rtpmidid/iobytes.hpp"
@@ -56,9 +57,6 @@ alsawaiter_t::alsawaiter_t(const std::string &name_,
         mididata_decoder.decode(ev, datawriter);
         auto mididata = mididata_t(datawriter);
         router->send_midi(peer_id, mididata);
-        if (rtpclient) {
-          rtpclient->peer.send_midi(mididata);
-        }
       });
 }
 
@@ -83,7 +81,8 @@ void alsawaiter_t::connect_to_remote_server() {
 
   // External index, in the future if first conneciton fails, try next
   // and so on. If all fail then real fail.
-  rtpclient = std::make_shared<rtpmidid::rtpclient_t>(settings.rtpmidid_name);
+  auto rtpclient =
+      std::make_shared<rtpmidid::rtpclient_t>(settings.rtpmidid_name);
 
   auto connected = false;
   for (uint i = 0; i < endpoints.size(); i++) {
@@ -113,6 +112,11 @@ void alsawaiter_t::connect_to_remote_server() {
                               "any of the advertised addresses.");
   }
 
+  rtpmidiclientworker_peer_id =
+      router->add_peer(make_rtpmidiclientworker(rtpclient));
+  router->connect(rtpmidiclientworker_peer_id, peer_id);
+  router->connect(peer_id, rtpmidiclientworker_peer_id);
+
   // TODO connect all signals
   disconnect_connection = rtpclient->peer.disconnect_event.connect(
       [this](rtpmidid::rtppeer_t::disconnect_reason_e reason) {
@@ -122,24 +126,23 @@ void alsawaiter_t::connect_to_remote_server() {
         connection_count = 0;
         aseq->disconnect_port(alsaport);
       });
-  rtpmidi_connection = rtpclient->peer.midi_event.connect(
-      [this](const rtpmidid::io_bytes_reader &data) {
-        mididata_t mididata{data};
-        mididata_encoder.encode(mididata, [this](snd_seq_event_t *ev) {
-          snd_seq_ev_set_source(ev, alsaport);
-          snd_seq_ev_set_subs(ev); // to all subscribers
-          snd_seq_ev_set_direct(ev);
-          snd_seq_event_output_direct(aseq->seq, ev);
-        });
-      });
 }
 
 void alsawaiter_t::disconnect_from_remote_server() {
   DEBUG("Disconnect from remote server at {}:{}", hostname, port);
-  rtpclient = nullptr; // for me, this is dead
+  router->remove_peer(rtpmidiclientworker_peer_id);
+  // rtpclient = nullptr; // for me, this is dead
 }
 
-void alsawaiter_t::send_midi(midipeer_id_t from, const mididata_t &) {}
+void alsawaiter_t::send_midi(midipeer_id_t from, const mididata_t &data) {
+  mididata_t mididata{data};
+  mididata_encoder.encode(mididata, [this](snd_seq_event_t *ev) {
+    snd_seq_ev_set_source(ev, alsaport);
+    snd_seq_ev_set_subs(ev); // to all subscribers
+    snd_seq_ev_set_direct(ev);
+    snd_seq_event_output_direct(aseq->seq, ev);
+  });
+}
 
 json_t alsawaiter_t::status() {
   json_t jendpoints;
@@ -148,18 +151,12 @@ json_t alsawaiter_t::status() {
         json_t{{"hostname", endpoint.hostname}, {"port", endpoint.port}});
   }
 
-  json_t jpeer;
-  if (rtpclient) {
-    jpeer = peer_status(rtpclient->peer, hostname, port);
-  }
-
   return json_t{
       //
       {"name", name},
       {"type", "alsa_waiter"},
       {"endpoints", jendpoints},
       {"connection_count", connection_count},
-      {"peer", jpeer},
       //
   };
 }
