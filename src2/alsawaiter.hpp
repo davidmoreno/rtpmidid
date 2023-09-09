@@ -57,6 +57,9 @@ public:
   connection_t<snd_seq_event_t *> alsamidi_connection;
   connection_t<const rtpmidid::io_bytes_reader &> rtpmidi_connection;
 
+  mididata_to_alsaevents_t mididata_decoder;
+  mididata_to_alsaevents_t mididata_encoder;
+
   std::shared_ptr<rtpmidid::rtpclient_t> rtpclient;
   connection_t<rtpmidid::rtppeer_t::disconnect_reason_e> disconnect_connection;
 

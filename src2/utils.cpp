@@ -25,21 +25,23 @@ json_t peer_status(rtpmidid::rtppeer_t &peer, const std::string &hostname,
       //
       {"latency_ms", peer.latency / 10.0},
       {"status", std::to_string(peer.status)},
-      {"sequence_number", peer.seq_nr},
-      {"sequence_number_ack", peer.seq_nr_ack},
       {"local",
        {
-           {"name", peer.local_name}, {"ssrc", peer.local_ssrc}, //
-       }},                                                       //
+           {"sequence_number", peer.seq_nr},         //
+           {"sequence_number_ack", peer.seq_nr_ack}, //
+           {"name", peer.local_name},                //
+           {"ssrc", peer.local_ssrc},                //
+       }},                                           //
       {
           "remote",
           {
               //
-              {"name", peer.remote_name}, //
-              {"ssrc", peer.remote_ssrc}, //
-              {"port", port},             //
-              {"hostname", hostname},     //
-          }                               //
+              {"name", peer.remote_name},              //
+              {"sequence_number", peer.remote_seq_nr}, //
+              {"ssrc", peer.remote_ssrc},              //
+              {"port", port},                          //
+              {"hostname", hostname},                  //
+          }                                            //
       }
       //
   };

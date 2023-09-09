@@ -19,7 +19,10 @@
 #include "alsawaiter.hpp"
 #include "aseq.hpp"
 #include "json.hpp"
+#include "mididata.hpp"
+#include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/rtpclient.hpp"
+#include "rtpmidid/rtppeer.hpp"
 #include "settings.hpp"
 #include "utils.hpp"
 #include <cstddef>
@@ -46,8 +49,17 @@ alsawaiter_t::alsawaiter_t(const std::string &name_,
         if (connection_count <= 0)
           disconnect_from_remote_server();
       });
-  alsamidi_connection = aseq->midi_event[alsaport].connect(
-      [this](snd_seq_event_t *ev) { DEBUG("ALSA EVENT"); });
+  alsamidi_connection =
+      aseq->midi_event[alsaport].connect([this](snd_seq_event_t *ev) {
+        rtpmidid::io_bytes_static<1024> data;
+        auto datawriter = rtpmidid::io_bytes_writer(data);
+        mididata_decoder.decode(ev, datawriter);
+        auto mididata = mididata_t(datawriter);
+        router->send_midi(peer_id, mididata);
+        if (rtpclient) {
+          rtpclient->peer.send_midi(mididata);
+        }
+      });
 }
 
 alsawaiter_t::~alsawaiter_t() { aseq->remove_port(alsaport); }
@@ -111,7 +123,15 @@ void alsawaiter_t::connect_to_remote_server() {
         aseq->disconnect_port(alsaport);
       });
   rtpmidi_connection = rtpclient->peer.midi_event.connect(
-      [](const rtpmidid::io_bytes_reader &data) { DEBUG("RTP DATA"); });
+      [this](const rtpmidid::io_bytes_reader &data) {
+        mididata_t mididata{data};
+        mididata_encoder.encode(mididata, [this](snd_seq_event_t *ev) {
+          snd_seq_ev_set_source(ev, alsaport);
+          snd_seq_ev_set_subs(ev); // to all subscribers
+          snd_seq_ev_set_direct(ev);
+          snd_seq_event_output_direct(aseq->seq, ev);
+        });
+      });
 }
 
 void alsawaiter_t::disconnect_from_remote_server() {
@@ -120,6 +140,7 @@ void alsawaiter_t::disconnect_from_remote_server() {
 }
 
 void alsawaiter_t::send_midi(midipeer_id_t from, const mididata_t &) {}
+
 json_t alsawaiter_t::status() {
   json_t jendpoints;
   for (auto &endpoint : endpoints) {

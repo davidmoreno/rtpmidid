@@ -21,6 +21,7 @@
 #include "json.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
+#include "utils.hpp"
 
 namespace rtpmididns {
 
@@ -50,28 +51,8 @@ json_t rtpmidilistener_t::status() {
   std::vector<json_t> peers;
   for (auto &peer : server.peers) {
     auto &peerpeer = peer.peer;
-    peers.push_back({
-        //
-        {"latency_ms", peerpeer->latency / 10.0},
-        {"status", peerpeer->status},
-        {"sequence_number", peerpeer->seq_nr},
-        {"sequence_number_ack", peerpeer->seq_nr_ack},
-        {"local",
-         {
-             {"name", peerpeer->local_name}, {"ssrc", peerpeer->local_ssrc}, //
-         }},                                                                 //
-        {
-            "remote",
-            {
-                {"sequence_number", peerpeer->remote_seq_nr},
-                {"name", peerpeer->remote_name},
-                {"ssrc", peerpeer->remote_ssrc},
-                {"port", peer.port},
-                {"address", peer.address} //
-            }                             //
-        }
-        //
-    });
+    peers.push_back(
+        peer_status(*peerpeer, peer.address, std::to_string(peer.port)));
   }
 
   return json_t{

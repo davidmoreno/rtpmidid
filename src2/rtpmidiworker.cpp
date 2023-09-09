@@ -23,6 +23,7 @@
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/rtppeer.hpp"
+#include "utils.hpp"
 #include <memory>
 
 namespace rtpmididns {
@@ -57,7 +58,7 @@ json_t rtpmidiworker_t::status() {
   return json_t{
       {"name", peer->remote_name}, //
       {"type", "rtpmidi_worker"},  //
-      {"latency_ms", peer->latency / 10.0},
+      {"peer", peer_status(*peer, "*", "*")},
   };
 };
 
