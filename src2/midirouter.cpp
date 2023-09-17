@@ -33,7 +33,7 @@ uint32_t midirouter_t::add_peer(std::shared_ptr<midipeer_t> peer) {
     peer->router = shared_from_this();
   } catch (const std::exception &exc) {
     ERROR("Error on SHARED FROM THIS! Make sure that the router is a "
-          "std::shared_ptr. {} {}",
+          "std::shared_ptr<midirouter_t>. {} {}",
           (void *)this, exc.what());
     throw;
   }

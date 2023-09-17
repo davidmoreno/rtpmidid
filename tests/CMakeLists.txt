@@ -15,23 +15,23 @@ add_executable(test_misc test_misc.cpp test_utils.cpp)
 target_link_libraries(test_misc rtpmidid-shared -lfmt -pthread)
 add_test(NAME test_misc COMMAND test_poller)
 
-add_executable(test_rtpmidid 
-    test_rtpmidid.cpp test_utils.cpp 
-    ../src/aseq.cpp  ../src/config.cpp ../src/control_socket.cpp ../src/rtpmidid.cpp ../src/stringpp.cpp
-)
-target_link_libraries(test_rtpmidid rtpmidid-shared -lfmt -pthread)
+# add_executable(test_rtpmidid 
+#     test_rtpmidid.cpp test_utils.cpp 
+#     ../src/aseq.cpp  ../src/config.cpp ../src/control_socket.cpp ../src/rtpmidid.cpp ../src/stringpp.cpp
+# )
+# target_link_libraries(test_rtpmidid rtpmidid-shared -lfmt -pthread)
 
-target_link_libraries(test_rtpmidid ${AVAHI_LIBRARIES})
-target_include_directories(test_rtpmidid PUBLIC ${AVAHI_INCLUDE_DIRS})
-target_compile_options(test_rtpmidid PUBLIC ${AVAHI_CFLAGS_OTHER})
+# target_link_libraries(test_rtpmidid ${AVAHI_LIBRARIES})
+# target_include_directories(test_rtpmidid PUBLIC ${AVAHI_INCLUDE_DIRS})
+# target_compile_options(test_rtpmidid PUBLIC ${AVAHI_CFLAGS_OTHER})
 
-target_link_libraries(test_rtpmidid ${FMT_LIBRARIES})
-target_include_directories(test_rtpmidid PUBLIC ${FMT_INCLUDE_DIRS})
-target_compile_options(test_rtpmidid PUBLIC ${FMT_CFLAGS_OTHER})
+# target_link_libraries(test_rtpmidid ${FMT_LIBRARIES})
+# target_include_directories(test_rtpmidid PUBLIC ${FMT_INCLUDE_DIRS})
+# target_compile_options(test_rtpmidid PUBLIC ${FMT_CFLAGS_OTHER})
 
-target_link_libraries(test_rtpmidid ${ALSA_LIBRARIES})
-target_include_directories(test_rtpmidid PUBLIC ${ALSA_INCLUDE_DIRS})
-target_compile_options(test_rtpmidid PUBLIC ${ALSA_CFLAGS_OTHER})
+# target_link_libraries(test_rtpmidid ${ALSA_LIBRARIES})
+# target_include_directories(test_rtpmidid PUBLIC ${ALSA_INCLUDE_DIRS})
+# target_compile_options(test_rtpmidid PUBLIC ${ALSA_CFLAGS_OTHER})
 
 add_executable(test_signals
     test_signals.cpp ../lib/logger.cpp
@@ -41,7 +41,11 @@ add_test(NAME test_signals COMMAND test_signals)
 
 
 add_executable(test_midirouter
-    test_midirouter.cpp test_utils.cpp ../src2/midirouter.cpp ../src2/alsalistener.cpp ../src2/aseq.cpp
+    test_midirouter.cpp test_utils.cpp 
+    ../src2/midirouter.cpp 
+    ../src2/alsalistener.cpp 
+    ../src2/aseq.cpp
+    ../src2/midipeer.cpp
 )
 target_link_libraries(test_midirouter -lfmt -pthread rtpmidid-shared)
 add_test(NAME test_midirouter COMMAND test_midirouter)

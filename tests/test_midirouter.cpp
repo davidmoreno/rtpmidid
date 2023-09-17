@@ -20,6 +20,7 @@
 #include "../src2/alsaworker.hpp"
 #include "../src2/aseq.hpp"
 #include "../src2/factory.hpp"
+#include "../src2/json.hpp"
 #include "../src2/mididata.hpp"
 #include "../src2/midipeer.hpp"
 #include "../src2/midirouter.hpp"
@@ -43,6 +44,8 @@ public:
     ASSERT_LT(data.start, data.end);
     writer.copy_from(data);
   }
+
+  rtpmididns::json_t status() override { return rtpmididns::json_t{}; }
 };
 
 // rtpmididns::alsapeer_t::alsapeer_t(const std::string &name,
@@ -60,27 +63,27 @@ public:
 //                                             const mididata_t &) {}
 
 std::shared_ptr<rtpmididns::midipeer_t>
-rtpmididns::make_rtpmidiserver(const std::string &name) {
+rtpmididns::make_rtpmidiserverworker(const std::string &name) {
   return std::make_shared<test_midiio_t>();
 }
-std::shared_ptr<rtpmididns::midipeer_t>
-rtpmididns::make_alsapeer(const std::string &name,
-                          std::shared_ptr<rtpmidid::aseq_t> seq) {
-  return std::make_shared<test_midiio_t>();
-}
+// std::shared_ptr<rtpmididns::midipeer_t>
+// rtpmididns::make_alsaworker(const std::string &name,
+//                           std::shared_ptr<rtpmidins::aseq_t> seq) {
+//   return std::make_shared<test_midiio_t>();
+// }
 
 void test_basic_midirouter() {
-  rtpmididns::midirouter_t router;
+  auto router = std::make_shared<rtpmididns::midirouter_t>();
   auto peera = std::make_shared<test_midiio_t>();
   auto peerb = std::make_shared<test_midiio_t>();
-  auto peerA = router.add_peer(peera);
-  auto peerB = router.add_peer(peerb);
+  auto peerA = router->add_peer(peera);
+  auto peerB = router->add_peer(peerb);
 
-  router.connect(peerA, peerB);
+  router->connect(peerA, peerB);
   auto mididata = hex_to_bin("90 64 7F");
   auto data = rtpmididns::mididata_t(mididata.start, mididata.size());
 
-  router.send_midi(peerA, data);
+  router->send_midi(peerA, data);
 
   ASSERT_EQUAL(peera->writer.pos(), 0);
 
@@ -89,13 +92,14 @@ void test_basic_midirouter() {
 }
 
 void test_midirouter_from_alsa() {
-  rtpmididns::midirouter_t router;
-  auto aseq = std::make_shared<rtpmidid::aseq_t>("Test");
-  rtpmididns::alsalistener_t alsanetwork("test", aseq);
+  auto router = std::make_shared<rtpmididns::midirouter_t>();
+  auto aseq = std::make_shared<rtpmididns::aseq_t>("Test");
+  auto alsanetwork = std::make_shared<rtpmididns::alsalistener_t>("test", aseq);
+  router->add_peer(alsanetwork);
 
   // This must have created a rtpmidid network connection
-  auto rtpmidinetwork_id = alsanetwork.new_alsa_connection({128, 0}, "KB01");
-  rtpmidid::mididata_to_alsaevents_t mididata_to_alsaevents;
+  auto rtpmidinetwork_id = alsanetwork->new_alsa_connection({128, 0}, "KB01");
+  rtpmididns::mididata_to_alsaevents_t mididata_to_alsaevents;
   auto mididata =
       hex_to_bin("90 64 7F"); // Tis must be in a variable to outlive its use
   auto data = rtpmidid::io_bytes_reader(mididata);
@@ -105,16 +109,16 @@ void test_midirouter_from_alsa() {
     ev->source.port = 0;
     // This test the encoder works
     ASSERT_EQUAL(ev->type, SND_SEQ_EVENT_NOTEON);
-    alsanetwork.alsaseq_event(ev);
+    alsanetwork->alsaseq_event(ev);
 
     // unknown source
     ev->source.client = 120;
     ev->source.port = 0;
-    alsanetwork.alsaseq_event(ev);
+    alsanetwork->alsaseq_event(ev);
   });
 
-  test_midiio_t *rtppeer =
-      dynamic_cast<test_midiio_t *>(router.peers[rtpmidinetwork_id].peer.get());
+  test_midiio_t *rtppeer = dynamic_cast<test_midiio_t *>(
+      router->peers[rtpmidinetwork_id].peer.get());
   // rtppeer->writer.print_hex();
   ASSERT_EQUAL(rtppeer->writer.pos(), 3);
 }

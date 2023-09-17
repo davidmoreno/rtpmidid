@@ -53,7 +53,7 @@ auto disconnect_msg2 = hex_to_bin("FF FF 'BY'"
 
 void test_several_connect_to_server() {
   // random port
-  rtpmidid::rtpserver server("test", "0");
+  rtpmidid::rtpserver_t server("test", "0");
 
   DEBUG("Server port is {}", server.control_port);
 
@@ -114,7 +114,7 @@ void test_several_connect_to_server() {
 }
 
 void test_connect_disconnect_send() {
-  rtpmidid::rtpserver server("test", "0");
+  rtpmidid::rtpserver_t server("test", "0");
 
   test_client_t control_client(0, server.control_port);
   test_client_t midi_client(control_client.local_port + 1, server.midi_port);
