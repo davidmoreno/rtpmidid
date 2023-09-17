@@ -33,7 +33,7 @@ class midirouter_t;
  *
  * Must be inherited by the real clients
  */
-class midipeer_t : std::enable_shared_from_this<midipeer_t> {
+class midipeer_t : public std::enable_shared_from_this<midipeer_t> {
 public:
   std::shared_ptr<midirouter_t> router;
   midipeer_id_t peer_id;

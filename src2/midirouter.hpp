@@ -54,5 +54,15 @@ public:
 
   void send_midi(peer_id_t from, const mididata_t &data);
   void send_midi(peer_id_t from, peer_id_t to, const mididata_t &data);
+
+  // For the given type of the for_each, by default midipeer_t.
+  template <typename T = midipeer_t>
+  void for_each_peer(const std::function<void(T *)> &f) {
+    for (auto &[peer_id, peer] : peers) {
+      auto t = dynamic_cast<T *>(peer.peer.get());
+      if (t)
+        f(t);
+    }
+  };
 };
 } // namespace rtpmididns

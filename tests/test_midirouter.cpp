@@ -123,13 +123,42 @@ void test_midirouter_from_alsa() {
   ASSERT_EQUAL(rtppeer->writer.pos(), 3);
 }
 
-int main(void) {
+void test_midirouter_for_each_peer() {
+  auto router = std::make_shared<rtpmididns::midirouter_t>();
+  auto aseq = std::make_shared<rtpmididns::aseq_t>("Test");
+  auto alsanetwork = std::make_shared<rtpmididns::alsalistener_t>("test", aseq);
+  auto midiio = std::make_shared<test_midiio_t>();
+
+  int count = 0;
+  router->for_each_peer<rtpmididns::midipeer_t>(
+      [&count](auto peer) { count++; });
+  ASSERT_EQUAL(count, 2);
+
+  count = 0;
+  router->for_each_peer<test_midiio_t>([&count, &midiio](auto peer) {
+    count++;
+    ASSERT_EQUAL(peer, midiio.get());
+  });
+  ASSERT_EQUAL(count, 1);
+
+  count = 0;
+  router->for_each_peer<rtpmididns::alsalistener_t>(
+      [&count, &alsanetwork](auto peer) {
+        count++;
+
+        ASSERT_EQUAL(peer, alsanetwork.get());
+      });
+  ASSERT_EQUAL(count, 1);
+}
+
+int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_basic_midirouter),
       TEST(test_midirouter_from_alsa),
+      TEST(test_midirouter_for_each_peer),
   };
 
-  testcase.run();
+  testcase.run(argc, argv);
 
   return testcase.exit_code();
 }
