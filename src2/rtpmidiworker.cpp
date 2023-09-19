@@ -51,6 +51,7 @@ rtpmidiworker_t::rtpmidiworker_t(std::shared_ptr<rtpmidid::rtppeer_t> peer_)
 rtpmidiworker_t::~rtpmidiworker_t() {}
 
 void rtpmidiworker_t::send_midi(midipeer_id_t from, const mididata_t &data) {
+  DEBUG("Send midi: {}", data.size());
   peer->send_midi(data);
 };
 

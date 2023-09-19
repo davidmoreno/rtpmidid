@@ -44,6 +44,10 @@ public:
     bool operator==(const port_t &other) const {
       return client == other.client && port == other.port;
     }
+
+    std::string to_string() const {
+      return fmt::format("port_t[{}, {}]", client, port);
+    }
   };
 
   std::string name;
@@ -64,6 +68,8 @@ public:
   uint8_t create_port(const std::string &name);
   void remove_port(uint8_t port);
 
+  /// Connect two ports
+  void connect(const port_t &from, const port_t &to);
   /// Disconencts everything from this port
   void disconnect_port(uint8_t port);
 };

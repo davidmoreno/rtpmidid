@@ -17,6 +17,7 @@
  */
 
 #pragma once
+#include "json_fwd.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include <cstdint>
 #include <functional>
@@ -54,6 +55,8 @@ public:
 
   void send_midi(peer_id_t from, const mididata_t &data);
   void send_midi(peer_id_t from, peer_id_t to, const mididata_t &data);
+
+  json_t status();
 
   // For the given type of the for_each, by default midipeer_t.
   template <typename T = midipeer_t>

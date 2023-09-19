@@ -17,11 +17,12 @@
  */
 
 #include "midirouter.hpp"
+#include "json.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "rtpmidid/logger.hpp"
 
-using namespace rtpmididns;
+namespace rtpmididns {
 
 midirouter_t::midirouter_t() : max_id(1) {}
 midirouter_t::~midirouter_t() {}
@@ -128,3 +129,25 @@ void midirouter_t::connect(peer_id_t from, peer_id_t to) {
 
   send_peer->send_to.push_back(to);
 }
+
+json_t midirouter_t::status() {
+  json_t routerdata;
+  for (auto peer : peers) {
+    try {
+      auto status = peer.second.peer->status();
+      status["id"] = peer.first;
+      status["send_to"] = peer.second.send_to;
+      status["stats"] = {
+          //
+          {"recv", peer.second.peer->packets_recv},
+          {"sent", peer.second.peer->packets_sent} //
+      };
+
+      routerdata.push_back(status);
+    } catch (const std::exception &exc) {
+      routerdata.push_back(json_t{{"error", exc.what()}});
+    }
+  }
+  return routerdata;
+}
+} // namespace rtpmididns

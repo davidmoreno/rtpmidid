@@ -110,6 +110,7 @@ aseq_t::~aseq_t() {
   //     ERROR("Error removing aseq socket: {}", e.what());
   //   }
   // }
+  aseq_listener.clear();
   snd_seq_close(seq);
   snd_config_update_free_global();
 }
@@ -301,6 +302,19 @@ void aseq_t::disconnect_port(uint8_t port) {
   snd_seq_query_subscribe_set_root(subs, snd_seq_port_info_get_addr(portinfo));
 
   disconnect_port_at_subs(seq, subs, port);
+}
+
+void aseq_t::connect(const port_t &from, const port_t &to) {
+  DEBUG("Connect alsa ports {} -> {}", from.to_string(), to.to_string());
+
+  if (from.client == client_id) {
+    snd_seq_connect_to(seq, from.port, to.client, to.port);
+  } else if (to.client == client_id) {
+    snd_seq_connect_from(seq, from.port, to.client, to.port);
+  } else {
+    ERROR("Can not connect ports I'm not part of.");
+    throw rtpmidid::exception("Can not connect ports I'm not part of.");
+  }
 }
 
 mididata_to_alsaevents_t::mididata_to_alsaevents_t() {

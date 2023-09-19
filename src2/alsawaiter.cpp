@@ -79,7 +79,7 @@ void alsawaiter_t::connect_to_remote_server() {
     return;
   }
 
-  // External index, in the future if first conneciton fails, try next
+  // External index, in the future if first connection fails, try next
   // and so on. If all fail then real fail.
   auto rtpclient =
       std::make_shared<rtpmidid::rtpclient_t>(settings.rtpmidid_name);
