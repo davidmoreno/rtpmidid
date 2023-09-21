@@ -23,6 +23,7 @@
 #include "../src2/rtpmidiserverworker.hpp"
 #include "../src2/settings.hpp"
 #include "../tests/test_case.hpp"
+#include "rtpmidid/rtppeer.hpp"
 #include "rtpmidid/rtpserver.hpp"
 #include "test_utils.hpp"
 #include <chrono>
@@ -72,15 +73,15 @@ void test_send_receive_messages() {
   //
   // The order ensures try as many options as possible:
   // 1. ALSA A connects to WR RTPMIDID, RTPPEER A should be announced
-  // 2. RTPPEER B connects to RTPMIDID, ALSA B should be announced
-  // 3. ALSA A connects again this RO to RTPMIDID, nothing should happend
-  // 4. We conenct RTPPEER A and B manually
-  // 5. We connect to ALSA B RW
+  // 2. Connect to RTPPEER A
+  // 3. RTPPEER B connects to RTPMIDID, ALSA RTPPEER B should be announced
+  // 4. ALSA A connects again this RO to RTPMIDID, nothing should happend
+  // 5. We conenct RTPPEER A and B manually
+  // 6. We connect to ALSA B RW
   //
-  // 6. All data we send from A hsould be read a B, and vice versa.
+  // 7. All data we send from A hsould be read a B, and vice versa.
 
-  auto aseq =
-      std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
+  auto aseq = std::make_shared<rtpmididns::aseq_t>("TESTING DEVICE");
 
   // 1. ALSA A connect to WR RTPMIDID
 
@@ -92,14 +93,10 @@ void test_send_receive_messages() {
         midi_packets_alsa_a++;
       });
 
-  DEBUG("CONNECT");
   aseq->connect(
       rtpmididns::aseq_t::port_t{aseq->client_id, alsa_a},
       rtpmididns::aseq_t::port_t{test_client_id, 0}); // Connect to network
-  DEBUG("CONNECTED");
-  DEBUG("POLL 100ms");
-  poller_wait_for(100ms);
-  DEBUG("ASEQ AT {}", (void *)aseq.get());
+  poller_wait_until([&router]() { return router->peers.size() == 3; });
 
   rtpmididns::json_t status = router->status();
   DEBUG("{}", status.dump(2));
@@ -113,18 +110,62 @@ void test_send_receive_messages() {
 
   DEBUG("At port {}", port);
 
-  auto client = rtpmidid::rtpclient_t("RTPPEER A");
-  client.connect_to("localhost", std::to_string(port));
-  poller_wait_for(200ms);
+  // 2. connect RTPPEER A and test
+
+  auto rtppeer_client_a = rtpmidid::rtpclient_t("RTPPEER A");
+  rtppeer_client_a.connect_to("localhost", std::to_string(port));
+  poller_wait_until([&rtppeer_client_a]() {
+    return rtppeer_client_a.peer.status ==
+           rtpmidid::rtppeer_t::status_e::CONNECTED;
+  });
 
   status = router->status();
   DEBUG("{}", status.dump(2));
   ASSERT_EQUAL(router->peers.size(), 3);
 
   auto data = hex_to_bin("90 40 40");
-  client.peer.send_midi(data);
-  poller_wait_for(100ms);
+  rtppeer_client_a.peer.send_midi(data);
+  ASSERT_EQUAL(midi_packets_alsa_a, 0);
+  poller_wait_until(
+      [&midi_packets_alsa_a]() { return midi_packets_alsa_a == 1; });
+  // The signal for midi data has been called.
   ASSERT_EQUAL(midi_packets_alsa_a, 1);
+
+  // 3. Connect to RTP MIDI announced Network
+
+  uint8_t device_id = aseq->find_device(rtpmididns::settings.alsa_name);
+
+  auto rtppeer_client_b = rtpmidid::rtpclient_t("RTPPEER B");
+  rtppeer_client_b.connect_to("localhost", rtpmididns::settings.rtpmidid_port);
+  poller_wait_until([&rtppeer_client_b]() {
+    return rtppeer_client_b.peer.status ==
+           rtpmidid::rtppeer_t::status_e::CONNECTED;
+  });
+  ASSERT_EQUAL(rtppeer_client_b.peer.status,
+               rtpmidid::rtppeer_t::status_e::CONNECTED);
+
+  uint8_t port_id = aseq->find_port(device_id, "RTPPEER B");
+  DEBUG("Got ALSA seq for RTPPEER B at {}:{}", (int)device_id, (int)port_id);
+
+  status = router->status();
+  DEBUG("{}", status.dump(2));
+  //// 2 more peers: the rtpmidi_worker and the alsa_worker.
+  ASSERT_EQUAL(router->peers.size(), 5);
+
+  // 4. Connect from network to ALSA A. Ntohing of importance should happen
+  DEBUG("Peer count: {}", router->peers.size());
+
+  // Connect network to alsa a
+  aseq->connect( //
+      rtpmididns::aseq_t::port_t{test_client_id, 0},
+      rtpmididns::aseq_t::port_t{aseq->client_id, alsa_a} //
+  );
+
+  poller_wait_for(100ms);
+  status = router->status();
+  DEBUG("{}", status.dump(2));
+  //// No more peers
+  ASSERT_EQUAL(router->peers.size(), 5);
 
   DEBUG("END");
 }

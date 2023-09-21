@@ -317,6 +317,68 @@ void aseq_t::connect(const port_t &from, const port_t &to) {
   }
 }
 
+/// List all devices
+uint8_t aseq_t::find_device(const std::string &name) {
+  snd_seq_client_info_t *cinfo;
+  int retv = -1;
+
+  int ret = snd_seq_client_info_malloc(&cinfo);
+  if (ret != 0)
+    throw rtpmidid::exception("Error allocating memory for alsa clients");
+
+  snd_seq_client_info_set_client(cinfo, -1);
+  while (snd_seq_query_next_client(seq, cinfo) >= 0) {
+    int cid = snd_seq_client_info_get_client(cinfo);
+    if (cid < 0) {
+      throw rtpmidid::exception("Error getting client info");
+    }
+    const char *cname = snd_seq_client_info_get_name(cinfo);
+    if (cname == name) {
+      retv = cid;
+    }
+  }
+  snd_seq_client_info_free(cinfo);
+
+  if (retv < 0) {
+    throw rtpmidid::exception("Device not found");
+  }
+
+  return retv;
+}
+
+/// List all ports of a device
+uint8_t aseq_t::find_port(uint8_t device_id, const std::string &name) {
+  int retv;
+  snd_seq_port_info_t *pinfo;
+
+  int ret = snd_seq_port_info_malloc(&pinfo);
+  if (ret != 0)
+    throw rtpmidid::exception("Error allocating memory for alsa ports");
+
+  snd_seq_port_info_set_client(pinfo, device_id);
+
+  snd_seq_port_info_set_port(pinfo, -1);
+  while (snd_seq_query_next_port(seq, pinfo) >= 0) {
+    int pid = snd_seq_port_info_get_port(pinfo);
+    if (pid < 0) {
+      throw rtpmidid::exception("Error getting client info");
+    }
+    const char *pname = snd_seq_port_info_get_name(pinfo);
+
+    if (pname == name) {
+      retv = pid;
+    }
+  }
+
+  snd_seq_port_info_free(pinfo);
+
+  if (retv < 0) {
+    throw rtpmidid::exception("Port not found");
+  }
+
+  return retv;
+}
+
 mididata_to_alsaevents_t::mididata_to_alsaevents_t() {
   snd_midi_event_new(1024, &buffer);
 }

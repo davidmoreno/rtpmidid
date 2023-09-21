@@ -70,8 +70,11 @@ public:
 
   /// Connect two ports
   void connect(const port_t &from, const port_t &to);
-  /// Disconencts everything from this port
+  /// Disconnects everything from this port
   void disconnect_port(uint8_t port);
+
+  uint8_t find_device(const std::string &name);
+  uint8_t find_port(uint8_t device_id, const std::string &name);
 };
 
 std::vector<std::string> get_ports(aseq_t *);
