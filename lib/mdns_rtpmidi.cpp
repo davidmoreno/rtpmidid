@@ -45,6 +45,17 @@ struct AvahiEntryGroup {
   char *name;
 };
 
+template <> struct fmt::formatter<AvahiWatchEvent> : fmt::formatter<int> {
+  auto format(AvahiWatchEvent ev, fmt::format_context &ctx) {
+    return fmt::formatter<int>::format((int)ev, ctx);
+  }
+};
+template <> struct fmt::formatter<AvahiBrowserEvent> : fmt::formatter<int> {
+  auto format(AvahiBrowserEvent ev, fmt::format_context &ctx) {
+    return fmt::formatter<int>::format((int)ev, ctx);
+  }
+};
+
 static void entry_group_callback(AvahiEntryGroup *g, AvahiEntryGroupState state,
                                  AVAHI_GCC_UNUSED void *userdata) {
   rtpmidid::mdns_rtpmidi *mr = (rtpmidid::mdns_rtpmidi *)userdata;

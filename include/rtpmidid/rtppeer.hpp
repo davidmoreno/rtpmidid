@@ -140,3 +140,71 @@ public:
   void parse_journal_chapter_N(uint8_t channel, io_bytes_reader &);
 };
 } // namespace rtpmidid
+
+template <>
+struct fmt::formatter<rtpmidid::rtppeer::status_e>
+    : formatter<std::string_view> {
+  auto format(rtpmidid::rtppeer::status_e c, format_context &ctx) {
+    std::string_view name = "UNKNOWN";
+    switch (c) {
+    case rtpmidid::rtppeer::status_e::NOT_CONNECTED:
+      name = "NOT_CONNECTED";
+      break;
+    case rtpmidid::rtppeer::status_e::CONTROL_CONNECTED:
+      name = "CONTROL_CONNECTED";
+      break;
+    case rtpmidid::rtppeer::status_e::MIDI_CONNECTED:
+      name = "MIDI_CONNECTED";
+      break;
+    case rtpmidid::rtppeer::status_e::CONNECTED:
+      name = "CONNECTED";
+      break;
+    }
+    return formatter<std::string_view>::format(name, ctx);
+  }
+};
+
+template <>
+struct fmt::formatter<rtpmidid::rtppeer::port_e> : formatter<std::string_view> {
+  auto format(rtpmidid::rtppeer::port_e c, format_context &ctx) {
+    std::string_view name = "UNKNOWN";
+    switch (c) {
+    case rtpmidid::rtppeer::port_e::MIDI_PORT:
+      name = "MIDI_PORT";
+      break;
+    case rtpmidid::rtppeer::port_e::CONTROL_PORT:
+      name = "CONTROL_PORT";
+      break;
+    }
+    return formatter<std::string_view>::format(name, ctx);
+  }
+};
+
+template <>
+struct fmt::formatter<rtpmidid::rtppeer::disconnect_reason_e>
+    : formatter<std::string_view> {
+  auto format(rtpmidid::rtppeer::disconnect_reason_e c, format_context &ctx) {
+    std::string_view name = "UNKNOWN";
+    switch (c) {
+    case rtpmidid::rtppeer::disconnect_reason_e::CANT_CONNECT:
+      name = "CANT_CONNECT";
+      break;
+    case rtpmidid::rtppeer::disconnect_reason_e::PEER_DISCONNECTED:
+      name = "PEER_DISCONNECTED";
+      break;
+    case rtpmidid::rtppeer::disconnect_reason_e::CONNECTION_REJECTED:
+      name = "CONNECTON_REJECTED";
+      break;
+    case rtpmidid::rtppeer::disconnect_reason_e::DISCONNECT:
+      name = "DISCONNECT";
+      break;
+    case rtpmidid::rtppeer::disconnect_reason_e::CONNECT_TIMEOUT:
+      name = "CONNECT_TIMEOUT";
+      break;
+    case rtpmidid::rtppeer::disconnect_reason_e::CK_TIMEOUT:
+      name = "CK_TIMEOUT";
+      break;
+    }
+    return formatter<std::string_view>::format(name, ctx);
+  }
+};
