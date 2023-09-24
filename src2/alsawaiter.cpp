@@ -66,7 +66,17 @@ void alsawaiter_t::add_endpoint(const std::string &hostname,
                                 const std::string &port) {
   DEBUG("Added endpoint for alsawaiter: {}, hostname: {}, port: {}", name,
         hostname, port);
-  endpoints.push_back(alsawaiter_t::endpoint_t{hostname, port});
+  bool exists = false;
+
+  for (auto &endpoint : endpoints) {
+    if (endpoint.hostname == hostname && endpoint.port == port) {
+      exists = true;
+      break;
+    }
+  }
+
+  if (!exists)
+    endpoints.push_back(alsawaiter_t::endpoint_t{hostname, port});
 }
 
 void alsawaiter_t::connect_to_remote_server() {
