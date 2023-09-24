@@ -40,12 +40,13 @@ enum Color {
 std::string color(const std::string_view &str, Color color,
                   bool highlight = false) {
   int hl = highlight ? 1 : 0;
-  return fmt::format("\033[{};{}m{}\033[0m", hl, color, str);
+  return fmt::format("\033[{};{}m{}\033[0m", hl, (int)color, str);
 }
 std::string color(const std::string_view &str, Color color, Color bgcolor,
                   bool highlight = false) {
   int hl = highlight ? 1 : 0;
-  return fmt::format("\033[{};{};{}m{}\033[0m", hl, color, bgcolor, str);
+  return fmt::format("\033[{};{};{}m{}\033[0m", hl, (int)color, (int)bgcolor,
+                     str);
 }
 
 logger::logger() { is_a_terminal = isatty(fileno(stdout)); }
