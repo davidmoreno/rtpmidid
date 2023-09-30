@@ -103,19 +103,20 @@ void test_midirouter_from_alsa() {
   auto mididata =
       hex_to_bin("90 64 7F"); // Tis must be in a variable to outlive its use
   auto data = rtpmidid::io_bytes_reader(mididata);
-  mididata_to_alsaevents.encode(data, [&alsanetwork](snd_seq_event_t *ev) {
-    // proper source
-    ev->source.client = 128;
-    ev->source.port = 0;
-    // This test the encoder works
-    ASSERT_EQUAL(ev->type, SND_SEQ_EVENT_NOTEON);
-    alsanetwork->alsaseq_event(ev);
+  mididata_to_alsaevents.mididata_to_evs_f(
+      data, [&alsanetwork](snd_seq_event_t *ev) {
+        // proper source
+        ev->source.client = 128;
+        ev->source.port = 0;
+        // This test the encoder works
+        ASSERT_EQUAL(ev->type, SND_SEQ_EVENT_NOTEON);
+        alsanetwork->alsaseq_event(ev);
 
-    // unknown source
-    ev->source.client = 120;
-    ev->source.port = 0;
-    alsanetwork->alsaseq_event(ev);
-  });
+        // unknown source
+        ev->source.client = 120;
+        ev->source.port = 0;
+        alsanetwork->alsaseq_event(ev);
+      });
 
   test_midiio_t *rtppeer = dynamic_cast<test_midiio_t *>(
       router->peers[rtpmidinetwork_id].peer.get());

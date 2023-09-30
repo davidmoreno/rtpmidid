@@ -54,7 +54,7 @@ alsawaiter_t::alsawaiter_t(const std::string &name_,
       aseq->midi_event[alsaport].connect([this](snd_seq_event_t *ev) {
         rtpmidid::io_bytes_static<1024> data;
         auto datawriter = rtpmidid::io_bytes_writer(data);
-        mididata_decoder.decode(ev, datawriter);
+        mididata_decoder.ev_to_mididata(ev, datawriter);
         auto mididata = mididata_t(datawriter);
         router->send_midi(peer_id, mididata);
       });
@@ -146,7 +146,7 @@ void alsawaiter_t::disconnect_from_remote_server() {
 
 void alsawaiter_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   mididata_t mididata{data};
-  mididata_encoder.encode(mididata, [this](snd_seq_event_t *ev) {
+  mididata_encoder.mididata_to_evs_f(mididata, [this](snd_seq_event_t *ev) {
     snd_seq_ev_set_source(ev, alsaport);
     snd_seq_ev_set_subs(ev); // to all subscribers
     snd_seq_ev_set_direct(ev);

@@ -35,7 +35,7 @@ alsaworker_t::alsaworker_t(const std::string &name_,
   midi_connection = seq->midi_event[port].connect([this](snd_seq_event *ev) {
     rtpmidid::io_bytes_static<1024> data;
     auto datawriter = rtpmidid::io_bytes_writer(data);
-    mididata_decoder.decode(ev, datawriter);
+    mididata_decoder.ev_to_mididata(ev, datawriter);
     auto mididata = mididata_t(datawriter);
     router->send_midi(peer_id, mididata);
   });
@@ -46,7 +46,7 @@ alsaworker_t::~alsaworker_t() { seq->remove_port(port); }
 void alsaworker_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   packets_recv += 1;
   auto readerdata = rtpmidid::io_bytes_reader(data);
-  mididata_encoder.encode(readerdata, [this](snd_seq_event_t *ev) {
+  mididata_encoder.mididata_to_evs_f(readerdata, [this](snd_seq_event_t *ev) {
     snd_seq_ev_set_source(ev, this->port);
     snd_seq_ev_set_subs(ev); // to all subscribers
     snd_seq_ev_set_direct(ev);

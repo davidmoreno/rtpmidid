@@ -92,9 +92,9 @@ public:
   ~mididata_to_alsaevents_t();
 
   // Gets a data bunch of bytes, and calls a callback with all found events.
-  void encode(rtpmidid::io_bytes_reader &data,
-              std::function<void(snd_seq_event_t *)>);
-  void decode(snd_seq_event_t *, rtpmidid::io_bytes_writer &data);
+  void mididata_to_evs_f(rtpmidid::io_bytes_reader &data,
+                         std::function<void(snd_seq_event_t *)>);
+  void ev_to_mididata(snd_seq_event_t *, rtpmidid::io_bytes_writer &data);
 };
 } // namespace rtpmididns
 

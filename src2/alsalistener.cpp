@@ -97,9 +97,8 @@ void alsalistener_t::alsaseq_event(snd_seq_event_t *event) {
     }
     return;
   }
-  uint8_t buffer[1024];
-  rtpmidid::io_bytes_writer writer(buffer, sizeof(buffer));
-  alsatrans_decoder.decode(event, writer);
+  rtpmidid::io_bytes_writer_static<1024> writer;
+  alsatrans_decoder.ev_to_mididata(event, writer);
   auto midi = mididata_t(writer);
 
   router->send_midi(peer_id, peerI->second, midi);
@@ -113,7 +112,7 @@ void alsalistener_t::send_midi(midipeer_id_t from, const mididata_t &data) {
       auto mididata_copy =
           mididata_t(data); // Its just the pointers, not the data itself
       auto port = peer.first;
-      alsatrans_encoder.encode(
+      alsatrans_encoder.mididata_to_evs_f(
           mididata_copy, [this, port](snd_seq_event_t *ev) {
             // DEBUG("Send to ALSA port {}:{}", port.client, port.port);
             snd_seq_ev_set_source(ev, this->port);

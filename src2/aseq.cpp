@@ -308,9 +308,17 @@ void aseq_t::connect(const port_t &from, const port_t &to) {
   DEBUG("Connect alsa ports {} -> {}", from.to_string(), to.to_string());
 
   if (from.client == client_id) {
-    snd_seq_connect_to(seq, from.port, to.client, to.port);
+    int res = snd_seq_connect_to(seq, from.port, to.client, to.port);
+    if (res < 0) {
+      throw rtpmidid::exception("Failed connection: {} -> {}", from.to_string(),
+                                to.to_string());
+    }
   } else if (to.client == client_id) {
-    snd_seq_connect_from(seq, from.port, to.client, to.port);
+    int res = snd_seq_connect_from(seq, from.port, to.client, to.port);
+    if (res < 0) {
+      throw rtpmidid::exception("Failed connection: {} -> {}", from.to_string(),
+                                to.to_string());
+    }
   } else {
     ERROR("Can not connect ports I'm not part of.");
     throw rtpmidid::exception("Can not connect ports I'm not part of.");
@@ -386,26 +394,31 @@ mididata_to_alsaevents_t::~mididata_to_alsaevents_t() {
   snd_midi_event_free(buffer);
 }
 
-void mididata_to_alsaevents_t::encode(
+void mididata_to_alsaevents_t::mididata_to_evs_f(
     rtpmidid::io_bytes_reader &data,
     std::function<void(snd_seq_event_t *)> func) {
   snd_seq_event_t ev;
 
+  snd_midi_event_reset_encode(buffer);
+
   while (data.position <= data.end) {
-    // memset(&ev, 0, sizeof(ev));
     snd_seq_ev_clear(&ev);
     auto used = snd_midi_event_encode(buffer, data.position,
                                       data.end - data.position, &ev);
     if (used <= 0) {
+      ERROR("Fail encode event: {}, {}", used, data);
+      data.print_hex(false);
       return;
     }
     data.position += used;
+    DEBUG("Encode MIDI {}", data);
     func(&ev);
   }
 }
 
-void mididata_to_alsaevents_t::decode(snd_seq_event_t *ev,
-                                      rtpmidid::io_bytes_writer &data) {
+void mididata_to_alsaevents_t::ev_to_mididata(snd_seq_event_t *ev,
+                                              rtpmidid::io_bytes_writer &data) {
+  snd_midi_event_reset_decode(buffer);
   auto ret = snd_midi_event_decode(buffer, data.position,
                                    data.end - data.position, ev);
   if (ret < 0) {
@@ -414,6 +427,7 @@ void mididata_to_alsaevents_t::decode(snd_seq_event_t *ev,
   }
 
   data.position += ret;
+  DEBUG("Decode MIDI {}B, {}", ret, data);
 }
 
 } // namespace rtpmididns
