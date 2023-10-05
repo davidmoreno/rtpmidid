@@ -1,8 +1,9 @@
-rtpmidid (21.11~17~g68d71) unstable; urgency=medium
+rtpmidid (23.10) unstable; urgency=medium
 
-  * Development version. Check `git log`.
+  * Packaging fixes
+  * Compiles with newest libfmt
 
- -- David Moreno <dmoreno@coralbits.com>  Sun, 27 Nov 2022 12:16:13 +0100
+ -- David Moreno <dmoreno@coralbits.com>  Thu, 05 Oct 2023 23:44:52 +0200
 
 rtpmidid (21.11) unstable; urgency=medium
 
