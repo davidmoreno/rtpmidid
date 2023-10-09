@@ -36,6 +36,7 @@ class rtpmidiserverworker_t : public midipeer_t {
 public:
   std::string name_;
   rtpmidid::rtpserver_t server;
+  int use_count = 0;
 
   connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
 

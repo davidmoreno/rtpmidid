@@ -27,6 +27,7 @@
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/logger.hpp"
 #include "rtpmidilistener.hpp"
+#include "rtpmidiserverworker.hpp"
 #include <alsa/seqmid.h>
 #include <memory>
 #include <utility>
@@ -54,17 +55,26 @@ alsalistener_t::~alsalistener_t() { seq->remove_port(port); }
 
 midipeer_id_t alsalistener_t::new_alsa_connection(const aseq_t::port_t &port,
                                                   const std::string &name) {
-  DEBUG("Create network peer {}", name);
-  // std::shared_ptr<midipeer_t> alsapeer = make_alsapeer(name, seq);
-  std::shared_ptr<midipeer_t> networkpeer = make_rtpmidiserverworker(name);
-  // auto alsapeer_id = router->add_peer(alsapeer);
-  auto networkpeer_id = router->add_peer(networkpeer);
+  DEBUG("New connection to network peer {}", name);
 
-  // router->connect(alsapeer_id, networkpeer_id);
-  // router->connect(networkpeer_id, alsapeer_id);
+  int networkpeer_id = -1;
+  router->for_each_peer<rtpmidiserverworker_t>(
+      [this, &name, &networkpeer_id](auto *peer) {
+        if (peer->name_ == name) {
+          peer->use_count++;
+          networkpeer_id = peer->peer_id;
+          DEBUG("One more user for peer: {}, count: ", peer->peer_id,
+                peer->use_count);
+        }
+      });
 
-  aseqpeers[port] = networkpeer_id;
-  router->connect(networkpeer_id, peer_id);
+  if (networkpeer_id < 0) {
+    std::shared_ptr<midipeer_t> networkpeer = make_rtpmidiserverworker(name);
+    auto networkpeer_id = router->add_peer(networkpeer);
+
+    aseqpeers[port] = networkpeer_id;
+    router->connect(networkpeer_id, peer_id);
+  }
 
   // return std::make_pair(alsapeer_id, networkpeer_id);
   return networkpeer_id;
@@ -72,18 +82,31 @@ midipeer_id_t alsalistener_t::new_alsa_connection(const aseq_t::port_t &port,
 
 void alsalistener_t::remove_alsa_connection(const aseq_t::port_t &port) {
   auto networkpeerI = aseqpeers.find(port);
-  if (networkpeerI != aseqpeers.end()) {
-    DEBUG("Removed ALSA port {}:{}, removing midipeer {}", port.client,
-          port.port, networkpeerI->second);
-    router->remove_peer(networkpeerI->second);
-    aseqpeers.erase(port);
-  } else {
+  if (networkpeerI == aseqpeers.end()) {
     DEBUG("Removed ALSA port {}:{}, removing midipeer. NOT FOUND!", port.client,
           port.port);
     for (auto &peers : aseqpeers) {
       DEBUG("Known peer {}:{}", peers.first.port, peers.first.client);
     }
+    return;
   }
+  rtpmidiserverworker_t *rtppeer = dynamic_cast<rtpmidiserverworker_t *>(
+      router->get_peer_by_id(networkpeerI->second).get());
+  if (!rtppeer) {
+    ERROR("Invalid router id is not a rtpmidiserverlistener!");
+    return;
+  }
+
+  rtppeer->use_count--;
+
+  INFO("One less user of peer: {}, use_count: {}", rtppeer->peer_id,
+       rtppeer->use_count);
+  if (rtppeer->use_count > 0) {
+    return;
+  }
+  DEBUG("Removed ALSA port {}:{}, removing midipeer {}", port.client, port.port,
+        networkpeerI->second);
+  router->remove_peer(networkpeerI->second);
 }
 
 void alsalistener_t::alsaseq_event(snd_seq_event_t *event) {

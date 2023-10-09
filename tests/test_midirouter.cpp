@@ -24,6 +24,7 @@
 #include "../src2/mididata.hpp"
 #include "../src2/midipeer.hpp"
 #include "../src2/midirouter.hpp"
+#include "../src2/rtpmidiserverworker.hpp"
 #include "../tests/test_case.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "test_utils.hpp"
@@ -47,6 +48,17 @@ public:
 
   rtpmididns::json_t status() override { return rtpmididns::json_t{}; }
 };
+
+rtpmididns::rtpmidiserverworker_t::rtpmidiserverworker_t(
+    const std::string &name)
+    : server(name, "15005") {}
+rtpmididns::rtpmidiserverworker_t::~rtpmidiserverworker_t() {}
+
+void rtpmididns::rtpmidiserverworker_t::send_midi(midipeer_id_t from,
+                                                  const mididata_t &) {}
+rtpmididns::json_t rtpmididns::rtpmidiserverworker_t::status() {
+  return rtpmididns::json_t{};
+}
 
 // rtpmididns::alsapeer_t::alsapeer_t(const std::string &name,
 //                                    rtpmidid::aseq &seq_)

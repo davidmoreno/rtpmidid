@@ -310,14 +310,16 @@ void aseq_t::connect(const port_t &from, const port_t &to) {
   if (from.client == client_id) {
     int res = snd_seq_connect_to(seq, from.port, to.client, to.port);
     if (res < 0) {
-      throw rtpmidid::exception("Failed connection: {} -> {}", from.to_string(),
-                                to.to_string());
+      throw rtpmidid::exception("Failed connection: {} -> {}: {}",
+                                from.to_string(), to.to_string(),
+                                snd_strerror(res));
     }
   } else if (to.client == client_id) {
-    int res = snd_seq_connect_from(seq, from.port, to.client, to.port);
+    int res = snd_seq_connect_from(seq, to.port, from.client, from.port);
     if (res < 0) {
-      throw rtpmidid::exception("Failed connection: {} -> {}", from.to_string(),
-                                to.to_string());
+      throw rtpmidid::exception("Failed connection: {} -> {}: {}",
+                                from.to_string(), to.to_string(),
+                                snd_strerror(res));
     }
   } else {
     ERROR("Can not connect ports I'm not part of.");

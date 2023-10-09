@@ -144,15 +144,15 @@ void test_send_receive_messages() {
   ASSERT_EQUAL(rtppeer_client_b.peer.status,
                rtpmidid::rtppeer_t::status_e::CONNECTED);
 
-  uint8_t port_id = aseq->find_port(device_id, "RTPPEER B");
-  DEBUG("Got ALSA seq for RTPPEER B at {}:{}", (int)device_id, (int)port_id);
+  uint8_t port_id_b = aseq->find_port(device_id, "RTPPEER B");
+  DEBUG("Got ALSA seq for RTPPEER B at {}:{}", (int)device_id, (int)port_id_b);
 
   status = router->status();
   DEBUG("{}", status.dump(2));
   //// 2 more peers: the rtpmidi_worker and the alsa_worker.
   ASSERT_EQUAL(router->peers.size(), 5);
 
-  // 4. Connect from network to ALSA A. Ntohing of importance should happen
+  // 4. Connect from network to ALSA A. Nothing of importance should happen
   DEBUG("Peer count: {}", router->peers.size());
 
   // Connect network to alsa a
@@ -165,6 +165,22 @@ void test_send_receive_messages() {
   status = router->status();
   DEBUG("{}", status.dump(2));
   //// No more peers
+  DEBUG("Found {} peers", router->peers.size());
+  ASSERT_EQUAL(router->peers.size(), 5);
+
+  // 5. Connect rtpmidi A and B manually, just copy data
+  auto rtppeer_client_a_midi_connection =
+      rtppeer_client_a.peer.midi_event.connect(
+          [&](const rtpmidid::io_bytes_reader &data) {
+            rtppeer_client_b.peer.send_midi(data);
+          });
+
+  // 6. Connect to/from ALSA B
+  ASSERT_NOT_EQUAL(aseq->client_id, device_id);
+  auto alsa_b_rw = aseq->create_port("ALSA B R/W");
+  aseq->connect({aseq->client_id, alsa_b_rw}, {device_id, port_id_b});
+  aseq->connect({device_id, port_id_b}, {aseq->client_id, alsa_b_rw});
+
   ASSERT_EQUAL(router->peers.size(), 5);
 
   DEBUG("END");
