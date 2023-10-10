@@ -304,7 +304,7 @@ void aseq_t::disconnect_port(uint8_t port) {
   disconnect_port_at_subs(seq, subs, port);
 }
 
-void aseq_t::connect(const port_t &from, const port_t &to) {
+aseq_t::connection_t aseq_t::connect(const port_t &from, const port_t &to) {
   DEBUG("Connect alsa ports {} -> {}", from.to_string(), to.to_string());
 
   if (from.client == client_id) {
@@ -324,6 +324,30 @@ void aseq_t::connect(const port_t &from, const port_t &to) {
   } else {
     ERROR("Can not connect ports I'm not part of.");
     throw rtpmidid::exception("Can not connect ports I'm not part of.");
+  }
+  return aseq_t::connection_t(shared_from_this(), from, to);
+}
+
+void aseq_t::disconnect(const port_t &from, const port_t &to) {
+  DEBUG("Disconnect alsa ports {} -> {}", from.to_string(), to.to_string());
+
+  if (from.client == client_id) {
+    int res = snd_seq_disconnect_to(seq, from.port, to.client, to.port);
+    if (res < 0) {
+      throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
+                                from.to_string(), to.to_string(),
+                                snd_strerror(res), res);
+    }
+  } else if (to.client == client_id) {
+    int res = snd_seq_disconnect_from(seq, to.port, from.client, from.port);
+    if (res < 0) {
+      throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
+                                from.to_string(), to.to_string(),
+                                snd_strerror(res), res);
+    }
+  } else {
+    ERROR("Can not disconnect ports I'm not part of.");
+    throw rtpmidid::exception("Can not disconnect ports I'm not part of.");
   }
 }
 

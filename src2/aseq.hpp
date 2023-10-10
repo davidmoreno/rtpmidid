@@ -23,13 +23,14 @@
 #include <alsa/seq_midi_event.h>
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include <rtpmidid/signal.hpp>
 
 namespace rtpmididns {
-class aseq_t {
+class aseq_t : public std::enable_shared_from_this<aseq_t> {
 public:
   struct port_t {
     uint8_t client;
@@ -47,6 +48,40 @@ public:
 
     std::string to_string() const {
       return fmt::format("port_t[{}, {}]", client, port);
+    }
+  };
+
+  struct connection_t {
+    std::shared_ptr<aseq_t> aseq;
+    port_t from;
+    port_t to;
+
+    connection_t(const std::shared_ptr<aseq_t> &aseq_, const port_t &from_,
+                 const port_t &to_) {
+      aseq = aseq_;
+      from = from_;
+      to = to_;
+    };
+    connection_t(const connection_t &other) = delete;
+    connection_t(connection_t &&other) {
+      aseq = aseq;
+      from = from;
+      to = to;
+      other.from = {0, 0};
+      other.to = {0, 0};
+    };
+    connection_t &operator=(const connection_t &other) = delete;
+    connection_t &operator=(connection_t &&other) {
+      aseq = aseq;
+      from = from;
+      to = to;
+      other.from = {0, 0};
+      other.to = {0, 0};
+      return *this;
+    }
+    ~connection_t() {
+      if (from.client && from.port && to.client && to.port)
+        aseq->disconnect(from, to);
     }
   };
 
@@ -69,7 +104,8 @@ public:
   void remove_port(uint8_t port);
 
   /// Connect two ports
-  void connect(const port_t &from, const port_t &to);
+  connection_t connect(const port_t &from, const port_t &to);
+  void disconnect(const port_t &from, const port_t &to);
   /// Disconnects everything from this port
   void disconnect_port(uint8_t port);
 

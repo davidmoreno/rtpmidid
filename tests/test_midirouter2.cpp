@@ -93,7 +93,7 @@ void test_send_receive_messages() {
         midi_packets_alsa_a++;
       });
 
-  aseq->connect(
+  auto alsa_a_to_network_connection = aseq->connect(
       rtpmididns::aseq_t::port_t{aseq->client_id, alsa_a},
       rtpmididns::aseq_t::port_t{test_client_id, 0}); // Connect to network
   poller_wait_until([&router]() { return router->peers.size() == 3; });
@@ -156,7 +156,7 @@ void test_send_receive_messages() {
   DEBUG("Peer count: {}", router->peers.size());
 
   // Connect network to alsa a
-  aseq->connect( //
+  auto network_to_alsa_a = aseq->connect( //
       rtpmididns::aseq_t::port_t{test_client_id, 0},
       rtpmididns::aseq_t::port_t{aseq->client_id, alsa_a} //
   );
@@ -178,8 +178,10 @@ void test_send_receive_messages() {
   // 6. Connect to/from ALSA B
   ASSERT_NOT_EQUAL(aseq->client_id, device_id);
   auto alsa_b_rw = aseq->create_port("ALSA B R/W");
-  aseq->connect({aseq->client_id, alsa_b_rw}, {device_id, port_id_b});
-  aseq->connect({device_id, port_id_b}, {aseq->client_id, alsa_b_rw});
+  auto alsa_a_to_b_connection =
+      aseq->connect({aseq->client_id, alsa_b_rw}, {device_id, port_id_b});
+  auto alsa_b_to_a_connection =
+      aseq->connect({device_id, port_id_b}, {aseq->client_id, alsa_b_rw});
 
   ASSERT_EQUAL(router->peers.size(), 5);
 
