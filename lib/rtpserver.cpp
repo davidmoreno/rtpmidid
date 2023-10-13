@@ -139,13 +139,15 @@ rtpserver_t::rtpserver_t(std::string _name, const std::string &port)
 }
 
 rtpserver_t::~rtpserver_t() {
+  DEBUG("~rtpserver_t({})", name);
   // Must clear here, to be able to use the control and midi
   // sockets
   for (auto &peerinfo : peers) {
-    peerinfo.peer->send_goodbye(rtppeer_t::CONTROL_PORT);
-    peerinfo.peer->send_goodbye(rtppeer_t::MIDI_PORT);
+    if (peerinfo.peer) {
+      peerinfo.peer->send_goodbye(rtppeer_t::CONTROL_PORT);
+      peerinfo.peer->send_goodbye(rtppeer_t::MIDI_PORT);
+    }
   }
-  DEBUG("~rtpserver_t({})", name);
   if (control_socket >= 0) {
     control_poller.stop();
     close(control_socket);
@@ -315,6 +317,7 @@ void rtpserver_t::create_peer_from(io_bytes_reader &&buffer,
   DEBUG("Connected from {}:{}", astring, remote_base_port);
 
   auto &peerdata = peers.emplace_back();
+  peerdata.peer = peer;
   peerdata.address = astring;
   peerdata.port = remote_base_port;
 
@@ -330,7 +333,6 @@ void rtpserver_t::create_peer_from(io_bytes_reader &&buffer,
   peer->data_ready(std::move(buffer), port);
 
   // After read the first packet I know the initiator_id and ssrc
-  peerdata.peer = peer;
 
   // Setup some callbacks
   auto wpeer = std::weak_ptr(peer);

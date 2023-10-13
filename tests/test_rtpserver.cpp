@@ -85,9 +85,12 @@ void test_several_connect_to_server() {
     ASSERT_TRUE(peer.peer->is_connected());
   }
 
+  INFO("Send disconnect");
   control_client.send(disconnect_msg2);
-
-  // Removed ok
+  DEBUG("{} peers", server.peers.size());
+  ASSERT_EQUAL(server.peers.size(), 2);
+  midi_client.send(disconnect_msg2);
+  DEBUG("{} peers", server.peers.size());
   ASSERT_EQUAL(server.peers.size(), 1);
 
   // Should do nothing, no add, no remove
@@ -150,13 +153,13 @@ void test_connect_disconnect_send() {
   ASSERT_EQUAL(*nmidievents, 1);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_several_connect_to_server),
       TEST(test_connect_disconnect_send),
   };
 
-  testcase.run();
+  testcase.run(argc, argv);
 
   return testcase.exit_code();
 }
