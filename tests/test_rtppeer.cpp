@@ -68,6 +68,7 @@ void test_connect_disconnect() {
   ASSERT_EQUAL(connected, rtpmidid::rtppeer_t::status_e::CONNECTED);
 
   peer.data_ready(DISCONNECT_MSG, rtpmidid::rtppeer_t::CONTROL_PORT);
+  peer.data_ready(DISCONNECT_MSG, rtpmidid::rtppeer_t::MIDI_PORT);
 
   ASSERT_EQUAL(connected, false);
   ASSERT_EQUAL(peer.is_connected(), false);
@@ -82,10 +83,12 @@ void test_connect_disconnect_reverse_order() {
   auto connected_event_c1 = peer.connected_event.connect(
       [&connected](const std::string &_name, rtpmidid::rtppeer_t::status_e st) {
         connected = st;
+        INFO("Got status {}", st);
       });
   auto disconnected_event_c1 =
       peer.disconnect_event.connect([&connected](auto reason) {
         connected = rtpmidid::rtppeer_t::status_e::NOT_CONNECTED;
+        INFO("Disconnected {}", reason);
       });
   auto send_event_c1 =
       peer.send_event.connect([](const rtpmidid::io_bytes_reader &data,
@@ -110,6 +113,9 @@ void test_connect_disconnect_reverse_order() {
   ASSERT_EQUAL(peer.is_connected(), true);
 
   peer.data_ready(DISCONNECT_MSG, rtpmidid::rtppeer_t::CONTROL_PORT);
+  ASSERT_EQUAL(peer.status, rtpmidid::rtppeer_t::status_e::MIDI_CONNECTED);
+  peer.data_ready(DISCONNECT_MSG, rtpmidid::rtppeer_t::MIDI_PORT);
+  ASSERT_EQUAL(peer.status, rtpmidid::rtppeer_t::status_e::NOT_CONNECTED);
 
   ASSERT_EQUAL(connected, rtpmidid::rtppeer_t::status_e::NOT_CONNECTED);
   ASSERT_EQUAL(peer.is_connected(), false);

@@ -236,16 +236,20 @@ void rtppeer_t::parse_command_by(io_bytes_reader &buffer, port_e port) {
     return;
   }
 
-  DEBUG("Parse BY. status: {}, port {} (midi: {})", status, port,
-        port == MIDI_PORT);
+  uint8_t mask = 0xFF;
 
   if (port == MIDI_PORT)
-    status = status_e(int(status) & ~(MIDI_CONNECTED));
+    mask = ~MIDI_CONNECTED;
   if (port == CONTROL_PORT)
-    status = status_e(int(status) & ~(CONTROL_CONNECTED));
+    mask = ~CONTROL_CONNECTED;
+  auto nextstatus = status_e(int(status) & mask);
 
-  INFO("Disconnect from {}, {} port. Status {:X}", remote_name,
-       port == MIDI_PORT ? "MIDI" : "Control", (int)status);
+  DEBUG("Parse BY. status: {}, port {}| {:08b} & {:08b} = {:08b}", status, port,
+        (uint8_t)(status), (uint8_t)mask, int(status) & mask);
+
+  INFO("Disconnect from {}, {} port. Status {} -> {}", remote_name, port,
+       status, nextstatus);
+  status = nextstatus;
 
   // One BY is enough, not even waiting for the midi one.
   if (status == NOT_CONNECTED)
