@@ -19,6 +19,7 @@
 #include "../src2/aseq.hpp"
 #include "../src2/factory.hpp"
 #include "../src2/json.hpp"
+#include "../src2/mididata.hpp"
 #include "../src2/midirouter.hpp"
 #include "../src2/rtpmidiserverworker.hpp"
 #include "../src2/settings.hpp"
@@ -87,10 +88,10 @@ void test_send_receive_messages() {
 
   auto alsa_a = aseq->create_port("ALSA A");
   int midi_packets_alsa_a = 0;
-  auto midievent_listener = aseq->midi_event[alsa_a].connect(
+  auto midievent_listener_a = aseq->midi_event[alsa_a].connect(
       [&midi_packets_alsa_a](snd_seq_event_t *ev) {
-        DEBUG("GOT MIDI DATA!");
         midi_packets_alsa_a++;
+        DEBUG("GOT MIDI DATA A: {}", midi_packets_alsa_a);
       });
 
   auto alsa_a_to_network_connection = aseq->connect(
@@ -172,7 +173,14 @@ void test_send_receive_messages() {
   auto rtppeer_client_a_midi_connection =
       rtppeer_client_a.peer.midi_event.connect(
           [&](const rtpmidid::io_bytes_reader &data) {
+            DEBUG("Got data grom A to B");
             rtppeer_client_b.peer.send_midi(data);
+          });
+  auto rtppeer_client_b_midi_connection =
+      rtppeer_client_b.peer.midi_event.connect(
+          [&](const rtpmidid::io_bytes_reader &data) {
+            DEBUG("Got data grom B to A");
+            rtppeer_client_a.peer.send_midi(data);
           });
 
   // 6. Connect to/from ALSA B
@@ -184,6 +192,39 @@ void test_send_receive_messages() {
       aseq->connect({device_id, port_id_b}, {aseq->client_id, alsa_b_rw});
 
   ASSERT_EQUAL(router->peers.size(), 5);
+  int midi_packets_alsa_b = 0;
+  auto midievent_listener_b = aseq->midi_event[alsa_b_rw].connect(
+      [&midi_packets_alsa_b](snd_seq_event_t *ev) {
+        midi_packets_alsa_b++;
+        DEBUG("GOT MIDI DATA B: {}", midi_packets_alsa_b);
+      });
+
+  // 7. Send from A, received at B
+  rtpmididns::mididata_to_alsaevents_t mdtoa;
+  auto mididata = hex_to_bin("90 64 64");
+  auto mididata2 = rtpmididns::mididata_t(mididata);
+  ASSERT_EQUAL(midi_packets_alsa_b, 0);
+  INFO("Send B -> A");
+  mdtoa.mididata_to_evs_f(mididata2, [&](auto *ev) {
+    snd_seq_ev_set_source(ev, alsa_a);
+    snd_seq_ev_set_subs(ev); // to all subscribers
+    snd_seq_ev_set_direct(ev);
+    snd_seq_event_output_direct(aseq->seq, ev);
+  });
+  poller_wait_until([&]() { return midi_packets_alsa_b == 1; });
+  ASSERT_EQUAL(midi_packets_alsa_a, 1);
+
+  INFO("Send A -> B");
+  // Send B to A
+  mididata2 = rtpmididns::mididata_t(mididata);
+  mdtoa.mididata_to_evs_f(mididata2, [&](auto *ev) {
+    snd_seq_ev_set_source(ev, alsa_b_rw);
+    snd_seq_ev_set_subs(ev); // to all subscribers
+    snd_seq_ev_set_direct(ev);
+    snd_seq_event_output_direct(aseq->seq, ev);
+  });
+  poller_wait_until([&]() { return midi_packets_alsa_a == 2; });
+  ASSERT_EQUAL(midi_packets_alsa_a, 2);
 
   DEBUG("END");
 }

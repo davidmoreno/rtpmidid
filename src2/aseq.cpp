@@ -427,7 +427,8 @@ void mididata_to_alsaevents_t::mididata_to_evs_f(
 
   snd_midi_event_reset_encode(buffer);
 
-  while (data.position <= data.end) {
+  while (data.position < data.end) {
+    DEBUG("mididata to snd_ev, left {}", data);
     snd_seq_ev_clear(&ev);
     auto used = snd_midi_event_encode(buffer, data.position,
                                       data.end - data.position, &ev);
@@ -437,7 +438,6 @@ void mididata_to_alsaevents_t::mididata_to_evs_f(
       return;
     }
     data.position += used;
-    DEBUG("Encode MIDI {}", data);
     func(&ev);
   }
 }
@@ -453,7 +453,7 @@ void mididata_to_alsaevents_t::ev_to_mididata(snd_seq_event_t *ev,
   }
 
   data.position += ret;
-  DEBUG("Decode MIDI {}B, {}", ret, data);
+  DEBUG("ev to mididata, left: {}, {}", ret, data);
 }
 
 } // namespace rtpmididns
