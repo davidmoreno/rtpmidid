@@ -70,7 +70,7 @@ midipeer_id_t alsalistener_t::new_alsa_connection(const aseq_t::port_t &port,
 
   if (networkpeer_id < 0) {
     std::shared_ptr<midipeer_t> networkpeer = make_rtpmidiserverworker(name);
-    auto networkpeer_id = router->add_peer(networkpeer);
+    networkpeer_id = router->add_peer(networkpeer);
 
     aseqpeers[port] = networkpeer_id;
     router->connect(networkpeer_id, peer_id);
