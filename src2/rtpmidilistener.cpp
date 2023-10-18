@@ -56,9 +56,17 @@ json_t rtpmidilistener_t::status() {
   }
 
   return json_t{
+      //
       {"type", "rtpmidi_listener"}, //
       {"peers", peers},             //
       {"name", server.name},        //
+      {"listening",
+       {
+           //
+           {"name", server.name},                 //
+           {"control_port", server.control_port}, //
+           {"midi_port", server.midi_port}        //
+       }}                                         //
   };
 }
 

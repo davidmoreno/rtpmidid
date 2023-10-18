@@ -2,6 +2,7 @@ add_executable(
   rtpmidid2-daemon  
   main.cpp
   aseq.cpp
+  argv.cpp
   control_socket.cpp
   stringpp.cpp
 

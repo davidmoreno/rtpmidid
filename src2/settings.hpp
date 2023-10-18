@@ -24,7 +24,8 @@ namespace rtpmididns {
 
 struct settings_t {
   std::string alsa_name = "rtpmidid";
-  std::string rtpmidid_name = "rtpmidid";
+  bool alsa_network = true;
+  std::string rtpmidid_name = "";
   std::string rtpmidid_port = "5004";
   std::string control_filename = "/var/run/rtpmidid/control.sock";
 };
