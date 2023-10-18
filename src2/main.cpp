@@ -69,14 +69,23 @@ int main(int argc, char **argv) {
     control.aseq = aseq;
     rtpmididns::rtpmidi_remote_handler_t rtpmidi_remote_handler(router, aseq);
 
-    if (rtpmididns::settings.alsa_network) {
-      router->add_peer(
-          rtpmididns::make_alsalistener(rtpmididns::settings.alsa_name, aseq));
+    // Create all the alsa network midipeers
+    for (const auto &announce : rtpmididns::settings.alsa_announces) {
+      router->add_peer(rtpmididns::make_alsalistener(announce.name, aseq));
     }
-
-    router->add_peer(rtpmididns::make_rtpmidilistener(
-        rtpmididns::settings.rtpmidid_name, rtpmididns::settings.rtpmidid_port,
-        aseq));
+    // Create all the rtpmidi network midipeers
+    for (const auto &announce : rtpmididns::settings.rtpmidi_announces) {
+      router->add_peer(
+          rtpmididns::make_rtpmidilistener(announce.name, announce.port, aseq));
+    }
+    // Connect to all static endpoints
+    for (const auto &connect_to : rtpmididns::settings.connect_to) {
+      WARNING(
+          "NOT IMPLEMENTED YET CREATE ALSA PORT TO CONNECT TO REMOTE PEER {}",
+          connect_to);
+      // router->add_peer(rtpmididns::make_rtpmidiconnector(
+      //     connect_to.name, connect_to.address, connect_to.port, aseq));
+    }
 
     INFO("Waiting for connections.");
     while (rtpmidid::poller.is_open()) {

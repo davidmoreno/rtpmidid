@@ -20,6 +20,7 @@
 #include "settings.hpp"
 #include <algorithm>
 #include <fmt/core.h>
+#include <fstream>
 #include <functional>
 #include <iterator>
 #include <rtpmidid/exceptions.hpp>
@@ -78,6 +79,128 @@ bool str_to_bool(const std::string &value) {
   throw rtpmidid::exception("Invalid boolean value: {}", value);
 }
 
+// Loads an INI file and sets the data in the settings_t struct
+void load_ini(const std::string &filename) {
+  auto fd = std::ifstream(filename);
+  if (!fd.is_open()) {
+    throw rtpmidid::exception("Cannot open ini file: {}", filename);
+  }
+  // Read line by line the file at fd
+  std::string line;
+  std::string section;
+  std::string key;
+  std::string value;
+
+  // Currently open sections
+  settings_t::rtpmidi_announce_t *rtpmidi_announce = nullptr;
+  settings_t::alsa_announce_t *alsa_announce = nullptr;
+  settings_t::connect_to_t *connect_to = nullptr;
+
+  while (std::getline(fd, line)) {
+    // Remove comments
+    auto comment_pos = line.find('#');
+    if (comment_pos != std::string::npos) {
+      line = line.substr(0, comment_pos);
+    }
+    // Remove spaces
+    line.erase(std::remove_if(line.begin(), line.end(), isspace), line.end());
+    // Skip empty lines
+    if (line.length() == 0) {
+      continue;
+    }
+    // Check if it is a section
+    if (line[0] == '[') {
+      if (line[line.length() - 1] != ']') {
+        throw rtpmidid::exception("Invalid section: {}", line);
+      }
+      section = line.substr(1, line.length() - 2);
+
+      if (section == "general") {
+        continue;
+      } else if (section == "rtpmidi_announce") {
+        settings.rtpmidi_announces.emplace_back();
+        rtpmidi_announce = settings.rtpmidi_announces.data() +
+                           settings.rtpmidi_announces.size() - 1;
+      } else if (section == "alsa_announce") {
+        settings.alsa_announces.emplace_back();
+        alsa_announce =
+            settings.alsa_announces.data() + settings.alsa_announces.size() - 1;
+      } else if (section == "connect_to") {
+        settings.connect_to.emplace_back();
+        connect_to =
+            settings.connect_to.data() + settings.connect_to.size() - 1;
+      } else {
+        throw rtpmidid::exception("Invalid section: {}", section);
+      }
+
+      continue;
+    }
+    // Check if it is a key
+    auto eq_pos = line.find('=');
+    if (eq_pos == std::string::npos) {
+      throw rtpmidid::exception("Invalid line: {}", line);
+    }
+    key = line.substr(0, eq_pos);
+    value = line.substr(eq_pos + 1);
+
+    // If value has {{hostname}} replace it with the result of the function
+    // hostname(null), beware of the double {{ }}
+    if (value.find("{{hostname}}") != std::string::npos) {
+      char hostname[256];
+      gethostname(hostname, std::size(hostname));
+      // replace the placeholder. DO NOT USE fmt::format as it will not change
+      // both opening brackets, use replace_all
+      std::string hostname_str = hostname;
+      std::string hostname_placeholder = "{{hostname}}";
+      std::string::size_type n = 0;
+      while ((n = value.find(hostname_placeholder, n)) != std::string::npos) {
+        value.replace(n, hostname_placeholder.size(), hostname_str);
+        n += hostname_str.size();
+      }
+    }
+
+    // Store the value
+    if (section == "general") {
+      if (key == "alsa_name") {
+        settings.alsa_name = value;
+      } else if (key == "control") {
+        settings.control_filename = value;
+      } else {
+        throw rtpmidid::exception("Invalid key: {}", key);
+      }
+    } else if (section == "rtpmidi_announce") {
+      if (key == "name") {
+        rtpmidi_announce->name = value;
+      } else if (key == "port") {
+        rtpmidi_announce->port = value;
+      } else {
+        throw rtpmidid::exception("Invalid key: {}", key);
+      }
+    } else if (section == "alsa_announce") {
+      if (key == "name") {
+        alsa_announce->name = value;
+      } else {
+        throw rtpmidid::exception("Invalid key: {}", key);
+      }
+    } else if (section == "connect_to") {
+      if (key == "address") {
+        connect_to->address = value;
+      } else if (key == "port") {
+        connect_to->port = value;
+      } else if (key == "name") {
+        connect_to->name = value;
+      } else {
+        throw rtpmidid::exception("Invalid key: {}", key);
+      }
+    } else {
+      throw rtpmidid::exception("Invalid section: {}", section);
+    }
+  }
+}
+
+// Parses the argv and sets up the settings_t struct
+// for parameters that affect a alsa and rtpmidi announcements, it changes the
+// first announced, and creates it if needed
 void parse_argv(int argc, char **argv) {
   std::vector<argument_t> arguments;
 
@@ -88,21 +211,40 @@ void parse_argv(int argc, char **argv) {
     }
   };
 
-  arguments.emplace_back(
-      "--port", //
-      "Opens local port as server. Default 5004.",
-      [](const std::string &value) { settings.rtpmidid_port = value; });
+  arguments.emplace_back( //
+      "--ini",            //
+      "Loads an INI file as default configuration. Depending on order may "
+      "overwrite other arguments",
+      [](const std::string &value) { load_ini(value); });
+
+  arguments.emplace_back("--port", //
+                         "Opens local port as server. Default 5004.",
+                         [](const std::string &value) {
+                           if (settings.rtpmidi_announces.size() == 0) {
+                             settings.rtpmidi_announces.emplace_back();
+                           }
+                           settings.rtpmidi_announces.begin()->port = value;
+                         });
   arguments.emplace_back( //
       "--name",           //
       "Forces the alsa and rtpmidi name", [](const std::string &value) {
-        settings.rtpmidid_name = value;
-        settings.alsa_name = value;
+        if (settings.rtpmidi_announces.size() == 0) {
+          settings.rtpmidi_announces.emplace_back();
+        }
+        if (settings.alsa_announces.size() == 0) {
+          settings.alsa_announces.emplace_back();
+        }
+
+        settings.rtpmidi_announces.begin()->name = value;
+        settings.alsa_announces.begin()->name = value;
       });
   arguments.emplace_back( //
       "--alsa-name",      //
       "Forces the alsa name", [](const std::string &value) {
-        settings.rtpmidid_name = value;
-        settings.alsa_name = value;
+        if (settings.alsa_announces.size() == 0) {
+          settings.alsa_announces.emplace_back();
+        }
+        settings.alsa_announces.begin()->name = value;
       });
   arguments.emplace_back(
       "--alsa-network-announcement",
@@ -110,14 +252,14 @@ void parse_argv(int argc, char **argv) {
       "If you have a firewall you want this disabled and allow only "
       "connections from the network to rtpmidid, not announce new endpoints. "
       "Default: True",
-      [](const std::string &value) {
-        settings.alsa_network = str_to_bool(value);
-      });
+      [](const std::string &value) { settings.rtpmidi_announces.clear(); });
   arguments.emplace_back( //
       "--rtpmidid-name",  //
       "Forces the rtpmidi name", [](const std::string &value) {
-        settings.rtpmidid_name = value;
-        settings.alsa_name = value;
+        if (settings.rtpmidi_announces.size() == 0) {
+          settings.rtpmidi_announces.emplace_back();
+        }
+        settings.rtpmidi_announces.begin()->name = value;
       });
   arguments.emplace_back(
       "--control",
@@ -185,6 +327,7 @@ void parse_argv(int argc, char **argv) {
     gethostname(hostname, std::size(hostname));
     settings.rtpmidid_name = hostname;
   }
+  DEBUG("settings after argument parsing: {}", settings);
 }
 
 } // namespace rtpmididns
