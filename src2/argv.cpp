@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "rtpmidid/logger.hpp"
 #include "settings.hpp"
 #include <algorithm>
 #include <fmt/core.h>
@@ -24,6 +25,7 @@
 #include <rtpmidid/exceptions.hpp>
 #include <string>
 #include <unistd.h>
+#include <vector>
 
 namespace rtpmididns {
 
@@ -46,34 +48,20 @@ const char *CMDLINE_HELP =
     "also\n"
     "deliver high latency.\n"
     "\n"
-    "Options:\n"
-    "  --version                                  Show version\n"
-    "  --help                                     Show this help\n"
-    "  --name <name>                              Forces the alsa and rtpmidi "
-    "name\n"
-    "  --alsa-name <name>                         Forces the alsa name\n"
-    "  --alsa-network-announcement=<true|false>   Enables / Disables the ALSA "
-    "Network "
-    "port to announce on the network. If you have a firewall you want this "
-    "disabled and allow only connections from the network to rtpmidid, not "
-    "announce new endpoints. Default: True\n"
-    "  --rtpmidi-name <name>                      Forces the rtpmidi name\n"
-    // "  --host <address>    My default IP. Needed to answer mDNS. Normally "
-    // "guessed but may be attached to another ip.\n"
-    "  --port <port>                              Opens local port as server. "
-    "Default "
-    "5004.\n"
-    // "  --connect <address> Connects the given address. This is default, no "
-    // "need for --connect\n"
-    "  --control <path>                           Creates a control socket. "
-    "Check "
-    "CONTROL.md. Default `/var/run/rtpmidid/control.sock`\n"
-    // "  address for connect:\n"
-    // "  hostname            Connects to hostname:5004 port using rtpmidi\n"
-    // "  hostname:port       Connects to a hostname on a given port\n"
-    // "  name:hostname:port  Connects to a hostname on a given port and forces
-    // a " "name for alsaseq\n"
-    "\n";
+    "Options:\n";
+
+struct argument_t {
+  std::string arg;
+  std::string comment;
+  std::function<void(const std::string &)> fn;
+  bool has_second_argument = true;
+
+  argument_t(const std::string &arg, const std::string &comment,
+             std::function<void(const std::string &)> fn,
+             bool has_second_argument = true)
+      : arg(arg), comment(comment), fn(fn),
+        has_second_argument(has_second_argument) {}
+};
 
 bool str_to_bool(const std::string &value) {
   // conver t value to lowercase, so True becomes true
@@ -91,80 +79,104 @@ bool str_to_bool(const std::string &value) {
 }
 
 void parse_argv(int argc, char **argv) {
-  int cargc = 1;
+  std::vector<argument_t> arguments;
+
+  auto help = [&] {
+    fmt::print(CMDLINE_HELP, VERSION);
+    for (auto &argument : arguments) {
+      fmt::print("  {:<30} {}\n", argument.arg, argument.comment);
+    }
+  };
+
+  arguments.emplace_back(
+      "--port", //
+      "Opens local port as server. Default 5004.",
+      [](const std::string &value) { settings.rtpmidid_port = value; });
+  arguments.emplace_back( //
+      "--name",           //
+      "Forces the alsa and rtpmidi name", [](const std::string &value) {
+        settings.rtpmidid_name = value;
+        settings.alsa_name = value;
+      });
+  arguments.emplace_back( //
+      "--alsa-name",      //
+      "Forces the alsa name", [](const std::string &value) {
+        settings.rtpmidid_name = value;
+        settings.alsa_name = value;
+      });
+  arguments.emplace_back(
+      "--alsa-network-announcement",
+      "Enables / Disables the ALSA Network port to announce on the network. "
+      "If you have a firewall you want this disabled and allow only "
+      "connections from the network to rtpmidid, not announce new endpoints. "
+      "Default: True",
+      [](const std::string &value) {
+        settings.alsa_network = str_to_bool(value);
+      });
+  arguments.emplace_back( //
+      "--rtpmidid-name",  //
+      "Forces the rtpmidi name", [](const std::string &value) {
+        settings.rtpmidid_name = value;
+        settings.alsa_name = value;
+      });
+  arguments.emplace_back(
+      "--control",
+      "Creates a control socket. Check CONTROL.md. Default "
+      "`/var/run/rtpmidid/control.sock`",
+      [](const std::string &value) { settings.control_filename = value; });
+  arguments.emplace_back( //
+      "--version",        //
+      "Show version", [](const std::string &value) {
+        fmt::print("rtpmidid version {}/2\n", VERSION);
+        exit(0);
+      });
+  arguments.emplace_back( //
+      "--help",           //
+      "Show this help",
+      [&](const std::string &value) {
+        help();
+        exit(0);
+      },
+      false);
+
   auto arg = std::string(argv[0]);
-  bool parsed_something = false;
-  auto parse_arg2 = [&argv, &cargc, &argc, &parsed_something](
-                        const std::string &name,
-                        const std::function<void(const std::string &)> &fn) {
-    if (cargc >= argc) {
-      return;
-    }
-
-    if (name == argv[cargc]) {
-      parsed_something = true;
-      fn(argv[cargc + 1]);
-      cargc += 2;
-    }
-    if (cargc >= argc) {
-      return;
-    }
+  bool second_part_comming = false;
+  for (int cargc = 1; cargc < argc; cargc++) {
+    auto parsed = false;
     auto key = std::string(argv[cargc]);
-    auto keyeq = fmt::format("{}=", name);
-    if (key.substr(0, keyeq.length()) == keyeq) {
-      parsed_something = true;
-      fn(key.substr(keyeq.length()));
-      cargc += 2;
+    // Checks all arguments
+    for (auto &argument : arguments) {
+      if (second_part_comming) {
+        argument.fn(argv[cargc]);
+        second_part_comming = false;
+        parsed = true;
+        break;
+      }
+      if (argument.has_second_argument) {
+        auto keyeq = fmt::format("{}=", argument.arg);
+        if (key.substr(0, keyeq.length()) == keyeq) {
+          second_part_comming = false;
+          argument.fn(key.substr(keyeq.length()));
+          parsed = true;
+          break;
+        }
+      }
+      if (key == argument.arg) {
+        if (argument.has_second_argument) {
+          second_part_comming = true;
+          parsed = true;
+        } else {
+          argument.fn("");
+          parsed = true;
+        }
+        break;
+      }
     }
-  };
-
-  auto parse_arg1 = [&argv, &cargc, &argc,
-                     &parsed_something](const std::string &name,
-                                        const std::function<void()> &fn) {
-    if (cargc >= argc) {
-      return;
-    }
-    if (name == argv[cargc]) {
-      parsed_something = true;
-      fn();
-      cargc++;
-    }
-  };
-
-  while (cargc < argc) {
-    parsed_something = false;
-
-    parse_arg2("--port", [](const std::string &value) {
-      settings.rtpmidid_port = std::string(value);
-    });
-    parse_arg2("--name", [](const std::string &value) {
-      settings.rtpmidid_name = std::string(value);
-      settings.alsa_name = std::string(value);
-    });
-    parse_arg2("--alsa-name", [](const std::string &value) {
-      settings.rtpmidid_name = std::string(value);
-      settings.alsa_name = std::string(value);
-    });
-    parse_arg2("--alsa-network-announcement", [](const std::string &value) {
-      settings.alsa_network = str_to_bool(value);
-    });
-    parse_arg2("--rtpmidid-name", [](const std::string &value) {
-      settings.rtpmidid_name = std::string(value);
-      settings.alsa_name = std::string(value);
-    });
-    parse_arg2("--control", [](const std::string &value) {
-      settings.control_filename = std::string(value);
-    });
-    parse_arg1("--version", []() {
-      fmt::print("rtpmidid version {}/2\n", VERSION);
-      exit(0);
-    });
-    parse_arg1("--help", []() {
-      fmt::print(CMDLINE_HELP, VERSION);
-      exit(0);
-    });
-    if (!parsed_something) {
-      throw rtpmidid::exception("Unknown option: {}", argv[cargc]);
+    // If none parsed, error
+    if (!parsed) {
+      ERROR("Unknown argument: {}", key);
+      help();
+      exit(1);
     }
   }
 
