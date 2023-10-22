@@ -282,36 +282,37 @@ void parse_argv(int argc, char **argv) {
       false);
 
   auto arg = std::string(argv[0]);
-  bool second_part_comming = false;
+  // Necesary for two part arguments
+  argument_t *current_argument = nullptr;
+
   for (int cargc = 1; cargc < argc; cargc++) {
     auto parsed = false;
     auto key = std::string(argv[cargc]);
-    // Checks all arguments
-    for (auto &argument : arguments) {
-      if (second_part_comming) {
-        argument.fn(argv[cargc]);
-        second_part_comming = false;
-        parsed = true;
-        break;
-      }
-      if (argument.has_second_argument) {
-        auto keyeq = fmt::format("{}=", argument.arg);
-        if (key.substr(0, keyeq.length()) == keyeq) {
-          second_part_comming = false;
-          argument.fn(key.substr(keyeq.length()));
-          parsed = true;
+    if (current_argument && current_argument->has_second_argument) {
+      current_argument->fn(key);
+      parsed = true;
+      current_argument = nullptr;
+    } else {
+      // Checks all arguments
+      for (auto &argument : arguments) {
+        if (argument.has_second_argument) {
+          auto keyeq = fmt::format("{}=", argument.arg);
+          if (key.substr(0, keyeq.length()) == keyeq) {
+            argument.fn(key.substr(keyeq.length()));
+            parsed = true;
+            break;
+          }
+        }
+        if (key == argument.arg) {
+          if (argument.has_second_argument) {
+            current_argument = &argument;
+            parsed = true;
+          } else {
+            argument.fn("");
+            parsed = true;
+          }
           break;
         }
-      }
-      if (key == argument.arg) {
-        if (argument.has_second_argument) {
-          second_part_comming = true;
-          parsed = true;
-        } else {
-          argument.fn("");
-          parsed = true;
-        }
-        break;
       }
     }
     // If none parsed, error
