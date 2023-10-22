@@ -33,7 +33,7 @@ public:
   mididata_to_alsaevents_t mididata_decoder;
 
   connection_t<aseq_t::port_t, const std::string &> subscribe_connection;
-  connection_t<aseq_t::port_t> unsubscibe_connection;
+  connection_t<aseq_t::port_t> unsubscribe_connection;
   connection_t<snd_seq_event_t *> midi_connection;
 
   alsaworker_t(const std::string &name, std::shared_ptr<aseq_t> seq);

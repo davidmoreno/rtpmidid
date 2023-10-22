@@ -51,7 +51,7 @@ public:
 
   std::unordered_map<aseq_t::port_t, midipeer_id_t> aseqpeers;
   connection_t<aseq_t::port_t, const std::string &> subscribe_connection;
-  connection_t<aseq_t::port_t> unsubscibe_connection;
+  connection_t<aseq_t::port_t> unsubscribe_connection;
   connection_t<snd_seq_event_t *> midi_connection;
 
   alsalistener_t(const std::string &name, std::shared_ptr<aseq_t> aseq);

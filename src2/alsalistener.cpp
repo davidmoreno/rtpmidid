@@ -47,7 +47,7 @@ alsalistener_t::alsalistener_t(const std::string &name,
   midi_connection = seq->midi_event[port].connect(
       [this](snd_seq_event_t *ev) { alsaseq_event(ev); });
 
-  unsubscibe_connection = seq->unsubscribe_event[port].connect(
+  unsubscribe_connection = seq->unsubscribe_event[port].connect(
       [this](aseq_t::port_t port) { remove_alsa_connection(port); });
   // TODO unsubscribe
 };
