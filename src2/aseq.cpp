@@ -453,7 +453,7 @@ void mididata_to_alsaevents_t::ev_to_mididata(snd_seq_event_t *ev,
   }
 
   data.position += ret;
-  DEBUG("ev to mididata, left: {}, {}", ret, data);
+  // DEBUG("ev to mididata, left: {}, {}", ret, data);
 }
 
 } // namespace rtpmididns

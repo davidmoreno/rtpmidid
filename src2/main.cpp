@@ -80,11 +80,8 @@ int main(int argc, char **argv) {
     }
     // Connect to all static endpoints
     for (const auto &connect_to : rtpmididns::settings.connect_to) {
-      WARNING(
-          "NOT IMPLEMENTED YET CREATE ALSA PORT TO CONNECT TO REMOTE PEER {}",
-          connect_to);
-      // router->add_peer(rtpmididns::make_rtpmidiconnector(
-      //     connect_to.name, connect_to.address, connect_to.port, aseq));
+      router->add_peer(rtpmididns::make_alsawaiter(
+          connect_to.name, connect_to.hostname, connect_to.port, aseq));
     }
 
     INFO("Waiting for connections.");

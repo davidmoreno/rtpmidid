@@ -183,8 +183,8 @@ void load_ini(const std::string &filename) {
         throw rtpmidid::exception("Invalid key: {}", key);
       }
     } else if (section == "connect_to") {
-      if (key == "address") {
-        connect_to->address = value;
+      if (key == "hostname") {
+        connect_to->hostname = value;
       } else if (key == "port") {
         connect_to->port = value;
       } else if (key == "name") {

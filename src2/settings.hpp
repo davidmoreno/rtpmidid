@@ -43,7 +43,7 @@ struct settings_t {
   };
 
   struct connect_to_t {
-    std::string address;
+    std::string hostname;
     std::string port;
     std::string name;
   };
@@ -113,7 +113,7 @@ struct fmt::formatter<rtpmididns::settings_t::connect_to_t>
   auto format(const rtpmididns::settings_t::connect_to_t &data,
               format_context &ctx) {
 
-    return fmt::format_to(ctx.out(), "[connect_to_t {} {} {}]", data.address,
+    return fmt::format_to(ctx.out(), "[connect_to_t {} {} {}]", data.hostname,
                           data.port, data.name);
   }
 };
@@ -125,8 +125,8 @@ struct fmt::formatter<std::vector<rtpmididns::settings_t::connect_to_t>>
               format_context &ctx) {
     std::string result = "[";
     for (auto &item : data) {
-      result += fmt::format("[connect_to_t {} {} {}] ", item.address, item.port,
-                            item.name);
+      result += fmt::format("[connect_to_t {} {} {}] ", item.hostname,
+                            item.port, item.name);
     }
     result += "]";
     return fmt::format_to(ctx.out(), "{}", result);
