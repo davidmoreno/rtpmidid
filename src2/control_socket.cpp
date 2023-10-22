@@ -148,11 +148,12 @@ void control_socket_t::data_ready(int fd) {
 namespace control_socket_ns {
 struct command_t {
   const char *name;
+  const char *description;
   std::function<json_t(rtpmididns::control_socket_t &, const json_t &)> func;
 };
 } // namespace control_socket_ns
 std::vector<control_socket_ns::command_t> commands{
-    {"status",
+    {"status", "Return status of the daemon",
      [](control_socket_t &control, const json_t &) {
        return json_t{
            {"version", rtpmididns::VERSION},
@@ -166,7 +167,7 @@ std::vector<control_socket_ns::command_t> commands{
            {"router", control.router->status()} //
        };
      }},
-    {"router.remove",
+    {"router.remove", "Remove a peer from the router",
      [](control_socket_t &control, const json_t &params) {
        DEBUG("Params {}", params.dump());
        peer_id_t peer_id;
@@ -176,6 +177,9 @@ std::vector<control_socket_ns::command_t> commands{
        return "ok";
      }},
     {"connect",
+     "Connect to a peer send params: [hostname] | [hostname, port] | [name, "
+     "hostname, port] | {\"name\": name, \"hostname\": hostname, \"port\": "
+     "port}",
      [](control_socket_t &control, const json_t &params) {
        std::string name, hostname, port;
        bool error = false;
@@ -218,7 +222,16 @@ std::vector<control_socket_ns::command_t> commands{
        control.router->add_peer(
            make_alsawaiter(name, hostname, port, control.aseq));
        return json_t{"ok"};
-     }}
+     }},
+    // REturn some help text
+    {"help", "Return help text",
+     [](control_socket_t &control, const json_t &) {
+       auto res = std::vector<json_t>{};
+       for (const auto &cmd : commands) {
+         res.push_back({{"name", cmd.name}, {"description", cmd.description}});
+       }
+       return res;
+     }},
     //
 };
 
