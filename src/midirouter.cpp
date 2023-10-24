@@ -131,7 +131,7 @@ void midirouter_t::connect(peer_id_t from, peer_id_t to) {
 }
 
 json_t midirouter_t::status() {
-  json_t routerdata;
+  std::vector<json_t> routerdata;
   for (auto peer : peers) {
     try {
       auto status = peer.second.peer->status();
