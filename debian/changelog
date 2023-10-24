@@ -1,10 +1,16 @@
+rtpmidid (23.10b1~4~g1b419) unstable; urgency=medium
+
+  * Development version. Check `git log`.
+
+ -- David Moreno <dmoreno@coralbits.com>  Tue, 24 Oct 2023 23:36:37 +0200
+
 rtpmidid (23.10b1) unstable; urgency=medium
 
   * New midirouter implementation
   * Accepts an ini file as initial configuration.
   * Control socket is more powerful and complete.
 
- --   Tue, 24 Oct 2023 21:30:45 +0200
+ -- David Moreno <dmoreno@coralbits.com>  Tue, 24 Oct 2023 21:30:45 +0200
 
 rtpmidid (21.11) unstable; urgency=medium
 
