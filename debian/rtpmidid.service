@@ -8,7 +8,7 @@ Type=simple
 User=rtpmidid
 Group=audio
 WorkingDirectory=/run/rtpmidid/
-ExecStart=/usr/bin/rtpmidid
+ExecStart=/usr/bin/rtpmidid --ini=/etc/rtpmidid/default.ini
 Restart=on-failure
 RuntimeDirectory=rtpmidid
 RuntimeDirectoryMode=0755

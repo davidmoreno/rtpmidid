@@ -109,6 +109,8 @@ install-rtpmidid: build man
 	cp cli/rtpmidid-cli.py $(PREFIX)/usr/bin/rtpmidid-cli
 	mkdir -p $(PREFIX)/etc/systemd/system/
 	cp debian/rtpmidid.service $(PREFIX)/etc/systemd/system/
+	mkdir -p $(PREFIX)/etc/rtpmidid/
+	cp default.ini $(PREFIX)/etc/rtpmidid/
 	mkdir -p $(PREFIX)/usr/share/doc/rtpmidid/
 	cp README.md $(PREFIX)/usr/share/doc/rtpmidid/
 	cp LICENSE-daemon.txt $(PREFIX)/usr/share/doc/rtpmidid/LICENSE.txt
