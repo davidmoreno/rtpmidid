@@ -18,8 +18,9 @@
 
 #include "./stringpp.hpp"
 
-std::vector<std::string> rtpmidid::split(std::string const &str,
-                                         const char delim) {
+namespace rtpmididns {
+
+std::vector<std::string> split(std::string const &str, const char delim) {
   std::vector<std::string> ret;
   size_t I;
   size_t endI = 0;
@@ -30,3 +31,4 @@ std::vector<std::string> rtpmidid::split(std::string const &str,
   }
   return ret;
 }
+} // namespace rtpmididns

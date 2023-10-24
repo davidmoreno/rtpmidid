@@ -58,7 +58,7 @@ inline bool endswith(const std::string_view &str,
                     std::begin(maybe_end));
 }
 } // namespace std
-namespace rtpmidid {
+namespace rtpmididns {
 std::vector<std::string> split(const std::string &str, char delim = ' ');
 
 // https://stackoverflow.com/questions/216823/whats-the-best-way-to-trim-stdstring
@@ -99,4 +99,4 @@ static inline std::string trim_copy(std::string s) {
   trim(s);
   return s;
 }
-} // namespace rtpmidid
+} // namespace rtpmididns

@@ -16,13 +16,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "../src2/aseq.hpp"
-#include "../src2/factory.hpp"
-#include "../src2/json.hpp"
-#include "../src2/mididata.hpp"
-#include "../src2/midirouter.hpp"
-#include "../src2/rtpmidiserverworker.hpp"
-#include "../src2/settings.hpp"
+#include "../src/aseq.hpp"
+#include "../src/factory.hpp"
+#include "../src/json.hpp"
+#include "../src/mididata.hpp"
+#include "../src/midirouter.hpp"
+#include "../src/rtpmidiserverworker.hpp"
+#include "../src/settings.hpp"
 #include "../tests/test_case.hpp"
 #include "rtpmidid/rtppeer.hpp"
 #include "rtpmidid/rtpserver.hpp"
