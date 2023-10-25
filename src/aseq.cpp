@@ -309,17 +309,27 @@ aseq_t::connection_t aseq_t::connect(const port_t &from, const port_t &to) {
 
   if (from.client == client_id) {
     int res = snd_seq_connect_to(seq, from.port, to.client, to.port);
+    if (res == -16) {
+      WARNING("ALSA seq error 16: {} -> {}. Already connected?",
+              from.to_string(), to.to_string());
+      return aseq_t::connection_t(shared_from_this(), from, to);
+    }
     if (res < 0) {
-      throw rtpmidid::exception("Failed connection: {} -> {}: {}",
+      throw rtpmidid::exception("Failed connection: {} -> {}: {} ({})",
                                 from.to_string(), to.to_string(),
-                                snd_strerror(res));
+                                snd_strerror(res), res);
     }
   } else if (to.client == client_id) {
     int res = snd_seq_connect_from(seq, to.port, from.client, from.port);
+    if (res == -16) {
+      WARNING("ALSA seq error 16: {} -> {}. Already connected?",
+              from.to_string(), to.to_string());
+      return aseq_t::connection_t(shared_from_this(), from, to);
+    }
     if (res < 0) {
-      throw rtpmidid::exception("Failed connection: {} -> {}: {}",
+      throw rtpmidid::exception("Failed connection: {} -> {}: {} ({})",
                                 from.to_string(), to.to_string(),
-                                snd_strerror(res));
+                                snd_strerror(res), res);
     }
   } else {
     ERROR("Can not connect ports I'm not part of.");
