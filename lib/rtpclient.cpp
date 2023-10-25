@@ -50,7 +50,13 @@ rtpclient_t::rtpclient_t(std::string name) : peer(std::move(name)) {
   peer.initiator_id = ::rtpmidid::rand_u32();
   send_connection = peer.send_event.connect(
       [this](const io_bytes_reader &data, rtppeer_t::port_e port) {
-        this->sendto(data, port);
+        try {
+          this->sendto(data, port);
+        } catch (const network_exception &e) {
+          ERROR("Error sending data to {}:{}. {}", peer.remote_name,
+                remote_base_port, e.what());
+          peer.disconnect_event(rtppeer_t::disconnect_reason_e::NETWORK_ERROR);
+        }
       });
 }
 

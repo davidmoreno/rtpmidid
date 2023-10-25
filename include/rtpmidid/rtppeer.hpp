@@ -68,6 +68,7 @@ public:
     DISCONNECT,
     CONNECT_TIMEOUT,
     CK_TIMEOUT,
+    NETWORK_ERROR,
   };
 
   status_e status;
@@ -168,7 +169,7 @@ template <>
 struct fmt::formatter<rtpmidid::rtppeer_t::port_e>
     : formatter<std::string_view> {
   auto format(rtpmidid::rtppeer_t::port_e c, format_context &ctx) {
-    std::string_view name = "UNKNOWN";
+    const char *name = "UNKNOWN";
     switch (c) {
     case rtpmidid::rtppeer_t::port_e::MIDI_PORT:
       name = "MIDI_PORT";
@@ -185,7 +186,7 @@ template <>
 struct fmt::formatter<rtpmidid::rtppeer_t::disconnect_reason_e>
     : formatter<std::string_view> {
   auto format(rtpmidid::rtppeer_t::disconnect_reason_e c, format_context &ctx) {
-    std::string_view name = "UNKNOWN";
+    const char *name = "UNKNOWN";
     switch (c) {
     case rtpmidid::rtppeer_t::disconnect_reason_e::CANT_CONNECT:
       name = "CANT_CONNECT";
@@ -204,6 +205,9 @@ struct fmt::formatter<rtpmidid::rtppeer_t::disconnect_reason_e>
       break;
     case rtpmidid::rtppeer_t::disconnect_reason_e::CK_TIMEOUT:
       name = "CK_TIMEOUT";
+      break;
+    case rtpmidid::rtppeer_t::disconnect_reason_e::NETWORK_ERROR:
+      name = "NETWORK_ERROR";
       break;
     }
     return formatter<std::string_view>::format(name, ctx);
