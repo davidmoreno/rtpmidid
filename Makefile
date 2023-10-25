@@ -45,6 +45,9 @@ man:
 .PHONY: clean
 clean:
 	rm -rf build
+	rm -rf debian/rtpmidid
+	rm -rf debian/librtpmidid0
+	rm -rf debian/librtpmidid0-dev
 
 VALGRINDFLAGS := --leak-check=full --error-exitcode=1
 RTPMIDID_ARGS := --port ${PORT} --name devel

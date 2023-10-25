@@ -4,7 +4,6 @@ After=avahi-daemon.service
 
 [Service]
 Type=simple
-# Another Type: forking
 User=rtpmidid
 Group=audio
 WorkingDirectory=/run/rtpmidid/
