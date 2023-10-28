@@ -115,6 +115,7 @@ public:
   bool is_connected() { return status == CONNECTED; }
   void reset();
   void data_ready(io_bytes_reader &&, port_e port);
+  void disconnect();
 
   void parse_command(io_bytes_reader &, port_e port);
   void parse_feedback(io_bytes_reader &);

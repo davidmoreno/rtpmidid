@@ -160,8 +160,8 @@ poller_t::timer_t poller_t::add_timer_event(std::chrono::milliseconds ms,
   std::sort(std::begin(pd->timer_events), std::end(pd->timer_events),
             [](const auto &a, const auto &b) { return a.when < b.when; });
 
-  // DEBUG("Added timer {}. {} s ({} pending)", timer_id, in_ms,
-  // timer_events.size());
+  // DEBUG("Added timer {}. {} s ({} pending)", timer_id, ms.count() / 1000.0,
+  //       pd->timer_events.size());
   return poller_t::timer_t(timer_id);
 }
 

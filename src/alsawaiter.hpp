@@ -37,13 +37,8 @@ namespace rtpmididns {
  */
 class alsawaiter_t : public midipeer_t {
 public:
-  struct endpoint_t {
-    std::string hostname;
-    std::string port;
-  };
-
   std::string name;
-  std::vector<endpoint_t> endpoints;
+  std::vector<rtpmidid::rtpclient_t::endpoint_t> endpoints;
   // Currently connected, if any
   std::string hostname;
   std::string port;

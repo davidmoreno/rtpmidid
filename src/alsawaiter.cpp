@@ -76,11 +76,10 @@ void alsawaiter_t::add_endpoint(const std::string &hostname,
   }
 
   if (!exists)
-    endpoints.push_back(alsawaiter_t::endpoint_t{hostname, port});
+    endpoints.push_back(rtpmidid::rtpclient_t::endpoint_t{hostname, port});
 }
 
 void alsawaiter_t::connect_to_remote_server() {
-  WARNING("TODO connect to all known endpoints. Now only try first");
   if (endpoints.size() == 0) {
     WARNING(
         "Unknown endpoints for this alsa waiter. Dont know where to connect.");
@@ -94,48 +93,12 @@ void alsawaiter_t::connect_to_remote_server() {
   auto rtpclient =
       std::make_shared<rtpmidid::rtpclient_t>(settings.rtpmidid_name);
 
-  auto connected = false;
-  for (uint i = 0; i < endpoints.size(); i++) {
-    auto &endpoint = endpoints[i];
-
-    DEBUG("Try connect to remote server at {}:{} (option {}/{})",
-          endpoint.hostname, endpoint.port, i + 1, endpoints.size());
-
-    try {
-      // FIX: This only ensure can create ports, not that could really conenct.
-      // For that use disconnect_event.
-      if (rtpclient->connect_to(endpoint.hostname, endpoint.port)) {
-        connected = true;
-        hostname = endpoint.hostname;
-        port = endpoint.port;
-        break;
-      }
-    } catch (const rtpmidid::exception &exc) {
-      WARNING("Connecting to {}:{} failed: {}", endpoint.hostname,
-              endpoint.port, exc.what());
-    }
-  }
-  if (!connected) {
-    ERROR("Could not connect to remote rtpmidi server at any of the advertised "
-          "addresses.");
-    throw rtpmidid::exception("Could not connect to remote rtpmidi server at "
-                              "any of the advertised addresses.");
-  }
-
   rtpmidiclientworker_peer_id =
       router->add_peer(make_rtpmidiclientworker(rtpclient));
   router->connect(rtpmidiclientworker_peer_id, peer_id);
   router->connect(peer_id, rtpmidiclientworker_peer_id);
 
-  // TODO connect all signals
-  disconnect_connection = rtpclient->peer.disconnect_event.connect(
-      [this](rtpmidid::rtppeer_t::disconnect_reason_e reason) {
-        // There was a conn failure, disconnect ALSA ports
-        ERROR("Disconnected from peer: {}:{} reason: {}", hostname, port,
-              reason);
-        connection_count = 0;
-        aseq->disconnect_port(alsaport);
-      });
+  rtpclient->connect_to(endpoints);
 }
 
 void alsawaiter_t::disconnect_from_remote_server() {

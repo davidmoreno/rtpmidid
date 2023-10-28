@@ -853,3 +853,12 @@ void rtppeer_t::parse_journal_chapter_N(uint8_t channel,
     }
   }
 }
+void rtppeer_t::disconnect() {
+  if (status & MIDI_CONNECTED) {
+    send_goodbye(MIDI_PORT);
+  }
+  if (status & CONTROL_CONNECTED) {
+    send_goodbye(CONTROL_PORT);
+  }
+  reset();
+}

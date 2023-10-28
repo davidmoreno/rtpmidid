@@ -438,7 +438,7 @@ void mididata_to_alsaevents_t::mididata_to_evs_f(
   snd_midi_event_reset_encode(buffer);
 
   while (data.position < data.end) {
-    DEBUG("mididata to snd_ev, left {}", data);
+    // DEBUG("mididata to snd_ev, left {}", data);
     snd_seq_ev_clear(&ev);
     auto used = snd_midi_event_encode(buffer, data.position,
                                       data.end - data.position, &ev);

@@ -58,6 +58,21 @@ rtpclient_t::rtpclient_t(std::string name) : peer(std::move(name)) {
           peer.disconnect_event(rtppeer_t::disconnect_reason_e::NETWORK_ERROR);
         }
       });
+
+  peer_disconnect_event_connection = peer.disconnect_event.connect(
+      [this](rtppeer_t::disconnect_reason_e reason) {
+        if (reason == rtppeer_t::disconnect_reason_e::CONNECT_TIMEOUT) {
+          INFO("Could not connect, try next peer. Reason: {}", reason);
+          connect_to_next();
+        } else {
+          INFO("Disconnected reason: {}", reason);
+        }
+      });
+  peer_connected_event_connection = peer.connected_event.connect(
+      [this](const std::string &name, rtppeer_t::status_e status) {
+        INFO("Connected to {}: {}", name, status);
+        connected_event(name, status);
+      });
 }
 
 rtpclient_t::~rtpclient_t() {
@@ -81,16 +96,43 @@ rtpclient_t::~rtpclient_t() {
   }
 }
 
+bool rtpclient_t::connect_to(const std::vector<endpoint_t> &address_port) {
+  bool list_was_empty = address_port_pending.empty();
+  for (auto &endpoint : address_port) {
+    DEBUG("Add {} to pending list", endpoint);
+    address_port_pending.push_back(endpoint);
+  }
+  DEBUG("All ports to try to connect to in order: {}", address_port_pending);
+
+  if (list_was_empty) {
+    INFO("Start connect to remote peer. {} endpoints available to try.",
+         address_port_pending.size());
+    return connect_to_next();
+  }
+  return false;
+}
+
+bool rtpclient_t::connect_to_next() {
+  if (address_port_pending.empty()) {
+    ERROR("Could not find any valid remote address to connect to");
+    connected_event("", rtppeer_t::NOT_CONNECTED);
+    return false;
+  }
+  auto endpoint = address_port_pending.front();
+  address_port_pending.pop_front();
+  return connect_to(endpoint.hostname, endpoint.port);
+}
+
 bool rtpclient_t::connect_to(const std::string &address,
                              const std::string &port) {
+  DEBUG("Try connect to service at {}:{}", address, port);
+
   struct addrinfo hints;
   struct addrinfo *sockaddress_list = nullptr;
   char host[NI_MAXHOST], service[NI_MAXSERV];
   socklen_t peer_addr_len = NI_MAXHOST;
 
   control_socket = midi_socket = -1;
-
-  DEBUG("Try connect to service at {}:{}", address, port);
 
   try {
     int res;
@@ -201,7 +243,7 @@ bool rtpclient_t::connect_to(const std::string &address,
   DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address,
         remote_base_port + 1);
 
-  // If not connected, connect now the MIDI port
+  // If connected, connect now the MIDI port
   connected_connection = peer.connected_event.connect(
       [this, address, port](const std::string &name,
                             rtppeer_t::status_e status) {
@@ -217,9 +259,12 @@ bool rtpclient_t::connect_to(const std::string &address,
   peer.connect_to(rtppeer_t::CONTROL_PORT);
 
   connect_timer = poller.add_timer_event(5s, [this] {
-    // ce will be scope removed at end or destruction of lambda
+    DEBUG("Timeout connecting to {}:{}, status {}", peer.remote_name,
+          remote_base_port, peer.status);
+    if (peer.status != rtppeer_t::CONNECTED)
+      peer.disconnect();
     peer.disconnect_event(rtppeer_t::CONNECT_TIMEOUT);
-    connected_connection.disconnect();
+    // connected_connection.disconnect();
   });
 
   return true;
