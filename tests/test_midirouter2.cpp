@@ -85,6 +85,7 @@ void test_send_receive_messages() {
   auto aseq = std::make_shared<rtpmididns::aseq_t>("TESTING DEVICE");
 
   // 1. ALSA A connect to WR RTPMIDID
+  INFO("1. ALSA A connect to WR RTPMIDID");
 
   auto alsa_a = aseq->create_port("ALSA A");
   int midi_packets_alsa_a = 0;
@@ -112,6 +113,7 @@ void test_send_receive_messages() {
   DEBUG("At port {}", port);
 
   // 2. connect RTPPEER A and test
+  INFO("2. connect RTPPEER A and test");
 
   auto rtppeer_client_a = rtpmidid::rtpclient_t("RTPPEER A");
   rtppeer_client_a.connect_to("localhost", std::to_string(port));
@@ -133,6 +135,7 @@ void test_send_receive_messages() {
   ASSERT_EQUAL(midi_packets_alsa_a, 1);
 
   // 3. Connect to RTP MIDI announced Network
+  INFO("3. Connect to RTP MIDI announced Network");
 
   uint8_t device_id = aseq->find_device(rtpmididns::settings.alsa_name);
 
@@ -154,6 +157,8 @@ void test_send_receive_messages() {
   ASSERT_EQUAL(router->peers.size(), 5);
 
   // 4. Connect from network to ALSA A. Nothing of importance should happen
+  INFO("4. Connect from network to ALSA A. Nothing of importance should "
+       "happen");
   DEBUG("Peer count: {}", router->peers.size());
 
   // Connect network to alsa a
@@ -170,6 +175,7 @@ void test_send_receive_messages() {
   ASSERT_EQUAL(router->peers.size(), 5);
 
   // 5. Connect rtpmidi A and B manually, just copy data
+  INFO("5. Connect rtpmidi A and B manually, just copy data");
   auto rtppeer_client_a_midi_connection =
       rtppeer_client_a.peer.midi_event.connect(
           [&](const rtpmidid::io_bytes_reader &data) {
@@ -184,6 +190,8 @@ void test_send_receive_messages() {
           });
 
   // 6. Connect to/from ALSA B
+  INFO("6. Connect to/from ALSA B");
+
   ASSERT_NOT_EQUAL(aseq->client_id, device_id);
   auto alsa_b_rw = aseq->create_port("ALSA B R/W");
   auto alsa_a_to_b_connection =
@@ -200,6 +208,8 @@ void test_send_receive_messages() {
       });
 
   // 7. Send from A, received at B
+  INFO("7. Send from A, received at B");
+
   rtpmididns::mididata_to_alsaevents_t mdtoa;
   auto mididata = hex_to_bin("90 64 64");
   auto mididata2 = rtpmididns::mididata_t(mididata);
@@ -212,7 +222,7 @@ void test_send_receive_messages() {
     snd_seq_event_output_direct(aseq->seq, ev);
   });
   poller_wait_until([&]() { return midi_packets_alsa_b == 1; });
-  ASSERT_EQUAL(midi_packets_alsa_a, 1);
+  ASSERT_EQUAL(midi_packets_alsa_b, 1);
 
   INFO("Send A -> B");
   // Send B to A
