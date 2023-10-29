@@ -3,6 +3,7 @@ add_executable(
   main.cpp
   aseq.cpp
   argv.cpp
+  ini.cpp
   control_socket.cpp
   stringpp.cpp
 
