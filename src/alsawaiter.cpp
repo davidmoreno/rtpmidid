@@ -71,6 +71,7 @@ void alsawaiter_t::add_endpoint(const std::string &hostname,
   for (auto &endpoint : endpoints) {
     if (endpoint.hostname == hostname && endpoint.port == port) {
       exists = true;
+      WARNING("Endpoint already exists!");
       break;
     }
   }

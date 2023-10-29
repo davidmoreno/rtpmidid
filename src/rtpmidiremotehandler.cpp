@@ -51,7 +51,7 @@ void rtpmidi_remote_handler_t::discover_peer(const std::string &name,
     }
   }
 
-  auto peer = rtpmididns::make_alsawaiter(name, hostname, port, aseq);
+  auto peer = rtpmididns::make_alsawaiter(router, name, hostname, port, aseq);
   peers.push_back(known_remote_peer_t{name, peer});
 
   router->add_peer(peer);

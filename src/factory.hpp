@@ -51,9 +51,9 @@ make_rtpmidiclientworker(std::shared_ptr<rtpmidid::rtpclient_t> peer);
 //
 std::shared_ptr<midipeer_t> make_rtpmidiserverworker(const std::string &name);
 //
-std::shared_ptr<midipeer_t> make_alsawaiter(const std::string &name,
-                                            const std::string &hostname,
-                                            const std::string &port,
-                                            std::shared_ptr<aseq_t> aseq);
+std::shared_ptr<midipeer_t>
+make_alsawaiter(std::shared_ptr<midirouter_t> &router, const std::string &name,
+                const std::string &hostname, const std::string &port,
+                std::shared_ptr<aseq_t> aseq);
 
 } // namespace rtpmididns

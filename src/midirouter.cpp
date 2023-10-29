@@ -28,6 +28,11 @@ midirouter_t::midirouter_t() : max_id(1) {}
 midirouter_t::~midirouter_t() {}
 
 uint32_t midirouter_t::add_peer(std::shared_ptr<midipeer_t> peer) {
+  if (peer->peer_id) {
+    WARNING("Peer already present!");
+    return peer->peer_id;
+  }
+
   auto peer_id = max_id++;
   peer->peer_id = peer_id;
   try {

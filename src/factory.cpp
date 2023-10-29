@@ -59,10 +59,21 @@ std::shared_ptr<midipeer_t> make_rtpmidiserverworker(const std::string &name) {
   return std::make_shared<rtpmidiserverworker_t>(name);
 }
 
-std::shared_ptr<midipeer_t> make_alsawaiter(const std::string &name,
-                                            const std::string &hostname,
-                                            const std::string &port,
-                                            std::shared_ptr<aseq_t> aseq) {
+std::shared_ptr<midipeer_t>
+make_alsawaiter(std::shared_ptr<midirouter_t> &router, const std::string &name,
+                const std::string &hostname, const std::string &port,
+                std::shared_ptr<aseq_t> aseq) {
+  std::shared_ptr<midipeer_t> added;
+  router->for_each_peer<alsawaiter_t>([&](alsawaiter_t *peer) {
+    if (peer->name == name) {
+      peer->add_endpoint(hostname, port);
+      added = peer->shared_from_this();
+    }
+  });
+
+  if (added)
+    return added;
+
   return std::make_shared<alsawaiter_t>(name, hostname, port, aseq);
 }
 
