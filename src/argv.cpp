@@ -135,13 +135,6 @@ void parse_argv(int argc, char **argv) {
         }
         settings.alsa_announces.begin()->name = value;
       });
-  // arguments.emplace_back(
-  //     "--alsa-network-announcement",
-  //     "Enables / Disables the ALSA Network port to announce on the network. "
-  //     "If you have a firewall you want this disabled and allow only "
-  //     "connections from the network to rtpmidid, not announce new endpoints.
-  //     " "Default: True",
-  //     [](const std::string &value) { settings.rtpmidi_announces.clear(); });
   arguments.emplace_back( //
       "--rtpmidid-name",  //
       "Forces the rtpmidi name", [](const std::string &value) {
