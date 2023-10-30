@@ -38,7 +38,8 @@ const char *VERSION = RTPMIDID_VERSION;
 
 const char *CMDLINE_HELP =
     ""
-    "rtpmidid v{}/2\n"
+    "Real Time Protocol Music Instrument Digital Interface Daemon v{}\n"
+    "(C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>\n"
     "Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.\n"
     "\n"
     "rtpmidi allows to use rtpmidi protocol to communicate with MIDI "
