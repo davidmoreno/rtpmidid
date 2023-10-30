@@ -79,6 +79,12 @@ bool str_to_bool(const std::string &value) {
   throw rtpmidid::exception("Invalid boolean value: {}", value);
 }
 
+static std::string get_hostname() {
+  char hostname[256];
+  gethostname(hostname, std::size(hostname));
+  return hostname;
+}
+
 // Parses the argv and sets up the settings_t struct
 // for parameters that affect a alsa and rtpmidi announcements, it changes the
 // first announced, and creates it if needed
@@ -103,6 +109,8 @@ void parse_argv(int argc, char **argv) {
                          [](const std::string &value) {
                            if (settings.rtpmidi_announces.size() == 0) {
                              settings.rtpmidi_announces.emplace_back();
+                             settings.rtpmidi_announces.begin()->name =
+                                 get_hostname();
                            }
                            settings.rtpmidi_announces.begin()->port = value;
                          });
@@ -127,13 +135,13 @@ void parse_argv(int argc, char **argv) {
         }
         settings.alsa_announces.begin()->name = value;
       });
-  arguments.emplace_back(
-      "--alsa-network-announcement",
-      "Enables / Disables the ALSA Network port to announce on the network. "
-      "If you have a firewall you want this disabled and allow only "
-      "connections from the network to rtpmidid, not announce new endpoints. "
-      "Default: True",
-      [](const std::string &value) { settings.rtpmidi_announces.clear(); });
+  // arguments.emplace_back(
+  //     "--alsa-network-announcement",
+  //     "Enables / Disables the ALSA Network port to announce on the network. "
+  //     "If you have a firewall you want this disabled and allow only "
+  //     "connections from the network to rtpmidid, not announce new endpoints.
+  //     " "Default: True",
+  //     [](const std::string &value) { settings.rtpmidi_announces.clear(); });
   arguments.emplace_back( //
       "--rtpmidid-name",  //
       "Forces the rtpmidi name", [](const std::string &value) {
@@ -205,9 +213,7 @@ void parse_argv(int argc, char **argv) {
   }
 
   if (settings.rtpmidid_name == "") {
-    char hostname[256];
-    gethostname(hostname, std::size(hostname));
-    settings.rtpmidid_name = hostname;
+    settings.rtpmidid_name = get_hostname();
   }
   DEBUG("settings after argument parsing: {}", settings);
 }
