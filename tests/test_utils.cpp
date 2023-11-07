@@ -23,7 +23,6 @@
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/poller.hpp"
 #include <arpa/inet.h>
-#include <bits/chrono.h>
 #include <chrono>
 #include <netdb.h>
 #include <netinet/in.h>

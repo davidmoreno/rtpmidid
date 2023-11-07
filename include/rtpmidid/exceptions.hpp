@@ -20,7 +20,7 @@
 #pragma once
 #include <cstring>
 #include <exception>
-#include <fmt/format.h>
+#include <fmt/core.h>
 #include <string>
 
 namespace rtpmidid {
