@@ -12,7 +12,7 @@ All `midipeer_t` are stored (`std::shared_ptr`) at the `midirouter_t` that
 also is in charge of keeping tabs on connections and resending midi packets
 from one peer to the connected ones.
 
-## `alsalistener_t`
+## `alsalistener_t` // `local:alsa:multi:listener`
 
 Exports an ALSA `Network` port. Any ALSA connection there creates a new
 `rtpmidiserverworker_t` server. Data is properly routed to/from that
@@ -21,17 +21,17 @@ Exports an ALSA `Network` port. Any ALSA connection there creates a new
 It does an impersonated send of data to the `rtpmidiserverworker_t` and from
 it to the right ALSA port.
 
-## `alsawaiter_t` (remove midipeer_t)
+## `alsawaiter_t` // `local:alsa:waiter`
 
 Created manually or via mDNS/Avahi/Bounjour it creates a local ALSA port
 which, when a connection is kept, connects to a remote rtpmidi server.
 Connects to a `rtpmidiclientworker_t`.
 
-## `alsaworker_t`
+## `alsaworker_t` // `local:alsa`
 
 Just redirects MIDI to/from an ALSA port. Used by `rtpmidilistener_t`
 
-## `rtpmidiclientworker_t`
+## `rtpmidiclientworker_t` // `network:rtpmidi:client`
 
 Stores an `rtpclient_t` RTP client that connects to a remote peer and redirecs all
 MIDI data as needed.
@@ -39,18 +39,25 @@ MIDI data as needed.
 It's used by `alsawaiter_t` and is ver similar to `rtpmidiworker_t`, but this
 is for a `rtpmidiclient_t`.
 
-## `rtpmidilistener_t` (remove midipeer_t)
+## `rtpmidilistener_t` // `network:rtpmidi:multi:listener`
 
 Creates a RTP server port on which whenever an RTP peer connects creates
 both a `alsaworker_t` and a `rtpmidiworker_t` and connects them.
 
 It does not send nor receive MIDI data.
 
-## `rtpmidiserverworker_t`
+It does the network interfacing for several `network:rtpmidi:server`, as it
+receives the connection, but then the data is sent to the worker.
+
+Maybe it can be removed as a `midipeer_t` as it does not really send nor receive
+midi to/from the router. It instead has a list of the workers and send the
+raw network data to them, and they parse it and do whatever.
+
+## `rtpmidiserverworker_t` // `network:rtpmidi:listener`
 
 Exports a RTP MIDI port and mDNS, so that any external rtpmidi client can
 connect. All connected peers send/receive data from this peer.
 
-## `rtpmidiworker_t`
+## `rtpmidiworker_t` // `network:rtpmidi:server`
 
-A connection to a rtppeer_t that send/receives MIDI.
+A connection from a rtppeer_t that send/receives MIDI.

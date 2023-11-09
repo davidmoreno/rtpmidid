@@ -34,8 +34,8 @@ or the three in one, separate them with a single `.`:
 cli/rtpmidid-cli.py help . stats . connect Synth 192.168.1.13 3000
 ```
 
-
 ## Line based protocol example:
+
 ```shell
 $ rlwrap nc -U /tmp/rtpmidid.sock
 stats
@@ -88,7 +88,7 @@ They will be identified by "event" and then a "code" and "detail".
 Example:
 
 ```json
-{"event": "close", "detail": "Shutdown", "code": 0}
+{ "event": "close", "detail": "Shutdown", "code": 0 }
 ```
 
 Known events:
@@ -102,3 +102,10 @@ Server is shutting down and will not receive more commands.
 There is limited size for commands to be received by the server, if too long
 this message is sent.
 
+# Tips and tricks
+
+## Use jq to show some data, csvlook as table
+
+```sh
+rtpmidid-cli /tmp/rtpmidid.sock status | jq -r "[\"id\", \"name\", \"type\", \"recv\", \"sent\", \"address\", \"send_to\", \"status\"],(.result.router[]|[.id, .name, .type, .stats.recv, .stats.sent, .peer.remote.hostname // \"-\", .send_to[0], (.peers[0].status // .peer.status // (.peers|length))]) | @csv" |csvlook
+```
