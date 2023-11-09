@@ -16,15 +16,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "../src/alsalistener.hpp"
-#include "../src/alsaworker.hpp"
 #include "../src/aseq.hpp"
 #include "../src/factory.hpp"
 #include "../src/json.hpp"
+#include "../src/local_alsa_multi_listener.hpp"
+#include "../src/local_alsa_worker.hpp"
 #include "../src/mididata.hpp"
 #include "../src/midipeer.hpp"
 #include "../src/midirouter.hpp"
-#include "../src/rtpmidiserverworker.hpp"
+#include "../src/network_rtpmidi_listener.hpp"
 #include "../tests/test_case.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "test_utils.hpp"
@@ -55,7 +55,7 @@ rtpmididns::network_rtpmidi_listener_t::network_rtpmidi_listener_t(
 rtpmididns::network_rtpmidi_listener_t::~network_rtpmidi_listener_t() {}
 
 void rtpmididns::network_rtpmidi_listener_t::send_midi(midipeer_id_t from,
-                                                  const mididata_t &) {}
+                                                       const mididata_t &) {}
 rtpmididns::json_t rtpmididns::network_rtpmidi_listener_t::status() {
   return rtpmididns::json_t{};
 }
@@ -106,7 +106,8 @@ void test_basic_midirouter() {
 void test_midirouter_from_alsa() {
   auto router = std::make_shared<rtpmididns::midirouter_t>();
   auto aseq = std::make_shared<rtpmididns::aseq_t>("Test");
-  auto alsanetwork = std::make_shared<rtpmididns::local_alsa_multi_listener_t>("test", aseq);
+  auto alsanetwork =
+      std::make_shared<rtpmididns::local_alsa_multi_listener_t>("test", aseq);
   router->add_peer(alsanetwork);
 
   // This must have created a rtpmidid network connection
@@ -144,7 +145,8 @@ void test_midirouter_from_alsa() {
 void test_midirouter_for_each_peer() {
   auto router = std::make_shared<rtpmididns::midirouter_t>();
   auto aseq = std::make_shared<rtpmididns::aseq_t>("Test");
-  auto alsanetwork = std::make_shared<rtpmididns::local_alsa_multi_listener_t>("test", aseq);
+  auto alsanetwork =
+      std::make_shared<rtpmididns::local_alsa_multi_listener_t>("test", aseq);
   auto midiio = std::make_shared<test_midiio_t>();
 
   router->add_peer(alsanetwork);

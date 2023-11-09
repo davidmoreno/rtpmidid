@@ -21,7 +21,7 @@
 #include "../src/json.hpp"
 #include "../src/mididata.hpp"
 #include "../src/midirouter.hpp"
-#include "../src/rtpmidiserverworker.hpp"
+#include "../src/network_rtpmidi_listener.hpp"
 #include "../src/settings.hpp"
 #include "../tests/test_case.hpp"
 #include "rtpmidid/rtppeer.hpp"
@@ -52,8 +52,8 @@ void test_send_receive_messages() {
         std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
     test_client_id = aseq->client_id;
 
-    router->add_peer(
-        rtpmididns::make_local_alsa_multi_listener(rtpmididns::settings.alsa_name, aseq));
+    router->add_peer(rtpmididns::make_local_alsa_multi_listener(
+        rtpmididns::settings.alsa_name, aseq));
 
     router->add_peer(rtpmididns::make_network_rtpmidi_multi_listener(
         rtpmididns::settings.rtpmidid_name, rtpmididns::settings.rtpmidid_port,
