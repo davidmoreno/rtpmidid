@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "alsawaiter.hpp"
+#include "local_alsa_waiter.hpp"
 #include "aseq.hpp"
 #include "factory.hpp"
 #include "json.hpp"
@@ -29,10 +29,10 @@
 #include <cstddef>
 
 namespace rtpmididns {
-alsawaiter_t::alsawaiter_t(const std::string &name_,
-                           const std::string &hostname_,
-                           const std::string &port_,
-                           std::shared_ptr<aseq_t> aseq_)
+local_alsa_waiter_t::local_alsa_waiter_t(const std::string &name_,
+                                         const std::string &hostname_,
+                                         const std::string &port_,
+                                         std::shared_ptr<aseq_t> aseq_)
     : name(name_), aseq(aseq_) {
 
   add_endpoint(hostname_, port_);
@@ -60,10 +60,10 @@ alsawaiter_t::alsawaiter_t(const std::string &name_,
       });
 }
 
-alsawaiter_t::~alsawaiter_t() { aseq->remove_port(alsaport); }
+local_alsa_waiter_t::~local_alsa_waiter_t() { aseq->remove_port(alsaport); }
 
-void alsawaiter_t::add_endpoint(const std::string &hostname,
-                                const std::string &port) {
+void local_alsa_waiter_t::add_endpoint(const std::string &hostname,
+                                       const std::string &port) {
   DEBUG("Added endpoint for alsawaiter: {}, hostname: {}, port: {}", name,
         hostname, port);
   bool exists = false;
@@ -80,7 +80,7 @@ void alsawaiter_t::add_endpoint(const std::string &hostname,
     endpoints.push_back(rtpmidid::rtpclient_t::endpoint_t{hostname, port});
 }
 
-void alsawaiter_t::connect_to_remote_server() {
+void local_alsa_waiter_t::connect_to_remote_server() {
   if (endpoints.size() == 0) {
     WARNING(
         "Unknown endpoints for this alsa waiter. Dont know where to connect.");
@@ -95,20 +95,21 @@ void alsawaiter_t::connect_to_remote_server() {
       std::make_shared<rtpmidid::rtpclient_t>(settings.rtpmidid_name);
 
   rtpmidiclientworker_peer_id =
-      router->add_peer(make_rtpmidiclientworker(rtpclient));
+      router->add_peer(make_network_rtpmidi_client(rtpclient));
   router->connect(rtpmidiclientworker_peer_id, peer_id);
   router->connect(peer_id, rtpmidiclientworker_peer_id);
 
   rtpclient->connect_to(endpoints);
 }
 
-void alsawaiter_t::disconnect_from_remote_server() {
+void local_alsa_waiter_t::disconnect_from_remote_server() {
   DEBUG("Disconnect from remote server at {}:{}", hostname, port);
   router->remove_peer(rtpmidiclientworker_peer_id);
   // rtpclient = nullptr; // for me, this is dead
 }
 
-void alsawaiter_t::send_midi(midipeer_id_t from, const mididata_t &data) {
+void local_alsa_waiter_t::send_midi(midipeer_id_t from,
+                                    const mididata_t &data) {
   mididata_t mididata{data};
   mididata_encoder.mididata_to_evs_f(mididata, [this](snd_seq_event_t *ev) {
     snd_seq_ev_set_source(ev, alsaport);
@@ -118,7 +119,7 @@ void alsawaiter_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   });
 }
 
-json_t alsawaiter_t::status() {
+json_t local_alsa_waiter_t::status() {
   json_t jendpoints;
   for (auto &endpoint : endpoints) {
     jendpoints.push_back(

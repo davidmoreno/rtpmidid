@@ -16,26 +16,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "alsalistener.hpp"
-#include "alsaworker.hpp"
+#include "local_alsa_multi_listener.hpp"
 #include "aseq.hpp"
 #include "factory.hpp"
 #include "json.hpp"
+#include "local_alsa_worker.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
+#include "network_rtpmidi_listener.hpp"
+#include "network_rtpmidi_server.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/logger.hpp"
-#include "rtpmidilistener.hpp"
-#include "rtpmidiserverworker.hpp"
 #include <alsa/seqmid.h>
 #include <memory>
 #include <utility>
 
 namespace rtpmididns {
 
-alsalistener_t::alsalistener_t(const std::string &name_,
-                               std::shared_ptr<aseq_t> aseq_)
+local_alsa_multi_listener_t::local_alsa_multi_listener_t(
+    const std::string &name_, std::shared_ptr<aseq_t> aseq_)
     : seq(aseq_), name(name_) {
 
   port = seq->create_port(name);
@@ -51,15 +51,18 @@ alsalistener_t::alsalistener_t(const std::string &name_,
       [this](aseq_t::port_t port) { remove_alsa_connection(port); });
   // TODO unsubscribe
 };
-alsalistener_t::~alsalistener_t() { seq->remove_port(port); }
+local_alsa_multi_listener_t::~local_alsa_multi_listener_t() {
+  seq->remove_port(port);
+}
 
-midipeer_id_t alsalistener_t::new_alsa_connection(const aseq_t::port_t &port,
-                                                  const std::string &name) {
+midipeer_id_t
+local_alsa_multi_listener_t::new_alsa_connection(const aseq_t::port_t &port,
+                                                 const std::string &name) {
   DEBUG("New connection to network peer {}, from a local connection to {}",
         name, this->name);
 
   int networkpeer_id = -1;
-  router->for_each_peer<rtpmidiserverworker_t>(
+  router->for_each_peer<network_rtpmidi_listener_t>(
       [this, &name, &networkpeer_id](auto *peer) {
         if (peer->name_ == name) {
           peer->use_count++;
@@ -70,7 +73,8 @@ midipeer_id_t alsalistener_t::new_alsa_connection(const aseq_t::port_t &port,
       });
 
   if (networkpeer_id < 0) {
-    std::shared_ptr<midipeer_t> networkpeer = make_rtpmidiserverworker(name);
+    std::shared_ptr<midipeer_t> networkpeer =
+        make_network_rtpmidi_listener(name);
     networkpeer_id = router->add_peer(networkpeer);
 
     aseqpeers[port] = networkpeer_id;
@@ -81,7 +85,8 @@ midipeer_id_t alsalistener_t::new_alsa_connection(const aseq_t::port_t &port,
   return networkpeer_id;
 }
 
-void alsalistener_t::remove_alsa_connection(const aseq_t::port_t &port) {
+void local_alsa_multi_listener_t::remove_alsa_connection(
+    const aseq_t::port_t &port) {
   auto networkpeerI = aseqpeers.find(port);
   if (networkpeerI == aseqpeers.end()) {
     DEBUG("Removed ALSA port {}:{}, removing midipeer. NOT FOUND!", port.client,
@@ -91,8 +96,9 @@ void alsalistener_t::remove_alsa_connection(const aseq_t::port_t &port) {
     }
     return;
   }
-  rtpmidiserverworker_t *rtppeer = dynamic_cast<rtpmidiserverworker_t *>(
-      router->get_peer_by_id(networkpeerI->second).get());
+  network_rtpmidi_listener_t *rtppeer =
+      dynamic_cast<network_rtpmidi_listener_t *>(
+          router->get_peer_by_id(networkpeerI->second).get());
   if (!rtppeer) {
     ERROR("Invalid router id is not a rtpmidiserverlistener!");
     return;
@@ -110,7 +116,7 @@ void alsalistener_t::remove_alsa_connection(const aseq_t::port_t &port) {
   router->remove_peer(networkpeerI->second);
 }
 
-void alsalistener_t::alsaseq_event(snd_seq_event_t *event) {
+void local_alsa_multi_listener_t::alsaseq_event(snd_seq_event_t *event) {
   auto peerI =
       aseqpeers.find(aseq_t::port_t{event->source.client, event->source.port});
   if (peerI == aseqpeers.end()) {
@@ -128,7 +134,8 @@ void alsalistener_t::alsaseq_event(snd_seq_event_t *event) {
   router->send_midi(peer_id, peerI->second, midi);
 }
 
-void alsalistener_t::send_midi(midipeer_id_t from, const mididata_t &data) {
+void local_alsa_multi_listener_t::send_midi(midipeer_id_t from,
+                                            const mididata_t &data) {
   for (auto &peer : aseqpeers) {
     // DEBUG("Look for dest alsa peer: {} == {} ? {}", peer.second, from,
     //       peer.second == from);
@@ -147,7 +154,7 @@ void alsalistener_t::send_midi(midipeer_id_t from, const mididata_t &data) {
     }
   }
 }
-json_t alsalistener_t::status() {
+json_t local_alsa_multi_listener_t::status() {
   json_t connections{};
   for (auto &peer : aseqpeers) {
     auto port = peer.first;

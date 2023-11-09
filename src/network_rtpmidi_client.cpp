@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "rtpmidiworker.hpp"
+#include "network_rtpmidi_client.hpp"
 #include "json.hpp"
 #include "mididata.hpp"
 #include "midirouter.hpp"
@@ -27,39 +27,41 @@
 #include <memory>
 
 namespace rtpmididns {
-rtpmidiworker_t::rtpmidiworker_t(std::shared_ptr<rtpmidid::rtppeer_t> peer_)
+network_rtpmidi_client_t::network_rtpmidi_client_t(
+    std::shared_ptr<rtpmidid::rtpclient_t> peer_)
     : peer(peer_) {
 
-  midi_connection =
-      peer->midi_event.connect([this](const rtpmidid::io_bytes_reader &data) {
+  midi_connection = peer->peer.midi_event.connect(
+      [this](const rtpmidid::io_bytes_reader &data) {
         router->send_midi(peer_id, mididata_t{data});
       });
 
-  disconnect_connection = peer->disconnect_event.connect(
-      [this](rtpmidid::rtppeer_t::disconnect_reason_e reason) {
-        DEBUG("Peer disconnected: {}. Remove rtpmidi peer and alsa port too.",
-              reason);
-        rtpmidid::poller.call_later([this] {
-          router->peer_connection_loop(peer_id, [this](auto other_peer) {
-            router->remove_peer(other_peer->peer_id);
-          });
-          router->remove_peer(peer_id);
-        });
-      });
+  // disconnect_connection = peer->disconnect_event.connect(
+  //     [this](rtpmidid::rtppeer_t::disconnect_reason_e reason) {
+  //       DEBUG("Peer disconnected: {}. Remove rtpmidi peer and alsa port
+  //       too.",
+  //             reason);
+  //       rtpmidid::poller.call_later([this] {
+  //         router->peer_connection_loop(peer_id, [this](auto other_peer) {
+  //           router->remove_peer(other_peer->peer_id);
+  //         });
+  //         router->remove_peer(peer_id);
+  //       });
+  //     });
 }
 
-rtpmidiworker_t::~rtpmidiworker_t() {}
+network_rtpmidi_client_t::~network_rtpmidi_client_t() {}
 
-void rtpmidiworker_t::send_midi(midipeer_id_t from, const mididata_t &data) {
-  DEBUG("Send midi: {}", data.size());
-  peer->send_midi(data);
+void network_rtpmidi_client_t::send_midi(midipeer_id_t from,
+                                         const mididata_t &data) {
+  peer->peer.send_midi(data);
 };
 
-json_t rtpmidiworker_t::status() {
+json_t network_rtpmidi_client_t::status() {
   return json_t{
-      {"name", peer->remote_name},        //
-      {"type", "network:rtpmidi:server"}, //
-      {"peer", peer_status(*peer)},
+      {"name", peer->peer.remote_name},   //
+      {"type", "network:rtpmidi:client"}, //
+      {"peer", peer_status(peer->peer)},
   };
 };
 

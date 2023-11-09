@@ -17,28 +17,25 @@
  */
 
 #pragma once
-#include "aseq.hpp"
 #include "midipeer.hpp"
+#include "rtpmidid/rtpserver.hpp"
+#include <memory>
+#include <string>
 
 namespace rtpmididns {
-/**
- * @short ALSA port that just receives data and send to another midipeer_t
- */
-class alsaworker_t : public midipeer_t {
+class aseq_t;
+class midirouter_t;
+
+class network_rtpmidi_multi_listener_t : public midipeer_t {
 public:
-  uint8_t port;
-  std::shared_ptr<aseq_t> seq;
-  std::string name;
-  mididata_to_alsaevents_t mididata_encoder;
-  mididata_to_alsaevents_t mididata_decoder;
+  std::shared_ptr<aseq_t> aseq;
+  rtpmidid::rtpserver_t server;
+  connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
+  connection_t<std::shared_ptr<rtpmidid::rtppeer_t>> connected_connection;
 
-  connection_t<aseq_t::port_t, const std::string &> subscribe_connection;
-  connection_t<aseq_t::port_t> unsubscribe_connection;
-  connection_t<snd_seq_event_t *> midi_connection;
-
-  alsaworker_t(const std::string &name, std::shared_ptr<aseq_t> seq);
-  virtual ~alsaworker_t();
+  network_rtpmidi_multi_listener_t(const std::string &name, const std::string &port,
+                    std::shared_ptr<aseq_t> aseq);
+  void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;
-  virtual void send_midi(midipeer_id_t from, const mididata_t &) override;
 };
 } // namespace rtpmididns

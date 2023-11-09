@@ -17,8 +17,8 @@
  */
 
 #include "rtpmidiremotehandler.hpp"
-#include "alsawaiter.hpp"
 #include "factory.hpp"
+#include "local_alsa_waiter.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 
@@ -43,15 +43,16 @@ void rtpmidi_remote_handler_t::discover_peer(const std::string &name,
                                              const std::string &port) {
   for (auto &peer : peers) {
     if (peer.name == name) {
-      alsawaiter_t *alsawaiter =
-          dynamic_cast<alsawaiter_t *>(peer.alsawaiter.get());
+      local_alsa_waiter_t *alsawaiter =
+          dynamic_cast<local_alsa_waiter_t *>(peer.alsawaiter.get());
       if (alsawaiter)
         alsawaiter->add_endpoint(hostname, port);
       return;
     }
   }
 
-  auto peer = rtpmididns::make_alsawaiter(router, name, hostname, port, aseq);
+  auto peer =
+      rtpmididns::make_local_alsa_waiter(router, name, hostname, port, aseq);
   peers.push_back(known_remote_peer_t{name, peer});
 
   router->add_peer(peer);

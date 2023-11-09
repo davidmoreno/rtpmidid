@@ -35,14 +35,14 @@ namespace rtpmididns {
  * Data from network to the peer is managed somewhere else, normally
  * a rtpmidid::rtpclient_t or rtpmidid::rtpserver_t object.
  */
-class rtpmidiclientworker_t : public midipeer_t {
+class network_rtpmidi_client_t : public midipeer_t {
 public:
   std::shared_ptr<rtpmidid::rtpclient_t> peer;
   connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
   connection_t<rtpmidid::rtppeer_t::disconnect_reason_e> disconnect_connection;
 
-  rtpmidiclientworker_t(std::shared_ptr<rtpmidid::rtpclient_t> peer);
-  ~rtpmidiclientworker_t();
+  network_rtpmidi_client_t(std::shared_ptr<rtpmidid::rtpclient_t> peer);
+  ~network_rtpmidi_client_t();
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;

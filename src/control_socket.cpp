@@ -220,7 +220,7 @@ std::vector<control_socket_ns::command_t> commands{
                        "hostname, port}"};
 
        control.router->add_peer(
-           make_alsawaiter(control.router, name, hostname, port, control.aseq));
+           make_local_alsa_waiter(control.router, name, hostname, port, control.aseq));
        return json_t{"ok"};
      }},
     // REturn some help text

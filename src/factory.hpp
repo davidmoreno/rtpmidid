@@ -31,29 +31,32 @@ class midirouter_t;
 class midipeer_t;
 
 // Many factory creators, basically to allow testing of the different parts
-std::shared_ptr<midipeer_t> make_alsalistener(const std::string &name,
-                                              std::shared_ptr<aseq_t> aseq);
-//
-std::shared_ptr<midipeer_t> make_rtpmidilistener(const std::string &name,
-                                                 const std::string &port,
-                                                 std::shared_ptr<aseq_t> aseq);
+std::shared_ptr<midipeer_t>
+make_local_alsa_multi_listener(const std::string &name,
+                               std::shared_ptr<aseq_t> aseq);
 //
 std::shared_ptr<midipeer_t>
-make_rtpmidiworker(std::shared_ptr<rtpmidid::rtppeer_t> peer);
+make_network_rtpmidi_multi_listener(const std::string &name,
+                                    const std::string &port,
+                                    std::shared_ptr<aseq_t> aseq);
 //
-std::shared_ptr<midipeer_t> make_alsaworker(const std::string &name,
-                                            std::shared_ptr<aseq_t>);
+std::shared_ptr<midipeer_t>
+make_network_rtpmidi_server(std::shared_ptr<rtpmidid::rtppeer_t> peer);
+//
+std::shared_ptr<midipeer_t> make_local_alsa_worker(const std::string &name,
+                                                   std::shared_ptr<aseq_t>);
 
 //
 std::shared_ptr<midipeer_t>
-make_rtpmidiclientworker(std::shared_ptr<rtpmidid::rtpclient_t> peer);
+make_network_rtpmidi_client(std::shared_ptr<rtpmidid::rtpclient_t> peer);
 
 //
-std::shared_ptr<midipeer_t> make_rtpmidiserverworker(const std::string &name);
+std::shared_ptr<midipeer_t>
+make_network_rtpmidi_listener(const std::string &name);
 //
 std::shared_ptr<midipeer_t>
-make_alsawaiter(std::shared_ptr<midirouter_t> &router, const std::string &name,
-                const std::string &hostname, const std::string &port,
-                std::shared_ptr<aseq_t> aseq);
+make_local_alsa_waiter(std::shared_ptr<midirouter_t> &router,
+                       const std::string &name, const std::string &hostname,
+                       const std::string &port, std::shared_ptr<aseq_t> aseq);
 
 } // namespace rtpmididns

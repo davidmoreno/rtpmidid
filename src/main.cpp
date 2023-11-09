@@ -71,16 +71,16 @@ int main(int argc, char **argv) {
 
     // Create all the alsa network midipeers
     for (const auto &announce : rtpmididns::settings.alsa_announces) {
-      router->add_peer(rtpmididns::make_alsalistener(announce.name, aseq));
+      router->add_peer(rtpmididns::make_local_alsa_multi_listener(announce.name, aseq));
     }
     // Create all the rtpmidi network midipeers
     for (const auto &announce : rtpmididns::settings.rtpmidi_announces) {
       router->add_peer(
-          rtpmididns::make_rtpmidilistener(announce.name, announce.port, aseq));
+          rtpmididns::make_network_rtpmidi_multi_listener(announce.name, announce.port, aseq));
     }
     // Connect to all static endpoints
     for (const auto &connect_to : rtpmididns::settings.connect_to) {
-      router->add_peer(rtpmididns::make_alsawaiter(
+      router->add_peer(rtpmididns::make_local_alsa_waiter(
           router, connect_to.name, connect_to.hostname, connect_to.port, aseq));
     }
 

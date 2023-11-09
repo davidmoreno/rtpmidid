@@ -47,7 +47,7 @@ add_test(NAME test_signals COMMAND test_signals)
 add_executable(test_midirouter
     test_midirouter.cpp test_utils.cpp 
     ../src/midirouter.cpp 
-    ../src/alsalistener.cpp 
+    ../src/local_alsa_multi_listener.cpp 
     ../src/aseq.cpp
     ../src/midipeer.cpp
 )
@@ -72,13 +72,13 @@ add_executable(test_midirouter2
     ../src/midipeer.cpp
     ../src/rtpmidiremotehandler.cpp
     ../src/utils.cpp
-    ../src/alsalistener.cpp
-    ../src/alsaworker.cpp
-    ../src/alsawaiter.cpp
-    ../src/rtpmidiclientworker.cpp
-    ../src/rtpmidilistener.cpp
-    ../src/rtpmidiserverworker.cpp
-    ../src/rtpmidiworker.cpp
+    ../src/local_alsa_multi_listener.cpp
+    ../src/local_alsa_waiter.cpp
+    ../src/local_alsa_worker.cpp
+    ../src/network_rtpmidi_client.cpp
+    ../src/network_rtpmidi_listener.cpp
+    ../src/network_rtpmidi_multi_listener.cpp
+    ../src/network_rtpmidi_server.cpp
   )
 target_link_libraries(test_midirouter2 -lfmt -pthread rtpmidid-shared)
 add_test(NAME test_midirouter2 COMMAND test_midirouter2)

@@ -42,7 +42,7 @@ namespace rtpmididns {
  * origin port and use that port to match to the ALSA connection
  * and send the data as if it comes from there to the midirouter.
  */
-class alsalistener_t : public midipeer_t {
+class local_alsa_multi_listener_t : public midipeer_t {
 public:
   std::shared_ptr<aseq_t> seq;
   uint8_t port;
@@ -55,8 +55,8 @@ public:
   connection_t<aseq_t::port_t> unsubscribe_connection;
   connection_t<snd_seq_event_t *> midi_connection;
 
-  alsalistener_t(const std::string &name, std::shared_ptr<aseq_t> aseq);
-  ~alsalistener_t();
+  local_alsa_multi_listener_t(const std::string &name, std::shared_ptr<aseq_t> aseq);
+  ~local_alsa_multi_listener_t();
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;

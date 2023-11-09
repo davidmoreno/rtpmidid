@@ -13,13 +13,13 @@ add_executable(
   rtpmidiremotehandler.cpp
   utils.cpp
 
-  alsalistener.cpp
-  alsaworker.cpp
-  alsawaiter.cpp
-  rtpmidiclientworker.cpp
-  rtpmidilistener.cpp
-  rtpmidiserverworker.cpp
-  rtpmidiworker.cpp
+  local_alsa_multi_listener.cpp
+  local_alsa_waiter.cpp
+  local_alsa_worker.cpp
+  network_rtpmidi_client.cpp
+  network_rtpmidi_listener.cpp
+  network_rtpmidi_multi_listener.cpp
+  network_rtpmidi_server.cpp
 )
 
 target_link_libraries(rtpmidid2-daemon ${AVAHI_LIBRARIES})

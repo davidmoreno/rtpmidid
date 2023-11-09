@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "rtpmidilistener.hpp"
+#include "network_rtpmidi_multi_listener.hpp"
 #include "factory.hpp"
 #include "json.hpp"
 #include "midirouter.hpp"
@@ -27,9 +27,9 @@ namespace rtpmididns {
 
 extern std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 
-rtpmidilistener_t::rtpmidilistener_t(const std::string &name,
-                                     const std::string &port,
-                                     std::shared_ptr<aseq_t> aseq_)
+network_rtpmidi_multi_listener_t::network_rtpmidi_multi_listener_t(
+    const std::string &name, const std::string &port,
+    std::shared_ptr<aseq_t> aseq_)
     : aseq(aseq_), server(name, port) {
   if (mdns)
     mdns->announce_rtpmidi(name, server.control_port);
@@ -38,16 +38,17 @@ rtpmidilistener_t::rtpmidilistener_t(const std::string &name,
       [this](std::shared_ptr<rtpmidid::rtppeer_t> peer) {
         DEBUG("Got connection from {}", peer->remote_name);
         auto alsa_id =
-            router->add_peer(make_alsaworker(peer->remote_name, aseq));
-        auto peer_id = router->add_peer(make_rtpmidiworker(peer));
+            router->add_peer(make_local_alsa_worker(peer->remote_name, aseq));
+        auto peer_id = router->add_peer(make_network_rtpmidi_server(peer));
         router->connect(alsa_id, peer_id);
         router->connect(peer_id, alsa_id);
       });
 }
 
-void rtpmidilistener_t::send_midi(midipeer_id_t from, const mididata_t &) {}
+void network_rtpmidi_multi_listener_t::send_midi(midipeer_id_t from,
+                                                 const mididata_t &) {}
 
-json_t rtpmidilistener_t::status() {
+json_t network_rtpmidi_multi_listener_t::status() {
   std::vector<json_t> peers;
   for (auto &peer : server.peers) {
     auto &peerpeer = peer.peer;

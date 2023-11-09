@@ -53,9 +53,9 @@ void test_send_receive_messages() {
     test_client_id = aseq->client_id;
 
     router->add_peer(
-        rtpmididns::make_alsalistener(rtpmididns::settings.alsa_name, aseq));
+        rtpmididns::make_local_alsa_multi_listener(rtpmididns::settings.alsa_name, aseq));
 
-    router->add_peer(rtpmididns::make_rtpmidilistener(
+    router->add_peer(rtpmididns::make_network_rtpmidi_multi_listener(
         rtpmididns::settings.rtpmidid_name, rtpmididns::settings.rtpmidid_port,
         aseq));
   }
@@ -107,7 +107,7 @@ void test_send_receive_messages() {
 
   int port = 0;
 
-  router->for_each_peer<rtpmididns::rtpmidiserverworker_t>(
+  router->for_each_peer<rtpmididns::network_rtpmidi_listener_t>(
       [&port](auto *peer) { port = peer->server.control_port; });
 
   DEBUG("At port {}", port);

@@ -35,7 +35,7 @@ namespace rtpmididns {
  * This is used both by mDNS, that creates and removes this port, and for
  * manually adding remote rtpmidi ports.
  */
-class alsawaiter_t : public midipeer_t {
+class local_alsa_waiter_t : public midipeer_t {
 public:
   std::string name;
   std::vector<rtpmidid::rtpclient_t::endpoint_t> endpoints;
@@ -58,9 +58,9 @@ public:
   // std::shared_ptr<rtpmidid::rtpclient_t> rtpclient;
   connection_t<rtpmidid::rtppeer_t::disconnect_reason_e> disconnect_connection;
 
-  alsawaiter_t(const std::string &name, const std::string &hostname,
+  local_alsa_waiter_t(const std::string &name, const std::string &hostname,
                const std::string &port, std::shared_ptr<aseq_t> aseq);
-  ~alsawaiter_t() override;
+  ~local_alsa_waiter_t() override;
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;
