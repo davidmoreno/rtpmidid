@@ -58,12 +58,11 @@ json_t rtpmidiserverworker_t::status() {
   std::vector<json_t> peers;
   for (auto &peer : server.peers) {
     auto &peerpeer = peer.peer;
-    peers.push_back(
-        peer_status(*peerpeer, peer.address, std::to_string(peer.port)));
+    peers.push_back(peer_status(*peerpeer));
   }
   return json_t{
-      {"name", name_},                   //
-      {"type", "rtpmidi_server_worker"}, //
+      {"name", name_},                      //
+      {"type", "network:rtpmidi:listener"}, //
       {"port", server.midi_port},
       {"peers", //
        peers}

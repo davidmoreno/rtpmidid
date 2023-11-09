@@ -2,6 +2,5 @@
 #include "rtpmidid/rtppeer.hpp"
 
 namespace rtpmididns {
-json_t peer_status(rtpmidid::rtppeer_t &peer, const std::string &hostname,
-                   const std::string &port);
+json_t peer_status(rtpmidid::rtppeer_t &peer);
 };

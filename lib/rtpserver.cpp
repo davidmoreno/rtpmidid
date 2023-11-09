@@ -315,11 +315,13 @@ void rtpserver_t::create_peer_from(io_bytes_reader &&buffer,
   char astring[INET6_ADDRSTRLEN];
   inet_ntop(AF_INET6, &(address->sin6_addr), astring, INET6_ADDRSTRLEN);
   DEBUG("Connected from {}:{}", astring, remote_base_port);
+  peer->remote_address = astring;
+  peer->remote_base_port = remote_base_port;
 
   auto &peerdata = peers.emplace_back();
   peerdata.peer = peer;
-  peerdata.address = astring;
-  peerdata.port = remote_base_port;
+  peer->remote_address = astring;
+  peer->remote_base_port = remote_base_port;
 
   // peer_data_t peerdata;
 

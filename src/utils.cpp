@@ -19,8 +19,7 @@ std::string to_string(const rtpmidid::rtppeer_t::status_e status) {
 } // namespace std
 
 namespace rtpmididns {
-json_t peer_status(rtpmidid::rtppeer_t &peer, const std::string &hostname,
-                   const std::string &port) {
+json_t peer_status(rtpmidid::rtppeer_t &peer) {
   return json_t{
       //
       {"latency_ms", peer.latency / 10.0},
@@ -39,8 +38,8 @@ json_t peer_status(rtpmidid::rtppeer_t &peer, const std::string &hostname,
               {"name", peer.remote_name},              //
               {"sequence_number", peer.remote_seq_nr}, //
               {"ssrc", peer.remote_ssrc},              //
-              {"port", port},                          //
-              {"hostname", hostname},                  //
+              {"port", peer.remote_base_port},         //
+              {"hostname", peer.remote_address},       //
           }                                            //
       }
       //

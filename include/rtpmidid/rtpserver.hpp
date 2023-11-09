@@ -37,8 +37,6 @@ public:
 
   struct peer_data_t {
     std::shared_ptr<rtppeer_t> peer;
-    std::string address;
-    int port;
 
     connection_t<const io_bytes_reader &, rtppeer_t::port_e>
         send_event_connection;

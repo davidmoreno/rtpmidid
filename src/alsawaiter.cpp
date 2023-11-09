@@ -128,7 +128,7 @@ json_t alsawaiter_t::status() {
   return json_t{
       //
       {"name", name},
-      {"type", "alsa_waiter"},
+      {"type", "local:alsa:waiter"},
       {"endpoints", jendpoints},
       {"connection_count", connection_count},
       //

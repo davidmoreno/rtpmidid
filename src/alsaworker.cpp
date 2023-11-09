@@ -56,7 +56,7 @@ void alsaworker_t::send_midi(midipeer_id_t from, const mididata_t &data) {
 
 json_t alsaworker_t::status() {
   return json_t{
-      {"type", "alsa_worker"}, {"name", name},
+      {"type", "local:alsa"}, {"name", name},
       //
   };
 }

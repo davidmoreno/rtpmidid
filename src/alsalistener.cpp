@@ -34,11 +34,11 @@
 
 namespace rtpmididns {
 
-alsalistener_t::alsalistener_t(const std::string &name,
+alsalistener_t::alsalistener_t(const std::string &name_,
                                std::shared_ptr<aseq_t> aseq_)
-    : seq(aseq_) {
+    : seq(aseq_), name(name_) {
 
-  port = seq->create_port("Network");
+  port = seq->create_port(name);
   subscribe_connection = seq->subscribe_event[port].connect(
       [this](aseq_t::port_t port, const std::string &name) {
         new_alsa_connection(port, name);
@@ -55,7 +55,8 @@ alsalistener_t::~alsalistener_t() { seq->remove_port(port); }
 
 midipeer_id_t alsalistener_t::new_alsa_connection(const aseq_t::port_t &port,
                                                   const std::string &name) {
-  DEBUG("New connection to network peer {}", name);
+  DEBUG("New connection to network peer {}, from a local connection to {}",
+        name, this->name);
 
   int networkpeer_id = -1;
   router->for_each_peer<rtpmidiserverworker_t>(
@@ -159,8 +160,8 @@ json_t alsalistener_t::status() {
   }
 
   return json_t{
-      {"type", "alsa_listener"}, //
-      {"name", seq->name},       //
+      {"type", "local:alsa:multi:listener"}, //
+      {"name", name},                        //
       {"connections", connections}
       //
   };

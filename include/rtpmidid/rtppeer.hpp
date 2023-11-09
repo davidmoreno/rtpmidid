@@ -87,6 +87,11 @@ public:
   // Need some buffer space for sysex. This may require memory alloc.
   std::vector<uint8_t> sysex;
 
+  // This is to be filled at connection by whoever makes it
+  // It is not used by the rtppeer_t, just nice info to have
+  std::string remote_address = "";
+  int remote_base_port = 0;
+
   /// Event for connected
   signal_t<const std::string &, status_e> connected_event;
   /// Event for disconnect

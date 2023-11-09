@@ -48,6 +48,7 @@ public:
   uint8_t port;
   mididata_to_alsaevents_t alsatrans_decoder;
   mididata_to_alsaevents_t alsatrans_encoder;
+  std::string name;
 
   std::unordered_map<aseq_t::port_t, midipeer_id_t> aseqpeers;
   connection_t<aseq_t::port_t, const std::string &> subscribe_connection;
