@@ -18,6 +18,7 @@
 
 #include "ini.hpp"
 #include "settings.hpp"
+#include "stringpp.hpp"
 #include <algorithm>
 #include <fstream>
 #include <rtpmidid/exceptions.hpp>
@@ -48,8 +49,9 @@ void load_ini(const std::string &filename) {
     if (comment_pos != std::string::npos) {
       line = line.substr(0, comment_pos);
     }
-    // Remove spaces
-    line.erase(std::remove_if(line.begin(), line.end(), isspace), line.end());
+    // Remove spaces at the beginning and end
+    line = trim_copy(line);
+
     // Skip empty lines
     if (line.length() == 0) {
       continue;
