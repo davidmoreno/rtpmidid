@@ -41,7 +41,7 @@ make_local_alsa_waiter(std::shared_ptr<midirouter_t> &router,
                        const std::string &port, std::shared_ptr<aseq_t> aseq) {
   std::shared_ptr<midipeer_t> added;
   router->for_each_peer<local_alsa_waiter_t>([&](local_alsa_waiter_t *peer) {
-    if (peer->name == name) {
+    if (peer->remote_name == name) {
       peer->add_endpoint(hostname, port);
       added = peer->shared_from_this();
     }

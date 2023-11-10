@@ -33,16 +33,16 @@ local_alsa_waiter_t::local_alsa_waiter_t(const std::string &name_,
                                          const std::string &hostname_,
                                          const std::string &port_,
                                          std::shared_ptr<aseq_t> aseq_)
-    : name(name_), aseq(aseq_) {
+    : remote_name(name_), aseq(aseq_) {
 
   add_endpoint(hostname_, port_);
 
-  alsaport = aseq->create_port(name);
+  alsaport = aseq->create_port(remote_name);
   subscribe_connection = aseq->subscribe_event[alsaport].connect(
       [this](aseq_t::port_t from, const std::string &name) {
         connection_count++;
         if (connection_count == 1)
-          connect_to_remote_server();
+          connect_to_remote_server(name);
       });
   unsubscribe_connection =
       aseq->unsubscribe_event[alsaport].connect([this](aseq_t::port_t from) {
@@ -64,8 +64,8 @@ local_alsa_waiter_t::~local_alsa_waiter_t() { aseq->remove_port(alsaport); }
 
 void local_alsa_waiter_t::add_endpoint(const std::string &hostname,
                                        const std::string &port) {
-  DEBUG("Added endpoint for alsawaiter: {}, hostname: {}, port: {}", name,
-        hostname, port);
+  DEBUG("Added endpoint for alsawaiter: {}, hostname: {}, port: {}",
+        remote_name, hostname, port);
   bool exists = false;
 
   for (auto &endpoint : endpoints) {
@@ -80,7 +80,8 @@ void local_alsa_waiter_t::add_endpoint(const std::string &hostname,
     endpoints.push_back(rtpmidid::rtpclient_t::endpoint_t{hostname, port});
 }
 
-void local_alsa_waiter_t::connect_to_remote_server() {
+void local_alsa_waiter_t::connect_to_remote_server(
+    const std::string &portname) {
   if (endpoints.size() == 0) {
     WARNING(
         "Unknown endpoints for this alsa waiter. Dont know where to connect.");
@@ -91,8 +92,8 @@ void local_alsa_waiter_t::connect_to_remote_server() {
 
   // External index, in the future if first connection fails, try next
   // and so on. If all fail then real fail.
-  auto rtpclient =
-      std::make_shared<rtpmidid::rtpclient_t>(settings.rtpmidid_name);
+  local_name = portname;
+  auto rtpclient = std::make_shared<rtpmidid::rtpclient_t>(portname);
 
   rtpmidiclientworker_peer_id =
       router->add_peer(make_network_rtpmidi_client(rtpclient));
@@ -128,7 +129,7 @@ json_t local_alsa_waiter_t::status() {
 
   return json_t{
       //
-      {"name", name},
+      {"name", fmt::format("{} <-> {}", local_name, remote_name)},
       {"type", "local:alsa:waiter"},
       {"endpoints", jendpoints},
       {"connection_count", connection_count},
