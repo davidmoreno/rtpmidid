@@ -107,5 +107,5 @@ this message is sent.
 ## Use jq to show some data, csvlook as table
 
 ```sh
-rtpmidid-cli /tmp/rtpmidid.sock status | jq -r "[\"id\", \"name\", \"type\", \"recv\", \"sent\", \"address\", \"send_to\", \"status\"],(.result.router[]|[.id, .name, .type, .stats.recv, .stats.sent, .peer.remote.hostname // \"-\", .send_to[0], (.peers[0].status // .peer.status // (.peers|length))]) | @csv" |csvlook
+rtpmidid-cli /tmp/rtpmidid.sock status | jq -r "[\"id\", \"name\", \"type\", \"recv\", \"sent\", \"address\", \"send_to\", \"status\", \"latency_ms\"],(.result.router[]|[.id, .name, .type, .stats.recv, .stats.sent, .peer.remote.hostname // \"-\", .send_to[0], (.peers[0].status // .peer.status // (.peers|length)), (.peer.latency_ms // .peers[0].latency_ms)]) | @csv" |csvlook
 ```
