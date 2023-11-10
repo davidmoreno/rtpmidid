@@ -61,11 +61,12 @@ rtpclient_t::rtpclient_t(std::string name) : peer(std::move(name)) {
 
   peer_disconnect_event_connection = peer.disconnect_event.connect(
       [this](rtppeer_t::disconnect_reason_e reason) {
-        if (reason == rtppeer_t::disconnect_reason_e::CONNECT_TIMEOUT) {
+        if (reason == rtppeer_t::disconnect_reason_e::CONNECT_TIMEOUT ||
+            reason == rtppeer_t::disconnect_reason_e::CANT_CONNECT) {
           INFO("Could not connect, try next peer. Reason: {}", reason);
           connect_to_next();
         } else {
-          INFO("Disconnected reason: {}", reason);
+          INFO("Disconnected reason: {}. Not trying to connect again.", reason);
         }
       });
   peer_connected_event_connection = peer.connected_event.connect(
