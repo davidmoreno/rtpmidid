@@ -1,5 +1,11 @@
-PORT := 10000
-CXX:= /usr/bin/g++-12
+# Port for test run 
+PORT:=10000
+# Number of jobs for make
+JOBS:=8
+
+# To easy change to clang, set CXX
+CMAKE_EXTRA_ARGS := -DCMAKE_CXX_COMPILER=${CXX}
+
 
 .PHONY: help
 help:
@@ -28,13 +34,13 @@ build: build/bin/rtpmidid
 
 build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${CXX}
-	cd build && make -j
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release  $(CMAKE_EXTRA_ARGS)
+	cd build && make -j$(JOBS)
 
 build-dev: 
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=${CXX}
-	cd build && make -j
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug $(CMAKE_EXTRA_ARGS)
+	cd build && make -j$(JOBS)
 
 
 man: 
