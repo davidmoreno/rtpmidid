@@ -25,13 +25,22 @@
 template <>
 struct fmt::formatter<sockaddr_storage> : formatter<std::string_view> {
   auto format(const sockaddr_storage &addr, format_context &ctx) {
-    char host[NI_MAXHOST];
-    char port[NI_MAXSERV];
-    host[0] = port[0] = '\0';
-    getnameinfo((sockaddr *)&addr, sizeof(addr), host, NI_MAXHOST, port,
-                NI_MAXSERV, NI_NUMERICSERV);
-    std::string name = fmt::format("{}:{}", host, port);
+    // print ip address and port
+    char name[INET6_ADDRSTRLEN];
+    if (addr.ss_family == AF_INET) {
+      auto *s = reinterpret_cast<const sockaddr_in *>(&addr);
+      inet_ntop(AF_INET, &s->sin_addr, name, sizeof(name));
 
-    return formatter<std::string_view>::format(name, ctx);
+      return formatter<std::string_view>::format(
+          fmt::format("{}:{}", name, ntohs(s->sin_port)), ctx);
+    }
+    if (addr.ss_family != AF_INET6) {
+      auto *s = reinterpret_cast<const sockaddr_in6 *>(&addr);
+      inet_ntop(AF_INET6, &s->sin6_addr, name, sizeof(name));
+
+      return formatter<std::string_view>::format(
+          fmt::format("{}:{}", name, ntohs(s->sin6_port)), ctx);
+    }
+    return formatter<std::string_view>::format("unknown", ctx);
   }
 };

@@ -313,6 +313,9 @@ poller_t::timer_t &poller_t::timer_t::operator=(poller_t::timer_t &&other) {
 }
 
 void poller_t::timer_t::disable() {
+  if (id == 0) {
+    return;
+  }
   poller.remove_timer(*this);
   id = 0;
 }

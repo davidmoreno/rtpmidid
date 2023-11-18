@@ -70,6 +70,7 @@ rtpclient_t::rtpclient_t(std::string name) : peer(std::move(name)) {
         } else {
           INFO("Disconnected reason: {}. Not trying to connect again.", reason);
         }
+        connect_to_next();
       });
   peer_connected_event_connection = peer.connected_event.connect(
       [this](const std::string &name, rtppeer_t::status_e status) {
@@ -118,6 +119,7 @@ bool rtpclient_t::connect_to(const std::vector<endpoint_t> &address_port) {
 bool rtpclient_t::connect_to_next() {
   if (address_port_pending.empty()) {
     ERROR("Could not find any valid remote address to connect to");
+    connect_timer.disable();
     connected_event("", rtppeer_t::NOT_CONNECTED);
     return false;
   }
@@ -257,8 +259,8 @@ std::optional<control_midi_ports_t> connect_control_and_midi_sockets(
     }
 
     // advance the port by 1, so it points to midi
-    ((sockaddr_in *)serveraddr->ai_addr)->sin_port =
-        htons(ntohs(((sockaddr_in *)serveraddr->ai_addr)->sin_port) + 1);
+    auto base_port = ntohs(((sockaddr_in *)serveraddr->ai_addr)->sin_port);
+    ((sockaddr_in *)serveraddr->ai_addr)->sin_port = htons(base_port + 1);
 
     auto midi = connect_udp_port(control->port + 1, serveraddr);
     if (!midi) {
@@ -268,8 +270,7 @@ std::optional<control_midi_ports_t> connect_control_and_midi_sockets(
     }
     ret = control_midi_ports_t{
         .remote_address = host,
-        .remote_base_port =
-            ntohs(((sockaddr_in *)serveraddr->ai_addr)->sin_port),
+        .remote_base_port = base_port,
         .control = *control,
         .midi = *midi,
     };
@@ -311,14 +312,15 @@ bool rtpclient_t::connect_to(const std::string &address,
   peer.remote_base_port = ports->remote_base_port;
   remote_base_port = ports->remote_base_port;
 
-  DEBUG("CONTROL at {}", ports->midi.addr);
+  DEBUG("CONTROL at {}, remote base at {}", ports->control.addr,
+        remote_base_port);
   DEBUG("MIDI at {}", ports->midi.addr);
 
   memcpy(&midi_addr, &ports->midi.addr, sizeof(sockaddr_storage));
   memcpy(&control_addr, &ports->control.addr, sizeof(sockaddr_storage));
 
-  DEBUG("CONTROL at {}", midi_addr);
-  DEBUG("MIDI at {}", control_addr);
+  DEBUG("CONTROL at {}", control_addr);
+  DEBUG("MIDI at {}", midi_addr);
 
   control_poller = poller.add_fd_in(control_socket, [this](int) {
     this->data_ready(rtppeer_t::CONTROL_PORT);
@@ -346,8 +348,6 @@ bool rtpclient_t::connect_to(const std::string &address,
   DEBUG("Connecting control port {} to {}:{}", local_base_port, address,
         remote_base_port);
 
-  peer.connect_to(rtppeer_t::CONTROL_PORT);
-
   connect_timer = poller.add_timer_event(5s, [this] {
     DEBUG("Timeout connecting to {}:{}, status {}", peer.remote_name,
           remote_base_port, peer.status);
@@ -356,6 +356,8 @@ bool rtpclient_t::connect_to(const std::string &address,
     peer.disconnect_event(rtppeer_t::CONNECT_TIMEOUT);
     // connected_connection.disconnect();
   });
+
+  peer.connect_to(rtppeer_t::CONTROL_PORT);
 
   return true;
 }
@@ -393,15 +395,25 @@ void rtpclient_t::send_ck0_with_timeout() {
 }
 
 void rtpclient_t::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
-  auto *peer_addr = (port == rtppeer_t::MIDI_PORT) ? &midi_addr : &control_addr;
+  sockaddr_storage *peer_addr;
+  int socket;
 
-  auto socket = rtppeer_t::MIDI_PORT == port ? midi_socket : control_socket;
+  if (port == rtppeer_t::MIDI_PORT) {
+    socket = midi_socket;
+    peer_addr = &midi_addr;
+  } else if (port == rtppeer_t::CONTROL_PORT) {
+    socket = control_socket;
+    peer_addr = &control_addr;
+  } else {
+    throw exception("Unknown port {}", port);
+  }
 
-  DEBUG("Send {} bytes to {}", pb.size(), *peer_addr);
+  // DEBUG("Send {} bytes to {} {}, socket {}", port, pb.size(), *peer_addr,
+  //       socket);
 
   for (;;) {
-    ssize_t res = ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
-                           (sockaddr *)peer_addr, sizeof(peer_addr));
+    ssize_t res = ::sendto(socket, pb.start, pb.size(), 0,
+                           (sockaddr *)peer_addr, sizeof(sockaddr_storage));
 
     if (static_cast<uint32_t>(res) == pb.size())
       break;
@@ -412,8 +424,8 @@ void rtpclient_t::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
         continue;
       }
 
-      ERROR("Client: Could not send all data to {}:{}. Sent {}. {} ({})",
-            peer.remote_name, remote_base_port, res, strerror(errno), errno);
+      ERROR("Client: Could not send all data to {}. Sent {}. {} ({})",
+            *peer_addr, res, strerror(errno), errno);
       throw network_exception(errno);
     }
 
