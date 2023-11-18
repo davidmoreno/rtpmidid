@@ -50,8 +50,8 @@ public:
 
   int control_socket;
   int midi_socket;
-  struct sockaddr control_addr;
-  struct sockaddr midi_addr;
+  struct sockaddr_storage control_addr;
+  struct sockaddr_storage midi_addr;
 
   uint16_t local_base_port;
   uint16_t remote_base_port;
