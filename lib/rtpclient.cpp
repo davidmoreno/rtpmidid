@@ -33,6 +33,7 @@
 
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
+#include <rtpmidid/network.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtpclient.hpp>
 #include <rtpmidid/utils.hpp>
@@ -309,8 +310,15 @@ bool rtpclient_t::connect_to(const std::string &address,
   peer.remote_name = ports->remote_address;
   peer.remote_base_port = ports->remote_base_port;
   remote_base_port = ports->remote_base_port;
-  memcpy(&midi_addr, &ports->midi.addr, sizeof(ports->midi.addr));
-  memcpy(&control_addr, &ports->control.addr, sizeof(ports->control.addr));
+
+  DEBUG("CONTROL at {}", ports->midi.addr);
+  DEBUG("MIDI at {}", ports->midi.addr);
+
+  memcpy(&midi_addr, &ports->midi.addr, sizeof(sockaddr_storage));
+  memcpy(&control_addr, &ports->control.addr, sizeof(sockaddr_storage));
+
+  DEBUG("CONTROL at {}", midi_addr);
+  DEBUG("MIDI at {}", control_addr);
 
   control_poller = poller.add_fd_in(control_socket, [this](int) {
     this->data_ready(rtppeer_t::CONTROL_PORT);
@@ -389,15 +397,7 @@ void rtpclient_t::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
 
   auto socket = rtppeer_t::MIDI_PORT == port ? midi_socket : control_socket;
 
-  {
-    char host[NI_MAXHOST];
-    char port[NI_MAXSERV];
-    host[0] = port[0] = '\0';
-    getnameinfo((sockaddr *)peer_addr, sizeof(peer_addr), host, NI_MAXHOST,
-                port, NI_MAXSERV, NI_NUMERICSERV);
-
-    DEBUG("Sending to {}:{}", host, port);
-  }
+  DEBUG("Send {} bytes to {}", pb.size(), *peer_addr);
 
   for (;;) {
     ssize_t res = ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
