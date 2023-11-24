@@ -332,19 +332,24 @@ void rtpserver_t::create_peer_from(io_bytes_reader &&buffer,
         this->sendto(buff, port, address.get(), remote_base_port);
       });
 
-  peer->data_ready(std::move(buffer), port);
-
   // After read the first packet I know the initiator_id and ssrc
 
   // Setup some callbacks
   auto wpeer = std::weak_ptr(peer);
   peerdata.connected_event_connection = peer->connected_event.connect(
       [this, wpeer](const std::string &name, rtppeer_t::status_e st) {
-        if (st != rtppeer_t::CONNECTED)
-          return;
         if (wpeer.expired())
           return;
         auto peer = wpeer.lock();
+
+        auto peerdata = std::find_if(peers.begin(), peers.end(),
+                                     [&peer](const peer_data_t &datapeer) {
+                                       return datapeer.peer == peer;
+                                     });
+        peerdata->timer_connection.disable();
+
+        if (st != rtppeer_t::CONNECTED)
+          return;
         connected_event(peer);
       });
 
@@ -367,6 +372,21 @@ void rtpserver_t::create_peer_from(io_bytes_reader &&buffer,
         //                  this->initiator_to_peer.erase(peer->initiator_id);
         // this->ssrc_to_peer.erase(peer->remote_ssrc);
       });
+
+  // And a timeout to remove the peer if it does not connect the midi port soon
+  peerdata.timer_connection =
+      poller.add_timer_event(std::chrono::seconds(5), [this, wpeer]() {
+        if (wpeer.expired())
+          return;
+        auto peer = wpeer.lock();
+        if (peer->status == rtppeer_t::status_e::CONTROL_CONNECTED) {
+          DEBUG("Timeout waiting for MIDI connection. Disconnecting.");
+          peer->disconnect();
+        }
+      });
+
+  // Finally pass the data to the peer
+  peer->data_ready(std::move(buffer), port);
 }
 
 void rtpserver_t::send_midi_to_all_peers(const io_bytes_reader &buffer) {

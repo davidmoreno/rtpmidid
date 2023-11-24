@@ -45,6 +45,7 @@ public:
     connection_t<const io_bytes_reader &> midi_event_connection;
     connection_t<rtpmidid::rtppeer_t::disconnect_reason_e>
         disconnect_event_connection;
+    poller_t::timer_t timer_connection;
   };
   std::vector<peer_data_t> peers;
 
