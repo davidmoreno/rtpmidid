@@ -47,6 +47,9 @@ local_alsa_waiter_t::local_alsa_waiter_t(const std::string &name_,
   unsubscribe_connection =
       aseq->unsubscribe_event[alsaport].connect([this](aseq_t::port_t from) {
         connection_count--;
+        DEBUG("rtpmidi remote {}: Unsubscribed from ALSA port: {}, connection "
+              "count: {}",
+              from, this->remote_name, from, connection_count);
         if (connection_count <= 0)
           disconnect_from_remote_server();
       });
@@ -71,7 +74,9 @@ void local_alsa_waiter_t::add_endpoint(const std::string &hostname,
   for (auto &endpoint : endpoints) {
     if (endpoint.hostname == hostname && endpoint.port == port) {
       exists = true;
-      WARNING("Endpoint already exists!");
+      WARNING("Endpoint {}:{} already exists. May happen if several network "
+              "interfaces. Ignoring.",
+              hostname, port);
       break;
     }
   }

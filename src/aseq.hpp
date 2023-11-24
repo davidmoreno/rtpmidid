@@ -141,3 +141,12 @@ template <> struct hash<rtpmididns::aseq_t::port_t> {
   }
 };
 } // namespace std
+
+template <>
+struct fmt::formatter<rtpmididns::aseq_t::port_t>
+    : formatter<std::string_view> {
+  auto format(rtpmididns::aseq_t::port_t c, format_context &ctx) {
+    auto name = fmt::format("port_t[{}, {}]", c.client, c.port);
+    return formatter<std::string_view>::format(name, ctx);
+  }
+};
