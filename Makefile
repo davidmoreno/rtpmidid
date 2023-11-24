@@ -56,7 +56,7 @@ clean:
 	rm -rf debian/librtpmidid0-dev
 
 VALGRINDFLAGS := --leak-check=full --error-exitcode=1
-RTPMIDID_ARGS := --port ${PORT} --name devel
+RTPMIDID_ARGS := --ini default.ini --port ${PORT} --name devel --control /tmp/rtpmidid.sock
 
 .PHONY: run run-valgrind gdb
 run: build-dev
