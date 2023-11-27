@@ -204,7 +204,6 @@ std::vector<std::string> get_ports(aseq_t *seq) {
 
   snd_seq_client_info_t *cinfo;
   snd_seq_port_info_t *pinfo;
-  int count;
 
   snd_seq_client_info_alloca(&cinfo);
   snd_seq_port_info_alloca(&pinfo);
@@ -212,10 +211,11 @@ std::vector<std::string> get_ports(aseq_t *seq) {
   // DEBUG("Looking for outputs");
 
   while (snd_seq_query_next_client(seq->seq, cinfo) >= 0) {
+    [[maybe_unused]] int count = 0;
+
     // DEBUG("Test if client {}", snd_seq_client_info_get_name(cinfo));
     snd_seq_port_info_set_client(pinfo, snd_seq_client_info_get_client(cinfo));
     snd_seq_port_info_set_port(pinfo, -1);
-    count = 0;
     while (snd_seq_query_next_port(seq->seq, pinfo) >= 0) {
       // DEBUG("Test if port {}:{}", snd_seq_client_info_get_name(cinfo),
       // snd_seq_port_info_get_name(pinfo));
@@ -392,7 +392,7 @@ uint8_t aseq_t::find_device(const std::string &name) {
 
 /// List all ports of a device
 uint8_t aseq_t::find_port(uint8_t device_id, const std::string &name) {
-  int retv;
+  int retv = 0;
   snd_seq_port_info_t *pinfo;
 
   int ret = snd_seq_port_info_malloc(&pinfo);

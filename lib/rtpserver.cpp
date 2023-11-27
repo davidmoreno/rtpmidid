@@ -375,7 +375,7 @@ void rtpserver_t::create_peer_from(io_bytes_reader &&buffer,
 
   // And a timeout to remove the peer if it does not connect the midi port soon
   peerdata.timer_connection =
-      poller.add_timer_event(std::chrono::seconds(5), [this, wpeer]() {
+      poller.add_timer_event(std::chrono::seconds(5), [wpeer]() {
         if (wpeer.expired())
           return;
         auto peer = wpeer.lock();

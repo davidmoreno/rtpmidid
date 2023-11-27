@@ -18,7 +18,6 @@
  */
 
 #pragma once
-#include <cstring>
 #include <exception>
 #include <fmt/core.h>
 #include <string>

@@ -21,7 +21,6 @@
 #include "exceptions.hpp"
 #include "signal.hpp"
 #include <arpa/inet.h>
-#include <functional>
 #include <string>
 
 namespace rtpmidid {
