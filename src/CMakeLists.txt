@@ -34,6 +34,10 @@ target_link_libraries(rtpmidid2-daemon ${ALSA_LIBRARIES})
 target_include_directories(rtpmidid2-daemon PUBLIC ${ALSA_INCLUDE_DIRS})
 target_compile_options(rtpmidid2-daemon PUBLIC ${ALSA_CFLAGS_OTHER})
 
+if(ENABLE_PCH)
+  target_precompile_headers(rtpmidid2-daemon PUBLIC precompile.hpp)
+endif()
+
 target_link_libraries(rtpmidid2-daemon rtpmidid-static)
 
 set_target_properties(rtpmidid2-daemon PROPERTIES OUTPUT_NAME rtpmidid)
