@@ -64,17 +64,17 @@ public:
     };
     connection_t(const connection_t &other) = delete;
     connection_t(connection_t &&other) {
-      aseq = aseq;
-      from = from;
-      to = to;
+      aseq = other.aseq;
+      from = other.from;
+      to = other.to;
       other.from = {0, 0};
       other.to = {0, 0};
     };
     connection_t &operator=(const connection_t &other) = delete;
     connection_t &operator=(connection_t &&other) {
-      aseq = aseq;
-      from = from;
-      to = to;
+      aseq = other.aseq;
+      from = other.from;
+      to = other.to;
       other.from = {0, 0};
       other.to = {0, 0};
       return *this;
