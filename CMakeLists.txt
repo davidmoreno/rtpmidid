@@ -1,12 +1,25 @@
 project(rtpmidid)
 cmake_minimum_required(VERSION 3.2)
-add_definitions("-std=gnu++17 -Wall -Werror -O0")
+add_definitions("-std=gnu++17 -Wall -Werror -O2")
 # set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fstack-protector-strong -fsanitize=address")
 # set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fstack-protector-strong")
 set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer")
 
+
+# Add option to enable/disable tests
+option(ENABLE_TESTS "Enable tests" ON)
+# option to enable precompiled headers
+option(ENABLE_PCH "Enable precompiled headers" ON)
+
+if (ENABLE_PCH)
+  # show a log message
+  message(STATUS "Precompiled headers enabled")
+else(ENABLE_PCH)
+  # show a log message
+  message(STATUS "Precompiled headers disabled")
+endif(ENABLE_PCH)
 
 include(FindPkgConfig)
 pkg_check_modules(AVAHI REQUIRED avahi-client)

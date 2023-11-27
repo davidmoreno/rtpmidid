@@ -4,7 +4,7 @@ PORT:=10000
 JOBS:=8
 
 # To easy change to clang, set CXX
-CMAKE_EXTRA_ARGS := -DCMAKE_CXX_COMPILER=${CXX}
+CMAKE_EXTRA_ARGS := -DCMAKE_CXX_COMPILER=${CXX} -GNinja  -DENABLE_PCH=OFF
 
 
 .PHONY: help
@@ -35,12 +35,14 @@ build: build/bin/rtpmidid
 build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 	mkdir -p build
 	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release  $(CMAKE_EXTRA_ARGS)
-	cd build && make -j$(JOBS)
+	# cd build && make -j$(JOBS)
+	cd build && ninja
 
 build-dev: 
 	mkdir -p build
 	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug $(CMAKE_EXTRA_ARGS)
-	cd build && make -j$(JOBS)
+	# cd build && make -j$(JOBS)
+	cd build && ninja
 
 
 man: 
