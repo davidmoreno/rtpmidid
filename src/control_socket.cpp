@@ -104,7 +104,7 @@ void rtpmididns::control_socket_t::connection_ready() {
         fd, [this](int fd) { this->data_ready(fd); });
     client.fd = fd;
     clients.push_back(std::move(client));
-    DEBUG("Added control connection: {}", fd);
+    // DEBUG("Added control connection: {}", fd);
   } else {
     ERROR("\"accept()\" failed, continuing...");
   }
@@ -114,7 +114,7 @@ void control_socket_t::data_ready(int fd) {
   char buf[1024];
   size_t l = recv(fd, buf, sizeof(buf), 0);
   if (l <= 0) {
-    DEBUG("Closed control connection: {}", fd);
+    // DEBUG("Closed control connection: {}", fd);
     auto I = std::find_if(clients.begin(), clients.end(),
                           [fd](auto &client) { return client.fd == fd; });
     I->listener.stop();
@@ -219,8 +219,8 @@ std::vector<control_socket_ns::command_t> commands{
                        "3 params (name,hostname,port) or a dict{name, "
                        "hostname, port}"};
 
-       control.router->add_peer(
-           make_local_alsa_waiter(control.router, name, hostname, port, control.aseq));
+       control.router->add_peer(make_local_alsa_waiter(
+           control.router, name, hostname, port, control.aseq));
        return json_t{"ok"};
      }},
     // REturn some help text
@@ -236,7 +236,7 @@ std::vector<control_socket_ns::command_t> commands{
 };
 
 std::string control_socket_t::parse_command(const std::string &command) {
-  DEBUG("Parse command {}", command);
+  // DEBUG("Parse command {}", command);
   auto js = json_t::parse(command);
 
   auto method = js["method"];
