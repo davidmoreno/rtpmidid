@@ -42,6 +42,11 @@ build-dev:
 	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug $(CMAKE_EXTRA_ARGS)
 	cd build && make -j$(JOBS)
 
+build-ninja:
+	mkdir -p build
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -G Ninja $(CMAKE_EXTRA_ARGS)
+	cd build && ninja
+	
 
 man: 
 	mkdir -p build/man/
