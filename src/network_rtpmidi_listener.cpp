@@ -55,7 +55,7 @@ void network_rtpmidi_listener_t::send_midi(midipeer_id_t from,
 }
 
 json_t network_rtpmidi_listener_t::status() {
-  std::vector<json_t> peers;
+  json_t peers = json_t::from_array({});
   for (auto &peer : server.peers) {
     auto &peerpeer = peer.peer;
     peers.push_back(peer_status(*peerpeer));
@@ -65,7 +65,7 @@ json_t network_rtpmidi_listener_t::status() {
       {"type", "network:rtpmidi:listener"}, //
       {"port", server.midi_port},
       {"peers", //
-       peers}
+       std::move(peers)}
       //
   };
 }

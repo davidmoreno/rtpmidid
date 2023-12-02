@@ -1,4 +1,4 @@
-#include "json_fwd.hpp"
+#include "json.hpp"
 #include "rtpmidid/rtppeer.hpp"
 
 namespace rtpmididns {

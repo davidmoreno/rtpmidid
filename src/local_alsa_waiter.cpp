@@ -136,7 +136,7 @@ json_t local_alsa_waiter_t::status() {
       //
       {"name", fmt::format("{} <-> {}", local_name, remote_name)},
       {"type", "local:alsa:waiter"},
-      {"endpoints", jendpoints},
+      {"endpoints", std::move(jendpoints)},
       {"connection_count", connection_count},
       //
   };

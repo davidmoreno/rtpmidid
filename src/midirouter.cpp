@@ -136,19 +136,23 @@ void midirouter_t::connect(peer_id_t from, peer_id_t to) {
 }
 
 json_t midirouter_t::status() {
-  std::vector<json_t> routerdata;
+  json_t routerdata = json_t::from_array({});
   for (auto peer : peers) {
     try {
       auto status = peer.second.peer->status();
-      status["id"] = peer.first;
-      status["send_to"] = peer.second.send_to;
-      status["stats"] = {
+      auto &statusobj = status.as_object();
+      statusobj["id"] = json_t::from_int(peer.first);
+      statusobj["send_to"] = json_t::from_array({});
+      for (auto &peer_id : peer.second.send_to) {
+        statusobj["send_to"].push_back(std::move(json_t::from_int(peer_id)));
+      }
+      statusobj["stats"] = {
           //
           {"recv", peer.second.peer->packets_recv},
           {"sent", peer.second.peer->packets_sent} //
       };
 
-      routerdata.push_back(status);
+      routerdata.push_back(std::move(status));
     } catch (const std::exception &exc) {
       routerdata.push_back(json_t{{"error", exc.what()}});
     }

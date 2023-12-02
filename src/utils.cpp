@@ -29,7 +29,7 @@ json_t peer_status(rtpmidid::rtppeer_t &peer) {
            {"sequence_number", peer.seq_nr},         //
            {"sequence_number_ack", peer.seq_nr_ack}, //
            {"name", peer.local_name},                //
-           {"ssrc", peer.local_ssrc},                //
+           {"ssrc", int64_t(peer.local_ssrc)},       //
        }},                                           //
       {
           "remote",
@@ -37,7 +37,7 @@ json_t peer_status(rtpmidid::rtppeer_t &peer) {
               //
               {"name", peer.remote_name},              //
               {"sequence_number", peer.remote_seq_nr}, //
-              {"ssrc", peer.remote_ssrc},              //
+              {"ssrc", int64_t(peer.remote_ssrc)},     //
               {"port", peer.remote_base_port},         //
               {"hostname", peer.remote_address},       //
           }                                            //

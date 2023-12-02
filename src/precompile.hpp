@@ -19,7 +19,6 @@
 
 #pragma once
 #include "json.hpp"
-#include "json_fwd.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "settings.hpp"

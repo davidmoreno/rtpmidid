@@ -15,21 +15,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#include "control_socket.hpp"
-#include "config.hpp"
-#include "factory.hpp"
-#include "settings.hpp"
-#include <algorithm>
-#include <functional>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 
+#include "config.hpp"
+#include "control_socket.hpp"
+#include "factory.hpp"
 #include "json.hpp"
 #include "midipeer.hpp"
 #include "rtpmidid/logger.hpp"
 #include "rtpmidid/poller.hpp"
+#include "settings.hpp"
 #include "stringpp.hpp"
 
 namespace rtpmididns {
@@ -152,7 +150,7 @@ struct command_t {
   std::function<json_t(rtpmididns::control_socket_t &, const json_t &)> func;
 };
 } // namespace control_socket_ns
-std::vector<control_socket_ns::command_t> commands{
+std::vector<control_socket_ns::command_t> commands({
     {"status", "Return status of the daemon",
      [](control_socket_t &control, const json_t &) {
        return json_t{
@@ -171,7 +169,7 @@ std::vector<control_socket_ns::command_t> commands{
      [](control_socket_t &control, const json_t &params) {
        DEBUG("Params {}", params.dump());
        peer_id_t peer_id;
-       peer_id = params[0];
+       peer_id = params[0].as_int();
        DEBUG("Remove peer_id {}", peer_id);
        control.router->remove_peer(peer_id);
        return "ok";
@@ -184,27 +182,27 @@ std::vector<control_socket_ns::command_t> commands{
        std::string name, hostname, port;
        bool error = false;
        if (params.is_array()) {
-         switch (params.size()) {
+         switch (params.as_object().size()) {
          case 1:
-           name = hostname = params[0];
+           name = hostname = params[0].as_string();
            port = "5004";
            break;
          case 2:
-           name = hostname = params[0];
-           port = params[1];
+           name = hostname = params[0].as_string();
+           port = params[1].as_string();
            break;
          case 3:
-           name = params[0];
-           hostname = params[1];
-           port = to_string(params[2]);
+           name = params[0].as_string();
+           hostname = params[1].as_string();
+           port = params[2].as_string();
            break;
          default:
            error = true;
          }
        } else if (params.is_object()) {
-         name = params["name"];
-         hostname = params["hostname"];
-         port = to_string(params["port"]);
+         name = params["name"].as_string();
+         hostname = params["hostname"].as_string();
+         port = params["port"].as_string();
 
          if (name.empty() || hostname.empty() || port.empty()) {
            error = true;
@@ -226,28 +224,31 @@ std::vector<control_socket_ns::command_t> commands{
     // REturn some help text
     {"help", "Return help text",
      [](control_socket_t &control, const json_t &) {
-       auto res = std::vector<json_t>{};
+       auto res = json_t::from_array({});
+       auto &reso = res.as_array();
        for (const auto &cmd : commands) {
-         res.push_back({{"name", cmd.name}, {"description", cmd.description}});
+         reso.push_back({{"name", cmd.name}, {"description", cmd.description}});
        }
        return res;
      }},
     //
-};
+});
 
 std::string control_socket_t::parse_command(const std::string &command) {
   // DEBUG("Parse command {}", command);
   auto js = json_t::parse(command);
 
-  auto method = js["method"];
+  auto method = js["method"].to_string();
   try {
     if (method == "list") {
-      auto res = std::vector<std::string>{};
+      auto res = json_t::from_array({});
+      auto &reso = res.as_array();
       for (const auto &cmd : commands) {
-        res.push_back(cmd.name);
+        reso.push_back(json_t(cmd.name));
       }
       json_t retdata = {
-          {"id", js["id"]}, {"result", res},
+          {"id", js["id"].dup()}, //
+          {"result", std::move(res)},
           //
       };
 
@@ -256,8 +257,8 @@ std::string control_socket_t::parse_command(const std::string &command) {
     for (const auto &cmd : commands) {
       if (cmd.name == method) {
         auto res = cmd.func(*this, js["params"]);
-        json_t retdata = {
-            {"id", js["id"]}, {"result", res},
+        json_t retdata = json_t{
+            {"id", js["id"].dup()}, {"result", std::move(res)},
             //
         };
 
@@ -265,14 +266,16 @@ std::string control_socket_t::parse_command(const std::string &command) {
       }
     }
     json_t retdata = {
-        {"id", js["id"]}, {"error", fmt::format("Unknown method '{}'", method)},
+        {"id", js["id"].dup()},
+        {"error", fmt::format("Unknown method '{}'", method)},
         //
     };
 
     return retdata.dump();
   } catch (const std::exception &e) {
-    json_t retdata = {{"id", js["id"]}, {"error", e.what()}};
+    json_t retdata = {{"id", js["id"].dup()}, {"error", e.what()}};
     return retdata.dump();
   }
 }
+
 } // namespace rtpmididns

@@ -72,6 +72,7 @@ add_executable(test_midirouter2
     ../src/midipeer.cpp
     ../src/rtpmidiremotehandler.cpp
     ../src/utils.cpp
+    ../src/json.cpp
     ../src/local_alsa_multi_listener.cpp
     ../src/local_alsa_waiter.cpp
     ../src/local_alsa_worker.cpp

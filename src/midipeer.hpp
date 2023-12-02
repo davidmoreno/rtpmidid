@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "json_fwd.hpp"
+#include "json.hpp"
 #include <cstdint>
 #include <memory>
 

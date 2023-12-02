@@ -12,6 +12,7 @@ add_executable(
   midipeer.cpp
   rtpmidiremotehandler.cpp
   utils.cpp
+  json.cpp
 
   local_alsa_multi_listener.cpp
   local_alsa_waiter.cpp

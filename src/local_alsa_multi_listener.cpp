@@ -20,17 +20,12 @@
 #include "aseq.hpp"
 #include "factory.hpp"
 #include "json.hpp"
-#include "local_alsa_worker.hpp"
 #include "mididata.hpp"
-#include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "network_rtpmidi_listener.hpp"
 #include "network_rtpmidi_server.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/logger.hpp"
-#include <alsa/seqmid.h>
-#include <memory>
-#include <utility>
 
 namespace rtpmididns {
 
@@ -162,14 +157,14 @@ json_t local_alsa_multi_listener_t::status() {
     connections.push_back({
         //
         {"alsa", fmt::format("{}:{}", port.client, port.port)},
-        {"local", to} //
+        {"local", int64_t(to)} //
     });
   }
 
   return json_t{
       {"type", "local:alsa:multi:listener"}, //
       {"name", name},                        //
-      {"connections", connections}
+      {"connections", std::move(connections)}
       //
   };
 }
