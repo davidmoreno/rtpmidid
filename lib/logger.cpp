@@ -59,7 +59,7 @@ logger::logger() { is_a_terminal = isatty(fileno(stdout)); }
 
 logger::~logger() {}
 void logger::log(const char *filename, int lineno, LogLevel loglevel,
-                 const std::string &msg) {
+                 const char *msg) {
   static char buffer[512];
   if (is_a_terminal) {
     time_t now = time(nullptr);

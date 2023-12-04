@@ -46,7 +46,8 @@ void error_handler(const char *file, int line, const char *function, int err,
   std::string filename = "alsa/";
   filename += file;
 
-  logger::__logger.log(filename.c_str(), line, ::logger::LogLevel::ERROR, msg);
+  logger::__logger.log(filename.c_str(), line, ::logger::LogLevel::ERROR,
+                       msg.c_str());
 }
 
 snd_seq_addr_t *get_other_ev_client_port(snd_seq_event_t *ev,
