@@ -7,7 +7,7 @@ add_definitions("-std=gnu++17 -Wall -Werror")
 # set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fstack-protector-strong")
 set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer")
 
-message(STATUS "Debug type ${CMAKE_BUILD_TYPE}")
+message(STATUS "Build type ${CMAKE_BUILD_TYPE}")
 
 # if debug build add -O0
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -49,4 +49,7 @@ message(STATUS "Version ${RTPMIDID_VERSION}")
 
 add_subdirectory(lib)
 add_subdirectory(src)
-add_subdirectory(tests)
+
+if (ENABLE_TESTS STREQUAL "ON")
+  add_subdirectory(tests)
+endif()

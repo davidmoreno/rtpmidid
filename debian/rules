@@ -17,7 +17,7 @@ export DH_VERBOSE = 1
 	dh $@
 
 override_dh_auto_build:
-	make build
+	make build-deb
 
 override_dh_auto_install:
 

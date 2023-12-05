@@ -35,19 +35,22 @@ build: build/bin/rtpmidid
 build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 	mkdir -p build
 	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release  $(CMAKE_EXTRA_ARGS)
-	# cd build && make -j$(JOBS)
 	cd build && ninja
 
 build-dev: 
 	mkdir -p build
 	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug $(CMAKE_EXTRA_ARGS)
-	# cd build && make -j$(JOBS)
 	cd build && ninja
 
-build-ninja:
+build-deb:
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -G Ninja $(CMAKE_EXTRA_ARGS)
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF $(CMAKE_EXTRA_ARGS)
 	cd build && ninja
+
+build-make:
+	mkdir -p build
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -G Makefile $(CMAKE_EXTRA_ARGS)
+	cd build && make -j$(JOBS)
 	
 
 man: 
