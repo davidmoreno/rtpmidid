@@ -305,6 +305,7 @@ void rtppeer_t::parse_command_ck(io_bytes_reader &buffer, port_e port) {
     INFO("Latency {}: {:.2f} ms (client / 2)", std::string_view(remote_name),
          latency / 10.0);
     ck_event(latency / 10.0);
+    stats.add_stat(std::chrono::nanoseconds((int)latency * 100));
   } break;
   case 2: {
     // Receive the other side CK, I can calculate latency
@@ -314,6 +315,7 @@ void rtppeer_t::parse_command_ck(io_bytes_reader &buffer, port_e port) {
     INFO("Latency {}: {:.2f} ms (server / 3)", std::string_view(remote_name),
          latency / 10.0);
     // No need to send message
+    stats.add_stat(std::chrono::nanoseconds((int)latency * 100));
     ck_event(latency / 10.0);
     return;
   }

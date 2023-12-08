@@ -20,6 +20,7 @@
 #pragma once
 #include "exceptions.hpp"
 #include "signal.hpp"
+#include "stats.hpp"
 #include <arpa/inet.h>
 #include <string>
 
@@ -85,6 +86,7 @@ public:
   uint8_t running_status;
   // Need some buffer space for sysex. This may require memory alloc.
   std::vector<uint8_t> sysex;
+  stats_t stats;
 
   // This is to be filled at connection by whoever makes it
   // It is not used by the rtppeer_t, just nice info to have

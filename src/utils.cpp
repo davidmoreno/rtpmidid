@@ -20,9 +20,20 @@ std::string to_string(const rtpmidid::rtppeer_t::status_e status) {
 
 namespace rtpmididns {
 json_t peer_status(rtpmidid::rtppeer_t &peer) {
+  auto stats = peer.stats.average_and_stddev();
+  auto now = std::chrono::system_clock::now();
+  peer.stats.loop_stats([&](rtpmidid::stats_t::stat_t const &stat) {
+    DEBUG("stat {}us, {}s ago", stat.latency.count(),
+          (now - stat.timestamp).count() / 1000000000.0);
+  });
   return json_t{
       //
-      {"latency_ms", peer.latency / 10.0},
+      {"latency_ms",
+       {
+           {"last", peer.latency / 10.0},
+           {"averave", stats.average.count() / 1000.0},
+           {"stddev", stats.stddev.count() / 1000.0},
+       }},
       {"status", std::to_string(peer.status)},
       {"local",
        {
