@@ -22,6 +22,7 @@
 #include <chrono>
 #include <functional>
 #include <math.h>
+#include <vector>
 
 namespace rtpmidid {
 /**
@@ -39,6 +40,10 @@ public:
     std::chrono::nanoseconds latency;
     std::chrono::system_clock::time_point timestamp;
   };
+  struct average_and_stddev_t {
+    std::chrono::nanoseconds average;
+    std::chrono::nanoseconds stddev;
+  };
 
 private:
   // Use it as a circular buffer,only overwrite when full
@@ -49,59 +54,10 @@ private:
 
 public:
   stats_t(int size = 20,
-          std::chrono::seconds item_time_ = std::chrono::seconds(120))
-      : item_time(item_time_) {
-    stats.resize(size);
-  }
+          std::chrono::seconds item_time_ = std::chrono::seconds(120));
 
-  void add_stat(std::chrono::nanoseconds latency) {
-    stats[index].latency = latency;
-    stats[index].timestamp = std::chrono::system_clock::now();
-    DEBUG("Added stats {}us", latency.count());
-    index = (index + 1) % stats.size();
-  }
-
-  void loop_stats(std::function<void(stat_t const &)> const &f) {
-    auto now = std::chrono::system_clock::now();
-    for (auto &stat : stats) {
-      if (now - stat.timestamp > item_time) {
-        break;
-      }
-      f(stat);
-    }
-  }
-
-  struct average_and_stddev_t {
-    std::chrono::nanoseconds average;
-    std::chrono::nanoseconds stddev;
-  };
-
-  average_and_stddev_t average_and_stddev() {
-    double sum = 0;
-    int count = 0;
-    loop_stats([&](stat_t const &stat) {
-      sum += stat.latency.count();
-      count++;
-    });
-    if (count == 0) {
-      return average_and_stddev_t{
-          std::chrono::nanoseconds(0),
-          std::chrono::nanoseconds(0),
-      };
-    }
-    auto average = sum / count;
-    sum = 0;
-    loop_stats([&](stat_t const &stat) {
-      auto mean = stat.latency.count();
-      auto delta = mean - average;
-      sum += delta * delta;
-    });
-    auto stddev = sqrt(sum / count);
-
-    return average_and_stddev_t{
-        std::chrono::nanoseconds((int)average),
-        std::chrono::nanoseconds((int)stddev),
-    };
-  }
+  void add_stat(std::chrono::nanoseconds latency);
+  void loop_stats(std::function<void(stat_t const &)> const &f) const;
+  average_and_stddev_t average_and_stddev() const;
 };
 } // namespace rtpmidid

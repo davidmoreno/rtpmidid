@@ -11,7 +11,7 @@ add_library(
   STATIC
   rtppeer.cpp rtpclient.cpp rtpserver.cpp
   mdns_rtpmidi.cpp logger.cpp poller.cpp
-  utils.cpp
+  utils.cpp stats.cpp
 )
 
 
@@ -36,7 +36,7 @@ add_library(
   SHARED
   rtppeer.cpp rtpclient.cpp rtpserver.cpp
   mdns_rtpmidi.cpp logger.cpp poller.cpp
-  utils.cpp
+  utils.cpp stats.cpp
 )
 
 target_link_libraries(rtpmidid-shared ${AVAHI_LIBRARIES})
