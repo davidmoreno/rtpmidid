@@ -365,7 +365,7 @@ void rtppeer_t::send_ck0() {
   response.write_uint64(ck2);
   response.write_uint64(ck3);
 
-  DEBUG("Send CK0 to {}", std::string_view(remote_name));
+  // DEBUG("Send CK0 to {}", std::string_view(remote_name));
 
   // DEBUG("Got packet CK");
   // buffer.print_hex(true);

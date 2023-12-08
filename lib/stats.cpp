@@ -22,9 +22,7 @@
 namespace rtpmidid {
 
 stats_t::stats_t(int size, std::chrono::seconds item_time_)
-    : item_time(item_time_) {
-  stats.resize(size);
-}
+    : stats(size), item_time(item_time_) {}
 
 void stats_t::add_stat(std::chrono::nanoseconds latency) {
   stats[index].latency = latency;
@@ -64,6 +62,8 @@ stats_t::average_and_stddev_t stats_t::average_and_stddev() const {
     sum += delta * delta;
   });
   auto stddev = sqrt(sum / count);
+
+  DEBUG("Average {}us stddev {}us, {} measurements", average, stddev, count);
 
   return stats_t::average_and_stddev_t{
       std::chrono::nanoseconds((int)average),
