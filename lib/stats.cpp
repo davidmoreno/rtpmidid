@@ -35,7 +35,7 @@ void stats_t::loop_stats(std::function<void(stat_t const &)> const &f) const {
   auto now = std::chrono::system_clock::now();
   for (auto &stat : stats) {
     if (now - stat.timestamp > item_time) {
-      break;
+      continue; // Skip
     }
     f(stat);
   }
@@ -49,6 +49,7 @@ stats_t::average_and_stddev_t stats_t::average_and_stddev() const {
     count++;
   });
   if (count == 0) {
+    DEBUG("{} measurements", count);
     return stats_t::average_and_stddev_t{
         std::chrono::nanoseconds(0),
         std::chrono::nanoseconds(0),
