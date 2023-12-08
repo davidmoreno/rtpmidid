@@ -26,7 +26,7 @@ json_t peer_status(rtpmidid::rtppeer_t &peer) {
       {"latency_ms",
        {
            {"last", peer.latency / 10.0},
-           {"averave", stats.average.count() / 1000.0},
+           {"average", stats.average.count() / 1000.0},
            {"stddev", stats.stddev.count() / 1000.0},
        }},
       {"status", std::to_string(peer.status)},
