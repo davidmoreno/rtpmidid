@@ -42,7 +42,7 @@ const char *color(const char *str, Color color, bool highlight = false) {
   static char buffer[256];
   auto n = fmt::format_to_n(buffer, sizeof(buffer), "\033[{};{}m{}\033[0m", hl,
                             (int)color, str);
-  buffer[n.size] = 0;
+  *n.out = '\0';
   return buffer;
 }
 const char *color(const char *str, Color color, Color bgcolor,
@@ -51,7 +51,7 @@ const char *color(const char *str, Color color, Color bgcolor,
   static char buffer[256];
   auto n = fmt::format_to_n(buffer, sizeof(buffer), "\033[{};{};{}m{}\033[0m",
                             hl, (int)color, (int)bgcolor, str);
-  buffer[n.size] = 0;
+  *n.out = '\0';
   return buffer;
 }
 
@@ -87,14 +87,16 @@ void logger::log(const char *filename, int lineno, LogLevel loglevel,
 
     auto n = fmt::format_to_n(buffer, sizeof(buffer), "[{}] [{}:{}]", timestamp,
                               filename, lineno);
-    buffer[n.size] = 0;
+    *n.out = '\0';
     n = fmt::format_to_n(buffer, sizeof(buffer), "{} {}\n",
                          color(buffer, my_color),
                          msg); // color("msg"), RED);
-    buffer[n.size] = 0;
+    *n.out = '\0';
   } else {
-    fmt::format_to_n(buffer, sizeof(buffer), " sizeof(buffer),[{}:{}] {}\n",
-                     filename, lineno, msg);
+    auto n =
+        fmt::format_to_n(buffer, sizeof(buffer), " sizeof(buffer),[{}:{}] {}\n",
+                         filename, lineno, msg);
+    *n.out = '\0';
   }
   ::fprintf(stderr, "%s", buffer);
 }

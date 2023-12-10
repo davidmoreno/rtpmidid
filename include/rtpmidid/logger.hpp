@@ -104,7 +104,7 @@ inline void log(const char *fullpath, int lineno, LogLevel loglevel,
   ++filename;
 
   auto n = fmt::format_to_n(buffer, sizeof(buffer), args...);
-  buffer[n.size] = 0;
+  *n.out = '\0';
 
   __logger.log(filename, lineno, loglevel, buffer);
 }
