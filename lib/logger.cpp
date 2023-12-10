@@ -93,9 +93,8 @@ void logger::log(const char *filename, int lineno, LogLevel loglevel,
                          msg); // color("msg"), RED);
     *n.out = '\0';
   } else {
-    auto n =
-        fmt::format_to_n(buffer, sizeof(buffer), " sizeof(buffer),[{}:{}] {}\n",
-                         filename, lineno, msg);
+    auto n = fmt::format_to_n(buffer, sizeof(buffer), " [{}:{}] {}\n", filename,
+                              lineno, msg);
     *n.out = '\0';
   }
   ::fprintf(stderr, "%s", buffer);
