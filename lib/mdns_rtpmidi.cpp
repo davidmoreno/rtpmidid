@@ -45,6 +45,10 @@ struct AvahiEntryGroup {
   char *name;
 };
 
+// FIXME! Hack needed as at poller_adapter_watch_new I'm getting the wrong
+// userdata pointer :(
+rtpmidid::mdns_rtpmidi_t *current = nullptr;
+
 template <> struct fmt::formatter<AvahiWatchEvent> : fmt::formatter<int> {
   auto format(AvahiWatchEvent ev, fmt::format_context &ctx) {
     return fmt::formatter<int>::format((int)ev, ctx);
@@ -58,7 +62,7 @@ template <> struct fmt::formatter<AvahiBrowserEvent> : fmt::formatter<int> {
 
 static void entry_group_callback(AvahiEntryGroup *g, AvahiEntryGroupState state,
                                  AVAHI_GCC_UNUSED void *userdata) {
-  rtpmidid::mdns_rtpmidi *mr = (rtpmidid::mdns_rtpmidi *)userdata;
+  rtpmidid::mdns_rtpmidi_t *mr = (rtpmidid::mdns_rtpmidi_t *)userdata;
   mr->group = g;
 
   /* Called whenever the entry group state changes */
@@ -96,21 +100,27 @@ AvahiWatch *poller_adapter_watch_new(const AvahiPoll *api, int fd,
                                      AvahiWatchEvent event,
                                      AvahiWatchCallback callback,
                                      void *userdata) {
-  DEBUG("watch_new {} {}", fd, event);
+  // DEBUG("watch_new {} {}", fd, event);
   AvahiWatch *wd = new AvahiWatch;
   wd->fd = fd;
   wd->userdata = userdata;
   wd->callback = callback;
+  rtpmidid::mdns_rtpmidi_t *mdns_rtpmidid = current;
+  // static_cast<rtpmidid::mdns_rtpmidi_t *>(userdata);
+  // DEBUG("mdns {}", (void *)userdata);
+  // DEBUG("mdns {}", (void *)mdns_rtpmidid);
 
   wd->event = event;
   if (event == AVAHI_WATCH_IN) {
-    rtpmidid::poller.add_fd_in(fd, [wd](int _) {
-      wd->callback(wd, wd->fd, AVAHI_WATCH_IN, wd->userdata);
-    });
+    mdns_rtpmidid->watch_in_poller =
+        rtpmidid::poller.add_fd_in(fd, [wd](int _) {
+          wd->callback(wd, wd->fd, AVAHI_WATCH_IN, wd->userdata);
+        });
   } else if (event == AVAHI_WATCH_OUT) {
-    rtpmidid::poller.add_fd_in(fd, [wd](int _) {
-      wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
-    });
+    mdns_rtpmidid->watch_out_poller =
+        rtpmidid::poller.add_fd_in(fd, [wd](int _) {
+          wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
+        });
   } else {
     DEBUG("Other event: {}", event);
   }
@@ -120,17 +130,22 @@ AvahiWatch *poller_adapter_watch_new(const AvahiPoll *api, int fd,
 
 /// Update the events to wait for. More...
 void poller_adapter_watch_update(AvahiWatch *wd, AvahiWatchEvent event) {
-  rtpmidid::poller.remove_fd(wd->fd);
+  // rtpmidid::poller.remove_fd(wd->fd);
+  rtpmidid::mdns_rtpmidi_t *mdns_rtpmidid = current;
+  // rtpmidid::mdns_rtpmidi_t *mdns_rtpmidid =
+  //     static_cast<rtpmidid::mdns_rtpmidi_t *>(wd->userdata);
 
   wd->event = event;
   if (event == AVAHI_WATCH_IN) {
-    rtpmidid::poller.add_fd_in(wd->fd, [wd](int _) {
-      wd->callback(wd, wd->fd, AVAHI_WATCH_IN, wd->userdata);
-    });
+    mdns_rtpmidid->watch_in_poller =
+        rtpmidid::poller.add_fd_in(wd->fd, [wd](int _) {
+          wd->callback(wd, wd->fd, AVAHI_WATCH_IN, wd->userdata);
+        });
   } else if (event == AVAHI_WATCH_OUT) {
-    rtpmidid::poller.add_fd_in(wd->fd, [wd](int _) {
-      wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
-    });
+    mdns_rtpmidid->watch_out_poller =
+        rtpmidid::poller.add_fd_in(wd->fd, [wd](int _) {
+          wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
+        });
   } else {
     DEBUG("Other event: {}", event);
   }
@@ -143,7 +158,12 @@ AvahiWatchEvent poller_adapter_watch_get_events(AvahiWatch *w) {
 
 /// Free a watch. More...
 void poller_adapter_watch_free(AvahiWatch *w) {
-  rtpmidid::poller.remove_fd(w->fd);
+  // rtpmidid::poller.remove_fd(w->fd);
+  // WARNING("TODO! If its only at program end, no problem.");
+  if (current) {
+    current->watch_in_poller.stop();
+    current->watch_out_poller.stop();
+  }
   delete w;
 }
 
@@ -168,7 +188,6 @@ AvahiTimeout *poller_adapter_timeout_new(const AvahiPoll *api,
 /// timeout is disabled. More...
 void poller_adapter_timeout_update(AvahiTimeout *to, const struct timeval *tv) {
   rtpmidid::poller.remove_timer(to->timer_id);
-  to->timer_id = 0;
   if (tv) {
     to->timer_id = rtpmidid::poller.add_timer_event(
         std::chrono::seconds(tv->tv_sec),
@@ -184,7 +203,7 @@ void poller_adapter_timeout_free(AvahiTimeout *to) {
 
 static void client_callback(AvahiClient *c, AvahiClientState state,
                             void *userdata) {
-  rtpmidid::mdns_rtpmidi *mr = (rtpmidid::mdns_rtpmidi *)userdata;
+  rtpmidid::mdns_rtpmidi_t *mr = (rtpmidid::mdns_rtpmidi_t *)userdata;
   mr->client = c;
 
   /* Called whenever the client or server state changes */
@@ -224,7 +243,7 @@ static void resolve_callback(AvahiServiceResolver *r, AvahiIfIndex interface,
                              AvahiLookupResultFlags flags,
                              AVAHI_GCC_UNUSED void *userdata) {
 
-  rtpmidid::mdns_rtpmidi *mr = (rtpmidid::mdns_rtpmidi *)userdata;
+  rtpmidid::mdns_rtpmidi_t *mr = (rtpmidid::mdns_rtpmidi_t *)userdata;
 
   assert(r);
   /* Called whenever a service has been resolved successfully or timed out */
@@ -235,17 +254,19 @@ static void resolve_callback(AvahiServiceResolver *r, AvahiIfIndex interface,
           name, type, domain,
           avahi_strerror(
               avahi_client_errno(avahi_service_resolver_get_client(r))));
-    mr->remove_event(name);
+    mr->remove_event(name, std::to_string(host_name || ""),
+                     std::to_string(port));
     break;
   case AVAHI_RESOLVER_FOUND: {
     if (!!(flags & AVAHI_LOOKUP_RESULT_OUR_OWN)) {
       // DEBUG("Received own announcement");
       return;
     }
-    char a[AVAHI_ADDRESS_STR_MAX];
-    avahi_address_snprint(a, sizeof(a), address);
+    char avahi_address_str[AVAHI_ADDRESS_STR_MAX];
+    avahi_address_snprint(avahi_address_str, sizeof(avahi_address_str),
+                          address);
     DEBUG("Discovered service '{:<32}' in host ({}:{} ({}))", name, host_name,
-          port, a);
+          port, avahi_address_str);
     // char *t = avahi_string_list_to_string(txt);
     // DEBUG("\t{}:{} ({})\n"
     //       "\tinterface={}\n"
@@ -267,7 +288,7 @@ static void resolve_callback(AvahiServiceResolver *r, AvahiIfIndex interface,
 
     // FIXME: address is not correct for interface (!), so is not unique, how to
     // make unique? or filter on interface?
-    mr->discover_event(name, a, std::to_string(port));
+    mr->discover_event(name, avahi_address_str, std::to_string(port));
   }
   }
   avahi_service_resolver_free(r);
@@ -280,7 +301,7 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface,
                             AVAHI_GCC_UNUSED AvahiLookupResultFlags flags,
                             void *userdata) {
 
-  rtpmidid::mdns_rtpmidi *mr = (rtpmidid::mdns_rtpmidi *)userdata;
+  rtpmidid::mdns_rtpmidi_t *mr = (rtpmidid::mdns_rtpmidi_t *)userdata;
 
   switch (event) {
   case AVAHI_BROWSER_FAILURE:
@@ -304,7 +325,7 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface,
   case AVAHI_BROWSER_REMOVE:
     INFO("(Browser) REMOVE: service '{}' of type '{}' in domain '{}'", name,
          type, domain);
-    mr->remove_event(name);
+    mr->remove_event(name, "*", "*");
     break;
   case AVAHI_BROWSER_ALL_FOR_NOW:
   case AVAHI_BROWSER_CACHE_EXHAUSTED:
@@ -317,7 +338,9 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface,
   }
 }
 
-rtpmidid::mdns_rtpmidi::mdns_rtpmidi() {
+rtpmidid::mdns_rtpmidi_t::mdns_rtpmidi_t() {
+  current = this;
+
   group = nullptr;
   poller_adapter = std::make_unique<AvahiPoll>();
   poller_adapter->watch_new = poller_adapter_watch_new;
@@ -329,6 +352,7 @@ rtpmidid::mdns_rtpmidi::mdns_rtpmidi() {
   poller_adapter->timeout_free = poller_adapter_timeout_free;
 
   int error;
+  DEBUG("mdns {}", (void *)this);
   client = avahi_client_new(poller_adapter.get(), (AvahiClientFlags)0,
                             client_callback, this, &error);
   if (!client) {
@@ -340,7 +364,7 @@ rtpmidid::mdns_rtpmidi::mdns_rtpmidi() {
 }
 
 /// Asks the network mdns for entries.
-void rtpmidid::mdns_rtpmidi::setup_mdns_browser() {
+void rtpmidid::mdns_rtpmidi_t::setup_mdns_browser() {
   if (service_browser)
     avahi_service_browser_free(service_browser);
   service_browser = avahi_service_browser_new(
@@ -353,9 +377,12 @@ void rtpmidid::mdns_rtpmidi::setup_mdns_browser() {
   }
 }
 
-rtpmidid::mdns_rtpmidi::~mdns_rtpmidi() { avahi_client_free(client); }
+rtpmidid::mdns_rtpmidi_t::~mdns_rtpmidi_t() {
+  current = nullptr;
+  avahi_client_free(client);
+}
 
-void rtpmidid::mdns_rtpmidi::announce_all() {
+void rtpmidid::mdns_rtpmidi_t::announce_all() {
   if (!group) {
     if (!(group = avahi_entry_group_new(client, entry_group_callback, this))) {
       ERROR("avahi_entry_group_new() failed: {}",
@@ -391,16 +418,16 @@ collision:
 fail:;
 }
 
-void rtpmidid::mdns_rtpmidi::announce_rtpmidi(const std::string &name,
-                                              const int32_t port) {
+void rtpmidid::mdns_rtpmidi_t::announce_rtpmidi(const std::string &name,
+                                                const int32_t port) {
   DEBUG("Announce {}", name);
   announcements.push_back({name, port});
 
   announce_all();
 }
 
-void rtpmidid::mdns_rtpmidi::unannounce_rtpmidi(const std::string &name,
-                                                const int32_t port) {
+void rtpmidid::mdns_rtpmidi_t::unannounce_rtpmidi(const std::string &name,
+                                                  const int32_t port) {
   DEBUG("Unannounce {}", name);
   announcements.erase(std::remove_if(announcements.begin(), announcements.end(),
                                      [port](const announcement_t &t) {

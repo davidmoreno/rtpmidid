@@ -17,6 +17,8 @@
  */
 #include "./aseq.hpp"
 #include <alsa/seq.h>
+#include <alsa/seq_event.h>
+#include <alsa/seq_midi_event.h>
 #include <fmt/format.h>
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/logger.hpp>
@@ -24,7 +26,7 @@
 #include <rtpmidid/rtpclient.hpp>
 #include <stdio.h>
 
-namespace rtpmidid {
+namespace rtpmididns {
 void error_handler(const char *file, int line, const char *function, int err,
                    const char *fmt, ...) {
   va_list arg;
@@ -44,10 +46,28 @@ void error_handler(const char *file, int line, const char *function, int err,
   std::string filename = "alsa/";
   filename += file;
 
-  logger::__logger.log(filename.c_str(), line, ::logger::LogLevel::ERROR, msg);
+  logger::__logger.log(filename.c_str(), line, ::logger::LogLevel::ERROR,
+                       msg.c_str());
 }
 
-aseq::aseq(std::string _name) : name(std::move(_name)) {
+snd_seq_addr_t *get_other_ev_client_port(snd_seq_event_t *ev,
+                                         uint8_t client_id) {
+  auto &connect = ev->data.connect;
+  if (connect.sender.client != client_id) {
+    return &connect.sender;
+  } else {
+    return &connect.dest;
+  }
+}
+snd_seq_addr_t *get_my_ev_client_port(snd_seq_event_t *ev, uint8_t client_id) {
+  auto &connect = ev->data.connect;
+  if (connect.sender.client == client_id) {
+    return &connect.sender;
+  } else {
+    return &connect.dest;
+  }
+}
+aseq_t::aseq_t(std::string _name) : name(std::move(_name)) {
   snd_lib_error_set_handler(error_handler);
   if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0) {
     throw rtpmidid::exception(
@@ -67,30 +87,31 @@ aseq::aseq(std::string _name) : name(std::move(_name)) {
   auto poller_count_check =
       snd_seq_poll_descriptors(seq, pfds.get(), poller_count, POLLIN);
   if (poller_count != poller_count_check) {
-    throw exception("ALSA seq poller count does not match. {} != {}",
-                    poller_count, poller_count_check);
+    throw rtpmidid::exception("ALSA seq poller count does not match. {} != {}",
+                              poller_count, poller_count_check);
   }
   // DEBUG("Got {} pollers", poller_count);
   for (int i = 0; i < poller_count; i++) {
-    fds.push_back(pfds[i].fd);
+    // fds.push_back(pfds[i].fd);
     // DEBUG("Adding fd {} as alsa seq", pfds[i].fd);
-    poller.add_fd_in(pfds[i].fd, [this](int) {
-      // INFO("New event at alsa seq");
-      this->read_ready();
-    });
+    aseq_listener.emplace_back(
+        rtpmidid::poller.add_fd_in(pfds[i].fd, [this](int) {
+          // INFO("New event at alsa seq");
+          this->read_ready();
+        }));
   }
   read_ready();
 }
 
-aseq::~aseq() {
-  for (auto fd : fds) {
-    try {
-       poller.remove_fd(fd);
-    }
-    catch(rtpmidid::exception & e) {
-      ERROR("Error removing aseq socket: {}", e.what());
-    }
-  }
+aseq_t::~aseq_t() {
+  // for (auto fd : fds) {
+  //   try {
+  //     poller.remove_fd(fd);
+  //   } catch (rtpmidid::exception &e) {
+  //     ERROR("Error removing aseq socket: {}", e.what());
+  //   }
+  // }
+  aseq_listener.clear();
   snd_seq_close(seq);
   snd_config_update_free_global();
 }
@@ -102,7 +123,7 @@ aseq::~aseq() {
  *                      groups that go to the same port. This will save some
  *                      bandwidth.
  */
-void aseq::read_ready() {
+void aseq_t::read_ready() {
   snd_seq_event_t *ev;
   int pending;
   while ((pending = snd_seq_event_input(seq, &ev)) > 0) {
@@ -114,25 +135,23 @@ void aseq::read_ready() {
       // auto client = std::make_shared<rtpmidid::rtpclient>(name);
       uint8_t client, port;
       std::string name;
-      snd_seq_addr_t *addr;
-      if (ev->data.connect.sender.client != client_id) {
-        addr = &ev->data.connect.sender;
-      } else {
-        addr = &ev->data.connect.dest;
-      }
+      snd_seq_addr_t *other_addr = get_other_ev_client_port(ev, client_id);
+      snd_seq_addr_t *my_addr = get_my_ev_client_port(ev, client_id);
 
-      name = get_client_name(addr);
-      client = addr->client;
-      port = addr->port;
-      auto myport = ev->dest.port;
+      name = get_client_name(other_addr);
+      client = other_addr->client;
+      port = other_addr->port;
+      auto myport = my_addr->port;
       INFO("New ALSA connection from port {} ({}:{})", name, client, port);
 
       subscribe_event[myport](port_t(client, port), name);
     } break;
     case SND_SEQ_EVENT_PORT_UNSUBSCRIBED: {
-      auto addr = &ev->data.addr;
-      auto myport = ev->dest.port;
-      unsubscribe_event[myport](port_t(addr->client, addr->port));
+      snd_seq_addr_t *other_addr = get_other_ev_client_port(ev, client_id);
+      snd_seq_addr_t *my_addr = get_my_ev_client_port(ev, client_id);
+
+      unsubscribe_event[my_addr->port](
+          port_t(other_addr->client, other_addr->port));
       DEBUG("Disconnected");
     } break;
     // case SND_SEQ_EVENT_NOTE:
@@ -166,7 +185,7 @@ void aseq::read_ready() {
   }
 }
 
-uint8_t aseq::create_port(const std::string &name) {
+uint8_t aseq_t::create_port(const std::string &name) {
   auto caps = SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE |
               SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ;
   auto type = SND_SEQ_TYPE_INET;
@@ -176,17 +195,16 @@ uint8_t aseq::create_port(const std::string &name) {
   return port;
 }
 
-void aseq::remove_port(uint8_t port) {
+void aseq_t::remove_port(uint8_t port) {
   snd_seq_delete_port(seq, port);
   midi_event.erase(port);
 }
 
-std::vector<std::string> get_ports(aseq *seq) {
+std::vector<std::string> get_ports(aseq_t *seq) {
   std::vector<std::string> ret;
 
   snd_seq_client_info_t *cinfo;
   snd_seq_port_info_t *pinfo;
-  int count;
 
   snd_seq_client_info_alloca(&cinfo);
   snd_seq_port_info_alloca(&pinfo);
@@ -194,10 +212,11 @@ std::vector<std::string> get_ports(aseq *seq) {
   // DEBUG("Looking for outputs");
 
   while (snd_seq_query_next_client(seq->seq, cinfo) >= 0) {
+    [[maybe_unused]] int count = 0;
+
     // DEBUG("Test if client {}", snd_seq_client_info_get_name(cinfo));
     snd_seq_port_info_set_client(pinfo, snd_seq_client_info_get_client(cinfo));
     snd_seq_port_info_set_port(pinfo, -1);
-    count = 0;
     while (snd_seq_query_next_port(seq->seq, pinfo) >= 0) {
       // DEBUG("Test if port {}:{}", snd_seq_client_info_get_name(cinfo),
       // snd_seq_port_info_get_name(pinfo));
@@ -214,7 +233,7 @@ std::vector<std::string> get_ports(aseq *seq) {
   return ret;
 }
 
-std::string aseq::get_client_name(snd_seq_addr_t *addr) {
+std::string aseq_t::get_client_name(snd_seq_addr_t *addr) {
   snd_seq_client_info_t *client_info = nullptr;
   snd_seq_client_info_malloc(&client_info);
   snd_seq_get_any_client_info(seq, addr->client, client_info);
@@ -270,7 +289,7 @@ static void disconnect_port_at_subs(snd_seq_t *seq,
   }
 }
 
-void aseq::disconnect_port(uint8_t port) {
+void aseq_t::disconnect_port(uint8_t port) {
   DEBUG("Disconnect alsa port {}", port);
   snd_seq_query_subscribe_t *subs;
   snd_seq_port_info_t *portinfo;
@@ -285,4 +304,167 @@ void aseq::disconnect_port(uint8_t port) {
 
   disconnect_port_at_subs(seq, subs, port);
 }
-} // namespace rtpmidid
+
+aseq_t::connection_t aseq_t::connect(const port_t &from, const port_t &to) {
+  DEBUG("Connect alsa ports {} -> {}", from.to_string(), to.to_string());
+
+  if (from.client == client_id) {
+    int res = snd_seq_connect_to(seq, from.port, to.client, to.port);
+    if (res == -16) {
+      WARNING("ALSA seq error 16: {} -> {}. Already connected?",
+              from.to_string(), to.to_string());
+      return aseq_t::connection_t(shared_from_this(), from, to);
+    }
+    if (res < 0) {
+      throw rtpmidid::exception("Failed connection: {} -> {}: {} ({})",
+                                from.to_string(), to.to_string(),
+                                snd_strerror(res), res);
+    }
+  } else if (to.client == client_id) {
+    int res = snd_seq_connect_from(seq, to.port, from.client, from.port);
+    if (res == -16) {
+      WARNING("ALSA seq error 16: {} -> {}. Already connected?",
+              from.to_string(), to.to_string());
+      return aseq_t::connection_t(shared_from_this(), from, to);
+    }
+    if (res < 0) {
+      throw rtpmidid::exception("Failed connection: {} -> {}: {} ({})",
+                                from.to_string(), to.to_string(),
+                                snd_strerror(res), res);
+    }
+  } else {
+    ERROR("Can not connect ports I'm not part of.");
+    throw rtpmidid::exception("Can not connect ports I'm not part of.");
+  }
+  return aseq_t::connection_t(shared_from_this(), from, to);
+}
+
+void aseq_t::disconnect(const port_t &from, const port_t &to) {
+  DEBUG("Disconnect alsa ports {} -> {}", from.to_string(), to.to_string());
+
+  if (from.client == client_id) {
+    int res = snd_seq_disconnect_to(seq, from.port, to.client, to.port);
+    if (res < 0) {
+      throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
+                                from.to_string(), to.to_string(),
+                                snd_strerror(res), res);
+    }
+  } else if (to.client == client_id) {
+    int res = snd_seq_disconnect_from(seq, to.port, from.client, from.port);
+    if (res < 0) {
+      throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
+                                from.to_string(), to.to_string(),
+                                snd_strerror(res), res);
+    }
+  } else {
+    ERROR("Can not disconnect ports I'm not part of.");
+    throw rtpmidid::exception("Can not disconnect ports I'm not part of.");
+  }
+}
+
+/// List all devices
+uint8_t aseq_t::find_device(const std::string &name) {
+  snd_seq_client_info_t *cinfo;
+  int retv = -1;
+
+  int ret = snd_seq_client_info_malloc(&cinfo);
+  if (ret != 0)
+    throw rtpmidid::exception("Error allocating memory for alsa clients");
+
+  snd_seq_client_info_set_client(cinfo, -1);
+  while (snd_seq_query_next_client(seq, cinfo) >= 0) {
+    int cid = snd_seq_client_info_get_client(cinfo);
+    if (cid < 0) {
+      throw rtpmidid::exception("Error getting client info");
+    }
+    const char *cname = snd_seq_client_info_get_name(cinfo);
+    if (cname == name) {
+      retv = cid;
+    }
+  }
+  snd_seq_client_info_free(cinfo);
+
+  if (retv < 0) {
+    throw rtpmidid::exception("Device not found");
+  }
+
+  return retv;
+}
+
+/// List all ports of a device
+uint8_t aseq_t::find_port(uint8_t device_id, const std::string &name) {
+  int retv = 0;
+  snd_seq_port_info_t *pinfo;
+
+  int ret = snd_seq_port_info_malloc(&pinfo);
+  if (ret != 0)
+    throw rtpmidid::exception("Error allocating memory for alsa ports");
+
+  snd_seq_port_info_set_client(pinfo, device_id);
+
+  snd_seq_port_info_set_port(pinfo, -1);
+  while (snd_seq_query_next_port(seq, pinfo) >= 0) {
+    int pid = snd_seq_port_info_get_port(pinfo);
+    if (pid < 0) {
+      throw rtpmidid::exception("Error getting client info");
+    }
+    const char *pname = snd_seq_port_info_get_name(pinfo);
+
+    if (pname == name) {
+      retv = pid;
+    }
+  }
+
+  snd_seq_port_info_free(pinfo);
+
+  if (retv < 0) {
+    throw rtpmidid::exception("Port not found");
+  }
+
+  return retv;
+}
+
+mididata_to_alsaevents_t::mididata_to_alsaevents_t() {
+  snd_midi_event_new(1024, &buffer);
+}
+mididata_to_alsaevents_t::~mididata_to_alsaevents_t() {
+  snd_midi_event_free(buffer);
+}
+
+void mididata_to_alsaevents_t::mididata_to_evs_f(
+    rtpmidid::io_bytes_reader &data,
+    std::function<void(snd_seq_event_t *)> func) {
+  snd_seq_event_t ev;
+
+  snd_midi_event_reset_encode(buffer);
+
+  while (data.position < data.end) {
+    // DEBUG("mididata to snd_ev, left {}", data);
+    snd_seq_ev_clear(&ev);
+    auto used = snd_midi_event_encode(buffer, data.position,
+                                      data.end - data.position, &ev);
+    if (used <= 0) {
+      ERROR("Fail encode event: {}, {}", used, data);
+      data.print_hex(false);
+      return;
+    }
+    data.position += used;
+    func(&ev);
+  }
+}
+
+void mididata_to_alsaevents_t::ev_to_mididata(snd_seq_event_t *ev,
+                                              rtpmidid::io_bytes_writer &data) {
+  snd_midi_event_reset_decode(buffer);
+  auto ret = snd_midi_event_decode(buffer, data.position,
+                                   data.end - data.position, ev);
+  if (ret < 0) {
+    ERROR("Could not translate alsa seq event. Do nothing.");
+    return;
+  }
+
+  data.position += ret;
+  // DEBUG("ev to mididata, left: {}, {}", ret, data);
+}
+
+} // namespace rtpmididns

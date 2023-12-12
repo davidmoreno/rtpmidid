@@ -35,7 +35,7 @@ On MacOS there is support included in the OS.
 
 ### iPad
 
-To test I used `MIDI Network` and `MIDI Wrench`. The first to manage
+To test I used `MIDI Network` and `MIDI Wrench` . The first to manage
 connections, the second to test.
 
 I was able to communicate exporting at rtpmidid side connecting my gadget to the
@@ -59,14 +59,11 @@ support. I will try to list them as I find them:
 
 ## How to use `rtpmidid`
 
-recomended use is via debian packages, at https://github.com/davidmoreno/rtpmidid/releases
-
-`rtpmidid` provides two modes of operation, one focused on importing, another on
-exporting.
+Recomended use is via debian packages, at https://github.com/davidmoreno/rtpmidid/releases
 
 ```
-Real Time Protocol Music Instrument Digital Interface Daemon - 20.04.5
-(C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
+Real Time Protocol Music Instrument Digital Interface Daemon v23.10b1~12~g3495e
+(C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
 Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.
 
 rtpmidi allows to use rtpmidi protocol to communicate with MIDI equipement
@@ -75,44 +72,110 @@ there is a lot more latency. Internet use has not been tested, but may also
 deliver high latency.
 
 Options:
-  --version           Show version
-  --help              Show this help
-  --name <name>       Forces a rtpmidi name
-  --host <address>    My default IP. Needed to answer mDNS. Normally guessed but may be attached to another ip.
-  --port <port>       Opens local port as server. Default 5004. Can set several.
-  --connect <address> Connects the given address. This is default, no need for --connect
-  --control <path>    Creates a control socket. Check CONTROL.md. Default `/var/run/rtpmidid/control.sock`
-  address for connect:
-  hostname            Connects to hostname:5004 port using rtpmidi
-  hostname:port       Connects to a hostname on a given port
-  name:hostname:port  Connects to a hostname on a given port and forces a name for alsaseq
+  --ini                          Loads an INI file as default configuration. Depending on order may overwrite other arguments
+  --port                         Opens local port as server. Default 5004.
+  --name                         Forces the alsa and rtpmidi name
+  --alsa-name                    Forces the alsa name
+  --rtpmidid-name                Forces the rtpmidi name
+  --control                      Creates a control socket. Check CONTROL.md. Default `/var/run/rtpmidid/control.sock`
+  --version                      Show version
+  --help                         Show this help
 ```
 
-### Importing
+By default it only exports all network discovered rtpmidi network ports
+into ALSA ports.
 
-For each found mDNS item, and connections to port `5004` (by default), it creates
-alsa seq ports which provide the events on those endpoints.
+On installation from .deb it uses a default `/etc/rtpmidid/default.ini` ini
+file that sets some sensible defaults:
+
+- Export as ALSA a "Network" port to which any ALSA connected device is
+  exported to the network.
+- Export as ALSA ports any rtpmidi announced on the network.
+- Export a Network rtpmidi port at 5004, to which external devices can connect
+  to and will be shown as ALSA ports.
+
+If there is no ini file, must use `--alsa-name`, `--rtpmidid-name` or `--name`
+to create the ALSA Network port, the rtpmidi host port, or both.
+
+Normal rule is just connect with normal ALSA commands and UIs, and the
+communication will be transparent.
+
+### rtpmidi `{{hostname}}` port
+
+Announced an rtpmidi service using mDNS (avahi / zeroconf) with the name
+of the current host.
+
+Other services can connect to this rtpmidi port and ALSA ports
+will be created for this connection.
+
+### ALSA `Network` port.
+
+To export a local alsa sequencer port, connect it to the "Network" port.
+
+It will create the server, announce the mDNS service so other endpoints know
+it exist, and accept connections.
+
+MIDI data is rerouted to the proper endpoint by checking the source port.
+
+When connecting the Network port to an input, it merges all the midi events
+from all exported services. Normally this is not the desired behaviour, so it
+is recomended to export output ports, not input ones. This will be fixed in the
+future.
+
+### Automatic detection of announced rtpmidi ports
+
+Any port announced on the network will be available at the ALSA port always.
 
 For mDNS discovered endpoints, the connection is delayed until the alsa seq
 connection.
+
+### Direct connection
 
 Also it can connect to other endpoints by ip and port. It's possible to create
 new connection via command line with `rtpmidid-cli connect NAME IP PORT`. There
 are variations to connect that skip the name and port.
 
-### Exporting
+### `.ini` files
 
-To export a local alsa sequencer port, connect it to the "Network" port.
+Ini files can be loaded to set up initial status as described above. This the
+default, here as reference:
 
-It will create the server, announce the mDNS service so other endpoints know it
-exist, and accept connections.
+```ini
+# example ini file for rtpmidid
+[general]
+alsa_name=rtpmidid
+control=/var/run/rtpmidid/control.sock
 
-MIDI data is rerouted to the proper endpoint by checking the source port.
+## All announce sections and connect_to can appear several times.
 
-When connecting the Network port to an input, it merges all the midi events
-from all exported services. Normally this is not the desired behaviour, so it is
-recomended to export output ports, not input ones. This will be fixed in the
-future.
+# RTPMIDI announcement requires a firewall rule to allow incoming
+# connections on port 5004. If you want to not have an rtpmidi_announce
+# section, comment it out or delete it.
+# This creates an announced rtpmidi endpoint, and any connection
+# will create a new ALSA port.
+[rtpmidi_announce]
+name={{hostname}}
+port=5004
+
+# Alsa announcement requires no firewall as it creates random
+# ports for each connection. If you want to not have an alsa_announce
+# section, comment it out or delete it.
+[alsa_announce]
+# Name for the ALSA connection so that when a conneciton is made, an rtpmidi
+# is announced.
+name=Network Export
+
+# and now some fixed connections
+# [connect_to]
+# hostname=192.168.1.33
+# port=5004
+# name=DeepMind12D
+
+# [connect_to]
+# hostname=192.168.1.210
+# # default port is 5004
+# name=midid
+```
 
 ## Install and Build
 
@@ -121,7 +184,7 @@ They are available for Ubuntu 18.04 x64 and Raspbian 32bits, but may work
 also on other systems.
 
 To easy build there is a simple makefile, which can be invoked to compile with
-`make build`. Use `make` or `make help` to get help on commands.
+`make build` . Use `make` or `make help` to get help on commands.
 
 Its possible to create a debian / ubuntu package with `make deb`
 
@@ -131,14 +194,14 @@ Requires C++17 (Ubuntu 18.04+), and libfmt-dev, libasound2-dev, libavahi-client-
 
 If you find any bug, please report it to https://github.com/davidmoreno/rtpmidid/issues/
 
-It is very usefull if you can accompany it with the resulting capture file from executing
-`make capture`.
+It is very usefull if you can accompany it with the resulting capture file from
+executing `make capture` .
 
-`make capture` is tuned to capture the network packets at ports `10000` and `10001`, but
-can be tuned to other ports with `make capture PORT=5004`.
+`make capture` is tuned to capture the network packets at ports `10000` and
+`10001`, but can be tuned to other ports with `make capture PORT=5004`.
 
-The port `10000` is the one used for developing. To run a development version of the
-rtpmidid server, execute `make run`. There are more options at `make help`.
+The port `10000` is the one used for developing. To run a development version of
+the rtpmidid server, execute `make run` . There are more options at `make help`.
 
 This captures packets for connections TO rtpmidid, not connecitons FROM rtpmidid.
 For those connecitons another port may need to be set.
@@ -159,11 +222,13 @@ Development status / plan:
 - [x] Create the alsa ports for found rtpmidi servers in the network
 - [x] When there is any connection to the alsa sequencer port `rtpmidid` creates
       the rtpmidi connection
+
 - [x] Any message from alsa seq is sent to the MIDI rtp extreme
 - [x] Any message from rtpmidi is replayed on the alsa seq
 - [x] Can export local ports, with user deciding which ones to export.
 - [x] Server mode at a known port, when remote side request connections, create
       the alsa seq virtual port for that connection and connect both ports.
+
 - [x] Allow several connections on the server port. Each its own aseq port.
 - [x] Send all MIDI events to rtpmidi
 - [x] Receive all MIDI events from rtpmidi

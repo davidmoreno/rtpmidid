@@ -37,23 +37,30 @@ enum Color {
   WHITE = 37,
 };
 
-std::string color(const std::string_view &str, Color color,
-                  bool highlight = false) {
+const char *color(const char *str, Color color, bool highlight = false) {
   int hl = highlight ? 1 : 0;
-  return fmt::format("\033[{};{}m{}\033[0m", hl, (int)color, str);
+  static char buffer[256];
+  auto n = fmt::format_to_n(buffer, sizeof(buffer), "\033[{};{}m{}\033[0m", hl,
+                            (int)color, str);
+  *n.out = '\0';
+  return buffer;
 }
-std::string color(const std::string_view &str, Color color, Color bgcolor,
+const char *color(const char *str, Color color, Color bgcolor,
                   bool highlight = false) {
   int hl = highlight ? 1 : 0;
-  return fmt::format("\033[{};{};{}m{}\033[0m", hl, (int)color, (int)bgcolor,
-                     str);
+  static char buffer[256];
+  auto n = fmt::format_to_n(buffer, sizeof(buffer), "\033[{};{};{}m{}\033[0m",
+                            hl, (int)color, (int)bgcolor, str);
+  *n.out = '\0';
+  return buffer;
 }
 
 logger::logger() { is_a_terminal = isatty(fileno(stdout)); }
 
 logger::~logger() {}
 void logger::log(const char *filename, int lineno, LogLevel loglevel,
-                 const std::string &msg) {
+                 const char *msg) {
+  static char buffer[512];
   if (is_a_terminal) {
     time_t now = time(nullptr);
     char timestamp[sizeof "2011-10-08T07:07:09Z"];
@@ -78,13 +85,19 @@ void logger::log(const char *filename, int lineno, LogLevel loglevel,
       break;
     }
 
-    fmt::print("{} {}\n",
-               color(fmt::format("[{}] [{}:{}]", timestamp, filename, lineno),
-                     my_color),
-               msg); // color("msg"), RED);
+    auto n = fmt::format_to_n(buffer, sizeof(buffer), "[{}] [{}:{}]", timestamp,
+                              filename, lineno);
+    *n.out = '\0';
+    n = fmt::format_to_n(buffer, sizeof(buffer), "{} {}\n",
+                         color(buffer, my_color),
+                         msg); // color("msg"), RED);
+    *n.out = '\0';
   } else {
-    fmt::print("[{}:{}] {}\n", filename, lineno, msg);
+    auto n = fmt::format_to_n(buffer, sizeof(buffer), " [{}:{}] {}\n", filename,
+                              lineno, msg);
+    *n.out = '\0';
   }
+  ::fprintf(stderr, "%s", buffer);
 }
 void logger::flush() { ::fflush(stderr); }
 } // namespace logger

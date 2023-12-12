@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2021 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,29 +15,26 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
-#include <errno.h>
-#include <stdlib.h>
+#include "control_socket.hpp"
+#include "config.hpp"
+#include "factory.hpp"
+#include "settings.hpp"
+#include <algorithm>
+#include <functional>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 
-#include "../third_party/nlohmann/json.hpp"
-
-#include "./rtpmidid.hpp"
-#include "config.hpp"
-#include "control_socket.hpp"
+#include "json.hpp"
+#include "midipeer.hpp"
+#include "rtpmidid/logger.hpp"
+#include "rtpmidid/poller.hpp"
 #include "stringpp.hpp"
-#include <rtpmidid/exceptions.hpp>
-#include <rtpmidid/logger.hpp>
-#include <rtpmidid/poller.hpp>
-#include <rtpmidid/rtpclient.hpp>
-#include <rtpmidid/rtppeer.hpp>
-#include <rtpmidid/rtpserver.hpp>
 
-using json = nlohmann::json;
+namespace rtpmididns {
 
+extern const char *VERSION;
 const char *MSG_CLOSE_CONN =
     "{\"event\": \"close\", \"detail\": \"Shutdown\", \"code\": 0}\n";
 const char *MSG_TOO_LONG =
@@ -45,22 +42,16 @@ const char *MSG_TOO_LONG =
 const char *MSG_UNKNOWN_COMMAND =
     "{\"error\": \"Unknown command\", \"code\": 2}";
 
-struct control_msg_t {
-  int id;
-  std::string method;
-  json params;
-};
+control_socket_t::control_socket_t() {
+  std::string &socketfile = settings.control_filename;
 
-rtpmidid::control_socket_t::control_socket_t(rtpmidid::rtpmidid_t &rtpmidid,
-                                             const std::string &socketfile)
-    : rtpmidid(rtpmidid) {
   int ret = unlink(socketfile.c_str());
   if (ret >= 0) {
     INFO("Removed old control socket. Creating new one.");
   }
 
-  listen_socket = socket(AF_UNIX, SOCK_STREAM, 0);
-  if (listen_socket == -1) {
+  socket = ::socket(AF_UNIX, SOCK_STREAM, 0);
+  if (socket == -1) {
     ERROR("Error creating socket: {}", strerror(errno));
     return;
   }
@@ -69,58 +60,66 @@ rtpmidid::control_socket_t::control_socket_t(rtpmidid::rtpmidid_t &rtpmidid,
   addr.sun_family = AF_UNIX;
   strncpy(addr.sun_path, socketfile.c_str(), sizeof(addr.sun_path) - 1);
 
-  ret = bind(listen_socket, (const struct sockaddr *)(&addr),
+  ret = bind(socket, (const struct sockaddr *)(&addr),
              sizeof(struct sockaddr_un));
   if (ret == -1) {
     ERROR("Error Binding socket at {}: {}", socketfile, strerror(errno));
-    close(listen_socket);
-    listen_socket = -1;
+    close(socket);
+    socket = -1;
     return;
   }
-  if (listen(listen_socket, 20) == -1) {
+  if (listen(socket, 20) == -1) {
     ERROR("Error Listening to socket at {}: {}", socketfile, strerror(errno));
-    close(listen_socket);
-    listen_socket = -1;
+    close(socket);
+    socket = -1;
     return;
   }
   ::chmod(socketfile.c_str(), 0777);
-  rtpmidid::poller.add_fd_in(listen_socket,
-                             [this](int fd) { this->connection_ready(); });
+  connection_listener = rtpmidid::poller.add_fd_in(
+      socket, [this](int fd) { this->connection_ready(); });
   INFO("Control socket ready at {}", socketfile);
   start_time = time(NULL);
 }
 
-rtpmidid::control_socket_t::~control_socket_t() {
-  for (auto fd : clients) {
-    auto n = write(fd, MSG_CLOSE_CONN, strlen(MSG_CLOSE_CONN));
+rtpmididns::control_socket_t::~control_socket_t() {
+  for (auto &client : clients) {
+    client.listener.stop();
+
+    auto n = write(client.fd, MSG_CLOSE_CONN, strlen(MSG_CLOSE_CONN));
     if (n < 0) {
       DEBUG("Could not send goodbye packet to control.");
     }
-    close(fd);
+    close(client.fd);
   }
-  close(listen_socket);
+  connection_listener.stop();
+  close(socket);
 }
 
-void rtpmidid::control_socket_t::connection_ready() {
-  int fd = accept(listen_socket, NULL, NULL);
+void rtpmididns::control_socket_t::connection_ready() {
+  int fd = accept(socket, NULL, NULL);
 
   if (fd != -1) {
-    rtpmidid::poller.add_fd_in(fd, [this](int fd) { this->data_ready(fd); });
-    DEBUG("Added control connection: {}", fd);
-    clients.push_back(fd);
+    client_t client;
+    client.listener = rtpmidid::poller.add_fd_in(
+        fd, [this](int fd) { this->data_ready(fd); });
+    client.fd = fd;
+    clients.push_back(std::move(client));
+    // DEBUG("Added control connection: {}", fd);
   } else {
     ERROR("\"accept()\" failed, continuing...");
   }
 }
 
-void rtpmidid::control_socket_t::data_ready(int fd) {
+void control_socket_t::data_ready(int fd) {
   char buf[1024];
   size_t l = recv(fd, buf, sizeof(buf), 0);
   if (l <= 0) {
-    close(fd);
-    DEBUG("Closed control connection: {}", fd);
-    clients.erase(std::remove(clients.begin(), clients.end(), fd),
-                  clients.end());
+    // DEBUG("Closed control connection: {}", fd);
+    auto I = std::find_if(clients.begin(), clients.end(),
+                          [fd](auto &client) { return client.fd == fd; });
+    I->listener.stop();
+    close(I->fd);
+    clients.erase(I);
     return;
   }
   if (l >= sizeof(buf) - 1) {
@@ -134,7 +133,7 @@ void rtpmidid::control_socket_t::data_ready(int fd) {
     return;
   }
   buf[l] = 0;
-  auto ret = parse_command(rtpmidid::trim_copy(buf));
+  auto ret = parse_command(trim_copy(buf));
   ret += "\n";
   auto w = write(fd, ret.c_str(), ret.length());
   if (w < 0) {
@@ -146,145 +145,134 @@ void rtpmidid::control_socket_t::data_ready(int fd) {
     fsync(fd);
 }
 
-namespace rtpmidid {
-namespace commands {
-// Commands
-static json status(rtpmidid::rtpmidid_t &rtpmidid, time_t start_time) {
-  auto js =
-      json{{"version", rtpmidid::VERSION}, {"uptime", time(NULL) - start_time}};
+namespace control_socket_ns {
+struct command_t {
+  const char *name;
+  const char *description;
+  std::function<json_t(rtpmididns::control_socket_t &, const json_t &)> func;
+};
+} // namespace control_socket_ns
+std::vector<control_socket_ns::command_t> commands{
+    {"status", "Return status of the daemon",
+     [](control_socket_t &control, const json_t &) {
+       return json_t{
+           {"version", rtpmididns::VERSION},
+           {"settings",
+            {
+                {"alsa_name", rtpmididns::settings.alsa_name},
+                {"rtpmidid_name", rtpmididns::settings.rtpmidid_name},
+                {"rtpmidid_port", rtpmididns::settings.rtpmidid_port},
+                {"control_filename", rtpmididns::settings.control_filename} //
+            }},
+           {"router", control.router->status()} //
+       };
+     }},
+    {"router.remove", "Remove a peer from the router",
+     [](control_socket_t &control, const json_t &params) {
+       DEBUG("Params {}", params.dump());
+       peer_id_t peer_id;
+       peer_id = params[0];
+       DEBUG("Remove peer_id {}", peer_id);
+       control.router->remove_peer(peer_id);
+       return "ok";
+     }},
+    {"connect",
+     "Connect to a peer send params: [hostname] | [hostname, port] | [name, "
+     "hostname, port] | {\"name\": name, \"hostname\": hostname, \"port\": "
+     "port}",
+     [](control_socket_t &control, const json_t &params) {
+       std::string name, hostname, port;
+       bool error = false;
+       if (params.is_array()) {
+         switch (params.size()) {
+         case 1:
+           name = hostname = params[0];
+           port = "5004";
+           break;
+         case 2:
+           name = hostname = params[0];
+           port = params[1];
+           break;
+         case 3:
+           name = params[0];
+           hostname = params[1];
+           port = to_string(params[2]);
+           break;
+         default:
+           error = true;
+         }
+       } else if (params.is_object()) {
+         name = params["name"];
+         hostname = params["hostname"];
+         port = to_string(params["port"]);
 
-  std::vector<json> clients;
-  for (auto port_client : rtpmidid.known_clients) {
-    auto client = port_client.second;
-    json cl = {{"name", client.name},
-               {"use_count", client.use_count},
-               {"alsa_port", port_client.first}};
-    std::vector<json> addresses;
-    for (auto &address : client.addresses) {
-      addresses.push_back({{"host", address.address}, {"port", address.port}});
-    }
-    cl["addresses"] = addresses;
-    if (client.peer) {
-      auto peer = client.peer;
-      cl["latency_ms"] = peer->peer.latency / 10.0;
-      cl["sequence_number"] = peer->peer.seq_nr;
-      cl["sequence_number_ack"] = peer->peer.seq_nr_ack;
-      cl["sequence_remote"] = peer->peer.remote_seq_nr;
-    }
-    clients.push_back(cl);
-  }
-  js["clients"] = clients;
+         if (name.empty() || hostname.empty() || port.empty()) {
+           error = true;
+         }
+       } else {
+         error = true;
+       }
+       if (error)
+         return json_t{"error",
+                       "Need 1 param (hostn ame:hostname:5004), 2 params "
+                       "(hostname:port), "
+                       "3 params (name,hostname,port) or a dict{name, "
+                       "hostname, port}"};
 
-  std::vector<json> connections;
-  for (auto port_client : rtpmidid.known_servers_connections) {
-    auto client = port_client.second;
-    json cl = {
-        {"name", client.name},
+       control.router->add_peer(make_local_alsa_waiter(
+           control.router, name, hostname, port, control.aseq));
+       return json_t{"ok"};
+     }},
+    // REturn some help text
+    {"help", "Return help text",
+     [](control_socket_t &control, const json_t &) {
+       auto res = std::vector<json_t>{};
+       for (const auto &cmd : commands) {
+         res.push_back({{"name", cmd.name}, {"description", cmd.description}});
+       }
+       return res;
+     }},
+    //
+};
+
+std::string control_socket_t::parse_command(const std::string &command) {
+  // DEBUG("Parse command {}", command);
+  auto js = json_t::parse(command);
+
+  auto method = js["method"];
+  try {
+    if (method == "list") {
+      auto res = std::vector<std::string>{};
+      for (const auto &cmd : commands) {
+        res.push_back(cmd.name);
+      }
+      json_t retdata = {
+          {"id", js["id"]}, {"result", res},
+          //
+      };
+
+      return retdata.dump();
+    }
+    for (const auto &cmd : commands) {
+      if (cmd.name == method) {
+        auto res = cmd.func(*this, js["params"]);
+        json_t retdata = {
+            {"id", js["id"]}, {"result", res},
+            //
+        };
+
+        return retdata.dump();
+      }
+    }
+    json_t retdata = {
+        {"id", js["id"]}, {"error", fmt::format("Unknown method '{}'", method)},
+        //
     };
-    clients.push_back(cl);
-  }
-  js["connections"] = connections;
 
-  std::vector<json> servers;
-  for (auto server : rtpmidid.servers) {
-    json data = {
-        {"name", server->name},
-        {"port", server->midi_port},
-        {"connect_listeners", server->connected_event.count()},
-        {"midi_listeners", server->midi_event.count()},
-    };
-    servers.push_back(data);
-  }
-  js["servers"] = servers;
-
-  return js;
-}
-
-static json exit(rtpmidid::rtpmidid_t &rtpmidid) {
-  rtpmidid::poller.close();
-  return {{"detail", "Bye."}};
-}
-
-static json connect(rtpmidid::rtpmidid_t &rtpmidid, const std::string &name,
-                    const std::string &host, const std::string &port) {
-  auto alsa_port = rtpmidid.add_rtpmidi_client(name, host, port);
-  if (alsa_port.has_value()) {
-    return {
-        {"alsa_port", alsa_port.value()},
-    };
-  } else {
-    return {{"detail", "Could not connect. Check logs."}};
+    return retdata.dump();
+  } catch (const std::exception &e) {
+    json_t retdata = {{"id", js["id"]}, {"error", e.what()}};
+    return retdata.dump();
   }
 }
-} // namespace commands
-} // namespace rtpmidid
-
-// Last declaration to avoid forward declaration
-
-std::string
-rtpmidid::control_socket_t::parse_command(const std::string &command) {
-  control_msg_t msg;
-  msg.id = 0;
-  DEBUG("Received command: {}", command);
-  if (command.length() == 0) {
-    return MSG_UNKNOWN_COMMAND;
-  }
-  if (std::startswith(command, "{")) {
-    auto js = json::parse(command);
-    msg.method = js["method"];
-    msg.params = js["params"];
-    if (js.contains("id"))
-      msg.id = js["id"];
-  } else {
-    auto command_split = rtpmidid::split(command);
-    msg.method = command_split[0];
-    std::vector<json> params;
-    for (size_t i = 1; i < command_split.size(); i++) {
-      params.push_back(command_split[i]);
-    }
-    msg.params = params;
-  }
-  json ret = nullptr; // Fill the one you return
-  json error =
-      json{{"detail", "Unknown command"}, {"code", 2}}; // By detault no command
-
-  if (msg.method == "status") {
-    ret = rtpmidid::commands::status(rtpmidid, start_time);
-  }
-  if (msg.method == "exit" || msg.method == "quit") {
-    ret = rtpmidid::commands::exit(rtpmidid);
-  }
-  if (msg.method == "connect") {
-    switch (msg.params.size()) {
-    case 1:
-      ret = rtpmidid::commands::connect(rtpmidid, msg.params[0], msg.params[0],
-                                        "5004");
-      break;
-    case 2:
-      ret = rtpmidid::commands::connect(rtpmidid, msg.params[0], msg.params[0],
-                                        msg.params[1]);
-      break;
-    case 3:
-      ret = rtpmidid::commands::connect(rtpmidid, msg.params[0], msg.params[1],
-                                        msg.params[2]);
-      break;
-    default:
-      error = {{"detail", "Invalid params"}, {"code", 3}};
-    }
-  }
-  if (msg.method == "update-mdns") {
-    rtpmidid.mdns_rtpmidi.setup_mdns_browser();
-    ret = {{"detail", "mDNS update requested"}};
-  }
-  if (msg.method == "help") {
-    ret = json{{"commands", {"help", "exit", "connect", "status"}}};
-  }
-
-  json retdata = {{"id", msg.id}};
-  if (!ret.is_null()) {
-    retdata["result"] = ret;
-  } else {
-    retdata["error"] = error;
-  }
-  return retdata.dump();
-}
+} // namespace rtpmididns

@@ -1,9 +1,19 @@
-rtpmidid (23.10) unstable; urgency=medium
+rtpmidid (23.12b2) unstable; urgency=medium
 
   * Packaging fixes
   * Compiles with newest libfmt
+  * No mallocs on the hot path
+  * Fixes connecting. Improved timeouts.
 
- -- David Moreno <dmoreno@coralbits.com>  Thu, 05 Oct 2023 23:44:52 +0200
+ -- David Moreno <dmoreno@coralbits.com>  Tue, 05 Dec 2023 22:18:25 +0100
+
+rtpmidid (23.10b1) unstable; urgency=medium
+
+  * New midirouter implementation
+  * Accepts an ini file as initial configuration.
+  * Control socket is more powerful and complete.
+
+ -- David Moreno <dmoreno@coralbits.com>  Tue, 24 Oct 2023 21:30:45 +0200
 
 rtpmidid (21.11) unstable; urgency=medium
 

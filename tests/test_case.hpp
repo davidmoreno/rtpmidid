@@ -17,6 +17,7 @@
  */
 #pragma once
 
+#include "stringpp.hpp"
 #include <functional>
 #include <rtpmidid/logger.hpp>
 #include <string>
@@ -65,17 +66,25 @@ public:
     return false;
   }
 
+  void help(const char *cmdname) {
+    INFO("{} [--failfast] [--help] [testname...]", cmdname);
+  }
+
   bool run(int argc = 0, char **argv = nullptr) {
     std::vector<std::string> args;
     bool fastfail = false;
     for (auto i = 1; i < argc; i++) {
       std::string opt = argv[i];
       if (opt == "--help") {
-        INFO("{} [--failfast] [--help] [testname...]", argv[0]);
+        help(argv[0]);
         return true;
       }
-      if (opt == "--fastfail") {
+      if (opt == "--failfast") {
         fastfail = true;
+      } else if (std::startswith(opt, "--")) {
+        ERROR("Unknown argument.");
+        help(argv[0]);
+        return false;
       } else {
         args.push_back(std::move(opt));
       }

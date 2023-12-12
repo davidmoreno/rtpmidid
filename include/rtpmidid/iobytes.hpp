@@ -197,9 +197,8 @@ public:
     from.position += count;
   }
 
-  void copy_from(const io_bytes &from) {
-    copy_from(from, from.end - from.position);
-  }
+  void copy_from(const io_bytes &from) { copy_from(from, from.size()); }
+
   void copy_from(const io_bytes &from, uint32_t count) {
     check_enough(count);
     from.check_enough(count);
@@ -328,3 +327,24 @@ public:
 };
 
 } // namespace rtpmidid
+
+template <>
+struct fmt::formatter<rtpmidid::io_bytes_reader> : formatter<std::string_view> {
+  auto format(const rtpmidid::io_bytes_reader &data, format_context &ctx) {
+    return formatter<std::string_view>::format(
+        fmt::format("[io_bytes_reader {} to {}, at {}, {}B left]",
+                    (void *)data.start, (void *)data.end, (void *)data.position,
+                    data.end - data.position),
+        ctx);
+  }
+};
+template <>
+struct fmt::formatter<rtpmidid::io_bytes_writer> : formatter<std::string_view> {
+  auto format(const rtpmidid::io_bytes_reader &data, format_context &ctx) {
+    return formatter<std::string_view>::format(
+        fmt::format("[io_bytes_writer {} to {}, at {}, {}B left]",
+                    (void *)data.start, (void *)data.end, (void *)data.position,
+                    data.end - data.position),
+        ctx);
+  }
+};

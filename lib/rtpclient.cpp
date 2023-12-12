@@ -20,6 +20,7 @@
 #include "rtpmidid/exceptions.hpp"
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <optional>
 #include <sys/socket.h>
 #include <sys/types.h>
 
@@ -32,6 +33,7 @@
 
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
+#include <rtpmidid/network.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtpclient.hpp>
 #include <rtpmidid/utils.hpp>
@@ -39,7 +41,7 @@
 using namespace std::chrono_literals;
 using namespace rtpmidid;
 
-rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
+rtpclient_t::rtpclient_t(std::string name) : peer(std::move(name)) {
   local_base_port = 0;
   remote_base_port = -1; // Not defined
   control_socket = -1;
@@ -48,16 +50,40 @@ rtpclient::rtpclient(std::string name) : peer(std::move(name)) {
   timerstate = 0;
   midi_socket = -1;
   peer.initiator_id = ::rtpmidid::rand_u32();
-  peer.send_event.connect([this](const io_bytes &data, rtppeer::port_e port) {
-    this->sendto(data, port);
-  });
+  send_connection = peer.send_event.connect(
+      [this](const io_bytes_reader &data, rtppeer_t::port_e port) {
+        try {
+          this->sendto(data, port);
+        } catch (const network_exception &e) {
+          ERROR("Error sending data to {}:{}. {}", peer.remote_name,
+                remote_base_port, e.what());
+          peer.disconnect_event(rtppeer_t::disconnect_reason_e::NETWORK_ERROR);
+        }
+      });
+
+  peer_disconnect_event_connection = peer.disconnect_event.connect(
+      [this](rtppeer_t::disconnect_reason_e reason) {
+        if (reason == rtppeer_t::disconnect_reason_e::CONNECT_TIMEOUT ||
+            reason == rtppeer_t::disconnect_reason_e::CANT_CONNECT) {
+          INFO("Could not connect, try next peer. Reason: {}", reason);
+          connect_to_next();
+        } else {
+          INFO("Disconnected reason: {}. Not trying to connect again.", reason);
+        }
+        connect_to_next();
+      });
+  peer_connected_event_connection = peer.connected_event.connect(
+      [this](const std::string &name, rtppeer_t::status_e status) {
+        INFO("Connected to {}: {}", name, status);
+        connected_event(name, status);
+      });
 }
 
-rtpclient::~rtpclient() {
+rtpclient_t::~rtpclient_t() {
   if (peer.is_connected()) {
     try {
-      peer.send_goodbye(rtppeer::CONTROL_PORT);
-      peer.send_goodbye(rtppeer::MIDI_PORT);
+      peer.send_goodbye(rtppeer_t::CONTROL_PORT);
+      peer.send_goodbye(rtppeer_t::MIDI_PORT);
     } catch (network_exception &e) {
       ERROR("Removing client without sending proper goodbye. If reconnected "
             "may misbehave.");
@@ -65,152 +91,275 @@ rtpclient::~rtpclient() {
   }
 
   if (control_socket > 0) {
-    poller.remove_fd(control_socket);
+    control_poller.stop();
     close(control_socket);
   }
   if (midi_socket > 0) {
-    poller.remove_fd(midi_socket);
+    midi_poller.stop();
     close(midi_socket);
   }
 }
 
-void rtpclient::connect_to(const std::string &address,
-                           const std::string &port) {
+bool rtpclient_t::connect_to(const std::vector<endpoint_t> &address_port) {
+  bool list_was_empty = address_port_pending.empty();
+  for (auto &endpoint : address_port) {
+    DEBUG("Add {} to pending list", endpoint);
+    address_port_pending.push_back(endpoint);
+  }
+  DEBUG("All ports to try to connect to in order: {}", address_port_pending);
+
+  if (list_was_empty) {
+    INFO("Start connect to remote peer. {} endpoints available to try.",
+         address_port_pending.size());
+    return connect_to_next();
+  }
+  return false;
+}
+
+bool rtpclient_t::connect_to_next() {
+  if (address_port_pending.empty()) {
+    ERROR("Could not find any valid remote address to connect to");
+    connect_timer.disable();
+    connected_event("", rtppeer_t::NOT_CONNECTED);
+    return false;
+  }
+  auto endpoint = address_port_pending.front();
+  address_port_pending.pop_front();
+  return connect_to(endpoint.hostname, endpoint.port);
+}
+
+// For each available adress on the hostname:port combo, call callback
+// If callback returns true, stop iterating.
+bool for_each_address(const std::string &hostname, const std::string &port,
+                      std::function<bool(addrinfo *serveraddr)> callback) {
   struct addrinfo hints;
   struct addrinfo *sockaddress_list = nullptr;
-  char host[NI_MAXHOST], service[NI_MAXSERV];
-  socklen_t peer_addr_len = NI_MAXHOST;
 
-  control_socket = midi_socket = -1;
+  int res;
+  memset(&hints, 0, sizeof(struct addrinfo));
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_DGRAM;
+  hints.ai_flags = 0;
+  hints.ai_protocol = 0;
 
-  DEBUG("Try connect to service at {}:{}", address, port);
-
-  try {
-    int res;
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = 0;
-    hints.ai_protocol = 0;
-
-    res = getaddrinfo(address.c_str(), port.c_str(), &hints, &sockaddress_list);
-    if (res < 0) {
-      DEBUG("Error resolving address {}:{}", address, port);
-      throw rtpmidid::exception("Can not resolve address {}:{}. {}", address,
-                                port, strerror(errno));
-    }
-    // Get addr info may return several options, try them in order.
-    // we asusme that if the ocntrol success to be created the midi will too.
-    auto serveraddr = sockaddress_list;
-    for (; serveraddr != nullptr; serveraddr = serveraddr->ai_next) {
-      host[0] = service[0] = 0x00;
-      getnameinfo(serveraddr->ai_addr, peer_addr_len, host, NI_MAXHOST, service,
-                  NI_MAXSERV, NI_NUMERICSERV);
-      DEBUG("Try connect to resolved name: {}:{}", host, service);
-      // remote_base_port = service;
-
-      control_socket = socket(serveraddr->ai_family, serveraddr->ai_socktype,
-                              serveraddr->ai_protocol);
-      if (control_socket < 0) {
-        continue;
-      }
-      if (connect(control_socket, serveraddr->ai_addr,
-                  serveraddr->ai_addrlen) == 0) {
-        break;
-      }
-      close(control_socket);
-    }
-    if (!serveraddr) {
-      DEBUG("Error opening control socket, port {}", port);
-      control_socket = -1;
-      throw rtpmidid::exception(
-          "Can not open remote rtpmidi control socket. {}", strerror(errno));
-    }
-    DEBUG("Connected to resolved name: {}:{}", host, service);
-    memcpy(&control_addr, serveraddr->ai_addr, sizeof(control_addr));
-
-    struct sockaddr_in6 servaddr;
-    socklen_t len = sizeof(servaddr);
-    ::getsockname(control_socket, (struct sockaddr *)&servaddr, &len);
-    local_base_port = ntohs(servaddr.sin6_port);
-
-    DEBUG("Control port, local: {}, remote at {}:{}", local_base_port, host,
-          service);
-
-    poller.add_fd_in(control_socket,
-                     [this](int) { this->data_ready(rtppeer::CONTROL_PORT); });
-
-    midi_socket = socket(serveraddr->ai_family, serveraddr->ai_socktype,
-                         serveraddr->ai_protocol);
-    if (midi_socket < 0) {
-      throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
-    }
-    // Reuse servaddr, just on next port
-    remote_base_port = ntohs(((sockaddr_in *)serveraddr->ai_addr)->sin_port);
-    ((sockaddr_in *)serveraddr->ai_addr)->sin_port =
-        htons(remote_base_port + 1);
-
-    servaddr.sin6_port = htons(local_base_port + 1);
-    auto ret = bind(midi_socket, (struct sockaddr *)&servaddr, len);
-    if (ret < 0) {
-      throw rtpmidid::exception("Could not bind to local port");
-    }
-
-    if (connect(midi_socket, serveraddr->ai_addr, serveraddr->ai_addrlen) < 0) {
-      DEBUG("Error opening midi socket, port {}", port);
-      throw rtpmidid::exception("Can not open remote rtpmidi MIDI socket. {}",
-                                strerror(errno));
-    }
-    memcpy(&midi_addr, serveraddr->ai_addr, sizeof(midi_addr));
-    ::getsockname(midi_socket, (struct sockaddr *)&servaddr, &len);
-    auto midi_port = htons(servaddr.sin6_port);
-    DEBUG("MIDI PORT at port {}", midi_port);
-
-    poller.add_fd_in(midi_socket,
-                     [this](int) { this->data_ready(rtppeer::MIDI_PORT); });
-  } catch (const std::exception &excp) {
-    ERROR("Error creating rtp client: {}", excp.what());
-    if (control_socket >= 0) {
-      poller.remove_fd(control_socket);
-      ::close(control_socket);
-      control_socket = -1;
-    }
-    if (midi_socket >= 0) {
-      poller.remove_fd(midi_socket);
-      ::close(midi_socket);
-      midi_socket = -1;
-    }
-    if (sockaddress_list) {
+  res = getaddrinfo(hostname.c_str(), port.c_str(), &hints, &sockaddress_list);
+  if (res < 0) {
+    DEBUG("Error resolving address {}:{}", hostname, port);
+    return false;
+  }
+  // Get addr info may return several options, try them in order.
+  // we asusme that if the control success to be created the midi will too.
+  addrinfo *serveraddr = sockaddress_list;
+  for (; serveraddr != nullptr; serveraddr = serveraddr->ai_next) {
+    bool stop = callback(serveraddr);
+    if (stop)
       freeaddrinfo(sockaddress_list);
+    return true;
+  }
+  freeaddrinfo(sockaddress_list);
+  // Could not connect to any address
+  return false;
+}
+
+struct socket_port_sockaddr_t {
+  int socket;
+  int port;
+  sockaddr_storage addr;
+};
+
+struct control_midi_ports_t {
+  std::string remote_address;
+  int remote_base_port;
+  socket_port_sockaddr_t control;
+  socket_port_sockaddr_t midi;
+};
+
+/**
+ * Connect to a remote host and port
+ *
+ * @param local_base_port if 0, any available port will be used
+ * @param serveraddr
+ * @param port_type
+ *
+ * @return control and midi ports information struct
+ *
+ * Create the socket and connect it. If connection is sucessfull,
+ * return the data. Else return an empty optional.
+ */
+std::optional<socket_port_sockaddr_t> connect_udp_port(int local_base_port,
+                                                       addrinfo *serveraddr) {
+  struct sockaddr_in6 myaddr;
+  memset(&myaddr, 0, sizeof(myaddr));
+  socklen_t len = sizeof(myaddr);
+  auto socketfd = socket(serveraddr->ai_family, serveraddr->ai_socktype,
+                         serveraddr->ai_protocol);
+  if (socketfd < 0) {
+    DEBUG("Could not create socket");
+    return std::nullopt;
+  }
+
+  myaddr.sin6_port = htons(local_base_port);
+  auto ret = bind(socketfd, (struct sockaddr *)&myaddr, len);
+  if (ret < 0) {
+    DEBUG("Could not bind socket at UDP port {}", local_base_port);
+    close(socketfd);
+    return std::nullopt;
+  }
+
+  if (connect(socketfd, serveraddr->ai_addr, serveraddr->ai_addrlen) < 0) {
+    DEBUG("Could not connect socket");
+    close(socketfd);
+    return std::nullopt;
+  }
+
+  ::getsockname(socketfd, (struct sockaddr *)&myaddr, &len);
+  auto udp_port = htons(myaddr.sin6_port);
+  DEBUG("PORT at port {}, socket {}", udp_port, socketfd);
+
+  socket_port_sockaddr_t retv{
+      .socket = socketfd,
+      .port = udp_port,
+  };
+
+  memcpy(&retv.addr, serveraddr->ai_addr, serveraddr->ai_addrlen);
+  return retv;
+}
+
+/**
+ * Connect to a remote host and port
+ *
+ * @param local_base_port if 0, any available port will be used
+ * @param hostname
+ * @param port
+ *
+ * @return control and midi ports information struct
+ *
+ * For each possible address (a name can have many posibilities),
+ * try to connect to each to both the control and midi ports.
+ *
+ * If both succeed, return them. Else the return is an empty optional.
+ */
+std::optional<control_midi_ports_t> connect_control_and_midi_sockets(
+    int local_base_port, const std::string &hostname, const std::string &port) {
+  std::optional<control_midi_ports_t> ret = std::nullopt;
+
+  for_each_address(hostname, port, [&](addrinfo *serveraddr) {
+    char host[NI_MAXHOST];
+    char port[NI_MAXSERV];
+    host[0] = port[0] = '\0';
+    getnameinfo(serveraddr->ai_addr, serveraddr->ai_addrlen, host, NI_MAXHOST,
+                port, NI_MAXSERV, NI_NUMERICSERV);
+
+    DEBUG("Try to connect to address: {}:{}", host, port);
+
+    auto control = connect_udp_port(local_base_port, serveraddr);
+    if (!control) {
+      DEBUG("Could not connect to control port");
+      return false;
     }
-    peer.disconnect_event(rtppeer::disconnect_reason_e::CANT_CONNECT);
-    return;
-  }
-  if (sockaddress_list) {
-    freeaddrinfo(sockaddress_list);
-  }
 
-  DEBUG("Connecting midi port {} to {}:{}", local_base_port + 1, address,
-        remote_base_port + 1);
+    // advance the port by 1, so it points to midi
+    auto base_port = ntohs(((sockaddr_in *)serveraddr->ai_addr)->sin_port);
+    ((sockaddr_in *)serveraddr->ai_addr)->sin_port = htons(base_port + 1);
 
-  // If not connected, connect now the MIDI port
-  auto conn_event = peer.connected_event.connect(
-      [this, address, port](const std::string &name, rtppeer::status_e status) {
-        if (status == rtppeer::CONTROL_CONNECTED) {
+    auto midi = connect_udp_port(control->port + 1, serveraddr);
+    if (!midi) {
+      DEBUG("Could not connect to MIDI port");
+      close(control->socket);
+      return false;
+    }
+    ret = control_midi_ports_t{
+        .remote_address = host,
+        .remote_base_port = base_port,
+        .control = *control,
+        .midi = *midi,
+    };
+
+    return true;
+  });
+  return ret;
+}
+
+/**
+ * Connect to a remote host and port
+ *
+ * @param address
+ * @param port
+ *
+ * @return true if connection dance started
+ *
+ * It gets apair of valid sockets, addrinfo and ports for both control and midi
+ * stores the data and starts the connection dance with the try to connect to
+ * control.
+ */
+bool rtpclient_t::connect_to(const std::string &address,
+                             const std::string &port) {
+
+  auto ports = connect_control_and_midi_sockets(0, address, port);
+  if (!ports) {
+    DEBUG("Error opening control and midi sockets, port {}:{}", address, port);
+    peer.disconnect_event(rtppeer_t::disconnect_reason_e::CANT_CONNECT);
+    return false;
+  }
+  DEBUG("Got UDP local ports: {} and {}, connection to {}:{} and {}:{}",
+        ports->control.port, ports->midi.port, address, ports->remote_base_port,
+        address, ports->remote_base_port + 1);
+
+  control_socket = ports->control.socket;
+  local_base_port = ports->control.port;
+  midi_socket = ports->midi.socket;
+  peer.remote_name = ports->remote_address;
+  peer.remote_base_port = ports->remote_base_port;
+  remote_base_port = ports->remote_base_port;
+
+  DEBUG("CONTROL at {}, remote base at {}", ports->control.addr,
+        remote_base_port);
+  DEBUG("MIDI at {}", ports->midi.addr);
+
+  memcpy(&midi_addr, &ports->midi.addr, sizeof(sockaddr_storage));
+  memcpy(&control_addr, &ports->control.addr, sizeof(sockaddr_storage));
+
+  DEBUG("CONTROL at {}", control_addr);
+  DEBUG("MIDI at {}", midi_addr);
+
+  control_poller = poller.add_fd_in(control_socket, [this](int) {
+    this->data_ready(rtppeer_t::CONTROL_PORT);
+  });
+
+  midi_poller = poller.add_fd_in(
+      midi_socket, [this](int) { this->data_ready(rtppeer_t::MIDI_PORT); });
+
+  // If connected, connect now the MIDI port
+  connected_connection = peer.connected_event.connect(
+      [this, address, port](const std::string &name,
+                            rtppeer_t::status_e status) {
+        if (status == rtppeer_t::CONTROL_CONNECTED) {
           DEBUG("Connected midi port {} to {}:{}", local_base_port + 1, address,
                 remote_base_port + 1);
-          peer.connect_to(rtppeer::MIDI_PORT);
-        } else if (status == rtppeer::CONNECTED) {
+          peer.connect_to(rtppeer_t::MIDI_PORT);
+        } else if (status == rtppeer_t::CONNECTED) {
           connected();
         }
       });
 
-  peer.connect_to(rtppeer::CONTROL_PORT);
+  // We start to try to connect to the control port
+  // the internal state machine will try after connecting here connect
+  // to the midi port
+  DEBUG("Connecting control port {} to {}:{}", local_base_port, address,
+        remote_base_port);
 
-  connect_timer = poller.add_timer_event(5s, [this, conn_event] {
-    peer.connected_event.disconnect(conn_event);
-    peer.disconnect_event(rtppeer::CONNECT_TIMEOUT);
+  connect_timer = poller.add_timer_event(5s, [this] {
+    DEBUG("Timeout connecting to {}:{}, status {}", peer.remote_name,
+          remote_base_port, peer.status);
+    if (peer.status != rtppeer_t::CONNECTED)
+      peer.disconnect();
+    peer.disconnect_event(rtppeer_t::CONNECT_TIMEOUT);
+    // connected_connection.disconnect();
   });
+
+  peer.connect_to(rtppeer_t::CONTROL_PORT);
+
+  return true;
 }
 
 /**
@@ -221,10 +370,10 @@ void rtpclient::connect_to(const std::string &address,
  *
  * This just checks timeout and sends the ck.
  */
-void rtpclient::connected() {
+void rtpclient_t::connected() {
   connect_timer.disable();
 
-  peer.ck_event.connect([this](float ms) {
+  ck_connection = peer.ck_event.connect([this](float ms) {
     ck_timeout.disable();
     if (timerstate < 6) {
       timer_ck =
@@ -238,22 +387,33 @@ void rtpclient::connected() {
   send_ck0_with_timeout();
 }
 
-void rtpclient::send_ck0_with_timeout() {
+void rtpclient_t::send_ck0_with_timeout() {
   peer.send_ck0();
   ck_timeout = poller.add_timer_event(5s, [this] {
-    peer.disconnect_event(rtppeer::disconnect_reason_e::CK_TIMEOUT);
+    peer.disconnect_event(rtppeer_t::disconnect_reason_e::CK_TIMEOUT);
   });
 }
 
-void rtpclient::sendto(const io_bytes &pb, rtppeer::port_e port) {
-  auto peer_addr = (port == rtppeer::MIDI_PORT) ? midi_addr : control_addr;
+void rtpclient_t::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
+  sockaddr_storage *peer_addr;
+  int socket;
 
-  auto socket = rtppeer::MIDI_PORT == port ? midi_socket : control_socket;
+  if (port == rtppeer_t::MIDI_PORT) {
+    socket = midi_socket;
+    peer_addr = &midi_addr;
+  } else if (port == rtppeer_t::CONTROL_PORT) {
+    socket = control_socket;
+    peer_addr = &control_addr;
+  } else {
+    throw exception("Unknown port {}", port);
+  }
+
+  // DEBUG("Send {} bytes to {} {}, socket {}", port, pb.size(), *peer_addr,
+  //       socket);
 
   for (;;) {
-    ssize_t res =
-        ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
-                 (const struct sockaddr *)&peer_addr, sizeof(peer_addr));
+    ssize_t res = ::sendto(socket, pb.start, pb.size(), 0,
+                           (sockaddr *)peer_addr, sizeof(sockaddr_storage));
 
     if (static_cast<uint32_t>(res) == pb.size())
       break;
@@ -264,8 +424,8 @@ void rtpclient::sendto(const io_bytes &pb, rtppeer::port_e port) {
         continue;
       }
 
-      ERROR("Client: Could not send all data to {}:{}. Sent {}. {} ({})",
-            peer.remote_name, remote_base_port, res, strerror(errno), errno);
+      ERROR("Client: Could not send all data to {}. Sent {}. {} ({})",
+            *peer_addr, res, strerror(errno), errno);
       throw network_exception(errno);
     }
 
@@ -274,16 +434,16 @@ void rtpclient::sendto(const io_bytes &pb, rtppeer::port_e port) {
   }
 }
 
-void rtpclient::reset() {
+void rtpclient_t::reset() {
   remote_base_port = 0;
   peer.reset();
 }
 
-void rtpclient::data_ready(rtppeer::port_e port) {
+void rtpclient_t::data_ready(rtppeer_t::port_e port) {
   uint8_t raw[1500];
   struct sockaddr_in6 cliaddr;
   unsigned int len = sizeof(cliaddr);
-  auto socket = port == rtppeer::CONTROL_PORT ? control_socket : midi_socket;
+  auto socket = port == rtppeer_t::CONTROL_PORT ? control_socket : midi_socket;
   auto n = recvfrom(socket, raw, 1500, MSG_DONTWAIT,
                     (struct sockaddr *)&cliaddr, &len);
   // DEBUG("Got some data from control: {}", n);

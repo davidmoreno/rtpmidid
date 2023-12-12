@@ -13,20 +13,40 @@ class Connection:
         try:
             self.socket.connect(filename)
         except ConnectionRefusedError:
-            print("Connection refused to %s. Change control socket location with RTPMIDID_SOCKET environment var." % filename)
+            print(
+                "Connection refused to %s. Change control socket location with RTPMIDID_SOCKET environment var."
+                % filename
+            )
             raise
 
     def command(self, command):
-        self.socket.send(json.dumps(command).encode('utf8')+b'\n')
-        data = self.socket.recv(1024*1024)  # load all you can. 1MB cool!
+        self.socket.send(json.dumps(command).encode("utf8") + b"\n")
+        data = self.socket.recv(1024 * 1024)  # load all you can. 1MB cool!
         return json.loads(data)
 
 
-socketpath = os.environ.get(
-    "RTPMIDID_SOCKET") or "/var/run/rtpmidid/control.sock"
+def help():
+    print(
+        """\
+Usage: rtpmidid-cli.py [socketpath] <command> [args]
+
+Examples:
+
+rtpmidid-cli.py list
+""",
+        end="",
+    )
 
 
 def main(argv):
+    socketpath = os.environ.get("RTPMIDID_SOCKET") or "/var/run/rtpmidid/control.sock"
+    if "--help" in argv or "-h" in argv or len(argv) == 1:
+        help()
+        return
+
+    if len(argv) > 1 and argv[1].startswith("/"):
+        socketpath = argv[1]
+        argv = argv[1:]
     try:
         conn = Connection(socketpath)
     except Exception as e:
@@ -39,17 +59,25 @@ def main(argv):
         print(json.dumps(ret, indent=2))
 
 
+def maybe_int(txt: str):
+    try:
+        return int(txt)
+    except:
+        pass
+    return txt
+
+
 def parse_commands(argv):
     cmd = []
     for x in argv:
-        if x == '.':
-            yield {"method": cmd[0], "params": cmd[1:]}
+        if x == ".":
+            yield {"method": cmd[0], "params": [maybe_int(x) for x in cmd[1:]]}
             cmd = []
         else:
             cmd.append(x)
     if cmd:
-        yield {"method": cmd[0], "params": cmd[1:]}
+        yield {"method": cmd[0], "params": [maybe_int(x) for x in cmd[1:]]}
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main(sys.argv)

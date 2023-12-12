@@ -86,13 +86,14 @@ public:
   ~logger();
 
   void log(const char *filename, int lineno, LogLevel loglevel,
-           const std::string &msg);
+           const char *msg);
   void flush();
 };
 
 template <typename... Args>
 inline void log(const char *fullpath, int lineno, LogLevel loglevel,
                 Args... args) {
+  static char buffer[512];
 
   // Get ony the file name part, not full path. Assumes a / and ends in 0.
   const char *filename = fullpath;
@@ -102,8 +103,10 @@ inline void log(const char *fullpath, int lineno, LogLevel loglevel,
     --filename;
   ++filename;
 
-  auto str = fmt::format(args...);
-  __logger.log(filename, lineno, loglevel, str);
+  auto n = fmt::format_to_n(buffer, sizeof(buffer), args...);
+  *n.out = '\0';
+
+  __logger.log(filename, lineno, loglevel, buffer);
 }
 
 inline void flush() { __logger.flush(); }

@@ -1,5 +1,5 @@
-#include <cstdint>
 #include <chrono>
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -12,6 +12,7 @@
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/rtpclient.hpp"
+#include "rtpmidid/signal.hpp"
 #include "test_case.hpp"
 
 using namespace std::chrono_literals;
@@ -280,6 +281,9 @@ public:
 struct ServerAB {
   rtpmidid::rtpmidid_t A;
   rtpmidid::rtpmidid_t B;
+  connection_t<const std::string &, const std::string &, const std::string &>
+      discover_connection;
+  connection_t<const std::string &> remote_connection;
 
   ServerAB()
       : A(parse_cmd_args({"--port", "10000", "--name", "TEST-SERVER-A",
@@ -289,17 +293,18 @@ struct ServerAB {
     avahi_known_names.clear();
 
     // Keep list of known items by server A
-    A.mdns_rtpmidi.discover_event.connect([](const std::string &name,
-                                             const std::string &address,
-                                             const std::string &port) {
-      avahi_known_names.push_back(name);
-      DEBUG("Discover {}", name);
-    });
-    A.mdns_rtpmidi.remove_event.connect([](const std::string &name) {
-      avahi_known_names.erase(std::find(std::begin(avahi_known_names),
-                                        std::end(avahi_known_names), name));
-      DEBUG("Undiscover {}", name);
-    });
+    discover_connection = A.mdns_rtpmidi.discover_event.connect(
+        [](const std::string &name, const std::string &address,
+           const std::string &port) {
+          avahi_known_names.push_back(name);
+          DEBUG("Discover {}", name);
+        });
+    remote_connection =
+        A.mdns_rtpmidi.remove_event.connect([](const std::string &name) {
+          avahi_known_names.erase(std::find(std::begin(avahi_known_names),
+                                            std::end(avahi_known_names), name));
+          DEBUG("Undiscover {}", name);
+        });
 
     auto control_A = rtpmidid::control_socket_t(A, "/tmp/rtpmidid.testA.sock");
     auto control_B = rtpmidid::control_socket_t(B, "/tmp/rtpmidid.testB.sock");
@@ -367,10 +372,10 @@ void test_evil_disconnect() {
 
   // Now disconnect the control port of server-b / metronome-metro
   for (auto &peer : servers.B.known_clients) {
-    if (peer.second.peer) {
-      DEBUG("Peer: {} / control fd {}", peer.second.peer->peer.local_name,
-            peer.second.peer->control_socket);
-      close(peer.second.peer->midi_socket);
+    if (peer.peer) {
+      DEBUG("Peer: {} / control fd {}", peer.peer->peer.local_name,
+            peer.peer->control_socket);
+      close(peer.peer->midi_socket);
     }
   }
   loggera.wait();

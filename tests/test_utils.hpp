@@ -17,6 +17,8 @@
  */
 #pragma once
 
+#include <chrono>
+#include <functional>
 #include <vector>
 
 #include <rtpmidid/iobytes.hpp>
@@ -33,3 +35,7 @@ public:
 };
 
 rtpmidid::io_bytes_managed hex_to_bin(const std::string &str);
+void poller_wait_for(std::chrono::milliseconds ms);
+void poller_wait_until(
+    const std::function<bool(void)> &f,
+    std::chrono::milliseconds ms = std::chrono::milliseconds(500));

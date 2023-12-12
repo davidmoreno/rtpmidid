@@ -20,8 +20,8 @@
 #pragma once
 #include "exceptions.hpp"
 #include "signal.hpp"
+#include "stats.hpp"
 #include <arpa/inet.h>
-#include <functional>
 #include <string>
 
 namespace rtpmidid {
@@ -40,7 +40,7 @@ public:
       : ::rtpmidid::exception("Bad MIDI packet: {}", what) {}
 };
 
-class rtppeer {
+class rtppeer_t {
 public:
   // Commands, the id is the same chars as the name
   enum commands_e {
@@ -68,6 +68,7 @@ public:
     DISCONNECT,
     CONNECT_TIMEOUT,
     CK_TIMEOUT,
+    NETWORK_ERROR,
   };
 
   status_e status;
@@ -85,6 +86,12 @@ public:
   uint8_t running_status;
   // Need some buffer space for sysex. This may require memory alloc.
   std::vector<uint8_t> sysex;
+  stats_t stats;
+
+  // This is to be filled at connection by whoever makes it
+  // It is not used by the rtppeer_t, just nice info to have
+  std::string remote_address = "";
+  int remote_base_port = 0;
 
   /// Event for connected
   signal_t<const std::string &, status_e> connected_event;
@@ -108,12 +115,13 @@ public:
   static bool is_command(io_bytes_reader &);
   static bool is_feedback(io_bytes_reader &);
 
-  rtppeer(std::string _name);
-  ~rtppeer();
+  rtppeer_t(std::string _name);
+  ~rtppeer_t();
 
   bool is_connected() { return status == CONNECTED; }
   void reset();
   void data_ready(io_bytes_reader &&, port_e port);
+  void disconnect();
 
   void parse_command(io_bytes_reader &, port_e port);
   void parse_feedback(io_bytes_reader &);
@@ -142,21 +150,21 @@ public:
 } // namespace rtpmidid
 
 template <>
-struct fmt::formatter<rtpmidid::rtppeer::status_e>
+struct fmt::formatter<rtpmidid::rtppeer_t::status_e>
     : formatter<std::string_view> {
-  auto format(rtpmidid::rtppeer::status_e c, format_context &ctx) {
+  auto format(rtpmidid::rtppeer_t::status_e c, format_context &ctx) {
     std::string_view name = "UNKNOWN";
     switch (c) {
-    case rtpmidid::rtppeer::status_e::NOT_CONNECTED:
+    case rtpmidid::rtppeer_t::status_e::NOT_CONNECTED:
       name = "NOT_CONNECTED";
       break;
-    case rtpmidid::rtppeer::status_e::CONTROL_CONNECTED:
+    case rtpmidid::rtppeer_t::status_e::CONTROL_CONNECTED:
       name = "CONTROL_CONNECTED";
       break;
-    case rtpmidid::rtppeer::status_e::MIDI_CONNECTED:
+    case rtpmidid::rtppeer_t::status_e::MIDI_CONNECTED:
       name = "MIDI_CONNECTED";
       break;
-    case rtpmidid::rtppeer::status_e::CONNECTED:
+    case rtpmidid::rtppeer_t::status_e::CONNECTED:
       name = "CONNECTED";
       break;
     }
@@ -165,14 +173,15 @@ struct fmt::formatter<rtpmidid::rtppeer::status_e>
 };
 
 template <>
-struct fmt::formatter<rtpmidid::rtppeer::port_e> : formatter<std::string_view> {
-  auto format(rtpmidid::rtppeer::port_e c, format_context &ctx) {
-    std::string_view name = "UNKNOWN";
+struct fmt::formatter<rtpmidid::rtppeer_t::port_e>
+    : formatter<std::string_view> {
+  auto format(rtpmidid::rtppeer_t::port_e c, format_context &ctx) {
+    const char *name = "UNKNOWN";
     switch (c) {
-    case rtpmidid::rtppeer::port_e::MIDI_PORT:
+    case rtpmidid::rtppeer_t::port_e::MIDI_PORT:
       name = "MIDI_PORT";
       break;
-    case rtpmidid::rtppeer::port_e::CONTROL_PORT:
+    case rtpmidid::rtppeer_t::port_e::CONTROL_PORT:
       name = "CONTROL_PORT";
       break;
     }
@@ -181,28 +190,31 @@ struct fmt::formatter<rtpmidid::rtppeer::port_e> : formatter<std::string_view> {
 };
 
 template <>
-struct fmt::formatter<rtpmidid::rtppeer::disconnect_reason_e>
+struct fmt::formatter<rtpmidid::rtppeer_t::disconnect_reason_e>
     : formatter<std::string_view> {
-  auto format(rtpmidid::rtppeer::disconnect_reason_e c, format_context &ctx) {
-    std::string_view name = "UNKNOWN";
+  auto format(rtpmidid::rtppeer_t::disconnect_reason_e c, format_context &ctx) {
+    const char *name = "UNKNOWN";
     switch (c) {
-    case rtpmidid::rtppeer::disconnect_reason_e::CANT_CONNECT:
+    case rtpmidid::rtppeer_t::disconnect_reason_e::CANT_CONNECT:
       name = "CANT_CONNECT";
       break;
-    case rtpmidid::rtppeer::disconnect_reason_e::PEER_DISCONNECTED:
+    case rtpmidid::rtppeer_t::disconnect_reason_e::PEER_DISCONNECTED:
       name = "PEER_DISCONNECTED";
       break;
-    case rtpmidid::rtppeer::disconnect_reason_e::CONNECTION_REJECTED:
+    case rtpmidid::rtppeer_t::disconnect_reason_e::CONNECTION_REJECTED:
       name = "CONNECTON_REJECTED";
       break;
-    case rtpmidid::rtppeer::disconnect_reason_e::DISCONNECT:
+    case rtpmidid::rtppeer_t::disconnect_reason_e::DISCONNECT:
       name = "DISCONNECT";
       break;
-    case rtpmidid::rtppeer::disconnect_reason_e::CONNECT_TIMEOUT:
+    case rtpmidid::rtppeer_t::disconnect_reason_e::CONNECT_TIMEOUT:
       name = "CONNECT_TIMEOUT";
       break;
-    case rtpmidid::rtppeer::disconnect_reason_e::CK_TIMEOUT:
+    case rtpmidid::rtppeer_t::disconnect_reason_e::CK_TIMEOUT:
       name = "CK_TIMEOUT";
+      break;
+    case rtpmidid::rtppeer_t::disconnect_reason_e::NETWORK_ERROR:
+      name = "NETWORK_ERROR";
       break;
     }
     return formatter<std::string_view>::format(name, ctx);

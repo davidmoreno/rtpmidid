@@ -1,20 +1,28 @@
-PORT := 10000
+# Port for test run 
+PORT:=10000
+# Number of jobs for make
+JOBS:=8
+
+# To easy change to clang, set CXX
+CMAKE_EXTRA_ARGS := -DCMAKE_CXX_COMPILER=${CXX} -GNinja  -DENABLE_PCH=OFF
+
 
 .PHONY: help
 help:
 	@echo "Makefile for rtpmidid"
 	@echo
-	@echo " build   -- Creates the build directory and builds the rtpmidid"
-	@echo " run     -- builds and runs the daemon"
-	@echo " setup   -- Creates the socket control file"
-	@echo " clean   -- Cleans project"
-	@echo " deb     -- Generate deb package"
-	@echo " test    -- Runs all test"
-	@echo " install -- Installs to PREFIX or DESTDIR (default /usr/local/)"
-	@echo " man     -- Generate man pages"
+	@echo " build     -- Creates the build directory and builds the rtpmidid"
+	@echo " build-dev -- Creates the build directory and builds the rtpmidid for debugging"
+	@echo " run       -- builds and runs the daemon"
+	@echo " setup     -- Creates the socket control file"
+	@echo " clean     -- Cleans project"
+	@echo " deb       -- Generate deb package"
+	@echo " test      -- Runs all test"
+	@echo " install   -- Installs to PREFIX or DESTDIR (default /usr/local/)"
+	@echo " man       -- Generate man pages"
 	@echo
-	@echo " gdb     -- Run inside gdb, to capture backtrace of failures (bt). Useful for bug reports."
-	@echo " capture -- Capture packets with tcpdump. Add this to bug reports."
+	@echo " gdb      -- Run inside gdb, to capture backtrace of failures (bt). Useful for bug reports."
+	@echo " capture  -- Capture packets with tcpdump. Add this to bug reports."
 	@echo
 	@echo "Variables:"
 	@echo 
@@ -26,14 +34,24 @@ build: build/bin/rtpmidid
 
 build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release
-	cd build && make -j
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release  $(CMAKE_EXTRA_ARGS)
+	cd build && ninja
 
 build-dev: 
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug
-	cd build && make -j
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug $(CMAKE_EXTRA_ARGS)
+	cd build && ninja
 
+build-deb:
+	mkdir -p build
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF $(CMAKE_EXTRA_ARGS)
+	cd build && ninja
+
+build-make:
+	mkdir -p build
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -G Makefile $(CMAKE_EXTRA_ARGS)
+	cd build && make -j$(JOBS)
+	
 
 man: 
 	mkdir -p build/man/
@@ -43,12 +61,15 @@ man:
 .PHONY: clean
 clean:
 	rm -rf build
+	rm -rf debian/rtpmidid
+	rm -rf debian/librtpmidid0
+	rm -rf debian/librtpmidid0-dev
 
 VALGRINDFLAGS := --leak-check=full --error-exitcode=1
-RTPMIDID_ARGS := --port ${PORT} --name devel
+RTPMIDID_ARGS := --ini default.ini --port ${PORT} --name devel --control /tmp/rtpmidid.sock
 
 .PHONY: run run-valgrind gdb
-run: build
+run: build-dev
 	build/src/rtpmidid $(RTPMIDID_ARGS)
 
 gdb: build-dev
@@ -107,6 +128,8 @@ install-rtpmidid: build man
 	cp cli/rtpmidid-cli.py $(PREFIX)/usr/bin/rtpmidid-cli
 	mkdir -p $(PREFIX)/etc/systemd/system/
 	cp debian/rtpmidid.service $(PREFIX)/etc/systemd/system/
+	mkdir -p $(PREFIX)/etc/rtpmidid/
+	cp default.ini $(PREFIX)/etc/rtpmidid/
 	mkdir -p $(PREFIX)/usr/share/doc/rtpmidid/
 	cp README.md $(PREFIX)/usr/share/doc/rtpmidid/
 	cp LICENSE-daemon.txt $(PREFIX)/usr/share/doc/rtpmidid/LICENSE.txt

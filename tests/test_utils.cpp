@@ -19,9 +19,11 @@
 
 #include "./test_utils.hpp"
 #include "./test_case.hpp"
+#include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/poller.hpp"
 #include <arpa/inet.h>
+#include <chrono>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -149,4 +151,46 @@ void test_client_t::recv(rtpmidid::io_bytes_reader &&msg) {
   auto len = ::recv(sockfd, msg.start, msg.size(), 0);
   msg.end = msg.start + len;
   msg.position = msg.start;
+}
+
+void poller_wait_for(std::chrono::milliseconds ms) {
+  using namespace std::chrono_literals;
+  using milliseconds = std::chrono::milliseconds;
+
+  auto pending = ms;
+  auto start = std::chrono::system_clock::now();
+  while (pending > 0s) {
+    DEBUG("WAIT {}ms", pending.count());
+    rtpmidid::poller.wait(pending);
+    auto now = std::chrono::system_clock::now();
+    auto elapsed = std::chrono::duration_cast<milliseconds>(now - start);
+    start = now;
+    pending -= elapsed;
+  };
+}
+
+void poller_wait_until(const std::function<bool(void)> &f,
+                       std::chrono::milliseconds ms) {
+  using namespace std::chrono_literals;
+  using milliseconds = std::chrono::milliseconds;
+
+  auto pending = ms;
+  auto start = std::chrono::system_clock::now();
+  auto start0 = start;
+  bool fret = f();
+  while (pending > 0s && !fret) {
+    DEBUG("WAIT {}ms or F", pending.count());
+    rtpmidid::poller.wait(pending / 4);
+    auto now = std::chrono::system_clock::now();
+    auto elapsed = std::chrono::duration_cast<milliseconds>(now - start);
+    start = now;
+    pending -= elapsed;
+    fret = f();
+  };
+  auto now = std::chrono::system_clock::now();
+  auto elapsed = std::chrono::duration_cast<milliseconds>(now - start0);
+  DEBUG("Done in {}ms", elapsed.count());
+  if (elapsed > ms) {
+    throw rtpmidid::exception("TEST TIMEOUT");
+  }
 }
