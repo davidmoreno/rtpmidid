@@ -4,7 +4,7 @@ PORT:=10000
 JOBS:=8
 
 # To easy change to clang, set CXX
-CMAKE_EXTRA_ARGS := -DCMAKE_CXX_COMPILER=${CXX} -GNinja  -DENABLE_PCH=OFF
+CMAKE_EXTRA_ARGS := -DCMAKE_CXX_COMPILER=${CXX} -DENABLE_PCH=OFF
 
 
 .PHONY: help
@@ -34,22 +34,22 @@ build: build/bin/rtpmidid
 
 build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release  $(CMAKE_EXTRA_ARGS)
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -GNinja $(CMAKE_EXTRA_ARGS)
 	cd build && ninja
 
 build-dev: 
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug $(CMAKE_EXTRA_ARGS)
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug -GNinja $(CMAKE_EXTRA_ARGS)
 	cd build && ninja
 
 build-deb:
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF $(CMAKE_EXTRA_ARGS)
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF -GNinja $(CMAKE_EXTRA_ARGS)
 	cd build && ninja
 
 build-make:
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -G Makefile $(CMAKE_EXTRA_ARGS)
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -GMakefile $(CMAKE_EXTRA_ARGS)
 	cd build && make -j$(JOBS)
 	
 
@@ -97,14 +97,13 @@ setup:
 	sudo mkdir -p /var/run/rtpmidid
 	sudo chown $(shell whoami) /var/run/rtpmidid
 
-.PHONY: test test_mdns test_rtppeer test_rtpserver
-test: test_rtppeer test_rtpserver
+.PHONY: test build-test
+test: build-test
+	mkdir -p build
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON -G "Unix Makefiles" $(CMAKE_EXTRA_ARGS)
+	cd build/tests && make -j
+	cd build/tests && make test
 
-test_rtppeer: build
-	valgrind $(VALGRINDFLAGS) build/tests/test_rtppeer
-
-test_rtpserver: build
-	valgrind $(VALGRINDFLAGS) build/tests/test_rtpserver
 
 .PHONY: deb
 deb:
