@@ -39,7 +39,6 @@ public:
   signal_t() {
     DEBUG0("{}::signal_t()", (void *)this);
     slots = std::make_shared<VT>();
-    next_slots = slots;
   }
   ~signal_t() {
     DEBUG0("{}::~signal_t()", (void *)this);
@@ -51,9 +50,10 @@ public:
   [[nodiscard]] connection_t<Args...>
   connect(std::function<void(Args...)> const &&f) {
     auto cid = max_id++;
-    // e copy next slots to ensure if there are several additions, it will work
-    next_slots = std::make_shared<VT>(*next_slots);
-    next_slots->insert(std::make_pair(cid, std::move(f)));
+    // Copy to next slots current slots, as if in use will still be valid, and
+    // later will be replaced.
+    slots = std::make_shared<VT>(*slots);
+    slots->insert(std::make_pair(cid, std::move(f)));
     DEBUG0("{}::signal_t::connect(f) -> {}", (void *)this, cid);
     connections[cid] = nullptr;
     return connection_t(this, cid);
@@ -61,7 +61,8 @@ public:
 
   void disconnect(int id) {
     DEBUG0("{}::signal_t::disconnect({})", (void *)this, id);
-    next_slots->erase(id);
+    slots = std::make_shared<VT>(*slots);
+    slots->erase(id);
     connections.erase(id);
   }
 
@@ -88,15 +89,15 @@ public:
    * not call a not valid callback anymore.
    */
   void operator()(Args... args) {
-    DEBUG0("{}::signal_t::()", (void *)this);
-    slots = next_slots;
+    auto slots = this->slots;
+    DEBUG0("{}::signal_t::() {} slots", (void *)this, slots->size());
     for (auto const &f : *slots) {
-      if (next_slots->find(f.first) == slots->end())
+      if (this->slots->find(f.first) == this->slots->end())
         continue; // this element was removed while looping, do not call
+      DEBUG0("{}::signal_t::() calling {}", (void *)this, f.first);
       f.second(std::forward<Args>(args)...);
+      DEBUG0("{}::signal_t::() called {}", (void *)this, f.first);
     }
-    // This may call free, but not normally
-    slots = next_slots;
     DEBUG0("{}::signal_t::() END", (void *)this);
   }
 
@@ -116,11 +117,7 @@ public:
 
 private:
   int max_id = 1;
-  // We do not manipulate the slots directly as when calling new ones can be
-  // added So we use a next_slots to add new ones, and then swap them afger each
-  // call. Normally this is just a increment of the internal ref counter
   std::shared_ptr<VT> slots;
-  std::shared_ptr<VT> next_slots;
 
   std::map<int, connection_t<Args...> *> connections;
 };
