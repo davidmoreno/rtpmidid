@@ -15,10 +15,10 @@ class Connection:
             self.socket.connect(filename)
         except ConnectionRefusedError:
             print(
-                "Connection refused to %s. Change control socket location with RTPMIDID_SOCKET environment var."
+                "Connection refused to %s. Can set other location with --control=<path>"
                 % filename
             )
-            raise
+            sys.exit(1)
 
     def command(self, command):
         self.socket.send(json.dumps(command).encode("utf8") + b"\n")
@@ -126,6 +126,14 @@ def safe_getter(*keys):
     return getter
 
 
+def latency_getter(data):
+    avg = safe_getter("peer", "latency_ms", "average")(data)
+    if not avg:
+        return ""
+    stddev = safe_getter("peer", "latency_ms", "stddev")(data)
+    return f"{avg}ms \u00B1 {stddev}ms"
+
+
 COLUMNS = [
     {
         "name": "ID",
@@ -165,8 +173,9 @@ COLUMNS = [
     },
     {
         "name": "Latency",
-        "get": lambda x: f'{safe_getter("peer", "latency_ms")(x)}ms',
-        "width": 8,
+        # the unicode symbol for +- is \u00B1
+        "get": latency_getter,
+        "width": 20,
         "align": "right",
     },
     {
