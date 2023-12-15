@@ -231,7 +231,7 @@ class Top:
         self.terminal_goto(1, self.height)
 
         print(self.ANSI_BG_BLUE + self.ANSI_TEXT_BOLD + self.ANSI_TEXT_WHITE, end="")
-        footer_left = f"Press Ctrl-C to exit | [q]uit | [k]ill midi peer | [up] [down] to navigate |"
+        footer_left = f"Press Ctrl-C to exit | [q]uit | [k]ill midi peer | [c]onnect to peer | [up] [down] to navigate"
         footer_right = f"| rtpmidid-cli v23.12 | (C) Coralbits 2023"
         padding = self.width - len(footer_left) - len(footer_right)
         self.print_padding(f"{footer_left}{' ' * padding}{footer_right}")
@@ -284,6 +284,55 @@ class Top:
             self.conn.command(
                 {"method": "router.remove", "params": [self.selected_row["id"]]}
             )
+        elif key == "c":
+            peer_id = self.dialog_ask("Connect to which peer id?")
+            self.conn.command(
+                {
+                    "method": "router.connect",
+                    "params": {"from": self.selected_row["id"], "to": int(peer_id)},
+                }
+            )
+
+    def set_cursor(self, x, y):
+        print("\033[%d;%dH" % (y, x), end="")
+
+    def dialog_ask(self, question, width=60):
+        # print a blue box with white text
+        width_2 = width // 2
+        start_x = self.width // 2 - width_2
+        start_y = self.height // 3
+
+        print(self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD, end="")
+        self.terminal_goto(start_x, start_y)
+        self.print_padding("", width_2)
+        self.terminal_goto(start_x, start_y + 1)
+        self.print_padding(" " + question, width_2)
+        self.terminal_goto(start_x, start_y + 2)
+        self.print_padding("", width_2)
+        self.terminal_goto(start_x, start_y + 4)
+        self.print_padding("", width_2)
+        print(self.ANSI_RESET + self.ANSI_BG_WHITE + self.ANSI_TEXT_BLUE, end="")
+        self.terminal_goto(start_x, start_y + 3)
+        self.print_padding("", width_2)
+        self.set_cursor(start_x + 1, start_y + 3)
+
+        sys.stdout.flush()
+        answer = ""
+        while True:
+            key = self.wait_for_input()
+            if key == "\n":
+                break
+            elif key == "\x7f":
+                answer = answer[:-1]
+            elif key:
+                answer += key
+            self.terminal_goto(start_x, start_y + 3)
+            self.print_padding(" " + answer, width_2)
+            self.set_cursor(start_x + 1 + len(answer), start_y + 3)
+            sys.stdout.flush()
+        print(self.ANSI_RESET, end="")
+
+        return answer
 
     def print_row(self, row):
         if not row:

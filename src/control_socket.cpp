@@ -176,6 +176,17 @@ std::vector<control_socket_ns::command_t> commands{
        control.router->remove_peer(peer_id);
        return "ok";
      }},
+    {"router.connect",
+     "Connects two peers at the router. Unidirectional conneciton.",
+     [](control_socket_t &control, const json_t &params) {
+       DEBUG("Params {}", params.dump());
+       peer_id_t from_peer_id, to_peer_id;
+       from_peer_id = params["from"];
+       to_peer_id = params["to"];
+       DEBUG("Connect peers: {} -> {}", from_peer_id, to_peer_id);
+       control.router->connect(from_peer_id, to_peer_id);
+       return "ok";
+     }},
     {"connect",
      "Connect to a peer send params: [hostname] | [hostname, port] | [name, "
      "hostname, port] | {\"name\": name, \"hostname\": hostname, \"port\": "
