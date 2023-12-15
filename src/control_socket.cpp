@@ -239,7 +239,7 @@ std::string control_socket_t::parse_command(const std::string &command) {
   // DEBUG("Parse command {}", command);
   auto js = json_t::parse(command);
 
-  auto method = js["method"];
+  auto method = nlohmann::to_string(js["method"]);
   try {
     if (method == "list") {
       auto res = std::vector<std::string>{};
