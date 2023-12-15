@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+import select
+import tty
 import shutil
 import socket
 import sys
@@ -99,9 +101,13 @@ class Top:
 
     ANSI_RESET = "\033[0m"
 
-    def __init__(self):
+    def __init__(self, conn: Connection):
         # terminal width and height from stty
+        self.conn = conn
         width, height = shutil.get_terminal_size()
+        self.selected_row_index = 0
+        self.selected_row = None
+        self.max_rows = height - 2
         self.width = width
         self.height = height
 
@@ -165,6 +171,9 @@ class Top:
             - (3 * (len(self.COLUMNS) - 1))
         )
 
+        # set the terminal input in one char per read
+        tty.setcbreak(sys.stdin)
+
     def terminal_goto(self, x, y):
         print("\033[%d;%dH" % (y, x), end="")
 
@@ -194,7 +203,14 @@ class Top:
     def get_color_row(self, row, idx):
         if idx == 0:
             return self.ANSI_BG_CYAN + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
-        elif row[3] == "CONNECTED":
+
+        # we are in the table rows
+        idx -= 1
+
+        if idx == self.selected_row_index:
+            return self.ANSI_BG_WHITE + self.ANSI_TEXT_BLACK
+
+        if row[3] == "CONNECTED":
             return self.ANSI_BG_GREEN + self.ANSI_TEXT_BLACK
         elif row[3] == "CONNECTING":
             return self.ANSI_BG_YELLOW + self.ANSI_TEXT_BLACK
@@ -215,9 +231,10 @@ class Top:
         self.terminal_goto(1, self.height)
 
         print(self.ANSI_BG_BLUE + self.ANSI_TEXT_BOLD + self.ANSI_TEXT_WHITE, end="")
-        self.print_padding(
-            "Press Ctrl-C to exit | rtpmidid-cli v23.12 | (C) Coralbits 2023"
-        )
+        footer_left = f"Press Ctrl-C to exit | [q]uit | [k]ill midi peer | [up] [down] to navigate |"
+        footer_right = f"| rtpmidid-cli v23.12 | (C) Coralbits 2023"
+        padding = self.width - len(footer_left) - len(footer_right)
+        self.print_padding(f"{footer_left}{' ' * padding}{footer_right}")
         print(self.ANSI_RESET, end="")
 
     def print_padding(self, text, count=None):
@@ -229,20 +246,81 @@ class Top:
             padchars = 0
         print(text[:count] + " " * padchars, end="")
 
-    def top_loop(self, conn: Connection):
+    def wait_for_input(self, timeout=1):
+        start = time.time()
+        while True:
+            if time.time() - start > timeout:
+                return
+            if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                # read a key
+                key = sys.stdin.read(1)
+                # if key is the ansi code for arrow keys, read the next 2 bytes and return "up", "down", "left", "right"
+                if key == "\033":
+                    key += sys.stdin.read(2)
+                    if key == "\033[A":
+                        return "up"
+                    elif key == "\033[B":
+                        return "down"
+                    elif key == "\033[C":
+                        return "right"
+                    elif key == "\033[D":
+                        return "left"
+                return key
+            time.sleep(0.1)
+
+    def parse_key(self, key):
+        # up got up in the current row
+        if key == "up":
+            self.selected_row_index -= 1
+            if self.selected_row_index < 0:
+                self.selected_row_index = 0
+        elif key == "down":
+            self.selected_row_index += 1
+            if self.selected_row_index >= self.max_rows:
+                self.selected_row_index = self.max_rows - 1
+        elif key == "q":
+            sys.exit(0)
+        elif key == "k":
+            self.conn.command(
+                {"method": "router.remove", "params": [self.selected_row["id"]]}
+            )
+
+    def print_row(self, row):
+        if not row:
+            return
+
+        text = json.dumps(row, indent=2)
+
+        print(self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE, end="")
+        self.print_padding("Current Row: ")
+        print(self.ANSI_RESET, end="")
+        print(text)
+
+    def print_data(self):
+        data = self.conn.command({"method": "status"})
+        peers = data["result"]["router"]
+        self.max_rows = len(peers)
+        if self.selected_row_index >= self.max_rows:
+            self.selected_row_index = self.max_rows - 1
+        self.selected_row = peers[self.selected_row_index]
+
+        table = [[x["name"] for x in self.COLUMNS]]
+        table.extend([[x["get"](peer) for x in self.COLUMNS] for peer in peers])
+        self.print_table(table)
+
+    def top_loop(self):
         print(self.ANSI_PUSH_SCREEN, end="")
         try:
             while True:
                 print(self.ANSI_CLEAR_SCREEN, end="")
                 self.print_header()
-                data = conn.command({"method": "status"})
-                table = [[x["name"] for x in self.COLUMNS]]
-                peers = data["result"]["router"]
-                table.extend([[x["get"](peer) for x in self.COLUMNS] for peer in peers])
-                self.print_table(table)
+                self.print_data()
+                self.print_row(self.selected_row)
                 self.print_footer()
                 print(flush=True, end="")
-                time.sleep(1)
+                key = self.wait_for_input()
+                if key:
+                    self.parse_key(key)
         except KeyboardInterrupt:
             pass
         finally:
@@ -267,7 +345,7 @@ def main(argv):
         sys.exit(1)
 
     if settings.top:
-        return Top().top_loop(conn)
+        return Top(conn).top_loop()
 
     for cmd in parse_commands(settings.command or ["help"]):
         print(">>> %s" % json.dumps(cmd), file=sys.stderr)
