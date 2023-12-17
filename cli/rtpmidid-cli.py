@@ -77,26 +77,25 @@ class Top:
     ANSI_PUSH_SCREEN = "\033[?1049h"
     ANSI_POP_SCREEN = "\033[?1049l"
 
-    ANSI_TEXT_BLUE = "\033[34m"
+    ANSI_TEXT_BLACK = "\033[30m"
     ANSI_TEXT_RED = "\033[31m"
     ANSI_TEXT_GREEN = "\033[32m"
     ANSI_TEXT_YELLOW = "\033[33m"
+    ANSI_TEXT_BLUE = "\033[34m"
     ANSI_TEXT_PURPLE = "\033[35m"
     ANSI_TEXT_CYAN = "\033[36m"
     ANSI_TEXT_WHITE = "\033[37m"
-    ANSI_TEXT_BLACK = "\033[30m"
     ANSI_TEXT_GREY = "\033[90m"
     ANSI_TEXT_BOLD = "\033[1m"
 
-    ANSI_BG_BLUE = "\033[44m"
+    ANSI_BG_BLACK = "\033[40m"
     ANSI_BG_RED = "\033[41m"
     ANSI_BG_GREEN = "\033[42m"
-    ANSI_BG_DARK_GREEN = "\033[32m"
     ANSI_BG_YELLOW = "\033[43m"
+    ANSI_BG_BLUE = "\033[44m"
     ANSI_BG_PURPLE = "\033[45m"
     ANSI_BG_CYAN = "\033[46m"
     ANSI_BG_WHITE = "\033[47m"
-    ANSI_BG_BLACK = "\033[40m"
     ANSI_BG_GREY = "\033[100m"
 
     ANSI_RESET = "\033[0m"
@@ -106,10 +105,12 @@ class Top:
         self.conn = conn
         width, height = shutil.get_terminal_size()
         self.selected_row_index = 0
+        self.selected_col_index = 0
         self.selected_row = None
         self.max_rows = height - 2
         self.width = width
         self.height = height
+        self.data = []
 
         self.COLUMNS = [
             {
@@ -168,8 +169,9 @@ class Top:
         self.COLUMNS[2]["width"] = (
             self.width
             - sum(x["width"] for x in self.COLUMNS)
-            - (3 * (len(self.COLUMNS) - 1))
+            - (1 * (len(self.COLUMNS) - 1))
         )
+        self.max_cols = len(self.COLUMNS)
 
         # set the terminal input in one char per read
         tty.setcbreak(sys.stdin)
@@ -191,27 +193,30 @@ class Top:
             else:
                 return "{:{width}}".format(cell, width=column["width"])
 
-        for idx, row in enumerate(table):
-            print(self.get_color_row(row, idx), end="")
-            print(
-                " | ".join(
-                    format_cell(x, column) for x, column in zip(row, self.COLUMNS)
-                )
-            )
-            print(self.ANSI_RESET, end="")
+        max_cols = self.max_cols - 1
+        for rown, row in enumerate(table):
+            for coln, cell in enumerate(zip(row, self.COLUMNS)):
+                cell, column = cell
+                print(self.get_color_cell(row, rown, coln), end="")
+                print(format_cell(cell, column), end="")
+                if coln != max_cols:
+                    print(" ", end="")
+        print(self.ANSI_RESET, end="")
 
-    def get_color_row(self, row, idx):
-        if idx == 0:
-            return self.ANSI_BG_CYAN + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
+    def get_color_cell(self, row: dict, rown: int, coln: int):
+        if rown == 0:
+            if coln == self.selected_col_index:
+                return self.ANSI_BG_CYAN + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
+            return self.ANSI_BG_PURPLE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
 
         # we are in the table rows
-        idx -= 1
+        rown -= 1
 
-        if idx == self.selected_row_index:
+        if rown == self.selected_row_index:
             return self.ANSI_BG_WHITE + self.ANSI_TEXT_BLACK
 
         if row[3] == "CONNECTED":
-            return self.ANSI_BG_GREEN + self.ANSI_TEXT_BLACK
+            return self.ANSI_BG_GREEN + self.ANSI_TEXT_WHITE
         elif row[3] == "CONNECTING":
             return self.ANSI_BG_YELLOW + self.ANSI_TEXT_BLACK
         elif row[3] == "":
@@ -251,7 +256,7 @@ class Top:
         while True:
             if time.time() - start > timeout:
                 return
-            if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+            if sys.stdin in select.select([sys.stdin], [], [], 1)[0]:
                 # read a key
                 key = sys.stdin.read(1)
                 # if key is the ansi code for arrow keys, read the next 2 bytes and return "up", "down", "left", "right"
@@ -266,7 +271,6 @@ class Top:
                     elif key == "\033[D":
                         return "left"
                 return key
-            time.sleep(0.1)
 
     def parse_key(self, key):
         # up got up in the current row
@@ -278,6 +282,14 @@ class Top:
             self.selected_row_index += 1
             if self.selected_row_index >= self.max_rows:
                 self.selected_row_index = self.max_rows - 1
+        if key == "left":
+            self.selected_col_index -= 1
+            if self.selected_col_index < 0:
+                self.selected_col_index = self.max_cols - 1
+        elif key == "right":
+            self.selected_col_index += 1
+            if self.selected_col_index >= self.max_cols:
+                self.selected_col_index = 0
         elif key == "q":
             sys.exit(0)
         elif key == "k":
@@ -340,21 +352,40 @@ class Top:
 
         text = json.dumps(row, indent=2)
 
+        data_rows = len(self.data)
+        top_area = data_rows + 4
+        max_col = self.height - top_area - 5
+
         print(self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE, end="")
-        self.print_padding("Current Row: ")
+        self.print_padding(f"Current Row {self.height}: ")
         print(self.ANSI_RESET, end="")
-        print(text)
+        width_2 = self.width // 2
+        for idx, row in enumerate(text.split("\n")):
+            if idx >= max_col:
+                self.terminal_goto(width_2, top_area + idx - max_col)
+            else:
+                self.terminal_goto(0, top_area + idx)
+            print(row)
 
     def print_data(self):
         data = self.conn.command({"method": "status"})
         peers = data["result"]["router"]
+        self.data = peers
         self.max_rows = len(peers)
         if self.selected_row_index >= self.max_rows:
             self.selected_row_index = self.max_rows - 1
         self.selected_row = peers[self.selected_row_index]
 
         table = [[x["name"] for x in self.COLUMNS]]
-        table.extend([[x["get"](peer) for x in self.COLUMNS] for peer in peers])
+        data = [[x["get"](peer) for x in self.COLUMNS] for peer in peers]
+
+        data.sort(
+            key=lambda x: "ZZZZZZZ"
+            if not x[self.selected_col_index]
+            else str(x[self.selected_col_index])
+        )
+
+        table.extend(data)
         self.print_table(table)
 
     def top_loop(self):
