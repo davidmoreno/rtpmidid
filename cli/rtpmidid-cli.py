@@ -40,9 +40,36 @@ def maybe_int(txt: str):
 def parse_arguments(argv):
     import argparse
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        usage="""rtpmidid-cli [options] [command]
+
+rtpmidid-cli is a command line interface to rtpmidid. It can be used to
+control rtpmidid and to monitor the status of the peers.
+
+If no command is passed as argument, rtpmidid-cli will enter top mode.
+
+In top mode, rtpmidid-cli will show a table with the status of the peers
+and will allow to connect and disconnect peers. In top mode, the following
+keys are available:
+                                    
+[up] [down] - navigate the table
+[left] [right] - navigate the table columns
+[q] - quit
+[k] - kill the selected peer
+[c] - connect to a peer
+
+Common commands are:
+
+help            - show all the remote available commands and some help
+status          - show the status of the router
+router.connect  - connect two peers
+router.remove   - disconnect a peer
+router.kill     - kill a peer
+connect         - connects to a remote rtpmidi server
+
+"""
+    )
     parser.add_argument("--control")
-    parser.add_argument("--top", action="store_true")
     parser.add_argument("command", nargs="*")
 
     return parser.parse_args(argv[1:])
@@ -424,7 +451,7 @@ def main(argv):
         print(str(e))
         sys.exit(1)
 
-    if settings.top:
+    if not settings.command:
         return Top(conn).top_loop()
 
     for cmd in parse_commands(settings.command or ["help"]):
