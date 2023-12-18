@@ -215,10 +215,12 @@ class Top:
 
     def print_table(self, table: list[list[str]]):
         def format_cell(cell, column):
+            width = column["width"]
+            cell = str(cell)[:width]
             if column.get("align") == "right":
-                return "{:>{width}}".format(cell, width=column["width"])
+                return "{:>{width}}".format(cell, width=width)
             else:
-                return "{:{width}}".format(cell, width=column["width"])
+                return "{:{width}}".format(cell, width=width)
 
         max_cols = self.max_cols - 1
         for rown, row in enumerate(table):
@@ -381,18 +383,22 @@ class Top:
 
         data_rows = len(self.data)
         top_area = data_rows + 4
-        max_col = self.height - top_area - 5
+        max_col = self.height - top_area
 
         print(self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE, end="")
         self.print_padding(f"Current Row {self.height}: ")
         print(self.ANSI_RESET, end="")
         width_2 = self.width // 2
+        max_col2 = max_col * 2
         for idx, row in enumerate(text.split("\n")):
-            if idx >= max_col:
-                self.terminal_goto(width_2, top_area + idx - max_col)
-            else:
+            if idx >= max_col2:
+                continue  # skip too many rows
+            elif idx < max_col:
                 self.terminal_goto(0, top_area + idx)
-            print(row)
+                print(row)
+            else:
+                self.terminal_goto(width_2, top_area + idx - max_col)
+                print(f"| {row}")
 
     def print_data(self):
         data = self.conn.command({"method": "status"})
