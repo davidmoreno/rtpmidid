@@ -137,7 +137,7 @@ class Top:
         self.max_rows = height - 2
         self.width = width
         self.height = height
-        self.data = []
+        self.status = {}
 
         self.COLUMNS = [
             {
@@ -160,7 +160,7 @@ class Top:
             },
             {
                 "name": "Status",
-                "get": lambda data: safe_get(data, "peer", "status"),
+                "get": self.get_peer_status,
                 "width": 20,
                 "align": "left",
             },
@@ -206,31 +206,62 @@ class Top:
     def terminal_goto(self, x, y):
         print("\033[%d;%dH" % (y, x), end="")
 
+    def get_peer_status(self, data):
+        return safe_get(data, "peer", "status")
+
     def get_latency(self, data):
         avg = safe_get(data, "peer", "latency_ms", "average")
-        if not avg:
+        if avg == "":
             return ""
         stddev = safe_get(data, "peer", "latency_ms", "stddev")
         return f"{avg}ms \u00B1 {stddev}ms"
 
-    def print_table(self, table: list[list[str]]):
-        def format_cell(cell, column):
-            width = column["width"]
-            cell = str(cell)[:width]
-            if column.get("align") == "right":
-                return "{:>{width}}".format(cell, width=width)
-            else:
-                return "{:{width}}".format(cell, width=width)
+    def print_table(self):
+        rows = self.status["router"]
 
+        def get_sort_key(row):
+            value = self.COLUMNS[self.selected_col_index]["get"](row)
+            if value is None or value == "":
+                return "ZZZZZZZ"
+            return value
+
+        rows.sort(key=get_sort_key)
+        self.selected_row = rows[self.selected_row_index]
         max_cols = self.max_cols - 1
-        for rown, row in enumerate(table):
-            for coln, cell in enumerate(zip(row, self.COLUMNS)):
-                cell, column = cell
-                print(self.get_color_cell(row, rown, coln), end="")
-                print(format_cell(cell, column), end="")
+
+        def print_cell(row: dict, rown: int, coln: int):
+            print(self.get_color_cell(row, rown, coln), end="")
+            column = self.COLUMNS[coln]
+            width = column["width"]
+            value = column["get"](row)
+            value = str(value)[:width]
+            if column.get("align") == "right":
+                print("{:>{width}}".format(value, width=width), end="")
+            else:
+                print("{:{width}}".format(value, width=width), end="")
+
+        def print_row(row: dict, rown: int):
+            for coln, column in enumerate(self.COLUMNS):
+                print_cell(row, rown, coln)
                 if coln != max_cols:
                     print(" ", end="")
-        print(self.ANSI_RESET, end="")
+            print()
+
+        for coln, column in enumerate(self.COLUMNS):
+            print(self.get_color_cell({}, 0, coln), end="")
+            width = column["width"]
+            value = column["name"][:width]
+            if column.get("align") == "right":
+                print("{:>{width}}".format(value, width=width), end="")
+            else:
+                print("{:{width}}".format(value, width=width), end="")
+
+            if coln != max_cols:
+                print(" ", end="")
+        print()
+
+        for rown, row in enumerate(self.status["router"]):
+            print_row(row, rown + 1)
 
     def get_color_cell(self, row: dict, rown: int, coln: int):
         if rown == 0:
@@ -240,18 +271,33 @@ class Top:
 
         # we are in the table rows
         rown -= 1
+        bg = self.ANSI_BG_BLACK
+        fg = self.ANSI_TEXT_WHITE
 
         if rown == self.selected_row_index:
-            return self.ANSI_BG_WHITE + self.ANSI_TEXT_BLACK
+            bg = self.ANSI_BG_WHITE
+            fg = self.ANSI_TEXT_BLACK
 
-        if row[3] == "CONNECTED":
-            return self.ANSI_BG_GREEN + self.ANSI_TEXT_WHITE
-        elif row[3] == "CONNECTING":
-            return self.ANSI_BG_YELLOW + self.ANSI_TEXT_BLACK
-        elif row[3] == "":
-            return self.ANSI_BG_BLACK + self.ANSI_TEXT_GREY
-        else:
-            return self.ANSI_BG_GREY + self.ANSI_TEXT_BLACK
+        status = self.get_peer_status(row)
+        column = self.COLUMNS[coln]
+
+        bold = ""
+
+        if column["name"] == "Status":
+            if status == "CONNECTED":
+                fg = self.ANSI_TEXT_GREEN
+            elif status == "CONNECTING":
+                fg = self.ANSI_TEXT_YELLOW
+
+        if row["id"] in self.selected_row["send_to"]:
+            bold = self.ANSI_TEXT_BOLD
+            fg = self.ANSI_TEXT_YELLOW
+
+        if self.selected_row["id"] in row["send_to"]:
+            fg = self.ANSI_TEXT_YELLOW
+            bold = self.ANSI_TEXT_BOLD
+
+        return self.ANSI_RESET + fg + bg + bold
 
     def print_header(self):
         # write a header with the rtpmidid client, version, with color until the end of line
@@ -381,7 +427,7 @@ class Top:
 
         text = json.dumps(row, indent=2)
 
-        data_rows = len(self.data)
+        data_rows = len(self.status["router"])
         top_area = data_rows + 4
         max_col = self.height - top_area
 
@@ -398,42 +444,33 @@ class Top:
                 print(row)
             else:
                 self.terminal_goto(width_2, top_area + idx - max_col)
-                print(f"| {row}")
+                print(f"\u2502 {row}")
 
-    def print_data(self):
-        data = self.conn.command({"method": "status"})
-        peers = data["result"]["router"]
-        self.data = peers
+    def refresh_data(self):
+        ret = self.conn.command({"method": "status"})
+        self.status = ret["result"]
+        peers = self.status["router"]
         self.max_rows = len(peers)
         if self.selected_row_index >= self.max_rows:
             self.selected_row_index = self.max_rows - 1
         self.selected_row = peers[self.selected_row_index]
 
-        table = [[x["name"] for x in self.COLUMNS]]
-        data = [[x["get"](peer) for x in self.COLUMNS] for peer in peers]
-
-        data.sort(
-            key=lambda x: "ZZZZZZZ"
-            if not x[self.selected_col_index]
-            else str(x[self.selected_col_index])
-        )
-
-        table.extend(data)
-        self.print_table(table)
-
     def top_loop(self):
         print(self.ANSI_PUSH_SCREEN, end="")
         try:
+            self.refresh_data()
             while True:
                 print(self.ANSI_CLEAR_SCREEN, end="")
                 self.print_header()
-                self.print_data()
+                self.print_table()
                 self.print_row(self.selected_row)
                 self.print_footer()
                 print(flush=True, end="")
                 key = self.wait_for_input()
                 if key:
                     self.parse_key(key)
+                else:
+                    self.refresh_data()
         except KeyboardInterrupt:
             pass
         finally:
