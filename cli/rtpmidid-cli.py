@@ -51,12 +51,11 @@ If no command is passed as argument, rtpmidid-cli will enter top mode.
 In top mode, rtpmidid-cli will show a table with the status of the peers
 and will allow to connect and disconnect peers. In top mode, the following
 keys are available:
-                                    
-[up] [down] - navigate the table
+
+[h]            - show help                                    
+[up] [down]    - navigate the table
 [left] [right] - navigate the table columns
-[q] - quit
-[k] - kill the selected peer
-[c] - connect to a peer
+[q]            - quit
 
 Common commands are:
 
@@ -190,6 +189,21 @@ class Top:
                 ),
                 "width": 10,
             },
+        ]
+
+        self.COMMANDS = [
+            {"key": "h", "command": self.help, "help": "Show this help"},
+            {"key": "up", "command": self.move_up, "help": "Previous peer in the list"},
+            {"key": "down", "command": self.move_down, "help": "Next peer in the list"},
+            {
+                "key": "left",
+                "command": self.move_left,
+                "help": "Sort by previous column",
+            },
+            {"key": "right", "command": self.move_right, "help": "Sort by next column"},
+            {"key": "q", "command": self.quit, "help": "Quit"},
+            {"key": "k", "command": self.kill, "help": "Kill peer"},
+            {"key": "c", "command": self.connect, "help": "Connect to peer"},
         ]
 
         # make Name column as wide as possible
@@ -365,39 +379,90 @@ class Top:
 
     def parse_key(self, key):
         # up got up in the current row
-        if key == "up":
-            self.selected_row_index -= 1
-            if self.selected_row_index < 0:
-                self.selected_row_index = 0
-        elif key == "down":
-            self.selected_row_index += 1
-            if self.selected_row_index >= self.max_rows:
-                self.selected_row_index = self.max_rows - 1
-        if key == "left":
-            self.selected_col_index -= 1
-            if self.selected_col_index < 0:
-                self.selected_col_index = self.max_cols - 1
-        elif key == "right":
-            self.selected_col_index += 1
-            if self.selected_col_index >= self.max_cols:
-                self.selected_col_index = 0
-        elif key == "q":
-            sys.exit(0)
-        elif key == "k":
-            self.conn.command(
-                {"method": "router.remove", "params": [self.selected_row["id"]]}
-            )
-        elif key == "c":
-            peer_id = self.dialog_ask("Connect to which peer id?")
-            self.conn.command(
-                {
-                    "method": "router.connect",
-                    "params": {"from": self.selected_row["id"], "to": int(peer_id)},
-                }
-            )
+        for cmd in self.COMMANDS:
+            if key == cmd["key"]:
+                cmd["command"]()
+                return
+
+    def move_up(self):
+        self.selected_row_index -= 1
+        if self.selected_row_index < 0:
+            self.selected_row_index = 0
+
+    def move_down(self):
+        self.selected_row_index += 1
+        if self.selected_row_index >= self.max_rows:
+            self.selected_row_index = self.max_rows - 1
+
+    def move_left(self):
+        self.selected_col_index -= 1
+        if self.selected_col_index < 0:
+            self.selected_col_index = self.max_cols - 1
+
+    def move_right(self):
+        self.selected_col_index += 1
+        if self.selected_col_index >= self.max_cols:
+            self.selected_col_index = 0
+
+    def quit(self):
+        sys.exit(0)
+
+    def kill(self):
+        self.conn.command(
+            {"method": "router.remove", "params": [self.selected_row["id"]]}
+        )
+
+    def connect(self):
+        peer_id = self.dialog_ask("Connect to which peer id?")
+        self.conn.command(
+            {
+                "method": "router.connect",
+                "params": {"from": self.selected_row["id"], "to": int(peer_id)},
+            }
+        )
+
+    def help(self):
+        text = ""
+        for cmd in self.COMMANDS:
+            text += f"[{cmd['key']}]{' '*(8-len(cmd['key']))} {cmd['help']}\n"
+        text = text.strip()
+        self.dialog(text=text)
 
     def set_cursor(self, x, y):
         print("\033[%d;%dH" % (y, x), end="")
+
+    def dialog(self, text):
+        width = max(len(x) for x in text.split("\n")) + 2
+        width_2 = width // 2
+        start_x = self.width // 2 - width_2
+        start_y = self.height // 3
+
+        print(self.ANSI_BG_PURPLE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD, end="")
+        self.terminal_goto(start_x, start_y)
+        # self.print_padding("", width)
+        # top border, width, using unicode table characters
+        print(f"\u250C{chr(0x2500) * (width-1)}\u2510")
+        for linen, line in enumerate(text.split("\n")):
+            self.terminal_goto(start_x, start_y + linen + 1)
+            self.print_padding(f"\u2502{line}", width)
+            print(f"\u2502", end="")
+
+        # bottom border, width, using unicode table characters
+        self.terminal_goto(start_x, start_y + linen + 2)
+        print(f"\u2514{chr(0x2500) * (width-1)}\u2518")
+
+        # text: press any key to close dialog in the center
+        self.terminal_goto(start_x + width_2 - 8, start_y + linen + 2)
+        print("[ Press any key ]", end="")
+
+        # cursor at end of screen
+        self.set_cursor(self.width, self.height)
+
+        # self.print_padding("", width)
+
+        print(self.ANSI_RESET, flush=True, end="")
+        # wait for a key
+        self.wait_for_input(timeout=10000000)
 
     def dialog_ask(self, question, width=60):
         # print a blue box with white text
@@ -465,7 +530,6 @@ class Top:
     def refresh_data(self):
         ret = self.conn.command({"method": "status"})
         self.status = ret["result"]
-        peers = self.status["router"]
 
     def top_loop(self):
         print(self.ANSI_PUSH_SCREEN, end="")
