@@ -260,8 +260,24 @@ class Top:
                 print(" ", end="")
         print()
 
-        for rown, row in enumerate(self.status["router"]):
-            print_row(row, rown + 1)
+        rown = 1
+        for row in self.status["router"]:
+            print_row(row, rown)
+            if "peers" in row:
+                for peer in row["peers"]:
+                    peer = {
+                        "id": "",
+                        "name": safe_get(peer, "remote", "name"),
+                        "type": "rtppeer",
+                        "peer": peer,
+                    }
+                    print_row(peer, rown)
+            rown += 1
+
+        self.max_rows = rown - 1
+        if self.selected_row_index >= self.max_rows:
+            self.selected_row_index = self.max_rows - 1
+        self.selected_row = self.status["router"][self.selected_row_index]
 
     def get_color_cell(self, row: dict, rown: int, coln: int):
         if rown == 0:
@@ -289,11 +305,11 @@ class Top:
             elif status == "CONNECTING":
                 fg = self.ANSI_TEXT_YELLOW
 
-        if row["id"] in self.selected_row["send_to"]:
+        if row.get("id") in self.selected_row.get("send_to", []):
             bold = self.ANSI_TEXT_BOLD
             fg = self.ANSI_TEXT_YELLOW
 
-        if self.selected_row["id"] in row["send_to"]:
+        if self.selected_row.get("id") in row.get("send_to", []):
             fg = self.ANSI_TEXT_YELLOW
             bold = self.ANSI_TEXT_BOLD
 
@@ -427,11 +443,11 @@ class Top:
 
         text = json.dumps(row, indent=2)
 
-        data_rows = len(self.status["router"])
+        data_rows = self.max_rows + 2
         top_area = data_rows + 4
         max_col = self.height - top_area
 
-        print(self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE, end="")
+        print(self.ANSI_RESET + self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE, end="")
         self.print_padding(f"Current Row {self.height}: ")
         print(self.ANSI_RESET, end="")
         width_2 = self.width // 2
@@ -450,10 +466,6 @@ class Top:
         ret = self.conn.command({"method": "status"})
         self.status = ret["result"]
         peers = self.status["router"]
-        self.max_rows = len(peers)
-        if self.selected_row_index >= self.max_rows:
-            self.selected_row_index = self.max_rows - 1
-        self.selected_row = peers[self.selected_row_index]
 
     def top_loop(self):
         print(self.ANSI_PUSH_SCREEN, end="")
