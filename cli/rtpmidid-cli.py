@@ -435,6 +435,44 @@ class Top:
     ##
 
     def print_table(self):
+        def get_color_cell(row: dict, rown: int, coln: int):
+            if rown == 0:
+                if coln == self.selected_col_index:
+                    return (
+                        self.ANSI_BG_CYAN + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
+                    )
+                return self.ANSI_BG_PURPLE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
+
+            # we are in the table rows
+            rown -= 1
+            bg = self.ANSI_BG_BLACK
+            fg = self.ANSI_TEXT_WHITE
+
+            if rown == self.selected_row_index:
+                bg = self.ANSI_BG_WHITE
+                fg = self.ANSI_TEXT_BLACK
+
+            status = self.get_peer_status(row)
+            column = self.COLUMNS[coln]
+
+            bold = ""
+
+            if column["name"] == "Status":
+                if status == "CONNECTED":
+                    fg = self.ANSI_TEXT_GREEN
+                elif status == "CONNECTING":
+                    fg = self.ANSI_TEXT_YELLOW
+
+            if row.get("id") in self.selected_row.get("send_to", []):
+                bold = self.ANSI_TEXT_BOLD
+                fg = self.ANSI_TEXT_YELLOW
+
+            if self.selected_row.get("id") in row.get("send_to", []):
+                fg = self.ANSI_TEXT_YELLOW
+                bold = self.ANSI_TEXT_BOLD
+
+            return self.ANSI_RESET + fg + bg + bold
+
         rows = self.status["router"]
 
         def get_sort_key(row):
@@ -450,7 +488,7 @@ class Top:
         max_cols = self.max_cols - 1
 
         def print_cell(row: dict, rown: int, coln: int):
-            self.print(self.get_color_cell(row, rown, coln))
+            self.print(get_color_cell(row, rown, coln))
             column = self.COLUMNS[coln]
             width = column["width"]
             value = column["get"](row)
@@ -468,7 +506,7 @@ class Top:
             self.print("\n")
 
         for coln, column in enumerate(self.COLUMNS):
-            self.print(self.get_color_cell({}, 0, coln))
+            self.print(get_color_cell({}, 0, coln))
             width = column["width"]
             value = column["name"][:width]
             if column.get("align") == "right":
@@ -498,42 +536,6 @@ class Top:
         if self.selected_row_index >= self.max_rows:
             self.selected_row_index = self.max_rows - 1
         self.selected_row = self.status["router"][self.selected_row_index]
-
-    def get_color_cell(self, row: dict, rown: int, coln: int):
-        if rown == 0:
-            if coln == self.selected_col_index:
-                return self.ANSI_BG_CYAN + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
-            return self.ANSI_BG_PURPLE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
-
-        # we are in the table rows
-        rown -= 1
-        bg = self.ANSI_BG_BLACK
-        fg = self.ANSI_TEXT_WHITE
-
-        if rown == self.selected_row_index:
-            bg = self.ANSI_BG_WHITE
-            fg = self.ANSI_TEXT_BLACK
-
-        status = self.get_peer_status(row)
-        column = self.COLUMNS[coln]
-
-        bold = ""
-
-        if column["name"] == "Status":
-            if status == "CONNECTED":
-                fg = self.ANSI_TEXT_GREEN
-            elif status == "CONNECTING":
-                fg = self.ANSI_TEXT_YELLOW
-
-        if row.get("id") in self.selected_row.get("send_to", []):
-            bold = self.ANSI_TEXT_BOLD
-            fg = self.ANSI_TEXT_YELLOW
-
-        if self.selected_row.get("id") in row.get("send_to", []):
-            fg = self.ANSI_TEXT_YELLOW
-            bold = self.ANSI_TEXT_BOLD
-
-        return self.ANSI_RESET + fg + bg + bold
 
     def print_header(self):
         # write a header with the rtpmidid client, version, with color until the end of line
