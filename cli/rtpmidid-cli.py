@@ -152,8 +152,14 @@ class Top:
                 "align": "left",
             },
             {
-                "name": "Name",
-                "get": lambda data: safe_get(data, "name"),
+                "name": "Local Name",
+                "get": self.get_local_name,
+                "width": 0,
+                "align": "left",
+            },
+            {
+                "name": "Remote Name",
+                "get": self.get_remote_name,
                 "width": 0,
                 "align": "left",
             },
@@ -219,11 +225,11 @@ class Top:
         ]
 
         # make Name column as wide as possible
-        self.COLUMNS[2]["width"] = (
-            self.width
-            - sum(x["width"] for x in self.COLUMNS)
-            - (1 * (len(self.COLUMNS) - 1))
-        )
+        auto_width_count = len([x for x in self.COLUMNS if x["width"] == 0])
+        extra_width = self.width - sum((x["width"] + 1) for x in self.COLUMNS) + 1
+        for col in self.COLUMNS:
+            if col["width"] == 0:
+                col["width"] = extra_width // auto_width_count
         self.max_cols = len(self.COLUMNS)
         self.print_data = []
 
@@ -429,6 +435,18 @@ class Top:
             return ""
         stddev = safe_get(data, "peer", "latency_ms", "stddev")
         return f"{avg}ms \u00B1 {stddev}ms"
+
+    def get_local_name(self, data):
+        type_ = safe_get(data, "type")
+        if type_.startswith("local:"):
+            return safe_get(data, "name")
+        return safe_get(data, "peer", "local", "name")
+
+    def get_remote_name(self, data):
+        type_ = safe_get(data, "type")
+        if type_.startswith("network:"):
+            return safe_get(data, "name")
+        return safe_get(data, "peer", "remote", "name")
 
     ##
     ## Top level components
