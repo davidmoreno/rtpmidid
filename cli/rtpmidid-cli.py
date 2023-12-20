@@ -192,18 +192,30 @@ class Top:
         ]
 
         self.COMMANDS = [
-            {"key": "h", "command": self.help, "help": "Show this help"},
-            {"key": "up", "command": self.move_up, "help": "Previous peer in the list"},
-            {"key": "down", "command": self.move_down, "help": "Next peer in the list"},
+            {"key": "h", "command": self.command_help, "help": "Show this help"},
+            {
+                "key": "up",
+                "command": self.command_move_up,
+                "help": "Previous peer in the list",
+            },
+            {
+                "key": "down",
+                "command": self.command_move_down,
+                "help": "Next peer in the list",
+            },
             {
                 "key": "left",
-                "command": self.move_left,
+                "command": self.command_move_left,
                 "help": "Sort by previous column",
             },
-            {"key": "right", "command": self.move_right, "help": "Sort by next column"},
-            {"key": "q", "command": self.quit, "help": "Quit"},
-            {"key": "k", "command": self.kill, "help": "Kill peer"},
-            {"key": "c", "command": self.connect, "help": "Connect to peer"},
+            {
+                "key": "right",
+                "command": self.command_move_right,
+                "help": "Sort by next column",
+            },
+            {"key": "q", "command": self.command_quit, "help": "Quit"},
+            {"key": "k", "command": self.command_kill, "help": "Kill peer"},
+            {"key": "c", "command": self.command_connect, "help": "Connect to peer"},
         ]
 
         # make Name column as wide as possible
@@ -213,12 +225,200 @@ class Top:
             - (1 * (len(self.COLUMNS) - 1))
         )
         self.max_cols = len(self.COLUMNS)
+        self.print_data = []
 
         # set the terminal input in one char per read
         tty.setcbreak(sys.stdin)
 
+    ##
+    ## INPUT
+    ##
+
+    def wait_for_input(self, timeout=1):
+        start = time.time()
+        while True:
+            if time.time() - start > timeout:
+                return
+            if sys.stdin in select.select([sys.stdin], [], [], 1)[0]:
+                # read a key
+                key = sys.stdin.read(1)
+                # if key is the ansi code for arrow keys, read the next 2 bytes and return "up", "down", "left", "right"
+                if key == "\033":
+                    key += sys.stdin.read(2)
+                    if key == "\033[A":
+                        return "up"
+                    elif key == "\033[B":
+                        return "down"
+                    elif key == "\033[C":
+                        return "right"
+                    elif key == "\033[D":
+                        return "left"
+                    elif key == "\033\x1b":
+                        return "escape"
+                    return None
+
+                return key
+
+    def parse_key(self, key):
+        # up got up in the current row
+        for cmd in self.COMMANDS:
+            if key == cmd["key"]:
+                cmd["command"]()
+                return
+
+    def command_move_up(self):
+        self.selected_row_index -= 1
+        if self.selected_row_index < 0:
+            self.selected_row_index = 0
+
+    def command_move_down(self):
+        self.selected_row_index += 1
+        if self.selected_row_index >= self.max_rows:
+            self.selected_row_index = self.max_rows - 1
+
+    def command_move_left(self):
+        self.selected_col_index -= 1
+        if self.selected_col_index < 0:
+            self.selected_col_index = self.max_cols - 1
+
+    def command_move_right(self):
+        self.selected_col_index += 1
+        if self.selected_col_index >= self.max_cols:
+            self.selected_col_index = 0
+
+    def command_quit(self):
+        sys.exit(0)
+
+    def command_kill(self):
+        self.conn.command(
+            {"method": "router.remove", "params": [self.selected_row["id"]]}
+        )
+
+    def command_connect(self):
+        peer_id = self.dialog_ask("Connect to which peer id?")
+        if not peer_id:
+            return
+
+        self.conn.command(
+            {
+                "method": "router.connect",
+                "params": {"from": self.selected_row["id"], "to": int(peer_id)},
+            }
+        )
+
+    def command_help(self):
+        text = ""
+        for cmd in self.COMMANDS:
+            text += f"[{cmd['key']}]{' '*(8-len(cmd['key']))} {cmd['help']}\n"
+        text = text.strip()
+        self.dialog(text=text)
+
+    ##
+    ## BASIC OUTPUT
+    ##
+
+    def print(self, text):
+        self.print_data.append(text)
+
+    def flush(self):
+        print("".join(self.print_data), end="", flush=True)
+        self.print_data = []
+
     def terminal_goto(self, x, y):
-        print("\033[%d;%dH" % (y, x), end="")
+        self.print("\033[%d;%dH" % (y, x))
+
+    def set_cursor(self, x, y):
+        self.print("\033[%d;%dH" % (y, x))
+
+    def dialog(self, text):
+        width = max(len(x) for x in text.split("\n")) + 2
+        width_2 = width // 2
+        start_x = self.width // 2 - width_2
+        start_y = self.height // 3
+
+        self.print(self.ANSI_BG_PURPLE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD)
+        self.terminal_goto(start_x, start_y)
+        # self.print_padding("", width)
+        # top border, width, using unicode table characters
+        self.print(f"\u250C{chr(0x2500) * (width-1)}\u2510")
+        for linen, line in enumerate(text.split("\n")):
+            self.terminal_goto(start_x, start_y + linen + 1)
+            self.print_padding(f"\u2502{line}", width)
+            self.print(f"\u2502")
+
+        # bottom border, width, using unicode table characters
+        self.terminal_goto(start_x, start_y + linen + 2)
+        self.print(f"\u2514{chr(0x2500) * (width-1)}\u2518")
+
+        # text: press any key to close dialog in the center
+        self.terminal_goto(start_x + width_2 - 8, start_y + linen + 2)
+        self.print("[ Press any key ]")
+
+        # cursor at end of screen
+        self.set_cursor(self.width, self.height)
+
+        # self.print_padding("", width)
+
+        self.print(self.ANSI_RESET)
+        self.flush()
+        # wait for a key
+        self.wait_for_input(timeout=10000000)
+
+    def dialog_ask(self, question, width=60):
+        # print a blue box with white text
+        width_2 = width // 2
+        start_x = self.width // 2 - width_2
+        start_y = self.height // 3
+
+        self.print(self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD)
+        self.terminal_goto(start_x, start_y)
+        self.print_padding("", width_2)
+        self.terminal_goto(start_x, start_y + 1)
+        self.print_padding(" " + question, width_2)
+        self.terminal_goto(start_x, start_y + 2)
+        self.print_padding("", width_2)
+        self.terminal_goto(start_x, start_y + 4)
+        self.print_padding("", width_2)
+        self.print(self.ANSI_RESET + self.ANSI_BG_WHITE + self.ANSI_TEXT_BLUE)
+        self.terminal_goto(start_x, start_y + 3)
+        self.print_padding("", width_2)
+        self.set_cursor(start_x + 1, start_y + 3)
+
+        self.flush()
+        answer = ""
+        while True:
+            key = self.wait_for_input(timeout=10000000)
+            if key is None:
+                return None
+            elif key == "escape":
+                return None
+            elif key == "\n":
+                break
+            elif key == "\x7f":
+                answer = answer[:-1]
+            elif key:
+                answer += key
+            self.terminal_goto(start_x, start_y + 3)
+            self.print_padding(" " + answer, width_2)
+            self.set_cursor(start_x + 1 + len(answer), start_y + 3)
+            self.flush()
+        self.print(self.ANSI_RESET)
+        self.print_all()
+
+        return answer
+
+    def print_padding(self, text, count=None):
+        if count is None:
+            count = self.width
+
+        padchars = count - len(text)
+        if padchars < 0:
+            padchars = 0
+        self.print(text[:count] + " " * padchars)
+
+    ##
+    ## Data gathering
+    ##
 
     def get_peer_status(self, data):
         return safe_get(data, "peer", "status") or safe_get(data, "status")
@@ -229,6 +429,10 @@ class Top:
             return ""
         stddev = safe_get(data, "peer", "latency_ms", "stddev")
         return f"{avg}ms \u00B1 {stddev}ms"
+
+    ##
+    ## Top level components
+    ##
 
     def print_table(self):
         rows = self.status["router"]
@@ -246,35 +450,35 @@ class Top:
         max_cols = self.max_cols - 1
 
         def print_cell(row: dict, rown: int, coln: int):
-            print(self.get_color_cell(row, rown, coln), end="")
+            self.print(self.get_color_cell(row, rown, coln))
             column = self.COLUMNS[coln]
             width = column["width"]
             value = column["get"](row)
             value = str(value)[:width]
             if column.get("align") == "right":
-                print("{:>{width}}".format(value, width=width), end="")
+                self.print("{:>{width}}".format(value, width=width))
             else:
-                print("{:{width}}".format(value, width=width), end="")
+                self.print("{:{width}}".format(value, width=width))
 
         def print_row(row: dict, rown: int):
             for coln, column in enumerate(self.COLUMNS):
                 print_cell(row, rown, coln)
                 if coln != max_cols:
-                    print(" ", end="")
-            print()
+                    self.print(" ")
+            self.print("\n")
 
         for coln, column in enumerate(self.COLUMNS):
-            print(self.get_color_cell({}, 0, coln), end="")
+            self.print(self.get_color_cell({}, 0, coln))
             width = column["width"]
             value = column["name"][:width]
             if column.get("align") == "right":
-                print("{:>{width}}".format(value, width=width), end="")
+                self.print("{:>{width}}".format(value, width=width))
             else:
-                print("{:{width}}".format(value, width=width), end="")
+                self.print("{:{width}}".format(value, width=width))
 
             if coln != max_cols:
-                print(" ", end="")
-        print()
+                self.print(" ")
+        self.print("\n")
 
         rown = 1
         for row in self.status["router"]:
@@ -333,176 +537,21 @@ class Top:
 
     def print_header(self):
         # write a header with the rtpmidid client, version, with color until the end of line
-        print(self.ANSI_BG_BLUE + self.ANSI_TEXT_BOLD + self.ANSI_TEXT_WHITE, end="")
+        self.print(self.ANSI_BG_BLUE + self.ANSI_TEXT_BOLD + self.ANSI_TEXT_WHITE)
         self.print_padding("rtpmidid-cli v23.12")
         # color until next newline
-        print(self.ANSI_RESET, end="")
-        print()
+        self.print(self.ANSI_RESET)
+        self.print("\n")
 
     def print_footer(self):
         self.terminal_goto(1, self.height)
 
-        print(self.ANSI_BG_BLUE + self.ANSI_TEXT_BOLD + self.ANSI_TEXT_WHITE, end="")
+        self.print(self.ANSI_BG_BLUE + self.ANSI_TEXT_BOLD + self.ANSI_TEXT_WHITE)
         footer_left = f"Press Ctrl-C to exit | [q]uit | [k]ill midi peer | [c]onnect to peer | [up] [down] to navigate"
         footer_right = f"| rtpmidid-cli v23.12 | (C) Coralbits 2023"
         padding = self.width - len(footer_left) - len(footer_right)
         self.print_padding(f"{footer_left}{' ' * padding}{footer_right}")
-        print(self.ANSI_RESET, end="")
-
-    def print_padding(self, text, count=None):
-        if count is None:
-            count = self.width
-
-        padchars = count - len(text)
-        if padchars < 0:
-            padchars = 0
-        print(text[:count] + " " * padchars, end="")
-
-    def wait_for_input(self, timeout=1):
-        start = time.time()
-        while True:
-            if time.time() - start > timeout:
-                return
-            if sys.stdin in select.select([sys.stdin], [], [], 1)[0]:
-                # read a key
-                key = sys.stdin.read(1)
-                # if key is the ansi code for arrow keys, read the next 2 bytes and return "up", "down", "left", "right"
-                if key == "\033":
-                    key += sys.stdin.read(2)
-                    if key == "\033[A":
-                        return "up"
-                    elif key == "\033[B":
-                        return "down"
-                    elif key == "\033[C":
-                        return "right"
-                    elif key == "\033[D":
-                        return "left"
-                return key
-
-    def parse_key(self, key):
-        # up got up in the current row
-        for cmd in self.COMMANDS:
-            if key == cmd["key"]:
-                cmd["command"]()
-                return
-
-    def move_up(self):
-        self.selected_row_index -= 1
-        if self.selected_row_index < 0:
-            self.selected_row_index = 0
-
-    def move_down(self):
-        self.selected_row_index += 1
-        if self.selected_row_index >= self.max_rows:
-            self.selected_row_index = self.max_rows - 1
-
-    def move_left(self):
-        self.selected_col_index -= 1
-        if self.selected_col_index < 0:
-            self.selected_col_index = self.max_cols - 1
-
-    def move_right(self):
-        self.selected_col_index += 1
-        if self.selected_col_index >= self.max_cols:
-            self.selected_col_index = 0
-
-    def quit(self):
-        sys.exit(0)
-
-    def kill(self):
-        self.conn.command(
-            {"method": "router.remove", "params": [self.selected_row["id"]]}
-        )
-
-    def connect(self):
-        peer_id = self.dialog_ask("Connect to which peer id?")
-        self.conn.command(
-            {
-                "method": "router.connect",
-                "params": {"from": self.selected_row["id"], "to": int(peer_id)},
-            }
-        )
-
-    def help(self):
-        text = ""
-        for cmd in self.COMMANDS:
-            text += f"[{cmd['key']}]{' '*(8-len(cmd['key']))} {cmd['help']}\n"
-        text = text.strip()
-        self.dialog(text=text)
-
-    def set_cursor(self, x, y):
-        print("\033[%d;%dH" % (y, x), end="")
-
-    def dialog(self, text):
-        width = max(len(x) for x in text.split("\n")) + 2
-        width_2 = width // 2
-        start_x = self.width // 2 - width_2
-        start_y = self.height // 3
-
-        print(self.ANSI_BG_PURPLE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD, end="")
-        self.terminal_goto(start_x, start_y)
-        # self.print_padding("", width)
-        # top border, width, using unicode table characters
-        print(f"\u250C{chr(0x2500) * (width-1)}\u2510")
-        for linen, line in enumerate(text.split("\n")):
-            self.terminal_goto(start_x, start_y + linen + 1)
-            self.print_padding(f"\u2502{line}", width)
-            print(f"\u2502", end="")
-
-        # bottom border, width, using unicode table characters
-        self.terminal_goto(start_x, start_y + linen + 2)
-        print(f"\u2514{chr(0x2500) * (width-1)}\u2518")
-
-        # text: press any key to close dialog in the center
-        self.terminal_goto(start_x + width_2 - 8, start_y + linen + 2)
-        print("[ Press any key ]", end="")
-
-        # cursor at end of screen
-        self.set_cursor(self.width, self.height)
-
-        # self.print_padding("", width)
-
-        print(self.ANSI_RESET, flush=True, end="")
-        # wait for a key
-        self.wait_for_input(timeout=10000000)
-
-    def dialog_ask(self, question, width=60):
-        # print a blue box with white text
-        width_2 = width // 2
-        start_x = self.width // 2 - width_2
-        start_y = self.height // 3
-
-        print(self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD, end="")
-        self.terminal_goto(start_x, start_y)
-        self.print_padding("", width_2)
-        self.terminal_goto(start_x, start_y + 1)
-        self.print_padding(" " + question, width_2)
-        self.terminal_goto(start_x, start_y + 2)
-        self.print_padding("", width_2)
-        self.terminal_goto(start_x, start_y + 4)
-        self.print_padding("", width_2)
-        print(self.ANSI_RESET + self.ANSI_BG_WHITE + self.ANSI_TEXT_BLUE, end="")
-        self.terminal_goto(start_x, start_y + 3)
-        self.print_padding("", width_2)
-        self.set_cursor(start_x + 1, start_y + 3)
-
-        sys.stdout.flush()
-        answer = ""
-        while True:
-            key = self.wait_for_input()
-            if key == "\n":
-                break
-            elif key == "\x7f":
-                answer = answer[:-1]
-            elif key:
-                answer += key
-            self.terminal_goto(start_x, start_y + 3)
-            self.print_padding(" " + answer, width_2)
-            self.set_cursor(start_x + 1 + len(answer), start_y + 3)
-            sys.stdout.flush()
-        print(self.ANSI_RESET, end="")
-
-        return answer
+        self.print(self.ANSI_RESET)
 
     def print_row(self, row):
         if not row:
@@ -514,9 +563,9 @@ class Top:
         top_area = data_rows + 4
         max_col = self.height - top_area
 
-        print(self.ANSI_RESET + self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE, end="")
+        self.print(self.ANSI_RESET + self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE)
         self.print_padding(f"Current Row {self.height}: ")
-        print(self.ANSI_RESET, end="")
+        self.print(self.ANSI_RESET)
         width_2 = self.width // 2
         max_col2 = max_col * 2
         for idx, row in enumerate(text.split("\n")):
@@ -524,26 +573,29 @@ class Top:
                 continue  # skip too many rows
             elif idx < max_col:
                 self.terminal_goto(0, top_area + idx)
-                print(row)
+                self.print(row)
             else:
                 self.terminal_goto(width_2, top_area + idx - max_col)
-                print(f"\u2502 {row}")
+                self.print(f"\u2502 {row}")
+
+    def print_all(self):
+        self.print(self.ANSI_CLEAR_SCREEN)
+        self.print_header()
+        self.print_table()
+        self.print_row(self.selected_row)
+        self.print_footer()
+        self.flush()
 
     def refresh_data(self):
         ret = self.conn.command({"method": "status"})
         self.status = ret["result"]
 
     def top_loop(self):
-        print(self.ANSI_PUSH_SCREEN, end="")
+        self.print(self.ANSI_PUSH_SCREEN)
         try:
             self.refresh_data()
             while True:
-                print(self.ANSI_CLEAR_SCREEN, end="")
-                self.print_header()
-                self.print_table()
-                self.print_row(self.selected_row)
-                self.print_footer()
-                print(flush=True, end="")
+                self.print_all()
                 key = self.wait_for_input()
                 if key:
                     self.parse_key(key)
@@ -552,7 +604,7 @@ class Top:
         except KeyboardInterrupt:
             pass
         finally:
-            print(self.ANSI_POP_SCREEN, end="")
+            self.print(self.ANSI_POP_SCREEN)
 
 
 def main(argv):
