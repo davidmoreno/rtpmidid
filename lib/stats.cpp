@@ -49,7 +49,7 @@ stats_t::average_and_stddev_t stats_t::average_and_stddev() const {
     count++;
   });
   if (count == 0) {
-    DEBUG("{} measurements", count);
+    // DEBUG("{} measurements", count);
     return stats_t::average_and_stddev_t{
         std::chrono::nanoseconds(0),
         std::chrono::nanoseconds(0),
@@ -64,7 +64,7 @@ stats_t::average_and_stddev_t stats_t::average_and_stddev() const {
   });
   auto stddev = sqrt(sum / count);
 
-  DEBUG("Average {}us stddev {}us, {} measurements", average, stddev, count);
+  // DEBUG("Average {}us stddev {}us, {} measurements", average, stddev, count);
 
   return stats_t::average_and_stddev_t{
       std::chrono::nanoseconds((int)average),
