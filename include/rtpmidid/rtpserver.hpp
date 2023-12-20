@@ -46,6 +46,9 @@ public:
     connection_t<rtpmidid::rtppeer_t::disconnect_reason_e>
         disconnect_event_connection;
     poller_t::timer_t timer_connection;
+
+    connection_t<float> timer_ck_connection;
+    poller_t::timer_t timer_ck;
   };
   std::vector<peer_data_t> peers;
 
@@ -72,6 +75,9 @@ public:
                         rtppeer_t::port_e port);
 
   void send_midi_to_all_peers(const io_bytes_reader &bufer);
+  // Call from time to time when there are events to
+  // avoid disconnection. Normally on cks.
+  void rearm_ck_timeout(std::shared_ptr<rtppeer_t> peer);
 
   void data_ready(rtppeer_t::port_e port);
   void sendto(const io_bytes_reader &b, rtppeer_t::port_e port,

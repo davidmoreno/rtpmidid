@@ -347,6 +347,15 @@ void rtpserver_t::create_peer_from(io_bytes_reader &&buffer,
                                        return datapeer.peer == peer;
                                      });
         peerdata->timer_connection.disable();
+        peerdata->timer_ck_connection =
+            peer->ck_event.connect([this, wpeer](float) {
+              if (wpeer.expired())
+                return;
+              auto peer = wpeer.lock();
+              rearm_ck_timeout(peer);
+            });
+
+        rearm_ck_timeout(peer);
 
         if (st != rtppeer_t::CONNECTED)
           return;
@@ -393,4 +402,20 @@ void rtpserver_t::send_midi_to_all_peers(const io_bytes_reader &buffer) {
   for (auto &speers : peers) {
     speers.peer->send_midi(buffer);
   }
+}
+
+void rtpserver_t::rearm_ck_timeout(std::shared_ptr<rtppeer_t> peer) {
+  auto peerdata = std::find_if(
+      peers.begin(), peers.end(),
+      [&peer](const peer_data_t &datapeer) { return datapeer.peer == peer; });
+  if (peerdata == peers.end())
+    return;
+  peerdata->timer_connection.disable();
+
+  // If no signal in 60 secs, remove the peer
+  peerdata->timer_connection =
+      poller.add_timer_event(std::chrono::seconds(60), [peerdata, peer]() {
+        DEBUG("Timeout waiting for CK. Disconnecting.");
+        peer->disconnect();
+      });
 }
