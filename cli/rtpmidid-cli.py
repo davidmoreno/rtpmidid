@@ -277,15 +277,15 @@ class Top:
         rown = 1
         for row in self.status["router"]:
             print_row(row, rown)
-            if "peers" in row:
-                for peer in row["peers"]:
-                    peer = {
-                        "id": "",
-                        "name": safe_get(peer, "remote", "name"),
-                        "type": "rtppeer",
-                        "peer": peer,
-                    }
-                    print_row(peer, rown)
+            # if "peers" in row:
+            #     for peer in row["peers"]:
+            #         peer = {
+            #             "id": "",
+            #             "name": safe_get(peer, "remote", "name"),
+            #             "type": "rtppeer",
+            #             "peer": peer,
+            #         }
+            #         print_row(peer, rown)
             rown += 1
 
         self.max_rows = rown - 1
