@@ -221,7 +221,7 @@ class Top:
         print("\033[%d;%dH" % (y, x), end="")
 
     def get_peer_status(self, data):
-        return safe_get(data, "peer", "status")
+        return safe_get(data, "peer", "status") or safe_get(data, "status")
 
     def get_latency(self, data):
         avg = safe_get(data, "peer", "latency_ms", "average")
@@ -240,6 +240,8 @@ class Top:
             return value
 
         rows.sort(key=get_sort_key)
+        if self.selected_row_index >= len(rows):
+            self.selected_row_index = len(rows) - 1
         self.selected_row = rows[self.selected_row_index]
         max_cols = self.max_cols - 1
 
@@ -508,7 +510,7 @@ class Top:
 
         text = json.dumps(row, indent=2)
 
-        data_rows = self.max_rows + 2
+        data_rows = self.max_rows
         top_area = data_rows + 4
         max_col = self.height - top_area
 
