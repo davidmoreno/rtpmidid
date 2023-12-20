@@ -112,6 +112,7 @@ void local_alsa_waiter_t::disconnect_from_remote_server() {
   DEBUG("Disconnect from remote server at {}:{}", hostname, port);
   router->remove_peer(rtpmidiclientworker_peer_id);
   // rtpclient = nullptr; // for me, this is dead
+  local_name = "";
 }
 
 void local_alsa_waiter_t::send_midi(midipeer_id_t from,
@@ -131,13 +132,21 @@ json_t local_alsa_waiter_t::status() {
     jendpoints.push_back(
         json_t{{"hostname", endpoint.hostname}, {"port", endpoint.port}});
   }
+  std::string status;
+  if (connection_count > 0)
+    status = "CONNECTED";
+  else
+    status = "WAITING";
 
   return json_t{
       //
-      {"name", fmt::format("{} <-> {}", local_name, remote_name)},
+      {"name",
+       fmt::format("{} <-> {}", local_name == "" ? "[WATING]" : local_name,
+                   remote_name)},
       {"type", "local:alsa:waiter"},
       {"endpoints", jendpoints},
       {"connection_count", connection_count},
+      {"status", status}
       //
   };
 }
