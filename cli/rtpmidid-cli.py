@@ -14,14 +14,7 @@ class Connection:
     def __init__(self, filename):
         self.filename = filename
         self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        try:
-            self.socket.connect(filename)
-        except ConnectionRefusedError:
-            print(
-                "Connection refused to %s. Can set other location with --control=<path>"
-                % filename
-            )
-            sys.exit(1)
+        self.socket.connect(filename)
 
     def command(self, command):
         self.socket.send(json.dumps(command).encode("utf8") + b"\n")
@@ -336,7 +329,7 @@ class Top:
     def set_cursor(self, x, y):
         self.print("\033[%d;%dH" % (y, x))
 
-    def dialog(self, text):
+    def dialog(self, text, bottom="Press any key", wait_for_key=True):
         width = max(len(x) for x in text.split("\n")) + 2
         width_2 = width // 2
         start_x = self.width // 2 - width_2
@@ -357,8 +350,10 @@ class Top:
         self.print(f"\u2514{chr(0x2500) * (width-1)}\u2518")
 
         # text: press any key to close dialog in the center
-        self.terminal_goto(start_x + width_2 - 8, start_y + linen + 2)
-        self.print("[ Press any key ]")
+        self.terminal_goto(
+            start_x + width_2 - 2 - len(bottom) // 2, start_y + linen + 2
+        )
+        self.print(f"[ {bottom} ]")
 
         # cursor at end of screen
         self.set_cursor(self.width, self.height)
@@ -368,7 +363,8 @@ class Top:
         self.print(self.ANSI_RESET)
         self.flush()
         # wait for a key
-        self.wait_for_input(timeout=10000000)
+        if wait_for_key:
+            self.wait_for_input(timeout=10000000)
 
     def dialog_ask(self, question, width=60):
         # print a blue box with white text
@@ -607,7 +603,23 @@ class Top:
         self.flush()
 
     def refresh_data(self):
-        ret = self.conn.command({"method": "status"})
+        try:
+            ret = self.conn.command({"method": "status"})
+        except BrokenPipeError:
+            self.dialog(
+                "Connection to rtpmidid lost. Reconnecting...",
+                bottom="Press Control-C to exit",
+                wait_for_key=False,
+            )
+            while True:
+                time.sleep(1)
+                try:
+                    self.conn = Connection(self.conn.filename)
+                    ret = self.conn.command({"method": "status"})
+                    break
+                except:
+                    pass
+
         self.status = ret["result"]
 
     def top_loop(self):
