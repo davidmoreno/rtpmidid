@@ -5,23 +5,38 @@ here are some notes on what we should test, and some use cases.
 
 ## WIP
 
-* [x] Basic mDNS
-* [ ] Announce check if announced mDNS
-* [ ] Connect to rtpmidi peers
-* [ ] Disconnect from rtpmidi peers
-* [ ] Clock
-* [ ] Journal N
-* [ ] More journals
+- [x] Basic mDNS
+- [x] Announce check if announced mDNS
+- [x] Connect to rtpmidi peers
+- [x] Disconnect from rtpmidi peers
+- [x] Clock
+- [ ] Journal N
+- [ ] More journals
 
 ## Test cases
 
-1. Connect to rtpmidi by Tobias Erichsen
+## 1. Connect to rtpmidi by Tobias Erichsen
 
-* rtpmidi announces its existence, so rtpmidid ports are created locally
-* connect at rtpmidi, and then another rtpmidi port appear.
-* Should it be the very same?
+- rtpmidi announces its existence, so rtpmidid ports are created locally
+- connect at rtpmidi, and then another rtpmidi port appear.
+- Should it be the very same?
 
+## 2. Remote disconnect
 
-2. Remote disconnect
+- If remote end disconnects, then the alsa connection should be removed.
 
-* If remote end disconnects, then the alsa connection should be removed.
+## 3. does not send CK on connection
+
+1. Create two rtpmidid
+2. Connect aseqdump to the peer1/peer2
+3. Connect vmpk at the peer2/aseqdump
+
+Should:
+Work no more. Send CK and keep connection.
+
+CK is sent by clients when connection finishes, looks like never finishes?
+
+Does:
+Stop the connection as nobody does the CK cycles.
+
+FIXED.
