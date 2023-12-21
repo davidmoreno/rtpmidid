@@ -26,6 +26,12 @@ namespace rtpmididns {
 class aseq_t;
 class midirouter_t;
 
+/**
+ * @short A rtpmidi server that creates local listen ALSA ports
+ *
+ * This midipeer does not actually send or receive data, but creates
+ * a local ALSA peer and a rtpmidi peer and connects them.
+ */
 class network_rtpmidi_multi_listener_t : public midipeer_t {
 public:
   std::shared_ptr<aseq_t> aseq;

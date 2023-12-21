@@ -28,6 +28,9 @@
 namespace rtpmididns {
 extern std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 
+/**
+ * @short A rtpmidi server that just sends data to another peer
+ */
 network_rtpmidi_listener_t::network_rtpmidi_listener_t(const std::string &name)
     : name_(name), server(name, "") {
   if (mdns)
