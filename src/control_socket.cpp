@@ -160,8 +160,6 @@ std::vector<control_socket_ns::command_t> commands{
            {"settings",
             {
                 {"alsa_name", rtpmididns::settings.alsa_name},
-                {"rtpmidid_name", rtpmididns::settings.rtpmidid_name},
-                {"rtpmidid_port", rtpmididns::settings.rtpmidid_port},
                 {"control_filename", rtpmididns::settings.control_filename} //
             }},
            {"router", control.router->status()} //

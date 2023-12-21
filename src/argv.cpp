@@ -127,6 +127,7 @@ void parse_argv(int argc, char **argv) {
 
         settings.rtpmidi_announces.begin()->name = value;
         settings.alsa_announces.begin()->name = value;
+        settings.alsa_name = value;
       });
   arguments.emplace_back( //
       "--alsa-name",      //
@@ -206,9 +207,6 @@ void parse_argv(int argc, char **argv) {
     }
   }
 
-  if (settings.rtpmidid_name == "") {
-    settings.rtpmidid_name = get_hostname();
-  }
   DEBUG("settings after argument parsing: {}", settings);
 }
 

@@ -53,7 +53,7 @@ network_rtpmidi_peer_t::~network_rtpmidi_peer_t() {}
 
 void network_rtpmidi_peer_t::send_midi(midipeer_id_t from,
                                        const mididata_t &data) {
-  DEBUG("Send midi: {}", data.size());
+  // DEBUG("Send midi: {}", data.size());
   peer->send_midi(data);
 };
 

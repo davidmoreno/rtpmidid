@@ -45,8 +45,8 @@ void test_send_receive_messages() {
   uint8_t test_client_id;
   {
     rtpmididns::settings.alsa_name = "rtpmidid-test";
-    rtpmididns::settings.rtpmidid_name = "rtpmidid-test";
-    rtpmididns::settings.rtpmidid_port = "60004";
+    // rtpmididns::settings.rtpmidid_name = "rtpmidid-test";
+    // rtpmididns::settings.rtpmidid_port = "60004";
 
     auto aseq =
         std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
@@ -56,8 +56,7 @@ void test_send_receive_messages() {
         rtpmididns::settings.alsa_name, aseq));
 
     router->add_peer(rtpmididns::make_network_rtpmidi_multi_listener(
-        rtpmididns::settings.rtpmidid_name, rtpmididns::settings.rtpmidid_port,
-        aseq));
+        "rtpmidid-test", "60004", aseq));
   }
 
   // Now I prepare another local port that will be use dfor communication,
@@ -140,7 +139,7 @@ void test_send_receive_messages() {
   uint8_t device_id = aseq->find_device(rtpmididns::settings.alsa_name);
 
   auto rtppeer_client_b = rtpmidid::rtpclient_t("RTPPEER B");
-  rtppeer_client_b.connect_to("localhost", rtpmididns::settings.rtpmidid_port);
+  rtppeer_client_b.connect_to("localhost", "60004");
   poller_wait_until([&rtppeer_client_b]() {
     return rtppeer_client_b.peer.status ==
            rtpmidid::rtppeer_t::status_e::CONNECTED;

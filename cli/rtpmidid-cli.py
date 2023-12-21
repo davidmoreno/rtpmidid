@@ -436,13 +436,13 @@ class Top:
         type_ = safe_get(data, "type")
         if type_.startswith("local:"):
             return safe_get(data, "name")
-        return safe_get(data, "peer", "local", "name")
+        return ""
 
     def get_remote_name(self, data):
         type_ = safe_get(data, "type")
         if type_.startswith("network:"):
             return safe_get(data, "name")
-        return safe_get(data, "peer", "remote", "name")
+        return ""
 
     ##
     ## Top level components

@@ -28,8 +28,6 @@ namespace rtpmididns {
 struct settings_t {
   std::string alsa_name = "rtpmidid";
   bool alsa_network = true;
-  std::string rtpmidid_name = "";
-  std::string rtpmidid_port = "5004";
   std::string control_filename = "/var/run/rtpmidid/control.sock";
 
   // Datas a read from the ini file
@@ -137,13 +135,12 @@ template <>
 struct fmt::formatter<rtpmididns::settings_t> : formatter<std::string_view> {
   auto format(const rtpmididns::settings_t &data, format_context &ctx) {
 
-    return fmt::format_to(
-        ctx.out(),
-        "[settings_t alsa_name: {} alsa_network: {} rtpmidid_name: {} "
-        "rtpmidid_port: {} control_filename: {} rtpmidi_announces: {} "
-        "alsa_announces: {} connect_to: {}]",
-        data.alsa_name, data.alsa_network, data.rtpmidid_name,
-        data.rtpmidid_port, data.control_filename, data.rtpmidi_announces,
-        data.alsa_announces, data.connect_to);
+    return fmt::format_to(ctx.out(),
+                          "[settings_t alsa_name: {} alsa_network: {} "
+                          "control_filename: {} rtpmidi_announces: {} "
+                          "alsa_announces: {} connect_to: {}]",
+                          data.alsa_name, data.alsa_network,
+                          data.control_filename, data.rtpmidi_announces,
+                          data.alsa_announces, data.connect_to);
   }
 };
