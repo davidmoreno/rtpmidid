@@ -78,7 +78,7 @@ add_executable(test_midirouter2
     ../src/network_rtpmidi_client.cpp
     ../src/network_rtpmidi_listener.cpp
     ../src/network_rtpmidi_multi_listener.cpp
-    ../src/network_rtpmidi_server.cpp
+    ../src/network_rtpmidi_peer.cpp
   )
 target_link_libraries(test_midirouter2 -lfmt -pthread rtpmidid-shared)
 add_test(NAME test_midirouter2 COMMAND test_midirouter2)

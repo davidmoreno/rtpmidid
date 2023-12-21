@@ -25,7 +25,7 @@
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "network_rtpmidi_listener.hpp"
-#include "network_rtpmidi_server.hpp"
+#include "network_rtpmidi_peer.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/logger.hpp"
 #include <alsa/seqmid.h>

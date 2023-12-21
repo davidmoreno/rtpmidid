@@ -19,7 +19,7 @@ add_executable(
   network_rtpmidi_client.cpp
   network_rtpmidi_listener.cpp
   network_rtpmidi_multi_listener.cpp
-  network_rtpmidi_server.cpp
+  network_rtpmidi_peer.cpp
 )
 
 target_link_libraries(rtpmidid2-daemon ${AVAHI_LIBRARIES})

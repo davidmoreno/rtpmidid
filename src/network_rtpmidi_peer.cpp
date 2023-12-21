@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "network_rtpmidi_server.hpp"
+#include "network_rtpmidi_peer.hpp"
 #include "json.hpp"
 #include "mididata.hpp"
 #include "midirouter.hpp"
@@ -27,7 +27,7 @@
 #include <memory>
 
 namespace rtpmididns {
-network_rtpmidi_server_t::network_rtpmidi_server_t(
+network_rtpmidi_peer_t::network_rtpmidi_peer_t(
     std::shared_ptr<rtpmidid::rtppeer_t> peer_)
     : peer(peer_) {
 
@@ -49,18 +49,18 @@ network_rtpmidi_server_t::network_rtpmidi_server_t(
       });
 }
 
-network_rtpmidi_server_t::~network_rtpmidi_server_t() {}
+network_rtpmidi_peer_t::~network_rtpmidi_peer_t() {}
 
-void network_rtpmidi_server_t::send_midi(midipeer_id_t from,
-                                         const mididata_t &data) {
+void network_rtpmidi_peer_t::send_midi(midipeer_id_t from,
+                                       const mididata_t &data) {
   DEBUG("Send midi: {}", data.size());
   peer->send_midi(data);
 };
 
-json_t network_rtpmidi_server_t::status() {
+json_t network_rtpmidi_peer_t::status() {
   return json_t{
-      {"name", peer->remote_name},        //
-      {"type", "network:rtpmidi:server"}, //
+      {"name", peer->remote_name},      //
+      {"type", "network:rtpmidi:peer"}, //
       {"peer", peer_status(*peer)},
   };
 };

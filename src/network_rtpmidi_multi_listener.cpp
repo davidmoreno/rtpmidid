@@ -39,7 +39,7 @@ network_rtpmidi_multi_listener_t::network_rtpmidi_multi_listener_t(
         DEBUG("Got connection from {}", peer->remote_name);
         auto alsa_id =
             router->add_peer(make_local_alsa_worker(peer->remote_name, aseq));
-        auto peer_id = router->add_peer(make_network_rtpmidi_server(peer));
+        auto peer_id = router->add_peer(make_network_rtpmidi_peer(peer));
         router->connect(alsa_id, peer_id);
         router->connect(peer_id, alsa_id);
       });

@@ -24,7 +24,7 @@
 #include "network_rtpmidi_client.hpp"
 #include "network_rtpmidi_listener.hpp"
 #include "network_rtpmidi_multi_listener.hpp"
-#include "network_rtpmidi_server.hpp"
+#include "network_rtpmidi_peer.hpp"
 #include <memory>
 
 namespace rtpmididns {
@@ -71,8 +71,8 @@ make_network_rtpmidi_multi_listener(const std::string &name,
 }
 
 std::shared_ptr<midipeer_t>
-make_network_rtpmidi_server(std::shared_ptr<rtpmidid::rtppeer_t> peer) {
-  return std::make_shared<network_rtpmidi_server_t>(peer);
+make_network_rtpmidi_peer(std::shared_ptr<rtpmidid::rtppeer_t> peer) {
+  return std::make_shared<network_rtpmidi_peer_t>(peer);
 }
 
 std::shared_ptr<midipeer_t>

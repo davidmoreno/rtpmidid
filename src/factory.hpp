@@ -41,7 +41,7 @@ make_network_rtpmidi_multi_listener(const std::string &name,
                                     std::shared_ptr<aseq_t> aseq);
 //
 std::shared_ptr<midipeer_t>
-make_network_rtpmidi_server(std::shared_ptr<rtpmidid::rtppeer_t> peer);
+make_network_rtpmidi_peer(std::shared_ptr<rtpmidid::rtppeer_t> peer);
 //
 std::shared_ptr<midipeer_t> make_local_alsa_worker(const std::string &name,
                                                    std::shared_ptr<aseq_t>);
