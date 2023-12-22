@@ -25,11 +25,12 @@ here are some notes on what we should test, and some use cases.
 
 - If remote end disconnects, then the alsa connection should be removed.
 
-## 3. does not send CK on connection
+## 3. does not send CK on connection [failing]
 
 1. Create two rtpmidid
-2. Connect aseqdump to the peer1/peer2
+2. Connect aseqdump to the peer1/peer1
 3. Connect vmpk at the peer2/aseqdump
+4. [optional] close aseqdump
 
 Should:
 Work no more. Send CK and keep connection.
@@ -38,5 +39,4 @@ CK is sent by clients when connection finishes, looks like never finishes?
 
 Does:
 Stop the connection as nobody does the CK cycles.
-
-FIXED.
+Leaves garbage aseqdumps at test2
