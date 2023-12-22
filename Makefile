@@ -102,7 +102,7 @@ test: build-test
 	mkdir -p build
 	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON -G "Unix Makefiles" $(CMAKE_EXTRA_ARGS)
 	cd build/tests && make -j
-	cd build/tests && make test
+	cd build/tests && CTEST_OUTPUT_ON_FAILURE=1 make test
 
 
 .PHONY: deb
