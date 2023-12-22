@@ -70,7 +70,7 @@ snd_seq_addr_t *get_my_ev_client_port(snd_seq_event_t *ev, uint8_t client_id) {
 aseq_t::aseq_t(std::string _name) : name(std::move(_name)) {
   snd_lib_error_set_handler(error_handler);
   if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0) {
-    throw rtpmidid::exception(
+    throw alsa_connect_exception(
         "Can't open sequencer. Maybe user has no permissions.");
   }
   snd_seq_set_client_name(seq, name.c_str());

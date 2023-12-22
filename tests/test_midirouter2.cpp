@@ -243,7 +243,12 @@ int main(int argc, char **argv) {
       TEST(test_send_receive_messages),
   };
 
-  testcase.run(argc, argv);
+  try {
+    testcase.run(argc, argv);
+  } catch (rtpmididns::alsa_connect_exception &exc) {
+    ERROR("ALSA CONNECT EXCEPTION: {}", exc.what());
+    INFO("Skipping test as ALSA is not available.");
+  }
 
   return testcase.exit_code();
 }

@@ -17,6 +17,7 @@
  */
 
 #pragma once
+#include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/signal.hpp"
@@ -132,6 +133,12 @@ public:
                          std::function<void(snd_seq_event_t *)>);
   void ev_to_mididata(snd_seq_event_t *, rtpmidid::io_bytes_writer &data);
 };
+
+class alsa_connect_exception : public rtpmidid::exception {
+public:
+  alsa_connect_exception(const std::string &msg) : rtpmidid::exception(msg) {}
+};
+
 } // namespace rtpmididns
 
 namespace std {
