@@ -105,7 +105,15 @@ void test_basic_midirouter() {
 
 void test_midirouter_from_alsa() {
   auto router = std::make_shared<rtpmididns::midirouter_t>();
-  auto aseq = std::make_shared<rtpmididns::aseq_t>("Test");
+  std::shared_ptr<rtpmididns::aseq_t> aseq;
+  try {
+    aseq = std::make_shared<rtpmididns::aseq_t>("Test");
+  } catch (rtpmididns::alsa_connect_exception &exc) {
+    ERROR("ALSA CONNECT EXCEPTION: {}", exc.what());
+    INFO("Skipping test as ALSA is not available.");
+    return;
+  }
+
   auto alsanetwork =
       std::make_shared<rtpmididns::local_alsa_multi_listener_t>("test", aseq);
   router->add_peer(alsanetwork);
@@ -144,7 +152,14 @@ void test_midirouter_from_alsa() {
 
 void test_midirouter_for_each_peer() {
   auto router = std::make_shared<rtpmididns::midirouter_t>();
-  auto aseq = std::make_shared<rtpmididns::aseq_t>("Test");
+  std::shared_ptr<rtpmididns::aseq_t> aseq;
+  try {
+    aseq = std::make_shared<rtpmididns::aseq_t>("Test");
+  } catch (rtpmididns::alsa_connect_exception &exc) {
+    ERROR("ALSA CONNECT EXCEPTION: {}", exc.what());
+    INFO("Skipping test as ALSA is not available.");
+    return;
+  }
   auto alsanetwork =
       std::make_shared<rtpmididns::local_alsa_multi_listener_t>("test", aseq);
   auto midiio = std::make_shared<test_midiio_t>();
@@ -181,11 +196,6 @@ int main(int argc, char **argv) {
       TEST(test_midirouter_for_each_peer),
   };
 
-  try {
-    testcase.run(argc, argv);
-  } catch (rtpmididns::alsa_connect_exception &exc) {
-    ERROR("ALSA CONNECT EXCEPTION: {}", exc.what());
-    INFO("Skipping test as ALSA is not available.");
-  }
+  testcase.run(argc, argv);
   return testcase.exit_code();
 }

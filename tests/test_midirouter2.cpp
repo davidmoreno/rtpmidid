@@ -48,8 +48,16 @@ void test_send_receive_messages() {
     // rtpmididns::settings.rtpmidid_name = "rtpmidid-test";
     // rtpmididns::settings.rtpmidid_port = "60004";
 
-    auto aseq =
-        std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
+    std::shared_ptr<rtpmididns::aseq_t> aseq;
+    try {
+      aseq =
+          std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
+    } catch (rtpmididns::alsa_connect_exception &exc) {
+      ERROR("ALSA CONNECT EXCEPTION: {}", exc.what());
+      INFO("Skipping test as ALSA is not available.");
+      return;
+    }
+
     test_client_id = aseq->client_id;
 
     router->add_peer(rtpmididns::make_local_alsa_multi_listener(
@@ -81,7 +89,14 @@ void test_send_receive_messages() {
   //
   // 7. All data we send from A hsould be read a B, and vice versa.
 
-  auto aseq = std::make_shared<rtpmididns::aseq_t>("TESTING DEVICE");
+  std::shared_ptr<rtpmididns::aseq_t> aseq;
+  try {
+    aseq = std::make_shared<rtpmididns::aseq_t>("TESTING DEVICE");
+  } catch (rtpmididns::alsa_connect_exception &exc) {
+    ERROR("ALSA CONNECT EXCEPTION: {}", exc.what());
+    INFO("Skipping test as ALSA is not available.");
+    return;
+  }
 
   // 1. ALSA A connect to WR RTPMIDID
   INFO("1. ALSA A connect to WR RTPMIDID");
@@ -243,12 +258,7 @@ int main(int argc, char **argv) {
       TEST(test_send_receive_messages),
   };
 
-  try {
-    testcase.run(argc, argv);
-  } catch (rtpmididns::alsa_connect_exception &exc) {
-    ERROR("ALSA CONNECT EXCEPTION: {}", exc.what());
-    INFO("Skipping test as ALSA is not available.");
-  }
+  testcase.run(argc, argv);
 
   return testcase.exit_code();
 }
