@@ -70,12 +70,6 @@ rtpclient_t::rtpclient_t(std::string name) : peer(std::move(name)) {
         } else {
           INFO("Disconnected reason: {}. Not trying to connect again.", reason);
         }
-        connect_to_next();
-      });
-  peer_connected_event_connection = peer.connected_event.connect(
-      [this](const std::string &name, rtppeer_t::status_e status) {
-        INFO("Connected to {}: {}", name, status);
-        connected_event(name, status);
       });
 }
 
@@ -152,9 +146,11 @@ bool for_each_address(const std::string &hostname, const std::string &port,
   addrinfo *serveraddr = sockaddress_list;
   for (; serveraddr != nullptr; serveraddr = serveraddr->ai_next) {
     bool stop = callback(serveraddr);
-    if (stop)
+    if (stop) {
+      DEBUG("Stop iterating addresses");
       freeaddrinfo(sockaddress_list);
-    return true;
+      return true;
+    }
   }
   freeaddrinfo(sockaddress_list);
   // Could not connect to any address
@@ -239,22 +235,25 @@ std::optional<socket_port_sockaddr_t> connect_udp_port(int local_base_port,
  *
  * If both succeed, return them. Else the return is an empty optional.
  */
-std::optional<control_midi_ports_t> connect_control_and_midi_sockets(
-    int local_base_port, const std::string &hostname, const std::string &port) {
+std::optional<control_midi_ports_t>
+connect_control_and_midi_sockets(int local_base_port,
+                                 const std::string &hostname,
+                                 const std::string &portname) {
   std::optional<control_midi_ports_t> ret = std::nullopt;
 
-  for_each_address(hostname, port, [&](addrinfo *serveraddr) {
+  for_each_address(hostname, portname, [&](addrinfo *serveraddr) {
     char host[NI_MAXHOST];
     char port[NI_MAXSERV];
     host[0] = port[0] = '\0';
     getnameinfo(serveraddr->ai_addr, serveraddr->ai_addrlen, host, NI_MAXHOST,
                 port, NI_MAXSERV, NI_NUMERICSERV);
 
-    DEBUG("Try to connect to address: {}:{}", host, port);
+    DEBUG("Try to connect to address: {}:{} ({}:{})", host, port, hostname,
+          portname);
 
     auto control = connect_udp_port(local_base_port, serveraddr);
     if (!control) {
-      DEBUG("Could not connect to control port");
+      DEBUG("Could not connect {}:{} to control port", hostname, portname);
       return false;
     }
 
@@ -338,6 +337,7 @@ bool rtpclient_t::connect_to(const std::string &address,
                 remote_base_port + 1);
           peer.connect_to(rtppeer_t::MIDI_PORT);
         } else if (status == rtppeer_t::CONNECTED) {
+          connected_event(name, status);
           connected();
         }
       });

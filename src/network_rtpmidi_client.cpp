@@ -36,18 +36,23 @@ network_rtpmidi_client_t::network_rtpmidi_client_t(
         router->send_midi(peer_id, mididata_t{data});
       });
 
-  // disconnect_connection = peer->disconnect_event.connect(
-  //     [this](rtpmidid::rtppeer_t::disconnect_reason_e reason) {
-  //       DEBUG("Peer disconnected: {}. Remove rtpmidi peer and alsa port
-  //       too.",
-  //             reason);
-  //       rtpmidid::poller.call_later([this] {
-  //         router->peer_connection_loop(peer_id, [this](auto other_peer) {
-  //           router->remove_peer(other_peer->peer_id);
-  //         });
-  //         router->remove_peer(peer_id);
-  //       });
-  //     });
+  connected_connection = peer->connected_event.connect(
+      [this](const std::string &, rtpmidid::rtppeer_t::status_e) {
+        DEBUG("Peer connected: {}. Add rtpmidi peer and alsa port too.",
+              peer->peer.remote_name);
+      });
+
+  disconnect_connection = peer->peer.disconnect_event.connect(
+      [this](rtpmidid::rtppeer_t::disconnect_reason_e reason) {
+        DEBUG("Peer disconnected: {}. Remove rtpmidi peer and alsa port too.",
+              reason);
+        // rtpmidid::poller.call_later([this] {
+        //   router->peer_connection_loop(peer_id, [this](auto other_peer) {
+        //     router->remove_peer(other_peer->peer_id);
+        //   });
+        //   router->remove_peer(peer_id);
+        // });
+      });
 }
 
 network_rtpmidi_client_t::~network_rtpmidi_client_t() {}
