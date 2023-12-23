@@ -59,6 +59,12 @@ router.remove   - disconnect a peer
 router.kill     - kill a peer
 connect         - connects to a remote rtpmidi server
 
+Each peer may have its own commands. Check with `[peer_id].help`.
+
+Arguments will be passed as a list or key=value into a dict. For example:
+
+1.remove_endpoint hostname=192.168.122.1 port=5004
+
 """
     )
     parser.add_argument("--control")
@@ -68,15 +74,42 @@ connect         - connects to a remote rtpmidi server
 
 
 def parse_commands(argv):
+    def guess_type(value: str):
+        # returns a str, or int
+        if value == "true":
+            return True
+        elif value == "false":
+            return False
+        elif value == "null":
+            return None
+        try:
+            return int(value)
+        except:
+            pass
+        return value
+
+    def prepare_params(cmd: list):
+        # if  = in the list values, then convert to dict
+        if not cmd:
+            return cmd
+        if "=" in cmd[0]:
+            d = {}
+            for x in cmd:
+                k, v = x.split("=")
+                d[k] = guess_type(v)
+            return d
+        return [guess_type(x) for x in cmd]
+
+    print("parse_commands", argv)
     cmd = []
     for x in argv:
         if x == ".":
-            yield {"method": cmd[0], "params": [maybe_int(x) for x in cmd[1:]]}
+            yield {"method": cmd[0], "params": prepare_params(cmd[1:])}
             cmd = []
         else:
             cmd.append(x)
     if cmd:
-        yield {"method": cmd[0], "params": [maybe_int(x) for x in cmd[1:]]}
+        yield {"method": cmd[0], "params": prepare_params(cmd[1:])}
 
 
 def safe_get(data, *keys):

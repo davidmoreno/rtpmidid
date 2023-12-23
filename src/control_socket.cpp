@@ -21,6 +21,7 @@
 #include "settings.hpp"
 #include <algorithm>
 #include <functional>
+#include <regex>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -41,6 +42,8 @@ const char *MSG_TOO_LONG =
     "{\"event\": \"close\", \"detail\": \"Message too long\", \"code\": 1}\n";
 const char *MSG_UNKNOWN_COMMAND =
     "{\"error\": \"Unknown command\", \"code\": 2}";
+
+static std::regex peer_command_re = std::regex("^(\\d*)\\.(.*)");
 
 control_socket_t::control_socket_t() {
   std::string &socketfile = settings.control_filename;
@@ -249,38 +252,40 @@ std::string control_socket_t::parse_command(const std::string &command) {
   auto js = json_t::parse(command);
 
   std::string method = js["method"];
+  json_t retdata = {{"id", js["id"]}};
   try {
-    if (method == "list") {
-      auto res = std::vector<std::string>{};
-      for (const auto &cmd : commands) {
-        res.push_back(cmd.name);
-      }
-      json_t retdata = {
-          {"id", js["id"]}, {"result", res},
-          //
-      };
-
-      return retdata.dump();
-    }
     for (const auto &cmd : commands) {
       if (cmd.name == method) {
         auto res = cmd.func(*this, js["params"]);
-        json_t retdata = {
-            {"id", js["id"]}, {"result", res},
-            //
-        };
+        retdata["result"] = res;
 
         return retdata.dump();
       }
     }
-    json_t retdata = {
-        {"id", js["id"]}, {"error", fmt::format("Unknown method '{}'", method)},
-        //
-    };
+    // if matches the regex (^d*\..*), its a command to a peer
+    std::smatch match;
+    if (std::regex_match(method, match, peer_command_re)) {
+      auto peer_id = std::stoi(match[1]);
+      auto cmd = match[2];
+      // DEBUG("Peer command: {} -> {}", peer_id, cmd.to_string());
+      auto peer = router->get_peer_by_id(peer_id);
+      if (peer) {
+        auto res = peer->command(cmd, js["params"]);
+        if (res.contains("error")) {
+          retdata["error"] = res["error"];
+        } else {
+          retdata["result"] = res;
+        }
+      } else {
+        retdata["error"] = fmt::format("Unknown peer '{}'", peer_id);
+      }
+      return retdata.dump();
+    }
 
+    retdata["error"] = fmt::format("Unknown method '{}'", method);
     return retdata.dump();
   } catch (const std::exception &e) {
-    json_t retdata = {{"id", js["id"]}, {"error", e.what()}};
+    retdata["error"] = e.what();
     return retdata.dump();
   }
 }

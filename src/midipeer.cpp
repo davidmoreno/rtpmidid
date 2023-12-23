@@ -19,11 +19,25 @@
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 
+#include "json.hpp"
+
 namespace rtpmididns {
 
 midipeer_t::~midipeer_t() {
   if (router) {
     router->remove_peer(peer_id);
   }
+}
+json_t midipeer_t::command(const std::string &cmd, const json_t &data) {
+  ERROR("Unknown command: {}", cmd);
+  if (cmd == "help") {
+    return {json_t::object({})};
+  }
+  if (cmd == "status") {
+    return status();
+  }
+  return json_t({
+      {"error", "Command not implemented"},
+  });
 }
 } // namespace rtpmididns

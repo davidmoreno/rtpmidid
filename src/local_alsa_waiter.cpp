@@ -151,4 +151,46 @@ json_t local_alsa_waiter_t::status() {
   };
 }
 
+json_t local_alsa_waiter_t::command(const std::string &cmd,
+                                    const json_t &data) {
+  if (cmd == "add_endpoint") {
+    std::string hostname = data["hostname"];
+    std::string port;
+    if (data["port"].is_number()) {
+      port = std::to_string(data["port"].get<int>());
+    } else {
+      port = data["port"];
+    }
+    add_endpoint(hostname, port);
+    return json_t{"ok"};
+  }
+  if (cmd == "remove_endpoint") {
+    std::string hostname = data["hostname"];
+    std::string port;
+    if (data["port"].is_number()) {
+      port = std::to_string(data["port"].get<int>());
+    } else {
+      port = data["port"];
+    }
+    for (auto it = endpoints.begin(); it != endpoints.end(); ++it) {
+      if (it->hostname == hostname && it->port == port) {
+        DEBUG("Removing endpoint {}:{} from {}", hostname, port, remote_name);
+        endpoints.erase(it);
+        return json_t{"ok"};
+      }
+      ERROR("Try to remove endpoint {}:{} but not found", hostname, port);
+    }
+    return json_t{"error", "Endpoint not found"};
+  }
+  if (cmd == "help") {
+    return json_t{{
+        {{"name", "add_endpoint"},
+         {"description", "Add an endpoint to connect to"}},
+        {{"name", "remove_endpoint"},
+         {"description", "Remove an endpoint to connect to"}},
+    }};
+  }
+
+  return midipeer_t::command(cmd, data);
+}
 } // namespace rtpmididns

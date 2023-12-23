@@ -44,5 +44,6 @@ public:
   virtual ~midipeer_t();
   virtual json_t status() = 0;
   virtual void send_midi(midipeer_id_t from, const mididata_t &) = 0;
+  virtual json_t command(const std::string &cmd, const json_t &data);
 };
 } // namespace rtpmididns

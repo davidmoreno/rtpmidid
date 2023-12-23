@@ -71,6 +71,8 @@ public:
   void add_endpoint(const std::string &hostname, const std::string &port);
   void connect_to_remote_server(const std::string &portname);
   void disconnect_from_remote_server();
+
+  json_t command(const std::string &cmd, const json_t &data) override;
 };
 
 } // namespace rtpmididns
