@@ -163,6 +163,7 @@ class Top:
         self.width = width
         self.height = height
         self.status = {}
+        self.expand_peers = False
 
         self.COLUMNS = [
             {
@@ -248,6 +249,11 @@ class Top:
             {"key": "q", "command": self.command_quit, "help": "Quit"},
             {"key": "k", "command": self.command_kill, "help": "Kill peer"},
             {"key": "c", "command": self.command_connect, "help": "Connect to peer"},
+            {
+                "key": "p",
+                "command": self.command_expand_peers,
+                "help": "Toggle expand peers",
+            },
         ]
 
         # make Name column as wide as possible
@@ -337,6 +343,9 @@ class Top:
                 "params": {"from": self.selected_row["id"], "to": int(peer_id)},
             }
         )
+
+    def command_expand_peers(self):
+        self.expand_peers = not self.expand_peers
 
     def command_help(self):
         text = ""
@@ -568,15 +577,16 @@ class Top:
         rown = 1
         for row in self.status["router"]:
             print_row(row, rown)
-            # if "peers" in row:
-            #     for peer in row["peers"]:
-            #         peer = {
-            #             "id": "",
-            #             "name": safe_get(peer, "remote", "name"),
-            #             "type": "rtppeer",
-            #             "peer": peer,
-            #         }
-            #         print_row(peer, rown)
+            if self.expand_peers and "peers" in row:
+                for peer in row["peers"]:
+                    peer = {
+                        "id": "",
+                        "name": safe_get(peer, "remote", "name"),
+                        "type": "rtppeer",
+                        "peer": peer,
+                    }
+                    print_row(peer, rown)
+                    rown += 1
             rown += 1
 
         self.max_rows = rown - 1
