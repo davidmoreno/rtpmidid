@@ -131,7 +131,6 @@ void control_socket_t::data_ready(int fd) {
       ERROR(
           "Could not send msg too long to control socket! Closing connection.");
       ::close(fd);
-      fd = -1;
     }
     return;
   }

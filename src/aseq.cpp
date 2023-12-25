@@ -125,8 +125,7 @@ aseq_t::~aseq_t() {
  */
 void aseq_t::read_ready() {
   snd_seq_event_t *ev;
-  int pending;
-  while ((pending = snd_seq_event_input(seq, &ev)) > 0) {
+  while (snd_seq_event_input(seq, &ev) > 0) {
     // DEBUG("ALSA MIDI event: {}, pending: {} / {}", ev->type, pending,
     // snd_seq_event_input_pending(seq, 0));
 

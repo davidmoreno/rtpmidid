@@ -95,7 +95,7 @@ public:
       if (this->slots->find(f.first) == this->slots->end())
         continue; // this element was removed while looping, do not call
       DEBUG0("{}::signal_t::() calling {}", (void *)this, f.first);
-      f.second(std::forward<Args>(args)...);
+      f.second(args...);
       DEBUG0("{}::signal_t::() called {}", (void *)this, f.first);
     }
     DEBUG0("{}::signal_t::() END", (void *)this);
