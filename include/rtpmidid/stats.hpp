@@ -53,8 +53,9 @@ private:
   std::chrono::seconds item_time;
 
 public:
-  stats_t(int size = 20,
-          std::chrono::seconds item_time_ = std::chrono::seconds(120));
+  stats_t(int size = 20,                                              // NOLNT
+          std::chrono::seconds item_time_ = std::chrono::seconds(120) // NOLINT
+  );
 
   void add_stat(std::chrono::nanoseconds latency);
   void loop_stats(std::function<void(stat_t const &)> const &f) const;

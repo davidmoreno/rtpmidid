@@ -20,9 +20,9 @@
 #include <random>
 
 namespace rtpmidid {
-std::random_device random_device;
-std::mt19937 generator_mt19937(random_device());
-std::uniform_int_distribution<uint32_t> distrib32;
+static std::random_device random_device;
+static std::mt19937 generator_mt19937(random_device());
+static std::uniform_int_distribution<uint32_t> distrib32;
 
-int32_t rand_u32(void) { return distrib32(generator_mt19937); }
+uint32_t rand_u32(void) { return distrib32(generator_mt19937); }
 } // namespace rtpmidid

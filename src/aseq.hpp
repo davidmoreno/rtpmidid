@@ -21,6 +21,7 @@
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/signal.hpp"
+#include "rtpmidid/utils.hpp"
 #include <alsa/asoundlib.h>
 #include <alsa/seq_midi_event.h>
 #include <functional>
@@ -30,7 +31,8 @@
 #include <vector>
 
 namespace rtpmididns {
-class aseq_t : public std::enable_shared_from_this<aseq_t> {
+class aseq_t : public std::enable_shared_from_this<aseq_t>,
+               private rtpmidid::non_copyable_t {
 public:
   struct port_t {
     uint8_t client;

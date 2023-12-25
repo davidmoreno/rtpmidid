@@ -43,7 +43,7 @@ public:
       disconnect_connection;
 
   network_rtpmidi_peer_t(std::shared_ptr<rtpmidid::rtppeer_t> peer);
-  ~network_rtpmidi_peer_t();
+  ~network_rtpmidi_peer_t() override;
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;

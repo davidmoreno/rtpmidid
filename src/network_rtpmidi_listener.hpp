@@ -41,7 +41,7 @@ public:
   rtpmidid::connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
 
   network_rtpmidi_listener_t(const std::string &name);
-  virtual ~network_rtpmidi_listener_t();
+  ~network_rtpmidi_listener_t() override;
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;

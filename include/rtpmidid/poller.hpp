@@ -19,6 +19,7 @@
 
 #pragma once
 #include "logger.hpp"
+#include "utils.hpp"
 #include <chrono>
 #include <ctime>
 #include <functional>
@@ -36,7 +37,7 @@ namespace rtpmidid {
  * Internally uses epoll, it is level triggered, so data must be read or
  * will retrigger.
  */
-class poller_t {
+class poller_t : private non_copyable_t {
   void *private_data;
 
 public:
@@ -70,28 +71,25 @@ public:
 // Singleton for all events on the system.
 extern poller_t poller;
 
-class poller_t::timer_t {
+class poller_t::timer_t : private non_copyable_t {
 public:
   int id;
 
   timer_t();
   timer_t(int id_);
-  timer_t(timer_t &&);
+  timer_t(timer_t &&) noexcept;
   ~timer_t();
-  timer_t &operator=(timer_t &&other);
+  timer_t &operator=(timer_t &&other) noexcept;
   void disable();
-
-  // No copying
-  timer_t(const timer_t &) = delete;
 };
 
-class poller_t::listener_t {
+class poller_t::listener_t : private non_copyable_t {
 public:
   int fd = -1;
 
   listener_t(int fd_) : fd(fd_) { DEBUG0("Create from fd {}", fd); };
   listener_t() : fd(-1) { DEBUG0("Create without fd {}", fd); };
-  listener_t(listener_t &&other) {
+  listener_t(listener_t &&other) noexcept {
     DEBUG0("Create from other {}", other.fd);
     fd = other.fd;
     other.fd = -1;
@@ -101,9 +99,7 @@ public:
       poller.__remove_fd(fd);
   }
 
-  listener_t &operator=(listener_t &other) = delete;
-  listener_t &operator=(const listener_t &other) = delete;
-  listener_t &operator=(listener_t &&other) {
+  listener_t &operator=(listener_t &&other) noexcept {
     if (fd >= 0)
       poller.__remove_fd(fd);
     fd = other.fd;

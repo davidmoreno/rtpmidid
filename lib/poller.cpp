@@ -293,7 +293,7 @@ void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
 
 poller_t::timer_t::timer_t() : id(0) {}
 poller_t::timer_t::timer_t(int id_) : id(id_) {}
-poller_t::timer_t::timer_t(poller_t::timer_t &&other) {
+poller_t::timer_t::timer_t(poller_t::timer_t &&other) noexcept {
   id = other.id;
   other.id = 0;
 }
@@ -302,7 +302,8 @@ poller_t::timer_t::~timer_t() {
     poller.remove_timer(*this);
   }
 }
-poller_t::timer_t &poller_t::timer_t::operator=(poller_t::timer_t &&other) {
+poller_t::timer_t &
+poller_t::timer_t::operator=(poller_t::timer_t &&other) noexcept {
   if (id != 0) {
     poller.remove_timer(*this);
   }

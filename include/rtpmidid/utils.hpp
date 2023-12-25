@@ -16,7 +16,22 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#pragma once
 
 namespace rtpmidid {
 uint32_t rand_u32(void);
-}
+
+// Inherit to remove default copy constructors
+class non_copyable_t {
+protected:
+  non_copyable_t() = default;
+  ~non_copyable_t() = default;
+  non_copyable_t(non_copyable_t &&) = default;
+  non_copyable_t &operator=(non_copyable_t &&) = default;
+
+private:
+  non_copyable_t(const non_copyable_t &) = delete;
+  non_copyable_t &operator=(const non_copyable_t &) = delete;
+};
+
+} // namespace rtpmidid

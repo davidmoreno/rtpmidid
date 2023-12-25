@@ -20,6 +20,7 @@
 #pragma once
 
 #include "rtpmidid/poller.hpp"
+#include "rtpmidid/utils.hpp"
 #include <functional>
 #include <memory>
 #include <string>
@@ -39,7 +40,7 @@ struct announcement_t {
   int port;
 };
 
-class mdns_rtpmidi_t {
+class mdns_rtpmidi_t : private non_copyable_t {
 public:
   std::unique_ptr<AvahiPoll> poller_adapter;
   AvahiClient *client;

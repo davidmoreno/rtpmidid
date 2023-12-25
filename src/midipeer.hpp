@@ -19,6 +19,7 @@
 #pragma once
 
 #include "json_fwd.hpp"
+#include "rtpmidid/utils.hpp"
 #include <cstdint>
 #include <memory>
 
@@ -33,15 +34,19 @@ class midirouter_t;
  *
  * Must be inherited by the real clients
  */
-class midipeer_t : public std::enable_shared_from_this<midipeer_t> {
+class midipeer_t : public std::enable_shared_from_this<midipeer_t>,
+                   private rtpmidid::non_copyable_t {
 public:
   std::shared_ptr<midirouter_t> router;
-  midipeer_id_t peer_id;
+  midipeer_id_t peer_id = 0;
   int packets_sent = 0;
   int packets_recv = 0;
 
-  midipeer_t() : router(nullptr), peer_id(0) {}
+  midipeer_t() = default;
   virtual ~midipeer_t();
+  midipeer_t(midipeer_t &&) = delete;
+  midipeer_t &operator=(midipeer_t &&) = delete;
+
   virtual json_t status() = 0;
   virtual void send_midi(midipeer_id_t from, const mididata_t &) = 0;
   virtual json_t command(const std::string &cmd, const json_t &data);

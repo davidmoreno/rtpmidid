@@ -18,6 +18,8 @@
 
 #pragma once
 #include "json_fwd.hpp"
+#include "rtpmidid/iobytes.hpp"
+#include "rtpmidid/utils.hpp"
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -31,14 +33,15 @@ class midipeer_t;
 using peer_id_t = uint32_t;
 
 struct peerconnection_t {
-  uint32_t id;
+  uint32_t id = 0;
   std::shared_ptr<midipeer_t> peer;
   std::vector<peer_id_t> send_to;
 };
 
-class midirouter_t : public std::enable_shared_from_this<midirouter_t> {
+class midirouter_t : public std::enable_shared_from_this<midirouter_t>,
+                     private rtpmidid::non_copyable_t {
 public:
-  peer_id_t max_id;
+  peer_id_t max_id = 1;
   std::unordered_map<uint32_t, peerconnection_t> peers;
   midirouter_t();
   ~midirouter_t();
