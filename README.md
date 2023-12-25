@@ -181,7 +181,17 @@ name=Network Export
 
 There are Debian packages at https://github.com/davidmoreno/rtpmidid/releases .
 They are available for Ubuntu 18.04 x64 and Raspbian 32bits, but may work
-also on other systems.
+also on other systems. Only the `rtpmidid_[version]_[arch].deb` file is needed.
+
+Install with:
+
+```
+dpkg -i rtpmidid.deb
+apt -f install
+```
+
+Replace the rtpmidid.deb file with the name of the downloaded file. 
+`apt -f install` ensure that all dependencies are installed.
 
 To easy build there is a simple makefile, which can be invoked to compile with
 `make build` . Use `make` or `make help` to get help on commands.
