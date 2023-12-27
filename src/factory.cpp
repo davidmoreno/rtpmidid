@@ -18,8 +18,8 @@
 
 #include "factory.hpp"
 #include "local_alsa_multi_listener.hpp"
-#include "local_alsa_waiter.hpp"
-#include "local_alsa_worker.hpp"
+#include "local_alsa_listener.hpp"
+#include "local_alsa_peer.hpp"
 #include "midipeer.hpp"
 #include "network_rtpmidi_client.hpp"
 #include "network_rtpmidi_listener.hpp"
@@ -40,7 +40,7 @@ make_local_alsa_waiter(std::shared_ptr<midirouter_t> &router,
                        const std::string &name, const std::string &hostname,
                        const std::string &port, std::shared_ptr<aseq_t> aseq) {
   std::shared_ptr<midipeer_t> added;
-  router->for_each_peer<local_alsa_waiter_t>([&](local_alsa_waiter_t *peer) {
+  router->for_each_peer<local_alsa_listener_t>([&](local_alsa_listener_t *peer) {
     if (peer->remote_name == name) {
       peer->add_endpoint(hostname, port);
       added = peer->shared_from_this();
@@ -50,12 +50,12 @@ make_local_alsa_waiter(std::shared_ptr<midirouter_t> &router,
   if (added)
     return added;
 
-  return std::make_shared<local_alsa_waiter_t>(name, hostname, port, aseq);
+  return std::make_shared<local_alsa_listener_t>(name, hostname, port, aseq);
 }
 
 std::shared_ptr<midipeer_t>
 make_local_alsa_worker(const std::string &name, std::shared_ptr<aseq_t> aseq) {
-  return std::make_shared<local_alsa_worker_t>(name, aseq);
+  return std::make_shared<local_alsa_peer_t>(name, aseq);
 }
 
 std::shared_ptr<midipeer_t>

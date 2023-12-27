@@ -20,7 +20,7 @@
 #include "aseq.hpp"
 #include "factory.hpp"
 #include "json.hpp"
-#include "local_alsa_worker.hpp"
+#include "local_alsa_peer.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"

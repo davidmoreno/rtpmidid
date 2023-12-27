@@ -36,13 +36,13 @@ Just redirects MIDI to/from an ALSA port. Used by `network_rtpmidi_multi_listene
 Stores an `rtpclient_t` RTP client that connects to a remote peer and redirecs all
 MIDI data as needed.
 
-It's used by `local_alsa_waiter_t` and is ver similar to `network_rtpmidi_peer_t`, but this
+It's used by `local_alsa_listener_t` and is ver similar to `network_rtpmidi_peer_t`, but this
 is for a `rtpmidiclient_t`.
 
 ## `network:rtpmidi:multi:listener`
 
 Creates a RTP server port on which whenever an RTP peer connects creates
-both a `local_alsa_worker_t` and a `network_rtpmidi_peer_t` and connects them.
+both a `local_alsa_peer_t` and a `network_rtpmidi_peer_t` and connects them.
 
 It does not send nor receive MIDI data.
 

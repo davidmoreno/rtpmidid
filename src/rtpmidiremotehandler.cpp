@@ -18,7 +18,7 @@
 
 #include "rtpmidiremotehandler.hpp"
 #include "factory.hpp"
-#include "local_alsa_waiter.hpp"
+#include "local_alsa_listener.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 
@@ -43,8 +43,8 @@ void rtpmidi_remote_handler_t::discover_peer(const std::string &name,
                                              const std::string &port) {
   for (auto &peer : peers) {
     if (peer.name == name) {
-      local_alsa_waiter_t *alsawaiter =
-          dynamic_cast<local_alsa_waiter_t *>(peer.alsawaiter.get());
+      local_alsa_listener_t *alsawaiter =
+          dynamic_cast<local_alsa_listener_t *>(peer.alsawaiter.get());
       if (alsawaiter)
         alsawaiter->add_endpoint(hostname, port);
       return;

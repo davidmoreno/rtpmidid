@@ -20,7 +20,7 @@
 #include "../src/factory.hpp"
 #include "../src/json.hpp"
 #include "../src/local_alsa_multi_listener.hpp"
-#include "../src/local_alsa_worker.hpp"
+#include "../src/local_alsa_peer.hpp"
 #include "../src/mididata.hpp"
 #include "../src/midipeer.hpp"
 #include "../src/midirouter.hpp"

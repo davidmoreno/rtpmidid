@@ -13,9 +13,9 @@ add_executable(
   rtpmidiremotehandler.cpp
   utils.cpp
 
+  local_alsa_listener.cpp
   local_alsa_multi_listener.cpp
-  local_alsa_waiter.cpp
-  local_alsa_worker.cpp
+  local_alsa_peer.cpp
   network_rtpmidi_client.cpp
   network_rtpmidi_listener.cpp
   network_rtpmidi_multi_listener.cpp
