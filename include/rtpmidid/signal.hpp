@@ -33,7 +33,7 @@ namespace rtpmidid {
 
 template <typename... Args> class connection_t;
 
-template <typename... Args> class signal_t : private non_copyable_t {
+template <typename... Args> class signal_t {
   typedef std::map<int, std::function<void(Args...)>> VT;
 
 public:
@@ -42,6 +42,8 @@ public:
   }
   signal_t(signal_t<Args...> &&other) = delete;
   signal_t &operator=(signal_t<Args...> &&other) = delete;
+  signal_t(const signal_t<Args...> &other) = delete;
+  signal_t &operator=(const signal_t<Args...> &other) = delete;
 
   ~signal_t() {
     DEBUG0("{}::~signal_t()", (void *)this);
@@ -152,6 +154,8 @@ public:
     DEBUG0("{}::~connection_t()", (void *)this);
     disconnect();
   }
+  connection_t(const connection_t<Args...> &) = delete;
+  connection_t<Args...> &operator=(const connection_t<Args...> &) = delete;
 
   connection_t &operator=(connection_t<Args...> &&other) noexcept {
     DEBUG0("{}::=({})", (void *)this, (void *)&other);

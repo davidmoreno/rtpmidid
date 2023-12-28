@@ -41,6 +41,7 @@ public:
 };
 
 class rtppeer_t {
+  NON_COPYABLE_NOR_MOVABLE(rtppeer_t)
 public:
   // Commands, the id is the same chars as the name
   enum commands_e {

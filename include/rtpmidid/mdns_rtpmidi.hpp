@@ -40,7 +40,8 @@ struct announcement_t {
   int port;
 };
 
-class mdns_rtpmidi_t : private non_copyable_t {
+class mdns_rtpmidi_t {
+  NON_COPYABLE_NOR_MOVABLE(mdns_rtpmidi_t)
 public:
   std::unique_ptr<AvahiPoll> poller_adapter;
   AvahiClient *client;
@@ -57,9 +58,6 @@ public:
 
   mdns_rtpmidi_t();
   ~mdns_rtpmidi_t();
-
-  mdns_rtpmidi_t(const mdns_rtpmidi_t &) = delete;
-  mdns_rtpmidi_t &operator=(const mdns_rtpmidi_t &) = delete;
 
   void setup_mdns_browser();
   void announce_all();

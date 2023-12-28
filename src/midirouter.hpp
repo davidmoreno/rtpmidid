@@ -38,8 +38,9 @@ struct peerconnection_t {
   std::vector<peer_id_t> send_to;
 };
 
-class midirouter_t : public std::enable_shared_from_this<midirouter_t>,
-                     private rtpmidid::non_copyable_t {
+class midirouter_t : public std::enable_shared_from_this<midirouter_t> {
+  NON_COPYABLE_NOR_MOVABLE(midirouter_t)
+
 public:
   peer_id_t max_id = 1;
   std::unordered_map<uint32_t, peerconnection_t> peers;

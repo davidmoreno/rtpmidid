@@ -31,15 +31,15 @@
 #include <vector>
 
 namespace rtpmididns {
-class aseq_t : public std::enable_shared_from_this<aseq_t>,
-               private rtpmidid::non_copyable_t {
+class aseq_t : public std::enable_shared_from_this<aseq_t> {
+  NON_COPYABLE_NOR_MOVABLE(aseq_t)
 public:
   struct port_t {
     uint8_t client;
     uint8_t port;
 
     port_t() : client(0), port(0) {}
-    port_t(uint8_t a, uint8_t b) : client(a), port(b) {}
+    port_t(uint8_t client_, uint8_t port_) : client(client_), port(port_) {}
 
     bool operator<(const port_t &other) const {
       return client < other.client && port < other.port;
@@ -60,24 +60,17 @@ public:
     bool connected = false;
 
     connection_t(const std::shared_ptr<aseq_t> &aseq_, const port_t &from_,
-                 const port_t &to_) {
-      aseq = aseq_;
-      from = from_;
-      to = to_;
-      connected = true;
-    };
+                 const port_t &to_)
+        : aseq(aseq_), from(from_), to(to_){};
     connection_t(const connection_t &other) = delete;
-    connection_t(connection_t &&other) {
-      aseq = other.aseq;
-      from = other.from;
-      to = other.to;
-      connected = other.connected;
+    connection_t(connection_t &&other) noexcept
+        : aseq(other.aseq), from(other.from), to(other.to) {
       other.from = {0, 0};
       other.to = {0, 0};
       other.connected = false;
     };
     connection_t &operator=(const connection_t &other) = delete;
-    connection_t &operator=(connection_t &&other) {
+    connection_t &operator=(connection_t &&other) noexcept {
       aseq = other.aseq;
       from = other.from;
       to = other.to;
@@ -148,6 +141,7 @@ std::vector<std::string> get_ports(aseq_t *);
  * Its just a intermediary to alsa functions
  */
 class mididata_to_alsaevents_t {
+  NON_COPYABLE_NOR_MOVABLE(mididata_to_alsaevents_t)
 public:
   snd_midi_event_t *buffer;
   mididata_to_alsaevents_t();

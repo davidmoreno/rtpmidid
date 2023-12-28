@@ -34,8 +34,8 @@ class midirouter_t;
  *
  * Must be inherited by the real clients
  */
-class midipeer_t : public std::enable_shared_from_this<midipeer_t>,
-                   private rtpmidid::non_copyable_t {
+class midipeer_t : public std::enable_shared_from_this<midipeer_t> {
+  NON_COPYABLE_NOR_MOVABLE(midipeer_t);
 public:
   std::shared_ptr<midirouter_t> router;
   midipeer_id_t peer_id = 0;
@@ -44,8 +44,6 @@ public:
 
   midipeer_t() = default;
   virtual ~midipeer_t();
-  midipeer_t(midipeer_t &&) = delete;
-  midipeer_t &operator=(midipeer_t &&) = delete;
 
   virtual json_t status() = 0;
   virtual void send_midi(midipeer_id_t from, const mididata_t &) = 0;

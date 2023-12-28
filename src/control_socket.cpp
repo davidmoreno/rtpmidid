@@ -33,16 +33,17 @@
 #include "stringpp.hpp"
 
 namespace rtpmididns {
+// NOLINTNEXTLINE
 extern const char *VERSION;
 
-const char *MSG_CLOSE_CONN =
+const char *const MSG_CLOSE_CONN =
     "{\"event\": \"close\", \"detail\": \"Shutdown\", \"code\": 0}\n";
-const char *MSG_TOO_LONG =
+const char *const MSG_TOO_LONG =
     "{\"event\": \"close\", \"detail\": \"Message too long\", \"code\": 1}\n";
-const char *MSG_UNKNOWN_COMMAND =
+const char *const MSG_UNKNOWN_COMMAND =
     "{\"error\": \"Unknown command\", \"code\": 2}";
 
-static std::regex peer_command_re = std::regex("^(\\d*)\\.(.*)");
+static const std::regex PEER_COMMAND_RE = std::regex("^(\\d*)\\.(.*)");
 
 control_socket_t::control_socket_t() {
   std::string &socketfile = settings.control_filename;
@@ -57,9 +58,10 @@ control_socket_t::control_socket_t() {
     ERROR("Error creating socket: {}", strerror(errno));
     return;
   }
-  struct sockaddr_un addr;
-  memset(&addr, 0, sizeof(struct sockaddr_un));
+  struct sockaddr_un addr = {};
+  // memset(&addr, 0, sizeof(struct sockaddr_un));
   addr.sun_family = AF_UNIX;
+  // NOLINTNEXTLINE
   strncpy(addr.sun_path, socketfile.c_str(), sizeof(addr.sun_path) - 1);
 
   ret = bind(socket, (const struct sockaddr *)(&addr),
@@ -262,7 +264,7 @@ std::string control_socket_t::parse_command(const std::string &command) {
     }
     // if matches the regex (^d*\..*), its a command to a peer
     std::smatch match;
-    if (std::regex_match(method, match, peer_command_re)) {
+    if (std::regex_match(method, match, PEER_COMMAND_RE)) {
       auto peer_id = std::stoi(match[1]);
       auto cmd = match[2];
       // DEBUG("Peer command: {} -> {}", peer_id, cmd.to_string());

@@ -37,9 +37,9 @@ namespace rtpmidid {
  * Internally uses epoll, it is level triggered, so data must be read or
  * will retrigger.
  */
-class poller_t : private non_copyable_t {
+class poller_t {
   void *private_data;
-
+  NON_COPYABLE_NOR_MOVABLE(poller_t)
 public:
   class timer_t;
   class listener_t;
@@ -61,6 +61,8 @@ public:
   [[nodiscard]] listener_t add_fd_out(int fd, std::function<void(int)> event_f);
   [[nodiscard]] listener_t add_fd_inout(int fd,
                                         std::function<void(int)> event_f);
+
+  // NOLINTNEXTLINE
   void __remove_fd(int fd);
 
   void wait(std::optional<std::chrono::milliseconds> wait_ms = {});
@@ -69,9 +71,10 @@ public:
   bool is_open();
 };
 // Singleton for all events on the system.
-extern poller_t poller;
+extern poller_t poller; // NOLINT
 
-class poller_t::timer_t : private non_copyable_t {
+class poller_t::timer_t {
+  NON_COPYABLE(timer_t)
 public:
   int id;
 
@@ -83,15 +86,15 @@ public:
   void disable();
 };
 
-class poller_t::listener_t : private non_copyable_t {
+class poller_t::listener_t {
+  NON_COPYABLE(listener_t)
 public:
   int fd = -1;
 
   listener_t(int fd_) : fd(fd_) { DEBUG0("Create from fd {}", fd); };
-  listener_t() : fd(-1) { DEBUG0("Create without fd {}", fd); };
-  listener_t(listener_t &&other) noexcept {
+  listener_t() { DEBUG0("Create without fd {}", fd); };
+  listener_t(listener_t &&other) noexcept : fd(other.fd) {
     DEBUG0("Create from other {}", other.fd);
-    fd = other.fd;
     other.fd = -1;
   };
   ~listener_t() {

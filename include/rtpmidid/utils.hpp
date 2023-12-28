@@ -21,17 +21,19 @@
 namespace rtpmidid {
 uint32_t rand_u32(void);
 
-// Inherit to remove default copy constructors
-class non_copyable_t {
-protected:
-  non_copyable_t() = default;
-  ~non_copyable_t() = default;
-  non_copyable_t(non_copyable_t &&) = default;
-  non_copyable_t &operator=(non_copyable_t &&) = default;
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define NON_COPYABLE(classname)                                                \
+  classname(const classname &) = delete;                                       \
+  classname &operator=(const classname &) = delete;
 
-private:
-  non_copyable_t(const non_copyable_t &) = delete;
-  non_copyable_t &operator=(const non_copyable_t &) = delete;
-};
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define NON_MOVABLE(classname)                                                 \
+  classname(classname &&) = delete;                                            \
+  classname &operator=(classname &&) = delete;
+
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define NON_COPYABLE_NOR_MOVABLE(classname)                                    \
+  NON_COPYABLE(classname)                                                      \
+  NON_MOVABLE(classname)
 
 } // namespace rtpmidid

@@ -20,14 +20,16 @@
 #include "aseq.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/poller.hpp"
+#include "rtpmidid/utils.hpp"
 #include <string>
 #include <vector>
 
 namespace rtpmididns {
 class control_socket_t {
-  class client_t {
-  public:
-    int fd;
+  NON_COPYABLE_NOR_MOVABLE(control_socket_t)
+
+  struct client_t {
+    int fd = -1;
     rtpmidid::poller_t::listener_t listener;
   };
 
@@ -42,6 +44,7 @@ public:
 public:
   control_socket_t();
   ~control_socket_t();
+
   void connection_ready();
   void data_ready(int fd);
   std::string parse_command(const std::string &command);
