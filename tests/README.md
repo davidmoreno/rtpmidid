@@ -25,7 +25,7 @@ here are some notes on what we should test, and some use cases.
 
 - If remote end disconnects, then the alsa connection should be removed.
 
-## 3. does not send CK on connection [failing]
+## 3. does not send CK on connection [fixes]
 
 1. Create two rtpmidid
 2. Connect aseqdump to the peer1/peer1
@@ -40,3 +40,20 @@ CK is sent by clients when connection finishes, looks like never finishes?
 Does:
 Stop the connection as nobody does the CK cycles.
 Leaves garbage aseqdumps at test2
+
+## 4. Connect directly two rtpmidi ports [fixed]
+
+1. Remote keyboard A
+2. Remote synth B
+3. Connect local/A to local/B
+
+Should:
+When press key A, receive at B
+
+Does:
+
+- Connect A with local/A, CONNECTED (rtpmidi client and alsa peer)
+- DO NOT connect local/B with B. WAITING (alsa listener)
+- Not sends data.
+
+Fix: When its an internal connection, special care must be taken for connecting end.

@@ -132,25 +132,34 @@ void aseq_t::read_ready() {
     switch (ev->type) {
     case SND_SEQ_EVENT_PORT_SUBSCRIBED: {
       // auto client = std::make_shared<rtpmidid::rtpclient>(name);
-      uint8_t client, port;
       std::string name;
-      snd_seq_addr_t *other_addr = get_other_ev_client_port(ev, client_id);
-      snd_seq_addr_t *my_addr = get_my_ev_client_port(ev, client_id);
+      snd_seq_addr_t *other = get_other_ev_client_port(ev, client_id);
+      snd_seq_addr_t *me = get_my_ev_client_port(ev, client_id);
 
-      name = get_client_name(other_addr);
-      client = other_addr->client;
-      port = other_addr->port;
-      auto myport = my_addr->port;
-      INFO("New ALSA connection from port {} ({}:{})", name, client, port);
+      name = get_client_name(other);
 
-      subscribe_event[myport](port_t(client, port), name);
+      INFO("New ALSA connection from port {} ({}:{})", name, other->client,
+           other->port);
+      subscribe_event[me->port](port_t(other->client, other->port), name);
+      if (me->client == other->client) {
+        // This is an internal connection, should send subscribe from the other
+        // side too
+        name = get_client_name(me);
+        INFO("New ALSA connection from port {} ({}:{}) (internal)", name,
+             me->client, me->port);
+        subscribe_event[other->port](port_t(me->client, me->port), name);
+      }
     } break;
     case SND_SEQ_EVENT_PORT_UNSUBSCRIBED: {
-      snd_seq_addr_t *other_addr = get_other_ev_client_port(ev, client_id);
-      snd_seq_addr_t *my_addr = get_my_ev_client_port(ev, client_id);
+      snd_seq_addr_t *other = get_other_ev_client_port(ev, client_id);
+      snd_seq_addr_t *me = get_my_ev_client_port(ev, client_id);
 
-      unsubscribe_event[my_addr->port](
-          port_t(other_addr->client, other_addr->port));
+      unsubscribe_event[me->port](port_t(other->client, other->port));
+      if (me->client == other->client) {
+        // This is an internal connection, should send unsubscribe from the
+        // other side too
+        unsubscribe_event[other->port](port_t(me->client, me->port));
+      }
       DEBUG("Disconnected");
     } break;
     // case SND_SEQ_EVENT_NOTE:
