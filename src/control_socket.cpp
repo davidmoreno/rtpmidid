@@ -16,7 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "control_socket.hpp"
-#include "config.hpp"
 #include "factory.hpp"
 #include "settings.hpp"
 #include <algorithm>
@@ -34,6 +33,7 @@
 #include "stringpp.hpp"
 
 namespace rtpmididns {
+extern const char *VERSION;
 
 const char *MSG_CLOSE_CONN =
     "{\"event\": \"close\", \"detail\": \"Shutdown\", \"code\": 0}\n";
