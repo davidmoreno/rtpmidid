@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace rtpmidid {
+namespace rtpmididns {
 extern const char *VERSION;
 
 /**
@@ -39,4 +39,4 @@ struct config_t {
   std::string control;
 };
 config_t parse_cmd_args(int argc, const char **argv);
-} // namespace rtpmidid
+} // namespace rtpmididns

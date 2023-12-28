@@ -71,7 +71,7 @@ struct settings_t {
   alsa_hw_auto_export_t alsa_hw_auto_export;
 };
 
-extern settings_t settings;
+extern settings_t settings; // NOLINT
 } // namespace rtpmididns
 
 template <>

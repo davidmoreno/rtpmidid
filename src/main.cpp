@@ -32,7 +32,7 @@
 namespace rtpmididns {
 std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 settings_t settings;
-void parse_argv(int argc, char **argv);
+void parse_argv(const std::vector<const char *> &args);
 } // namespace rtpmididns
 
 static bool exiting = false;
@@ -55,7 +55,12 @@ void sigint_f(int) {
 }
 
 int main(int argc, char **argv) {
-  rtpmididns::parse_argv(argc, argv);
+  std::vector<const char *> args;
+  for (int i = 0; i < argc; i++) {
+    args.push_back(argv[i]);
+  }
+
+  rtpmididns::parse_argv(args);
   std::optional<rtpmididns::HwAutoAnnounce> hwautoannounce;
 
   signal(SIGINT, sigint_f);

@@ -35,7 +35,6 @@
 
 namespace rtpmididns {
 
-extern const char *VERSION;
 const char *MSG_CLOSE_CONN =
     "{\"event\": \"close\", \"detail\": \"Shutdown\", \"code\": 0}\n";
 const char *MSG_TOO_LONG =

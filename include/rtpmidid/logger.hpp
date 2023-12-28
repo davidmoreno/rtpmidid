@@ -18,6 +18,7 @@
  */
 
 #pragma once
+#include <array>
 #include <fmt/format.h>
 #include <time.h>
 
@@ -30,13 +31,18 @@
 #else
 #define DEBUG(...) false
 #endif
+// NOLINTNEXTLINE
 #define WARNING(...)                                                           \
   logger::log(__FILE__, __LINE__, logger::WARNING, __VA_ARGS__)
+// NOLINTNEXTLINE
 #define ERROR(...) logger::log(__FILE__, __LINE__, logger::ERROR, __VA_ARGS__)
+// NOLINTNEXTLINE
 #define INFO(...) logger::log(__FILE__, __LINE__, logger::INFO, __VA_ARGS__)
+// NOLINTNEXTLINE
 #define SUCCESS(...)                                                           \
   logger::log(__FILE__, __LINE__, logger::SUCCESS, __VA_ARGS__)
 
+// NOLINTNEXTLINE
 #define ERROR_ONCE(...)                                                        \
   {                                                                            \
     static bool __error_once_unseen_##__LINENO__ = true;                       \
@@ -45,6 +51,7 @@
       logger::log(__FILE__, __LINE__, logger::ERROR, __VA_ARGS__);             \
     }                                                                          \
   }
+// NOLINTNEXTLINE
 #define WARNING_ONCE(...)                                                      \
   {                                                                            \
     static bool __warning_once_unseen_##__LINENO__ = true;                     \
@@ -54,6 +61,7 @@
     }                                                                          \
   }
 // Will show only once every X seconds
+// NOLINTNEXTLINE
 #define WARNING_RATE_LIMIT(seconds, ...)                                       \
   {                                                                            \
     static int __warning_skip_until_##__LINENO__ = 0;                          \
@@ -67,7 +75,7 @@
 namespace logger {
 class logger;
 
-extern logger __logger;
+extern logger __logger; // NOLINT
 
 enum LogLevel {
   DEBUG,
@@ -85,28 +93,35 @@ public:
   logger();
   ~logger();
 
+  logger(const logger &) = delete;
+  logger(logger &&) = delete;
+  logger &operator=(const logger &) = delete;
+  logger &operator=(logger &&) = delete;
+
   void log(const char *filename, int lineno, LogLevel loglevel,
            const char *msg);
   void flush();
 };
 
+constexpr int LOG_BUFFER_SIZE = 512;
+
 template <typename... Args>
 inline void log(const char *fullpath, int lineno, LogLevel loglevel,
                 Args... args) {
-  static char buffer[512];
+  static std::array<char, LOG_BUFFER_SIZE> buffer;
 
   // Get ony the file name part, not full path. Assumes a / and ends in 0.
   const char *filename = fullpath;
   while (*filename)
-    ++filename;
+    ++filename; // NOLINT
   while (*filename != '/')
-    --filename;
-  ++filename;
+    --filename; // NOLINT
+  ++filename;   // NOLINT
 
-  auto n = fmt::format_to_n(buffer, sizeof(buffer), args...);
+  auto n = fmt::format_to_n(buffer.data(), sizeof(buffer), args...);
   *n.out = '\0';
 
-  __logger.log(filename, lineno, loglevel, buffer);
+  __logger.log(filename, lineno, loglevel, buffer.data());
 }
 
 inline void flush() { __logger.flush(); }

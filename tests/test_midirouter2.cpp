@@ -36,7 +36,7 @@ using namespace std::chrono_literals;
 namespace rtpmididns {
 settings_t settings;
 std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
-const char *VERSION = "TEST";
+const char *VERSION = "TEST"; // NOLINT
 } // namespace rtpmididns
 
 void test_send_receive_messages() {
