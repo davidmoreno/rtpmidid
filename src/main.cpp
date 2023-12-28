@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
     }
     // Connect to all static endpoints
     for (const auto &connect_to : rtpmididns::settings.connect_to) {
-      router->add_peer(rtpmididns::make_local_alsa_waiter(
+      router->add_peer(rtpmididns::make_local_alsa_listener(
           router, connect_to.name, connect_to.hostname, connect_to.port, aseq));
     }
 

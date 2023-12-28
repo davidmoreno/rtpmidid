@@ -230,7 +230,7 @@ std::vector<control_socket_ns::command_t> commands{
                        "3 params (name,hostname,port) or a dict{name, "
                        "hostname, port}"};
 
-       control.router->add_peer(make_local_alsa_waiter(
+       control.router->add_peer(make_local_alsa_listener(
            control.router, name, hostname, port, control.aseq));
        return json_t{"ok"};
      }},

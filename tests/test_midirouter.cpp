@@ -79,7 +79,7 @@ rtpmididns::make_network_rtpmidi_listener(const std::string &name) {
   return std::make_shared<test_midiio_t>();
 }
 // std::shared_ptr<rtpmididns::midipeer_t>
-// rtpmididns::make_local_alsa_worker(const std::string &name,
+// rtpmididns::make_local_alsa_peer(const std::string &name,
 //                           std::shared_ptr<rtpmidins::aseq_t> seq) {
 //   return std::make_shared<test_midiio_t>();
 // }
