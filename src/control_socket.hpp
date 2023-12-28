@@ -43,7 +43,7 @@ public:
 
 public:
   control_socket_t();
-  ~control_socket_t();
+  ~control_socket_t() noexcept;
 
   void connection_ready();
   void data_ready(int fd);

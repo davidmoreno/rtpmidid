@@ -156,6 +156,7 @@ public:
   }
   connection_t(const connection_t<Args...> &) = delete;
   connection_t<Args...> &operator=(const connection_t<Args...> &) = delete;
+  connection_t<Args...> &operator=(connection_t<Args...> &other) = delete;
 
   connection_t &operator=(connection_t<Args...> &&other) noexcept {
     DEBUG0("{}::=({})", (void *)this, (void *)&other);
