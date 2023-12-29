@@ -30,6 +30,7 @@ struct sockaddr_in6;
 
 namespace rtpmidid {
 class rtpserver_t {
+  NON_COPYABLE_NOR_MOVABLE(rtpserver_t)
 public:
   // Callbacks to call when new connections
   signal_t<std::shared_ptr<rtppeer_t>> connected_event;

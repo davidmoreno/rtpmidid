@@ -301,23 +301,25 @@ public:
   }
 };
 
+// NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)
+
 template <size_t Size> class io_bytes_static : public io_bytes {
 public:
-  // NOLINTNEXTLINE
   uint8_t data[Size];
-  // NOLINTNEXTLINE
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
   io_bytes_static() : io_bytes(data, Size) {}
 };
 
 template <size_t Size> class io_bytes_writer_static : public io_bytes_writer {
 public:
-  // NOLINTNEXTLINE
   uint8_t data[Size];
-  // NOLINTNEXTLINE
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
   io_bytes_writer_static() : io_bytes_writer(data, Size) {
     memset(data, 0, Size);
   }
 };
+
+// NOLINTEND(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)
 
 class io_bytes_managed : public io_bytes {
 public:

@@ -22,6 +22,7 @@
 #include <rtpmidid/logger.hpp>
 #include <string>
 
+// NOLINTNEXTLINE
 #define TEST(fn)                                                               \
   { #fn, fn }
 
@@ -32,14 +33,12 @@ public:
   int line;
   std::string error;
 
-  test_exception(const char *file, int line, const std::string &error) {
-    this->filename = file;
-    this->line = line;
-    this->error = error;
+  test_exception(const char *file, int line, const std::string &error)
+      : filename(file), line(line), error(error) {
     msg = fmt::format("{}:{} Test Fail: {}{}{}", file, line, "\033[1;31m",
                       error, "\033[0m");
   }
-  virtual const char *what() const noexcept { return msg.c_str(); }
+  const char *what() const noexcept override { return msg.c_str(); }
 };
 
 struct test_t {
@@ -52,7 +51,7 @@ public:
   std::vector<test_t> tests;
   bool error = false;
 
-  test_case_t(const std::initializer_list<test_t> &tests_) { tests = tests_; }
+  test_case_t(std::initializer_list<test_t> tests_) : tests(tests_) {}
 
   bool string_in_argv(const std::vector<std::string> &args,
                       const std::string &name) {
@@ -91,7 +90,7 @@ public:
     }
 
     int errors = 0;
-    int total = tests.size();
+    auto total = tests.size();
     int count = 0;
     for (auto &tcase : tests) {
       count += 1;
@@ -132,43 +131,52 @@ public:
   int exit_code() { return error ? 1 : 0; }
 };
 
+// NOLINTNEXTLINE
 #define ASSERT_TRUE(A)                                                         \
   if (!(A)) {                                                                  \
     throw test_exception(__FILE__, __LINE__, "Assert [" #A "] failed");        \
   }
+// NOLINTNEXTLINE
 #define ASSERT_FALSE(A)                                                        \
   if (A) {                                                                     \
     throw test_exception(__FILE__, __LINE__, "Assert ![" #A "] failed");       \
   }
+// NOLINTNEXTLINE
 #define ASSERT_EQUAL(A, B)                                                     \
   if ((A) != (B)) {                                                            \
     throw test_exception(__FILE__, __LINE__,                                   \
                          "Assert [" #A " == " #B "] failed");                  \
   }
+// NOLINTNEXTLINE
 #define ASSERT_NOT_EQUAL(A, B)                                                 \
   if ((A) == (B)) {                                                            \
     throw test_exception(__FILE__, __LINE__,                                   \
                          "Assert [" #A " != " #B "] failed");                  \
   }
+// NOLINTNEXTLINE
 #define ASSERT_GT(A, B)                                                        \
   if ((A) <= (B)) {                                                            \
     throw test_exception(__FILE__, __LINE__,                                   \
                          "Assert [" #A " > " #B "] failed");                   \
   }
+// NOLINTNEXTLINE
 #define ASSERT_GTE(A, B)                                                       \
   if ((A) < (B)) {                                                             \
     throw test_exception(__FILE__, __LINE__,                                   \
                          "Assert [" #A " >= " #B "] failed");                  \
   }
+// NOLINTNEXTLINE
 #define ASSERT_LT(A, B)                                                        \
   if ((A) >= (B)) {                                                            \
     throw test_exception(__FILE__, __LINE__,                                   \
                          "Assert [" #A " < " #B "] failed");                   \
   }
+// NOLINTNEXTLINE
 #define ASSERT_LTE(A, B)                                                       \
   if ((A) > (B)) {                                                             \
     throw test_exception(__FILE__, __LINE__,                                   \
                          "Assert [" #A " <= " #B "] failed");                  \
   }
+// NOLINTNEXTLINE
 #define FAIL(msg)                                                              \
   { throw test_exception(__FILE__, __LINE__, msg); }

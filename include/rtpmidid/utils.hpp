@@ -21,19 +21,19 @@
 namespace rtpmidid {
 uint32_t rand_u32(void);
 
-// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+// NOLINTBEGIN(cppcoreguidelines-macro-usage,bugprone-macro-parentheses)
 #define NON_COPYABLE(classname)                                                \
   classname(const classname &) = delete;                                       \
   classname &operator=(const classname &) = delete;
 
-// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define NON_MOVABLE(classname)                                                 \
   classname(classname &&) = delete;                                            \
   classname &operator=(classname &&) = delete;
 
-// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define NON_COPYABLE_NOR_MOVABLE(classname)                                    \
   NON_COPYABLE(classname)                                                      \
   NON_MOVABLE(classname)
+
+// NOLINTEND(cppcoreguidelines-macro-usage,bugprone-macro-parentheses)
 
 } // namespace rtpmidid

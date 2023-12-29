@@ -20,6 +20,7 @@
 #include "midipeer.hpp"
 #include "rtpmidid/rtppeer.hpp"
 #include "rtpmidid/signal.hpp"
+#include "rtpmidid/utils.hpp"
 
 namespace rtpmidid {
 class io_bytes_reader;
@@ -36,6 +37,8 @@ namespace rtpmididns {
  * a rtpmidid::rtpclient_t or rtpmidid::rtpserver_t object.
  */
 class network_rtpmidi_peer_t : public midipeer_t {
+  NON_COPYABLE_NOR_MOVABLE(network_rtpmidi_peer_t);
+
 public:
   std::shared_ptr<rtpmidid::rtppeer_t> peer;
   rtpmidid::connection_t<const rtpmidid::io_bytes_reader &> midi_connection;

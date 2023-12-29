@@ -39,6 +39,7 @@ public:
     uint8_t port;
 
     port_t() : client(0), port(0) {}
+    // NOLINTNEXTLINE
     port_t(uint8_t client_, uint8_t port_) : client(client_), port(port_) {}
 
     bool operator<(const port_t &other) const {
@@ -59,6 +60,7 @@ public:
     port_t to;
     bool connected = false;
 
+    // NOLINTNEXTLINE
     connection_t(const std::shared_ptr<aseq_t> &aseq_, const port_t &from_,
                  const port_t &to_)
         : aseq(aseq_), from(from_), to(to_){};

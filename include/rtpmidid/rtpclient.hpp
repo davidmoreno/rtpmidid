@@ -39,7 +39,7 @@ struct address_port_t {
  * and emits midi events or on_disconnect if not valid.
  */
 class rtpclient_t {
-
+  NON_COPYABLE_NOR_MOVABLE(rtpclient_t)
 public:
   rtppeer_t peer;
   // signal_t<> connect_failed_event;

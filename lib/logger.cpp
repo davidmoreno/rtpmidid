@@ -25,6 +25,7 @@
 #include <unistd.h>
 
 namespace logger {
+// NOLINTNEXLINE(cppcoreguidelines-avoid-non-const-global-variables)
 logger __logger;
 
 enum Color {
@@ -36,6 +37,8 @@ enum Color {
   ORANGE = 36,
   WHITE = 37,
 };
+
+// NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)
 
 const char *color(const char *str, Color color, bool highlight = false) {
   int hl = highlight ? 1 : 0;
@@ -100,4 +103,7 @@ void logger::log(const char *filename, int lineno, LogLevel loglevel,
   ::fprintf(stderr, "%s", buffer);
 }
 void logger::flush() { ::fflush(stderr); }
+
+// NOLINTEND(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)
+
 } // namespace logger

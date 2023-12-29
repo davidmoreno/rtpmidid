@@ -72,19 +72,19 @@ public:
     NETWORK_ERROR,
   };
 
-  status_e status;
-  uint32_t initiator_id;
-  uint32_t remote_ssrc;
-  uint32_t local_ssrc;
+  status_e status = NOT_CONNECTED;
+  uint32_t initiator_id = 0;
+  uint32_t remote_ssrc = 0;
+  uint32_t local_ssrc = 0;
   std::string local_name;
   std::string remote_name;
-  uint16_t seq_nr_ack;
-  uint16_t seq_nr;
-  uint16_t remote_seq_nr;
-  uint64_t timestamp_start; // Time in ms
-  uint64_t latency;
-  bool waiting_ck;
-  uint8_t running_status;
+  uint16_t seq_nr_ack = 0;
+  uint16_t seq_nr = 0;
+  uint16_t remote_seq_nr = 0;
+  uint64_t timestamp_start = 0; // Time in ms
+  uint64_t latency = 0;
+  bool waiting_ck = false;
+  uint8_t running_status = 0;
   // Need some buffer space for sysex. This may require memory alloc.
   std::vector<uint8_t> sysex;
   stats_t stats;
@@ -117,7 +117,7 @@ public:
   static bool is_feedback(io_bytes_reader &);
 
   rtppeer_t(std::string _name);
-  ~rtppeer_t();
+  ~rtppeer_t(); // NOLINT(bugprone-exception-escape)
 
   bool is_connected() { return status == CONNECTED; }
   void reset();

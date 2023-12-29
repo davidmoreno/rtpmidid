@@ -30,11 +30,14 @@
 #include <unistd.h>
 
 namespace rtpmididns {
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 settings_t settings;
 void parse_argv(const std::vector<const char *> &args);
 } // namespace rtpmididns
 
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 static bool exiting = false;
 
 void sigterm_f(int) {
@@ -54,6 +57,7 @@ void sigint_f(int) {
   rtpmidid::poller.close();
 }
 
+// NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char **argv) {
   std::vector<const char *> args;
   for (int i = 0; i < argc; i++) {

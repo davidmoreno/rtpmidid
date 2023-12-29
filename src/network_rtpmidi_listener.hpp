@@ -20,6 +20,7 @@
 #include "midipeer.hpp"
 #include "rtpmidid/rtpserver.hpp"
 #include "rtpmidid/signal.hpp"
+#include "rtpmidid/utils.hpp"
 #include <string>
 
 namespace rtpmididns {
@@ -33,6 +34,8 @@ namespace rtpmididns {
  * the ALSA side, and any data from ALSA goes to all the clients.
  */
 class network_rtpmidi_listener_t : public midipeer_t {
+  NON_COPYABLE_NOR_MOVABLE(network_rtpmidi_listener_t);
+
 public:
   std::string name_;
   rtpmidid::rtpserver_t server;
