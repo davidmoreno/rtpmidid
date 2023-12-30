@@ -35,7 +35,7 @@ using peer_id_t = uint32_t;
 struct peerconnection_t {
   uint32_t id = 0;
   std::shared_ptr<midipeer_t> peer;
-  std::vector<peer_id_t> send_to;
+  std::vector<peer_id_t> send_to{};
 };
 
 class midirouter_t : public std::enable_shared_from_this<midirouter_t> {

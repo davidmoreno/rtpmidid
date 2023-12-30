@@ -87,6 +87,7 @@ public:
         aseq->disconnect(from, to);
       connected = false;
     }
+    // NOLINTNEXTLINE
     ~connection_t() { disconnect(); }
   };
 
