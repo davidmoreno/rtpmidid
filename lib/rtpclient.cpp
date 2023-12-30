@@ -42,13 +42,6 @@ using namespace std::chrono_literals;
 using namespace rtpmidid;
 
 rtpclient_t::rtpclient_t(std::string name) : peer(std::move(name)) {
-  local_base_port = 0;
-  remote_base_port = -1; // Not defined
-  control_socket = -1;
-  control_addr = {0};
-  midi_addr = {0};
-  timerstate = 0;
-  midi_socket = -1;
   peer.initiator_id = ::rtpmidid::rand_u32();
   send_connection = peer.send_event.connect(
       [this](const io_bytes_reader &data, rtppeer_t::port_e port) {
@@ -126,10 +119,10 @@ bool rtpclient_t::connect_to_next() {
 // If callback returns true, stop iterating.
 bool for_each_address(const std::string &hostname, const std::string &port,
                       std::function<bool(addrinfo *serveraddr)> callback) {
-  struct addrinfo hints;
+  struct addrinfo hints {};
   struct addrinfo *sockaddress_list = nullptr;
 
-  int res;
+  int res = 0;
   memset(&hints, 0, sizeof(struct addrinfo));
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_DGRAM;
@@ -184,7 +177,7 @@ struct control_midi_ports_t {
  */
 std::optional<socket_port_sockaddr_t> connect_udp_port(int local_base_port,
                                                        addrinfo *serveraddr) {
-  struct sockaddr_in6 myaddr;
+  struct sockaddr_in6 myaddr {};
   memset(&myaddr, 0, sizeof(myaddr));
   socklen_t len = sizeof(myaddr);
   auto socketfd = socket(serveraddr->ai_family, serveraddr->ai_socktype,
@@ -195,6 +188,7 @@ std::optional<socket_port_sockaddr_t> connect_udp_port(int local_base_port,
   }
 
   myaddr.sin6_port = htons(local_base_port);
+  // NOLINTNEXTLINE
   auto ret = bind(socketfd, (struct sockaddr *)&myaddr, len);
   if (ret < 0) {
     DEBUG("Could not bind socket at UDP port {}", local_base_port);
@@ -208,6 +202,7 @@ std::optional<socket_port_sockaddr_t> connect_udp_port(int local_base_port,
     return std::nullopt;
   }
 
+  // NOLINTNEXTLINE
   ::getsockname(socketfd, (struct sockaddr *)&myaddr, &len);
   auto udp_port = htons(myaddr.sin6_port);
   DEBUG("PORT at port {}, socket {}", udp_port, socketfd);
@@ -241,6 +236,7 @@ connect_control_and_midi_sockets(int local_base_port,
                                  const std::string &portname) {
   std::optional<control_midi_ports_t> ret = std::nullopt;
 
+  // NOLINTBEGIN(cppcoreguidelines-pro-bounds-array-to-pointer-decay,cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-type-cstyle-cast)
   for_each_address(hostname, portname, [&](addrinfo *serveraddr) {
     char host[NI_MAXHOST];
     char port[NI_MAXSERV];
@@ -276,6 +272,7 @@ connect_control_and_midi_sockets(int local_base_port,
 
     return true;
   });
+  // NOLINTEND(cppcoreguidelines-pro-bounds-array-to-pointer-decay,cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-type-cstyle-cast)
   return ret;
 }
 
@@ -395,8 +392,8 @@ void rtpclient_t::send_ck0_with_timeout() {
 }
 
 void rtpclient_t::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
-  sockaddr_storage *peer_addr;
-  int socket;
+  sockaddr_storage *peer_addr = nullptr;
+  int socket = -1;
 
   if (port == rtppeer_t::MIDI_PORT) {
     socket = midi_socket;
@@ -411,9 +408,12 @@ void rtpclient_t::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
   // DEBUG("Send {} bytes to {} {}, socket {}", port, pb.size(), *peer_addr,
   //       socket);
 
+  // NOLINTNEXTLINE
+  sockaddr *peer_addr_sockaddr = reinterpret_cast<sockaddr *>(peer_addr);
+
   for (;;) {
-    ssize_t res = ::sendto(socket, pb.start, pb.size(), 0,
-                           (sockaddr *)peer_addr, sizeof(sockaddr_storage));
+    ssize_t res = ::sendto(socket, pb.start, pb.size(), 0, peer_addr_sockaddr,
+                           sizeof(sockaddr_storage));
 
     if (static_cast<uint32_t>(res) == pb.size())
       break;
@@ -439,13 +439,15 @@ void rtpclient_t::reset() {
   peer.reset();
 }
 
+// NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)
 void rtpclient_t::data_ready(rtppeer_t::port_e port) {
   uint8_t raw[1500];
-  struct sockaddr_in6 cliaddr;
+  struct sockaddr_storage cliaddr {};
   unsigned int len = sizeof(cliaddr);
   auto socket = port == rtppeer_t::CONTROL_PORT ? control_socket : midi_socket;
-  auto n = recvfrom(socket, raw, 1500, MSG_DONTWAIT,
-                    (struct sockaddr *)&cliaddr, &len);
+  // NOLINTNEXTLINE
+  auto cliaddr_sockaddr = reinterpret_cast<sockaddr *>(&cliaddr);
+  auto n = recvfrom(socket, raw, 1500, MSG_DONTWAIT, cliaddr_sockaddr, &len);
   // DEBUG("Got some data from control: {}", n);
   if (n < 0) {
     throw exception("Error reading from rtppeer {}:{}", peer.remote_name,
@@ -455,3 +457,4 @@ void rtpclient_t::data_ready(rtppeer_t::port_e port) {
   auto buffer = io_bytes_reader(raw, n);
   peer.data_ready(std::move(buffer), port);
 }
+// NOLINTEND(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)

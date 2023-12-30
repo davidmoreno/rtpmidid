@@ -18,6 +18,7 @@
  */
 
 #include <arpa/inet.h>
+#include <array>
 #include <fmt/core.h>
 #include <netdb.h>
 #include <string_view>
@@ -26,20 +27,22 @@ template <>
 struct fmt::formatter<sockaddr_storage> : formatter<std::string_view> {
   auto format(const sockaddr_storage &addr, format_context &ctx) {
     // print ip address and port
-    char name[INET6_ADDRSTRLEN];
+    std::array<char, INET6_ADDRSTRLEN> name{};
     if (addr.ss_family == AF_INET) {
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
       auto *s = reinterpret_cast<const sockaddr_in *>(&addr);
-      inet_ntop(AF_INET, &s->sin_addr, name, sizeof(name));
+      inet_ntop(AF_INET, &s->sin_addr, name.data(), name.size());
 
       return formatter<std::string_view>::format(
-          fmt::format("{}:{}", name, ntohs(s->sin_port)), ctx);
+          fmt::format("{}:{}", name.data(), ntohs(s->sin_port)), ctx);
     }
     if (addr.ss_family != AF_INET6) {
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
       auto *s = reinterpret_cast<const sockaddr_in6 *>(&addr);
-      inet_ntop(AF_INET6, &s->sin6_addr, name, sizeof(name));
+      inet_ntop(AF_INET6, &s->sin6_addr, name.data(), name.size());
 
       return formatter<std::string_view>::format(
-          fmt::format("{}:{}", name, ntohs(s->sin6_port)), ctx);
+          fmt::format("{}:{}", name.data(), ntohs(s->sin6_port)), ctx);
     }
     return formatter<std::string_view>::format("unknown", ctx);
   }

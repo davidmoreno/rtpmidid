@@ -48,17 +48,17 @@ public:
   int connect_count =
       3; // how many times we tried to connect, after 3, final fail.
 
-  int control_socket;
-  int midi_socket;
-  struct sockaddr_storage control_addr;
-  struct sockaddr_storage midi_addr;
+  int control_socket = -1;
+  int midi_socket = -1;
+  struct sockaddr_storage control_addr {};
+  struct sockaddr_storage midi_addr {};
 
-  uint16_t local_base_port;
-  uint16_t remote_base_port;
+  uint16_t local_base_port = 0;
+  uint16_t remote_base_port = -1;
   poller_t::timer_t timer_ck;
   /// A simple state machine. We need to send 6 CK one after another, and then
   /// every 10 secs.
-  uint8_t timerstate;
+  uint8_t timerstate = 0;
   connection_t<const io_bytes_reader &, rtppeer_t::port_e> send_connection;
   connection_t<float> ck_connection;
   connection_t<const std::string &, rtppeer_t::status_e> connected_connection;

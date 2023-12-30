@@ -24,8 +24,7 @@
 #include <string_view>
 #include <vector>
 
-// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-// NOLINTBEGIN(cppcoreguidelines-pro-avoid-magic-numbers)
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-avoid-magic-numbers)
 
 namespace rtpmidid {
 class io_bytes_reader;
@@ -325,6 +324,7 @@ class io_bytes_managed : public io_bytes {
 public:
   std::vector<uint8_t> data;
 
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
   io_bytes_managed(int size) : data(size) {
     start = data.data();
     end = data.data() + size;
@@ -332,6 +332,7 @@ public:
   }
   io_bytes_managed(const io_bytes_managed &) = delete;
 
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
   io_bytes_managed(io_bytes_managed &&other) noexcept
       : data(std::move(other.data)) {
     start = other.start;
@@ -350,8 +351,7 @@ public:
   io_bytes_managed &operator=(const io_bytes_managed &other) = delete;
 };
 
-// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic
-// NOLINTEND(cppcoreguidelines-pro-avoid-magic-numbers)
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-avoid-magic-numbers)
 
 } // namespace rtpmidid
 
