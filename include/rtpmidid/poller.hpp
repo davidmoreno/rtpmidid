@@ -31,6 +31,7 @@
 #define DEBUG0(...)
 
 namespace rtpmidid {
+class poller_private_data_t;
 /**
  * Simplified fd poller
  *
@@ -38,8 +39,9 @@ namespace rtpmidid {
  * will retrigger.
  */
 class poller_t {
-  void *private_data;
   NON_COPYABLE_NOR_MOVABLE(poller_t)
+  std::unique_ptr<poller_private_data_t> private_data;
+
 public:
   class timer_t;
   class listener_t;

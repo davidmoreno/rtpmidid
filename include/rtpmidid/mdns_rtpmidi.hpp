@@ -44,9 +44,9 @@ class mdns_rtpmidi_t {
   NON_COPYABLE_NOR_MOVABLE(mdns_rtpmidi_t)
 public:
   std::unique_ptr<AvahiPoll> poller_adapter;
-  AvahiClient *client;
-  AvahiEntryGroup *group;
-  AvahiServiceBrowser *service_browser;
+  AvahiClient *client = nullptr;
+  AvahiEntryGroup *group = nullptr;
+  AvahiServiceBrowser *service_browser = nullptr;
   std::vector<announcement_t> announcements;
   // name, address, port
   signal_t<const std::string &, const std::string &, const std::string &>
