@@ -28,22 +28,21 @@
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
+#include <rtpmidid/network.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtpserver.hpp>
 
 using namespace rtpmidid;
 
+// NOLINTNEXTLINE(bugprone-swappable-parameters)
 rtpserver_t::rtpserver_t(std::string _name, const std::string &port)
     : name(std::move(_name)) {
-  control_socket = midi_socket = -1;
-  control_port = 0;
-  midi_port = 0;
   struct addrinfo *sockaddress_list = nullptr;
 
   try {
-    struct addrinfo hints;
+    struct addrinfo hints {};
 
-    int res;
+    int res = -1;
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_DGRAM;
@@ -59,14 +58,15 @@ rtpserver_t::rtpserver_t(std::string _name, const std::string &port)
     }
     // Get addr info may return several options, try them in order.
     // we asume that if the control success to be created the midi will too.
-    char host[NI_MAXHOST], service[NI_MAXSERV];
+    std::array<char, NI_MAXHOST> host{};
+    std::array<char, NI_MAXHOST> service{};
     socklen_t peer_addr_len = NI_MAXHOST;
     auto listenaddr = sockaddress_list;
     for (; listenaddr != nullptr; listenaddr = listenaddr->ai_next) {
       host[0] = service[0] = 0x00;
-      getnameinfo(listenaddr->ai_addr, peer_addr_len, host, NI_MAXHOST, service,
-                  NI_MAXSERV, NI_NUMERICSERV);
-      DEBUG("Try listen at {}:{}", host, service);
+      getnameinfo(listenaddr->ai_addr, peer_addr_len, host.data(), NI_MAXHOST,
+                  service.data(), NI_MAXSERV, NI_NUMERICSERV);
+      DEBUG("Try listen at {}:{}", host.data(), service.data());
 
       control_socket = socket(listenaddr->ai_family, listenaddr->ai_socktype,
                               listenaddr->ai_protocol);
@@ -84,16 +84,17 @@ rtpserver_t::rtpserver_t(std::string _name, const std::string &port)
       throw rtpmidid::exception("Can not open rtpmidi control socket. {}.",
                                 strerror(errno));
     }
-    struct sockaddr_in6 addr;
+    struct sockaddr_storage addr {};
     unsigned int len = sizeof(addr);
-    res = ::getsockname(control_socket, (sockaddr *)&addr, &len);
+    res = ::getsockname(control_socket, sockaddr_storage_to_sockaddr(&addr),
+                        &len);
     if (res < 0) {
       throw rtpmidid::exception("Error getting info the newly created midi "
                                 "socket. Can not create server.");
     }
-    control_port = ntohs(addr.sin6_port);
+    control_port = sockaddr_storage_get_port(&addr);
 
-    DEBUG("Control port at {}:{}", host, control_port);
+    DEBUG("Control port at {}:{}", host.data(), control_port);
     midi_port = control_port + 1;
 
     control_poller = poller.add_fd_in(control_socket, [this](int) {
@@ -106,6 +107,7 @@ rtpserver_t::rtpserver_t(std::string _name, const std::string &port)
       throw rtpmidid::exception("Can not open MIDI socket. Out of sockets?");
     }
     // Reuse listenaddr, just on next port
+    // NOLINTNEXTLINE
     ((sockaddr_in *)listenaddr->ai_addr)->sin_port = htons(midi_port);
     if (bind(midi_socket, listenaddr->ai_addr, listenaddr->ai_addrlen) < 0) {
       throw rtpmidid::exception("Can not open MIDI socket. {}.",
@@ -138,6 +140,7 @@ rtpserver_t::rtpserver_t(std::string _name, const std::string &port)
        control_port, name);
 }
 
+// NOLINTNEXTLINE(bugprone-exception-escape)
 rtpserver_t::~rtpserver_t() {
   DEBUG("~rtpserver_t({})", name);
   // Must clear here, to be able to use the control and midi
@@ -223,20 +226,20 @@ rtpserver_t::get_peer_by_initiator_id(uint32_t initiator_id) {
 }
 
 void rtpserver_t::data_ready(rtppeer_t::port_e port) {
-  uint8_t raw[1500];
-  struct sockaddr_in6 cliaddr;
+  std::array<uint8_t, 1500> raw{};
+  struct sockaddr_storage cliaddr {};
   unsigned int len = sizeof(cliaddr);
   auto socket =
       (port == rtppeer_t::CONTROL_PORT) ? control_socket : midi_socket;
-  auto n = recvfrom(socket, raw, 1500, MSG_DONTWAIT,
-                    (struct sockaddr *)&cliaddr, &len);
+  auto n = recvfrom(socket, raw.data(), 1500, MSG_DONTWAIT,
+                    sockaddr_storage_to_sockaddr(&cliaddr), &len);
   // DEBUG("Got some data from control: {}", n);
   if (n < 0) {
     auto netport = (port == rtppeer_t::CONTROL_PORT) ? control_port : midi_port;
     throw exception("Error reading from server 0.0.0.0:{}", netport);
   }
 
-  auto buffer = io_bytes_reader(raw, n);
+  auto buffer = io_bytes_reader(raw.data(), n);
 
   auto peer = get_peer_by_packet(buffer, port);
   if (peer) {
@@ -249,13 +252,16 @@ void rtpserver_t::data_ready(rtppeer_t::port_e port) {
         buffer.start[3] == 'N') {
       create_peer_from(std::move(buffer), &cliaddr, port);
     } else {
-      char host[NI_MAXHOST]{0}, service[NI_MAXSERV]{0};
-      getnameinfo((const struct sockaddr *)&cliaddr, len, host, NI_MAXHOST,
-                  service, NI_MAXSERV, NI_NUMERICSERV);
+      std::array<char, NI_MAXHOST> host{};
+      std::array<char, NI_MAXSERV> service{};
+
+      getnameinfo(sockaddr_storage_to_sockaddr(&cliaddr), len, host.data(),
+                  NI_MAXHOST, service.data(), NI_MAXSERV, NI_NUMERICSERV);
 
       DEBUG(
           "Unknown peer ({}/{}), and not connect on control. Ignoring {} port.",
-          host, service, port == rtppeer_t::MIDI_PORT ? "MIDI" : "Control");
+          host.data(), service.data(),
+          port == rtppeer_t::MIDI_PORT ? "MIDI" : "Control");
 
       buffer.print_hex(true);
     }
@@ -263,11 +269,12 @@ void rtpserver_t::data_ready(rtppeer_t::port_e port) {
 }
 
 void rtpserver_t::sendto(const io_bytes_reader &pb, rtppeer_t::port_e port,
-                         struct sockaddr_in6 *address, int remote_base_port) {
+                         struct sockaddr_storage *address,
+                         int remote_base_port) {
   if (port == rtppeer_t::MIDI_PORT)
-    address->sin6_port = htons(remote_base_port + 1);
+    sockaddr_storage_set_port(address, remote_base_port + 1);
   else
-    address->sin6_port = htons(remote_base_port);
+    sockaddr_storage_set_port(address, remote_base_port);
 
   auto socket = rtppeer_t::MIDI_PORT == port ? midi_socket : control_socket;
 
@@ -276,15 +283,15 @@ void rtpserver_t::sendto(const io_bytes_reader &pb, rtppeer_t::port_e port,
   // htons(address->sin6_port));
 
   for (;;) {
-    ssize_t res =
-        ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
-                 (const struct sockaddr *)address, sizeof(struct sockaddr_in6));
+    ssize_t res = ::sendto(socket, pb.start, pb.size(), MSG_CONFIRM,
+                           sockaddr_storage_to_sockaddr(address),
+                           sizeof(sockaddr_storage));
 
     if (static_cast<uint32_t>(res) == pb.size())
       break;
 
-    char addr_buffer[INET6_ADDRSTRLEN]{0};
-    inet_ntop(AF_INET6, address, addr_buffer, sizeof(struct sockaddr_in6));
+    std::array<char, INET6_ADDRSTRLEN> addr_buffer{};
+    inet_ntop(AF_INET6, address, addr_buffer.data(), INET6_ADDRSTRLEN);
 
     if (res == -1) {
       if (errno == EINTR) {
@@ -292,35 +299,36 @@ void rtpserver_t::sendto(const io_bytes_reader &pb, rtppeer_t::port_e port,
         continue;
       }
 
-      ERROR("Server: Could not send all data to {}: {}", addr_buffer,
+      ERROR("Server: Could not send all data to {}: {}", addr_buffer.data(),
             strerror(errno));
       throw network_exception(errno);
     }
 
-    DEBUG("Could not send whole message to {}: only {} of {}", addr_buffer, res,
-          pb.size());
+    DEBUG("Could not send whole message to {}: only {} of {}",
+          addr_buffer.data(), res, pb.size());
     break;
   }
 }
 
 void rtpserver_t::create_peer_from(io_bytes_reader &&buffer,
-                                   struct sockaddr_in6 *cliaddr,
+                                   struct sockaddr_storage *cliaddr,
                                    rtppeer_t::port_e port) {
 
   auto peer = std::make_shared<rtppeer_t>(name);
-  auto address = std::make_shared<struct sockaddr_in6>();
-  ::memcpy(address.get(), cliaddr, sizeof(struct sockaddr_in6));
-  auto remote_base_port = htons(cliaddr->sin6_port);
+  auto address = std::make_shared<struct sockaddr_storage>();
+  ::memcpy(address.get(), cliaddr, sizeof(struct sockaddr_storage));
+  auto remote_base_port = sockaddr_storage_get_port(cliaddr);
 
-  char astring[INET6_ADDRSTRLEN];
-  inet_ntop(AF_INET6, &(address->sin6_addr), astring, INET6_ADDRSTRLEN);
-  DEBUG("Connected from {}:{}", astring, remote_base_port);
-  peer->remote_address = astring;
+  std::array<char, INET6_ADDRSTRLEN> astring{};
+  inet_ntop(AF_INET6, sockaddr_storage_get_addr_in6(address.get()),
+            astring.data(), INET6_ADDRSTRLEN);
+  DEBUG("Connected from {}:{}", astring.data(), remote_base_port);
+  peer->remote_address = astring.data();
   peer->remote_base_port = remote_base_port;
 
   auto &peerdata = peers.emplace_back();
   peerdata.peer = peer;
-  peer->remote_address = astring;
+  peer->remote_address = astring.data();
   peer->remote_base_port = remote_base_port;
 
   // peer_data_t peerdata;
@@ -373,11 +381,13 @@ void rtpserver_t::create_peer_from(io_bytes_reader &&buffer,
         if (wpeer.expired())
           return;
         auto peer = wpeer.lock();
-        peers.erase(std::remove_if(peers.begin(), peers.end(),
-                                   [&peer](const peer_data_t &datapeer) {
-                                     return datapeer.peer == peer;
-                                   }));
-
+        peers.erase(        //
+            std::remove_if( //
+                peers.begin(), peers.end(),
+                [&peer](const peer_data_t &datapeer) {
+                  return datapeer.peer == peer;
+                }),
+            peers.end());
         //                  this->initiator_to_peer.erase(peer->initiator_id);
         // this->ssrc_to_peer.erase(peer->remote_ssrc);
       });

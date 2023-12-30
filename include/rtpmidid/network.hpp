@@ -23,6 +23,26 @@
 #include <netdb.h>
 #include <string_view>
 
+namespace rtpmidid {
+inline sockaddr *sockaddr_storage_to_sockaddr(sockaddr_storage *addr) {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  return reinterpret_cast<sockaddr *>(addr);
+}
+inline int sockaddr_storage_get_port(sockaddr_storage *addr) {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  return ntohs(reinterpret_cast<sockaddr_in6 *>(addr)->sin6_port);
+}
+inline void sockaddr_storage_set_port(sockaddr_storage *addr, int port) {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  reinterpret_cast<sockaddr_in6 *>(addr)->sin6_port = htons(port);
+}
+inline in6_addr *sockaddr_storage_get_addr_in6(sockaddr_storage *addr) {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  return &(reinterpret_cast<sockaddr_in6 *>(addr)->sin6_addr);
+}
+
+} // namespace rtpmidid
+
 template <>
 struct fmt::formatter<sockaddr_storage> : formatter<std::string_view> {
   auto format(const sockaddr_storage &addr, format_context &ctx) {
