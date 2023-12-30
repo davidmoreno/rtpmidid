@@ -97,11 +97,13 @@ public:
     DEBUG0("Create from other {}", other.fd);
     other.fd = -1;
   };
+  // NOLINTNEXTLINE(bugprone-exception-escape)
   ~listener_t() {
     if (fd >= 0)
       poller.__remove_fd(fd);
   }
 
+  // NOLINTNEXTLINE(bugprone-exception-escape)
   listener_t &operator=(listener_t &&other) noexcept {
     if (fd >= 0)
       poller.__remove_fd(fd);

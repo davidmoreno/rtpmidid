@@ -28,7 +28,7 @@ void stats_t::add_stat(std::chrono::nanoseconds latency) {
   stats[index].latency = latency;
   stats[index].timestamp = std::chrono::system_clock::now();
   //   DEBUG("Added stats {}us", latency.count());
-  index = (index + 1) % stats.size();
+  index = int((index + 1) % stats.size());
 }
 
 void stats_t::loop_stats(std::function<void(stat_t const &)> const &f) const {
@@ -45,7 +45,7 @@ stats_t::average_and_stddev_t stats_t::average_and_stddev() const {
   double sum = 0;
   int count = 0;
   loop_stats([&](stats_t::stat_t const &stat) {
-    sum += stat.latency.count();
+    sum += double(stat.latency.count());
     count++;
   });
   if (count == 0) {
@@ -59,7 +59,7 @@ stats_t::average_and_stddev_t stats_t::average_and_stddev() const {
   sum = 0;
   loop_stats([&](stats_t::stat_t const &stat) {
     auto mean = stat.latency.count();
-    auto delta = mean - average;
+    auto delta = double(mean) - average;
     sum += delta * delta;
   });
   auto stddev = sqrt(sum / count);

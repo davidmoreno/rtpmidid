@@ -30,15 +30,15 @@
 
 struct AvahiTimeout {
   rtpmidid::poller_t::timer_t timer_id;
-  void *userdata;
-  AvahiTimeoutCallback callback;
+  void *userdata = nullptr;
+  AvahiTimeoutCallback callback = nullptr;
 };
 
 struct AvahiWatch {
-  int fd;
-  void *userdata;
-  AvahiWatchCallback callback;
-  AvahiWatchEvent event;
+  int fd = -1;
+  void *userdata = nullptr;
+  AvahiWatchCallback callback = nullptr;
+  AvahiWatchEvent event = AVAHI_WATCH_IN;
 };
 
 struct AvahiEntryGroup {
@@ -47,6 +47,7 @@ struct AvahiEntryGroup {
 
 // FIXME! Hack needed as at poller_adapter_watch_new I'm getting the wrong
 // userdata pointer :(
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 rtpmidid::mdns_rtpmidi_t *current = nullptr;
 
 template <> struct fmt::formatter<AvahiWatchEvent> : fmt::formatter<int> {

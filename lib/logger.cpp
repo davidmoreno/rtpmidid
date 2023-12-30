@@ -25,7 +25,7 @@
 #include <unistd.h>
 
 namespace logger {
-// NOLINTNEXLINE(cppcoreguidelines-avoid-non-const-global-variables)
+// NOLINTNEXLINE: A lot of rules are broken here, but I need it like this
 logger __logger;
 
 enum Color {
@@ -100,6 +100,7 @@ void logger::log(const char *filename, int lineno, LogLevel loglevel,
                               lineno, msg);
     *n.out = '\0';
   }
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
   ::fprintf(stderr, "%s", buffer);
 }
 void logger::flush() { ::fflush(stderr); }

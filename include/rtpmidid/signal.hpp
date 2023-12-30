@@ -124,7 +124,7 @@ private:
   int max_id = 1;
   std::shared_ptr<VT> slots;
 
-  std::map<int, connection_t<Args...> *> connections;
+  std::map<int, connection_t<Args...> *> connections{};
 };
 
 template <typename... Args> class connection_t {
