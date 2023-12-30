@@ -173,16 +173,13 @@ static std::vector<argument_t> setup_arguments() {
 // Parses the argv and sets up the settings_t struct
 // for parameters that affect a alsa and rtpmidi announcements, it changes the
 // first announced, and creates it if needed
-void parse_argv(const std::vector<const char *> &argv) {
+void parse_argv(const std::vector<std::string> &argv) {
   std::vector<argument_t> arguments = setup_arguments();
-
-  auto arg = std::string(argv[0]);
   // Necesary for two part arguments
   argument_t *current_argument = nullptr;
 
-  for (std::size_t cargc = 1; cargc < arguments.size(); cargc++) {
+  for (auto &key : argv) {
     auto parsed = false;
-    auto key = std::string(argv[cargc]);
     if (current_argument && current_argument->has_second_argument) {
       current_argument->fn(key);
       parsed = true;
