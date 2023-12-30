@@ -21,11 +21,14 @@
 #include "json_fwd.hpp"
 #include "rtpmidid/utils.hpp"
 #include <cstdint>
+#include <limits>
 #include <memory>
 
 namespace rtpmididns {
 
 using midipeer_id_t = uint32_t;
+constexpr midipeer_id_t MIDIPEER_ID_INVALID =
+    std::numeric_limits<uint32_t>::max();
 
 class mididata_t;
 class midirouter_t;
@@ -36,6 +39,7 @@ class midirouter_t;
  */
 class midipeer_t : public std::enable_shared_from_this<midipeer_t> {
   NON_COPYABLE_NOR_MOVABLE(midipeer_t);
+
 public:
   std::shared_ptr<midirouter_t> router;
   midipeer_id_t peer_id = 0;
