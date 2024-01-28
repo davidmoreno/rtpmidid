@@ -1,6 +1,6 @@
 [Unit]
 Description=rtpmidid
-After=avahi-daemon.service
+Wants=avahi-daemon.service
 
 [Service]
 Type=simple
