@@ -85,6 +85,11 @@ public:
     }
   };
 
+  enum client_type_e {
+    TYPE_HARDWARE,
+    TYPE_SOFTWARE,
+  };
+
   std::string name;
   snd_seq_t *seq;
   // std::vector<int> fds; // Normally 1?
@@ -94,14 +99,17 @@ public:
   std::map<int, rtpmidid::signal_t<snd_seq_event_t *>> midi_event;
   uint8_t client_id;
   std::vector<rtpmidid::poller_t::listener_t> aseq_listener;
+  rtpmidid::signal_t<const std::string &, aseq_t::client_type_e, const port_t &>
+      new_client_announcement;
 
   aseq_t(std::string name);
   ~aseq_t();
 
   void read_ready();
   std::string get_client_name(snd_seq_addr_t *addr);
+  aseq_t::client_type_e get_client_type(snd_seq_addr_t *addr);
 
-  uint8_t create_port(const std::string &name);
+  uint8_t create_port(const std::string &name, bool do_export = true);
   void remove_port(uint8_t port);
 
   /// Connect two ports
@@ -112,6 +120,10 @@ public:
 
   uint8_t find_device(const std::string &name);
   uint8_t find_port(uint8_t device_id, const std::string &name);
+  void for_devices(
+      std::function<void(uint8_t, const std::string &, client_type_e)>);
+  void for_ports(uint8_t device_id,
+                 std::function<void(uint8_t, const std::string &)>);
 };
 
 std::vector<std::string> get_ports(aseq_t *);
@@ -154,6 +166,17 @@ struct fmt::formatter<rtpmididns::aseq_t::port_t>
     : formatter<std::string_view> {
   auto format(rtpmididns::aseq_t::port_t c, format_context &ctx) {
     auto name = fmt::format("port_t[{}, {}]", c.client, c.port);
+    return formatter<std::string_view>::format(name, ctx);
+  }
+};
+
+template <>
+struct fmt::formatter<rtpmididns::aseq_t::client_type_e>
+    : formatter<std::string_view> {
+  auto format(rtpmididns::aseq_t::client_type_e c, format_context &ctx) {
+    auto name = c == rtpmididns::aseq_t::client_type_e::TYPE_HARDWARE
+                    ? "TYPE_HARDWARE"
+                    : "TYPE_SOFTWARE";
     return formatter<std::string_view>::format(name, ctx);
   }
 };

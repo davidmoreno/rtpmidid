@@ -6,6 +6,7 @@ add_executable(
   ini.cpp
   control_socket.cpp
   stringpp.cpp
+  hwautoannounce.cpp
 
   factory.cpp
   midirouter.cpp
