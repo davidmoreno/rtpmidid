@@ -4,6 +4,7 @@ add_executable(
   aseq.cpp
   argv.cpp
   ini.cpp
+  settings.cpp
   control_socket.cpp
   stringpp.cpp
   hwautoannounce.cpp
