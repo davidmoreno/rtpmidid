@@ -18,17 +18,22 @@
 
 #include "hwautoannounce.hpp"
 #include "aseq.hpp"
+#include "local_alsa_multi_listener.hpp"
+#include "midirouter.hpp"
 #include "settings.hpp"
 #include <regex>
 #include <rtpmidid/logger.hpp>
 
 namespace rtpmididns {
 
-HwAutoAnnounce::HwAutoAnnounce(std::shared_ptr<aseq_t> aseq) {
+HwAutoAnnounce::HwAutoAnnounce(std::shared_ptr<aseq_t> aseq,
+                               std::shared_ptr<midirouter_t> router)
+    : router(router), aseq(aseq) {
 
   auto ann_port = aseq->create_port("Announcements", false);
-  aseq->connect(aseq_t::port_t{0, 1},
-                aseq_t::port_t{aseq->client_id, ann_port});
+  auto conn = aseq->connect(aseq_t::port_t{0, 1},
+                            aseq_t::port_t{aseq->client_id, ann_port});
+  connections.push_back(std::move(conn));
 
   aseq->for_devices([&](uint8_t device_id, const std::string &device_name,
                         aseq_t::client_type_e type) {
@@ -98,11 +103,27 @@ void HwAutoAnnounce::new_client_announcement(const std::string &name,
   }
 
   DEBUG("HwAutoAnnounce::new_client_announcement {} {} {}", name, type, port);
-  // auto ann_port = aseq->create_port("Announcements", false);
-  // aseq->connect(aseq_t::port_t{0, 1},
-  //               aseq_t::port_t{aseq->client_id, ann_port});
-  // aseq->connect(aseq_t::port_t{port.client, port.port},
-  //               aseq_t::port_t{aseq->client_id, ann_port});
+
+  // Find the local_alsa_listener_t
+  bool connected = false;
+  router->for_each_peer<local_alsa_multi_listener_t>(
+      [&](local_alsa_multi_listener_t *peer) {
+        INFO("Auto announcing {} {} {}", name, type, port);
+        auto annport = aseq_t::port_t{aseq->client_id, peer->port};
+        auto con1 = aseq->connect(port, annport);
+        auto con2 = aseq->connect(annport, port);
+        // FIXME should be removed from here, or it may grow for each new
+        // client. There is no real problem as will never disconnect, but it is
+        // not clean.
+        connections.push_back(std::move(con1));
+        connections.push_back(std::move(con2));
+
+        connected = true;
+      });
+  if (!connected) {
+    ERROR("No local_alsa_multi_listener_t found to connect {} {} {}", name,
+          type, port);
+  }
 }
 
 } // namespace rtpmididns

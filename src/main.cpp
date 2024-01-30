@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
           router, connect_to.name, connect_to.hostname, connect_to.port, aseq));
     }
 
-    hwautoannounce.emplace(aseq);
+    hwautoannounce.emplace(aseq, router);
 
     INFO("Waiting for connections.");
     while (rtpmidid::poller.is_open()) {

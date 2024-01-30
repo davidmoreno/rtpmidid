@@ -55,32 +55,38 @@ public:
     std::shared_ptr<aseq_t> aseq;
     port_t from;
     port_t to;
+    bool connected = false;
 
     connection_t(const std::shared_ptr<aseq_t> &aseq_, const port_t &from_,
                  const port_t &to_) {
       aseq = aseq_;
       from = from_;
       to = to_;
+      connected = true;
     };
     connection_t(const connection_t &other) = delete;
     connection_t(connection_t &&other) {
       aseq = other.aseq;
       from = other.from;
       to = other.to;
+      connected = other.connected;
       other.from = {0, 0};
       other.to = {0, 0};
+      other.connected = false;
     };
     connection_t &operator=(const connection_t &other) = delete;
     connection_t &operator=(connection_t &&other) {
       aseq = other.aseq;
       from = other.from;
       to = other.to;
+      connected = other.connected;
       other.from = {0, 0};
       other.to = {0, 0};
+      other.connected = false;
       return *this;
     }
     ~connection_t() {
-      if (from.client && from.port && to.client && to.port)
+      if (connected)
         aseq->disconnect(from, to);
     }
   };
@@ -166,19 +172,19 @@ template <> struct hash<rtpmididns::aseq_t::port_t> {
 template <>
 struct fmt::formatter<rtpmididns::aseq_t::port_t>
     : formatter<std::string_view> {
-  auto format(rtpmididns::aseq_t::port_t c, format_context &ctx) {
-    auto name = fmt::format("port_t[{}, {}]", c.client, c.port);
-    return formatter<std::string_view>::format(name, ctx);
-  }
+  fmt::v9::appender format(rtpmididns::aseq_t::port_t c, format_context &ctx);
 };
 
 template <>
 struct fmt::formatter<rtpmididns::aseq_t::client_type_e>
     : formatter<std::string_view> {
-  auto format(rtpmididns::aseq_t::client_type_e c, format_context &ctx) {
-    auto name = c == rtpmididns::aseq_t::client_type_e::TYPE_HARDWARE
-                    ? "TYPE_HARDWARE"
-                    : "TYPE_SOFTWARE";
-    return formatter<std::string_view>::format(name, ctx);
-  }
+  fmt::v9::appender format(rtpmididns::aseq_t::client_type_e c,
+                           format_context &ctx);
+};
+
+template <>
+struct fmt::formatter<rtpmididns::aseq_t::connection_t>
+    : formatter<std::string_view> {
+  fmt::v9::appender format(const rtpmididns::aseq_t::connection_t &c,
+                           format_context &ctx);
 };

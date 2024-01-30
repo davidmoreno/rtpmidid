@@ -17,6 +17,7 @@
  */
 
 #include "aseq.hpp"
+#include "midirouter.hpp"
 #include <memory>
 #include <rtpmidid/signal.hpp>
 #include <string>
@@ -24,11 +25,16 @@
 namespace rtpmididns {
 class HwAutoAnnounce {
 public:
+  std::shared_ptr<midirouter_t> router;
+  std::shared_ptr<aseq_t> aseq;
+  std::vector<aseq_t::connection_t> connections;
+
   rtpmidid::connection_t<const std::string &, aseq_t::client_type_e,
                          const aseq_t::port_t &>
       new_client_announcement_connection;
 
-  HwAutoAnnounce(std::shared_ptr<aseq_t> aseq);
+  HwAutoAnnounce(std::shared_ptr<aseq_t> aseq,
+                 std::shared_ptr<midirouter_t> router);
   ~HwAutoAnnounce();
 
   void new_client_announcement(const std::string &name,
