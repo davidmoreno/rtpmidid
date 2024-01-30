@@ -18,6 +18,8 @@
 
 #include "hwautoannounce.hpp"
 #include "aseq.hpp"
+#include "settings.hpp"
+#include <regex>
 #include <rtpmidid/logger.hpp>
 
 namespace rtpmididns {
@@ -57,7 +59,50 @@ HwAutoAnnounce::~HwAutoAnnounce() {}
 void HwAutoAnnounce::new_client_announcement(const std::string &name,
                                              aseq_t::client_type_e type,
                                              const aseq_t::port_t &port) {
+  //  DEBUG("HwAutoAnnounce::new_client_announcement {} {} {}", name, type,
+  //  port);
+  auto ahwaa = &settings.alsa_hw_auto_export;
+
+  if (ahwaa->type == settings_t::alsa_hw_auto_export_type_e::NONE)
+    return;
+
+  // Check positive regex
+  if (!ahwaa->name_negative_regex.has_value())
+    return;
+
+  auto pos_regex = ahwaa->name_positive_regex.value();
+
+  if (!std::regex_match(name, pos_regex)) {
+    return;
+  }
+
+  // Check negative regex
+  if (ahwaa->name_positive_regex.has_value()) {
+    auto neg_regex = ahwaa->name_negative_regex.value();
+
+    if (std::regex_match(name, neg_regex)) {
+      return;
+    }
+  }
+
+  // Check the type is appropiate
+  if (ahwaa->type == settings_t::alsa_hw_auto_export_type_e::HARDWARE) {
+    if (type != aseq_t::client_type_e::TYPE_HARDWARE)
+      return;
+  } else if (ahwaa->type == settings_t::alsa_hw_auto_export_type_e::SOFTWARE) {
+    if (type != aseq_t::client_type_e::TYPE_SOFTWARE)
+      return;
+  } else if (ahwaa->type == settings_t::alsa_hw_auto_export_type_e::SYSTEM) {
+    if (type != aseq_t::client_type_e::TYPE_SYSTEM)
+      return;
+  }
+
   DEBUG("HwAutoAnnounce::new_client_announcement {} {} {}", name, type, port);
+  // auto ann_port = aseq->create_port("Announcements", false);
+  // aseq->connect(aseq_t::port_t{0, 1},
+  //               aseq_t::port_t{aseq->client_id, ann_port});
+  // aseq->connect(aseq_t::port_t{port.client, port.port},
+  //               aseq_t::port_t{aseq->client_id, ann_port});
 }
 
 } // namespace rtpmididns

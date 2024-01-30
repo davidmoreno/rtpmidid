@@ -19,6 +19,8 @@
 #pragma once
 #include <chrono>
 #include <fmt/format.h>
+#include <optional>
+#include <regex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -49,6 +51,24 @@ struct settings_t {
   std::vector<rtpmidi_announce_t> rtpmidi_announces;
   std::vector<alsa_announce_t> alsa_announces;
   std::vector<connect_to_t> connect_to;
+
+  enum alsa_hw_auto_export_type_e {
+    NONE = 0,
+    ALL = 7,
+    HARDWARE = 1,
+    SOFTWARE = 2,
+    SYSTEM = 4,
+  };
+
+  struct alsa_hw_auto_export_t {
+    std::string name_positive;
+    std::optional<std::regex> name_positive_regex;
+    std::string name_negative;
+    std::optional<std::regex> name_negative_regex;
+    alsa_hw_auto_export_type_e type = alsa_hw_auto_export_type_e::NONE;
+  };
+
+  alsa_hw_auto_export_t alsa_hw_auto_export;
 };
 
 extern settings_t settings;
@@ -136,11 +156,58 @@ struct fmt::formatter<rtpmididns::settings_t> : formatter<std::string_view> {
   auto format(const rtpmididns::settings_t &data, format_context &ctx) {
 
     return fmt::format_to(ctx.out(),
-                          "[settings_t alsa_name: {} alsa_network: {} "
-                          "control_filename: {} rtpmidi_announces: {} "
-                          "alsa_announces: {} connect_to: {}]",
+                          "[settings_t: alsa_name: {}, alsa_network: {}, "
+                          "control_filename: {}, rtpmidi_announces: {}, "
+                          "alsa_announces: {}, connect_to: {}, "
+                          "alsa_hw_auto_export: {}]",
                           data.alsa_name, data.alsa_network,
                           data.control_filename, data.rtpmidi_announces,
-                          data.alsa_announces, data.connect_to);
+                          data.alsa_announces, data.connect_to,
+                          data.alsa_hw_auto_export);
+  }
+};
+
+template <>
+struct fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_t>
+    : formatter<std::string_view> {
+  auto format(const rtpmididns::settings_t::alsa_hw_auto_export_t &data,
+              format_context &ctx) {
+    std::string result = "[";
+    if (data.name_positive_regex.has_value()) {
+      result += fmt::format("name_positive_regex: {} ", data.name_positive);
+    }
+    if (data.name_negative_regex.has_value()) {
+      result += fmt::format("name_negative_regex: {} ", data.name_negative);
+    }
+    result += fmt::format("type: {} ", data.type);
+    result += "]";
+    return fmt::format_to(ctx.out(), "{}", result);
+  }
+};
+
+template <>
+struct fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_type_e>
+    : formatter<std::string_view> {
+  auto format(const rtpmididns::settings_t::alsa_hw_auto_export_type_e &data,
+              format_context &ctx) {
+    std::string result = "[";
+    if (data == rtpmididns::settings_t::alsa_hw_auto_export_type_e::NONE) {
+      result += "NONE";
+    } else if (data ==
+               rtpmididns::settings_t::alsa_hw_auto_export_type_e::ALL) {
+      result += "ALL";
+    } else {
+      if (data & rtpmididns::settings_t::alsa_hw_auto_export_type_e::HARDWARE) {
+        result += "HARDWARE ";
+      }
+      if (data & rtpmididns::settings_t::alsa_hw_auto_export_type_e::SOFTWARE) {
+        result += "SOFTWARE ";
+      }
+      if (data & rtpmididns::settings_t::alsa_hw_auto_export_type_e::SYSTEM) {
+        result += "SYSTEM ";
+      }
+    }
+    result += "]";
+    return fmt::format_to(ctx.out(), "{}", result);
   }
 };
