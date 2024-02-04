@@ -51,7 +51,7 @@ public:
   int connection_count = 0;
   uint8_t alsaport;
   std::shared_ptr<aseq_t> aseq;
-  rtpmidid::connection_t<aseq_t::port_t, const std::string &>
+  rtpmidid::connection_t<const aseq_t::connection_t &, const std::string &>
       subscribe_connection;
   rtpmidid::connection_t<aseq_t::port_t> unsubscribe_connection;
   rtpmidid::connection_t<snd_seq_event_t *> alsamidi_connection;

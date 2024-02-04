@@ -39,7 +39,7 @@ local_alsa_listener_t::local_alsa_listener_t(const std::string &name_,
 
   alsaport = aseq->create_port(remote_name);
   subscribe_connection = aseq->subscribe_event[alsaport].connect(
-      [this](aseq_t::port_t from, const std::string &name) {
+      [this](const aseq_t::connection_t &from, const std::string &name) {
         connection_count++;
         if (connection_count == 1)
           connect_to_remote_server(name);

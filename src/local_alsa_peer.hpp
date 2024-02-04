@@ -29,7 +29,9 @@ class local_alsa_peer_t : public midipeer_t {
   NON_COPYABLE_NOR_MOVABLE(local_alsa_peer_t);
 
 public:
-  uint8_t port;
+  // If empty port, do not check that side of the message
+  aseq_t::connection_t conn;
+
   std::shared_ptr<aseq_t> seq;
   std::string name;
   mididata_to_alsaevents_t mididata_encoder;
@@ -40,8 +42,16 @@ public:
   rtpmidid::connection_t<aseq_t::port_t> unsubscribe_connection;
   rtpmidid::connection_t<snd_seq_event_t *> midi_connection;
 
+  // Mode 1. Create a new port and listen there
   local_alsa_peer_t(const std::string &name, std::shared_ptr<aseq_t> seq);
   ~local_alsa_peer_t() override;
+  // Mode 2. Port already exists
+  local_alsa_peer_t(const std::string &name, aseq_t::connection_t conn,
+                    std::shared_ptr<aseq_t> seq);
+
+  // To be called after port, seq and name are properly set
+  void initialize();
+
   json_t status() override;
   void send_midi(midipeer_id_t from, const mididata_t &) override;
 };

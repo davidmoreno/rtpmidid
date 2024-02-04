@@ -43,10 +43,20 @@ public:
     bool operator==(const port_t &other) const {
       return client == other.client && port == other.port;
     }
+    bool operator!=(const port_t &other) const {
+      return client != other.client || port != other.port;
+    }
+
+    bool is_empty() const { return client == 0 && port == 0; }
 
     std::string to_string() const {
+      if (is_empty()) {
+        return "port_t[empty]";
+      }
       return fmt::format("port_t[{}, {}]", client, port);
     }
+
+    bool empty() { return client == 0 && port == 0; }
   };
 
   struct connection_t {
@@ -55,6 +65,7 @@ public:
     port_t to;
     bool connected = false;
 
+    connection_t() = default;
     // NOLINTNEXTLINE
     connection_t(const std::shared_ptr<aseq_t> &aseq_, const port_t &from_,
                  const port_t &to_)
@@ -77,13 +88,30 @@ public:
       other.connected = false;
       return *this;
     }
+    ~connection_t() { disconnect(); }
     void disconnect() {
       if (connected)
         aseq->disconnect(from, to);
       connected = false;
     }
-    // NOLINTNEXTLINE
-    ~connection_t() { disconnect(); }
+    port_t get_my_port() const {
+      if (from.client == aseq->client_id)
+        return from;
+      if (to.client == aseq->client_id)
+        return to;
+      return port_t{};
+    }
+    port_t get_their_port() const {
+      if (from.client == aseq->client_id)
+        return to;
+      if (to.client == aseq->client_id)
+        return from;
+      return port_t{};
+    }
+
+    std::string to_string() const {
+      return fmt::format("connection_t[{} -> {}]", from, to);
+    }
   };
 
   enum client_type_e {
@@ -96,7 +124,7 @@ public:
   std::string name;
   snd_seq_t *seq;
   // std::vector<int> fds; // Normally 1?
-  std::map<int, rtpmidid::signal_t<port_t, const std::string &>>
+  std::map<int, rtpmidid::signal_t<const connection_t &, const std::string &>>
       subscribe_event;
   std::map<int, rtpmidid::signal_t<port_t>> unsubscribe_event;
   std::map<int, rtpmidid::signal_t<snd_seq_event_t *>> midi_event;

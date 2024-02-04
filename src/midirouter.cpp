@@ -105,6 +105,12 @@ void midirouter_t::send_midi(uint32_t from, const mididata_t &data) {
   }
 
   // DEBUG("Send data to {} peers", peer->second.send_to.size());
+  auto send_peer = peerdata->peer;
+  if (!send_peer) {
+    WARNING("Sending from an unkown peer {}!", from);
+    return;
+  }
+  send_peer->packets_sent++;
   for (auto to : peerdata->send_to) {
     // DEBUG("Send data {} to {}", from, to);
     send_midi(from, to, data);
@@ -113,13 +119,11 @@ void midirouter_t::send_midi(uint32_t from, const mididata_t &data) {
 
 void midirouter_t::send_midi(peer_id_t from, peer_id_t to,
                              const mididata_t &data) {
-  auto send_peer = get_peer_by_id(from);
   auto recv_peer = get_peer_by_id(to);
-  if (!send_peer || !recv_peer) {
-    WARNING("Sending to unkown peer {} -> {}", from, to);
+  if (!recv_peer) {
+    WARNING("Sending to unkown peer {}", to);
     return;
   }
-  send_peer->packets_sent++;
   recv_peer->packets_recv++;
   recv_peer->send_midi(from, data);
 }
@@ -131,6 +135,7 @@ void midirouter_t::connect(peer_id_t from, peer_id_t to) {
     WARNING("Sending to unkown peer {} -> {}", from, to);
     return;
   }
+  // DEBUG("Connect {} -> {}", from, to);
 
   send_peer->send_to.push_back(to);
 }

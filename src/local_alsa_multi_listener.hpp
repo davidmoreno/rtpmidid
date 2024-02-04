@@ -54,7 +54,7 @@ public:
   std::string name;
 
   std::unordered_map<aseq_t::port_t, midipeer_id_t> aseqpeers;
-  rtpmidid::connection_t<aseq_t::port_t, const std::string &>
+  rtpmidid::connection_t<const aseq_t::connection_t &, const std::string &>
       subscribe_connection;
   rtpmidid::connection_t<aseq_t::port_t> unsubscribe_connection;
   rtpmidid::connection_t<snd_seq_event_t *> midi_connection;
@@ -67,8 +67,9 @@ public:
   json_t status() override;
 
   // Returns the RTPSERVER id. Useful for testing.
-  midipeer_id_t new_alsa_connection(const aseq_t::port_t &port,
-                                    const std::string &name);
+  std::pair<midipeer_id_t, midipeer_id_t>
+  new_alsa_connection(const aseq_t::connection_t &port,
+                      const std::string &name);
   void remove_alsa_connection(const aseq_t::port_t &port);
 
   // received data from the alsa side, look who is the aseqpeer_t

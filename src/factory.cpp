@@ -60,6 +60,12 @@ std::shared_ptr<midipeer_t> make_local_alsa_peer(const std::string &name,
   return std::make_shared<local_alsa_peer_t>(name, aseq);
 }
 
+std::shared_ptr<midipeer_t> make_local_alsa_peer(const std::string &name,
+                                                 aseq_t::connection_t conn,
+                                                 std::shared_ptr<aseq_t> aseq) {
+  return std::make_shared<local_alsa_peer_t>(name, std::move(conn), aseq);
+}
+
 std::shared_ptr<midipeer_t>
 make_network_rtpmidi_client(std::shared_ptr<rtpmidid::rtpclient_t> peer) {
   return std::make_shared<network_rtpmidi_client_t>(peer);

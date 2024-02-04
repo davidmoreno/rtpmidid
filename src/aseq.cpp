@@ -149,14 +149,17 @@ void aseq_t::read_ready() {
         continue;
       }
 
-      subscribe_event[me->port](port_t(other->client, other->port), name);
+      auto connection =
+          connection_t(shared_from_this(), port_t(me->client, me->port),
+                       port_t(other->client, other->port));
+      subscribe_event[me->port](connection, name);
       if (me->client == other->client) {
         // This is an internal connection, should send subscribe from the other
         // side too
         name = get_client_name(me);
         INFO("New ALSA connection from port {} ({}:{}) (internal)", name,
              me->client, me->port);
-        subscribe_event[other->port](port_t(me->client, me->port), name);
+        subscribe_event[other->port](connection, name);
       }
     } break;
     case SND_SEQ_EVENT_PORT_UNSUBSCRIBED: {

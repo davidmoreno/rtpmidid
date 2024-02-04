@@ -116,7 +116,8 @@ inline void log(const char *fullpath, int lineno, LogLevel loglevel,
     --filename; // NOLINT
   ++filename;   // NOLINT
 
-  auto n = fmt::format_to_n(buffer.data(), buffer.size(), args...);
+  auto n =
+      fmt::format_to_n(buffer, sizeof(buffer), std::forward<Args>(args)...);
   *n.out = '\0';
 
   __logger.log(filename, lineno, loglevel, buffer.data());
