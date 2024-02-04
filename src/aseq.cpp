@@ -182,6 +182,18 @@ void aseq_t::read_ready() {
       if (me != midi_event.end())
         me->second(ev);
     } break;
+    case SND_SEQ_EVENT_PORT_START: {
+      auto name = get_client_name(&ev->data.addr);
+      auto type = get_client_type(&ev->data.addr);
+      auto port = port_t(ev->data.addr.client, ev->data.addr.port);
+      DEBUG("Client start {} {} {}", name, type, port);
+      added_port_announcement(name, type, port);
+    } break;
+    case SND_SEQ_EVENT_PORT_EXIT: {
+      auto port = port_t(ev->data.addr.client, ev->data.addr.port);
+      DEBUG("Client exit {}", port);
+      removed_port_announcement(port);
+    } break;
     default:
       static bool warning_raised[SND_SEQ_EVENT_NONE + 1];
       if (!warning_raised[ev->type]) {
@@ -193,10 +205,14 @@ void aseq_t::read_ready() {
   }
 }
 
-uint8_t aseq_t::create_port(const std::string &name) {
+uint8_t aseq_t::create_port(const std::string &name, bool do_export) {
   auto caps = SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE |
               SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ;
   auto type = SND_SEQ_TYPE_INET;
+
+  if (!do_export) {
+    caps |= SND_SEQ_PORT_CAP_NO_EXPORT;
+  }
 
   auto port = snd_seq_create_simple_port(seq, name.c_str(), caps, type);
 
@@ -259,6 +275,41 @@ std::string aseq_t::get_client_name(snd_seq_addr_t *addr) {
   if (client_name == port_name)
     return client_name;
   return fmt::format("{}-{}", client_name, port_name);
+}
+
+aseq_t::client_type_e get_type_by_seq_type(int type) {
+  // Known types so far.. may be increased later? Dont know how to make it more
+  // future proof. If change here, quite probably will be incompatible changes
+  DEBUG("Type: {:b}", type);
+  if (type & 0b01'00000000'00000000) {
+    return aseq_t::client_type_e::TYPE_HARDWARE;
+  } else if (type == 0x02) {
+    return aseq_t::client_type_e::TYPE_HARDWARE;
+  } else {
+    return aseq_t::client_type_e::TYPE_SOFTWARE;
+  }
+}
+
+aseq_t::client_type_e aseq_t::get_client_type(snd_seq_addr_t *addr) {
+  // get client type using snd_seq_port_info_get_type(const snd_seq_port_info_t
+  // *info);
+  snd_seq_client_info_t *client_info = nullptr;
+  snd_seq_client_info_malloc(&client_info);
+  snd_seq_get_any_client_info(seq, addr->client, client_info);
+  std::string client_name = snd_seq_client_info_get_name(client_info);
+
+  snd_seq_port_info_t *port_info = nullptr;
+  snd_seq_port_info_malloc(&port_info);
+  snd_seq_get_any_port_info(seq, addr->client, addr->port, port_info);
+  std::string port_name = snd_seq_port_info_get_name(port_info);
+
+  auto type = snd_seq_client_info_get_type(client_info);
+  // snd_seq_port_info_get_type(port_info);
+
+  snd_seq_client_info_free(client_info);
+  snd_seq_port_info_free(port_info);
+
+  return get_type_by_seq_type(type);
 }
 
 static void disconnect_port_at_subs(snd_seq_t *seq,
@@ -353,16 +404,20 @@ void aseq_t::disconnect(const port_t &from, const port_t &to) {
   if (from.client == client_id) {
     int res = snd_seq_disconnect_to(seq, from.port, to.client, to.port);
     if (res < 0) {
-      throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
-                                from.to_string(), to.to_string(),
-                                snd_strerror(res), res);
+      ERROR("Failed disconnection: {} -> {}: {} ({})", from.to_string(),
+            to.to_string(), snd_strerror(res), res);
+      // throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
+      //                           from.to_string(), to.to_string(),
+      //                           snd_strerror(res), res);
     }
   } else if (to.client == client_id) {
     int res = snd_seq_disconnect_from(seq, to.port, from.client, from.port);
     if (res < 0) {
-      throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
-                                from.to_string(), to.to_string(),
-                                snd_strerror(res), res);
+      ERROR("Failed disconnection: {} -> {}: {} ({})", from.to_string(),
+            to.to_string(), snd_strerror(res), res);
+      // throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
+      //                           from.to_string(), to.to_string(),
+      //                           snd_strerror(res), res);
     }
   } else {
     ERROR("Can not disconnect ports I'm not part of.");
@@ -432,6 +487,55 @@ uint8_t aseq_t::find_port(uint8_t device_id, const std::string &name) {
   return retv;
 }
 
+void aseq_t::for_devices(
+    std::function<void(uint8_t, const std::string &, aseq_t::client_type_e)>
+        func) {
+  snd_seq_client_info_t *cinfo;
+
+  int ret = snd_seq_client_info_malloc(&cinfo);
+  if (ret != 0)
+    throw rtpmidid::exception("Error allocating memory for alsa clients");
+
+  snd_seq_client_info_set_client(cinfo, -1);
+  while (snd_seq_query_next_client(seq, cinfo) >= 0) {
+    int cid = snd_seq_client_info_get_client(cinfo);
+    if (cid < 0) {
+      throw rtpmidid::exception("Error getting client info");
+    }
+    auto cname = snd_seq_client_info_get_name(cinfo);
+    auto type = get_type_by_seq_type(snd_seq_client_info_get_type(cinfo));
+    // DEBUG("Client {} {} {:b}", cid, cname,
+    // snd_seq_client_info_get_type(cinfo));
+
+    func(cid, cname, type);
+  }
+  snd_seq_client_info_free(cinfo);
+}
+
+void aseq_t::for_ports(uint8_t device_id,
+                       std::function<void(uint8_t, const std::string &)> func) {
+  snd_seq_port_info_t *pinfo;
+
+  int ret = snd_seq_port_info_malloc(&pinfo);
+  if (ret != 0)
+    throw rtpmidid::exception("Error allocating memory for alsa ports");
+
+  snd_seq_port_info_set_client(pinfo, device_id);
+
+  snd_seq_port_info_set_port(pinfo, -1);
+  while (snd_seq_query_next_port(seq, pinfo) >= 0) {
+    int pid = snd_seq_port_info_get_port(pinfo);
+    if (pid < 0) {
+      throw rtpmidid::exception("Error getting client info");
+    }
+    const char *pname = snd_seq_port_info_get_name(pinfo);
+
+    func(pid, pname);
+  }
+
+  snd_seq_port_info_free(pinfo);
+}
+
 mididata_to_alsaevents_t::mididata_to_alsaevents_t() {
   snd_midi_event_new(1024, &buffer);
 }
@@ -476,3 +580,25 @@ void mididata_to_alsaevents_t::ev_to_mididata(snd_seq_event_t *ev,
 }
 
 } // namespace rtpmididns
+
+fmt::v9::appender
+fmt::formatter<rtpmididns::aseq_t::port_t>::format(rtpmididns::aseq_t::port_t c,
+                                                   format_context &ctx) {
+  auto name = fmt::format("port_t[{}, {}]", c.client, c.port);
+  return formatter<std::string_view>::format(name, ctx);
+}
+
+fmt::v9::appender fmt::formatter<rtpmididns::aseq_t::client_type_e>::format(
+    rtpmididns::aseq_t::client_type_e c, format_context &ctx) {
+  auto name = c == rtpmididns::aseq_t::client_type_e::TYPE_HARDWARE
+                  ? "TYPE_HARDWARE"
+                  : "TYPE_SOFTWARE";
+  return formatter<std::string_view>::format(name, ctx);
+}
+
+fmt::v9::appender fmt::formatter<rtpmididns::aseq_t::connection_t>::format(
+    const rtpmididns::aseq_t::connection_t &c, format_context &ctx) {
+  auto name =
+      fmt::format("connection_t[{}, {} -> {}]", c.connected, c.from, c.to);
+  return formatter<std::string_view>::format(name, ctx);
+}

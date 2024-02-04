@@ -19,6 +19,7 @@
 #include "aseq.hpp"
 #include "control_socket.hpp"
 #include "factory.hpp"
+#include "hwautoannounce.hpp"
 #include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "rtpmidid/poller.hpp"
@@ -55,6 +56,7 @@ void sigint_f(int) {
 
 int main(int argc, char **argv) {
   rtpmididns::parse_argv(argc, argv);
+  std::optional<rtpmididns::HwAutoAnnounce> hwautoannounce;
 
   signal(SIGINT, sigint_f);
   signal(SIGTERM, sigterm_f);
@@ -71,18 +73,21 @@ int main(int argc, char **argv) {
 
     // Create all the alsa network midipeers
     for (const auto &announce : rtpmididns::settings.alsa_announces) {
-      router->add_peer(rtpmididns::make_local_alsa_multi_listener(announce.name, aseq));
+      router->add_peer(
+          rtpmididns::make_local_alsa_multi_listener(announce.name, aseq));
     }
     // Create all the rtpmidi network midipeers
     for (const auto &announce : rtpmididns::settings.rtpmidi_announces) {
-      router->add_peer(
-          rtpmididns::make_network_rtpmidi_multi_listener(announce.name, announce.port, aseq));
+      router->add_peer(rtpmididns::make_network_rtpmidi_multi_listener(
+          announce.name, announce.port, aseq));
     }
     // Connect to all static endpoints
     for (const auto &connect_to : rtpmididns::settings.connect_to) {
       router->add_peer(rtpmididns::make_local_alsa_listener(
           router, connect_to.name, connect_to.hostname, connect_to.port, aseq));
     }
+
+    hwautoannounce.emplace(aseq, router);
 
     INFO("Waiting for connections.");
     while (rtpmidid::poller.is_open()) {

@@ -63,22 +63,28 @@ void load_ini(const std::string &filename) {
       }
       section = line.substr(1, line.length() - 2);
 
+      // sections that are unique, can not be repeated
       if (section == "general") {
         continue;
-      } else if (section == "rtpmidi_announce") {
-        settings.rtpmidi_announces.emplace_back();
-        rtpmidi_announce = settings.rtpmidi_announces.data() +
-                           settings.rtpmidi_announces.size() - 1;
-      } else if (section == "alsa_announce") {
-        settings.alsa_announces.emplace_back();
-        alsa_announce =
-            settings.alsa_announces.data() + settings.alsa_announces.size() - 1;
-      } else if (section == "connect_to") {
-        settings.connect_to.emplace_back();
-        connect_to =
-            settings.connect_to.data() + settings.connect_to.size() - 1;
+      } else if (section == "alsa_hw_auto_export") {
+        continue;
       } else {
-        throw rtpmidid::exception("Invalid section: {}", section);
+        // Sections that can be repeated
+        if (section == "rtpmidi_announce") {
+          settings.rtpmidi_announces.emplace_back();
+          rtpmidi_announce = settings.rtpmidi_announces.data() +
+                             settings.rtpmidi_announces.size() - 1;
+        } else if (section == "alsa_announce") {
+          settings.alsa_announces.emplace_back();
+          alsa_announce = settings.alsa_announces.data() +
+                          settings.alsa_announces.size() - 1;
+        } else if (section == "connect_to") {
+          settings.connect_to.emplace_back();
+          connect_to =
+              settings.connect_to.data() + settings.connect_to.size() - 1;
+        } else {
+          throw rtpmidid::exception("Invalid section: {}", section);
+        }
       }
 
       continue;
@@ -137,6 +143,35 @@ void load_ini(const std::string &filename) {
         connect_to->port = value;
       } else if (key == "name") {
         connect_to->name = value;
+      } else {
+        throw rtpmidid::exception("Invalid key: {}", key);
+      }
+    } else if (section == "alsa_hw_auto_export") {
+      if (key == "type") {
+        if (value == "none") {
+          settings.alsa_hw_auto_export.type =
+              settings_t::alsa_hw_auto_export_type_e::NONE;
+        } else if (value == "hardware") {
+          settings.alsa_hw_auto_export.type =
+              settings_t::alsa_hw_auto_export_type_e::HARDWARE;
+        } else if (value == "software") {
+          settings.alsa_hw_auto_export.type =
+              settings_t::alsa_hw_auto_export_type_e::SOFTWARE;
+        } else if (value == "system") {
+          settings.alsa_hw_auto_export.type =
+              settings_t::alsa_hw_auto_export_type_e::SYSTEM;
+        } else if (value == "all") {
+          settings.alsa_hw_auto_export.type =
+              settings_t::alsa_hw_auto_export_type_e::ALL;
+        } else {
+          throw rtpmidid::exception("Invalid value: {}", value);
+        }
+      } else if (key == "name_positive_regex") {
+        settings.alsa_hw_auto_export.name_positive = value;
+        settings.alsa_hw_auto_export.name_positive_regex.emplace(value);
+      } else if (key == "name_negative_regex") {
+        settings.alsa_hw_auto_export.name_negative = value;
+        settings.alsa_hw_auto_export.name_negative_regex.emplace(value);
       } else {
         throw rtpmidid::exception("Invalid key: {}", key);
       }
