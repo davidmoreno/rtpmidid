@@ -41,30 +41,51 @@ HwAutoAnnounce::HwAutoAnnounce(std::shared_ptr<aseq_t> aseq,
       return;
     aseq->for_ports(
         device_id, [&](uint8_t port_id, const std::string &port_name) {
-          // DEBUG("HwAutoAnnounce::HwAutoAnnounce::for_ports {}:{} {}:{}
+          // DEBUG("HwAutoAnnounce::HwAutoAnnounce::for_ports {}:{}
+          // {}:{}
           // ",
           //       device_name, port_name, device_id, port_id);
-          new_client_announcement(device_name, type,
+          added_port_announcement(device_name, type,
                                   aseq_t::port_t{device_id, port_id});
         });
   });
 
-  new_client_announcement_connection = aseq->new_client_announcement.connect(
+  added_client_announcement_connection = aseq->added_port_announcement.connect(
       [this](const std::string &name, aseq_t::client_type_e type,
              const aseq_t::port_t &port) {
-        // DEBUG("HwAutoAnnounce::HwAutoAnnounce::new_client_announcement {} {}
+        // DEBUG("HwAutoAnnounce::HwAutoAnnounce::added_port_announcement {} {}
         // ",
         //       name, type);
-        new_client_announcement(name, type, port);
+        added_port_announcement(name, type, port);
       });
+
+  removed_port_announcement_connection =
+      aseq->removed_port_announcement.connect(
+          [this](const aseq_t::port_t &port) {
+            // DEBUG("HwAutoAnnounce::HwAutoAnnounce::removed_port_announcement
+            // {} {}
+            // ",
+            //       name, type);
+            removed_port_announcement(port);
+          });
 }
 
-HwAutoAnnounce::~HwAutoAnnounce() {}
+HwAutoAnnounce::~HwAutoAnnounce() {
+  for (auto &conn : connections) {
+    try {
+      DEBUG("Disconnecting {} -> {}", conn.from, conn.to);
+      conn.disconnect();
+    } catch (...) {
+      ERROR("Error disconnecting {} -> {}", conn.from, conn.to);
+      // Ignore
+    }
+  }
+}
 
-void HwAutoAnnounce::new_client_announcement(const std::string &name,
+void HwAutoAnnounce::added_port_announcement(const std::string &name,
                                              aseq_t::client_type_e type,
                                              const aseq_t::port_t &port) {
-  //  DEBUG("HwAutoAnnounce::new_client_announcement {} {} {}", name, type,
+  //  DEBUG("HwAutoAnnounce::added_port_announcement {} {} {}", name, type,
   //  port);
   auto ahwaa = &settings.alsa_hw_auto_export;
 
@@ -102,7 +123,7 @@ void HwAutoAnnounce::new_client_announcement(const std::string &name,
       return;
   }
 
-  DEBUG("HwAutoAnnounce::new_client_announcement {} {} {}", name, type, port);
+  DEBUG("HwAutoAnnounce::added_port_announcement {} {} {}", name, type, port);
 
   // Find the local_alsa_listener_t
   bool connected = false;
@@ -111,12 +132,12 @@ void HwAutoAnnounce::new_client_announcement(const std::string &name,
         INFO("Auto announcing {} {} {}", name, type, port);
         auto annport = aseq_t::port_t{aseq->client_id, peer->port};
         auto con1 = aseq->connect(port, annport);
-        auto con2 = aseq->connect(annport, port);
+        // auto con2 = aseq->connect(annport, port);
         // FIXME should be removed from here, or it may grow for each new
         // client. There is no real problem as will never disconnect, but it is
         // not clean.
         connections.push_back(std::move(con1));
-        connections.push_back(std::move(con2));
+        // connections.push_back(std::move(con2));
 
         connected = true;
       });
@@ -124,6 +145,31 @@ void HwAutoAnnounce::new_client_announcement(const std::string &name,
     ERROR("No local_alsa_multi_listener_t found to connect {} {} {}", name,
           type, port);
   }
+}
+
+void HwAutoAnnounce::removed_port_announcement(const aseq_t::port_t &port) {
+  DEBUG("HwAutoAnnounce::removed_client_announcement {}", port);
+  connections.erase(
+      std::remove_if(connections.begin(), connections.end(),
+                     [&](const aseq_t::connection_t &conn) {
+                       if (conn.from == port || conn.to == port) {
+                         DEBUG("Disconnecting {} -> {}. May show error as we "
+                               "really try to disconnect, but normally it does "
+                               "not even exist anymore.",
+                               conn.from, conn.to);
+                         return true;
+                       }
+                       return false;
+                     }),
+      connections.end());
+
+  // DEBUG("Still got this connections:");
+  // for (auto &conn : connections) {
+  //   DEBUG("  {} -> {}", conn.from, conn.to);
+  //   if (conn.from == port || conn.to == port) {
+  //     ERROR("Still got a connection to the removed port");
+  //   }
+  // }
 }
 
 } // namespace rtpmididns

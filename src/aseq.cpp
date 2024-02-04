@@ -182,12 +182,17 @@ void aseq_t::read_ready() {
       if (me != midi_event.end())
         me->second(ev);
     } break;
-    case SND_SEQ_EVENT_CLIENT_START: {
+    case SND_SEQ_EVENT_PORT_START: {
       auto name = get_client_name(&ev->data.addr);
       auto type = get_client_type(&ev->data.addr);
       auto port = port_t(ev->data.addr.client, ev->data.addr.port);
       DEBUG("Client start {} {} {}", name, type, port);
-      new_client_announcement(name, type, port);
+      added_port_announcement(name, type, port);
+    } break;
+    case SND_SEQ_EVENT_PORT_EXIT: {
+      auto port = port_t(ev->data.addr.client, ev->data.addr.port);
+      DEBUG("Client exit {}", port);
+      removed_port_announcement(port);
     } break;
     default:
       static bool warning_raised[SND_SEQ_EVENT_NONE + 1];
@@ -275,6 +280,7 @@ std::string aseq_t::get_client_name(snd_seq_addr_t *addr) {
 aseq_t::client_type_e get_type_by_seq_type(int type) {
   // Known types so far.. may be increased later? Dont know how to make it more
   // future proof. If change here, quite probably will be incompatible changes
+  DEBUG("Type: {:b}", type);
   if (type & 0b01'00000000'00000000) {
     return aseq_t::client_type_e::TYPE_HARDWARE;
   } else if (type == 0x02) {
@@ -297,7 +303,8 @@ aseq_t::client_type_e aseq_t::get_client_type(snd_seq_addr_t *addr) {
   snd_seq_get_any_port_info(seq, addr->client, addr->port, port_info);
   std::string port_name = snd_seq_port_info_get_name(port_info);
 
-  auto type = snd_seq_port_info_get_type(port_info);
+  auto type = snd_seq_client_info_get_type(client_info);
+  // snd_seq_port_info_get_type(port_info);
 
   snd_seq_client_info_free(client_info);
   snd_seq_port_info_free(port_info);
@@ -397,16 +404,20 @@ void aseq_t::disconnect(const port_t &from, const port_t &to) {
   if (from.client == client_id) {
     int res = snd_seq_disconnect_to(seq, from.port, to.client, to.port);
     if (res < 0) {
-      throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
-                                from.to_string(), to.to_string(),
-                                snd_strerror(res), res);
+      ERROR("Failed disconnection: {} -> {}: {} ({})", from.to_string(),
+            to.to_string(), snd_strerror(res), res);
+      // throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
+      //                           from.to_string(), to.to_string(),
+      //                           snd_strerror(res), res);
     }
   } else if (to.client == client_id) {
     int res = snd_seq_disconnect_from(seq, to.port, from.client, from.port);
     if (res < 0) {
-      throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
-                                from.to_string(), to.to_string(),
-                                snd_strerror(res), res);
+      ERROR("Failed disconnection: {} -> {}: {} ({})", from.to_string(),
+            to.to_string(), snd_strerror(res), res);
+      // throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
+      //                           from.to_string(), to.to_string(),
+      //                           snd_strerror(res), res);
     }
   } else {
     ERROR("Can not disconnect ports I'm not part of.");

@@ -31,15 +31,18 @@ public:
 
   rtpmidid::connection_t<const std::string &, aseq_t::client_type_e,
                          const aseq_t::port_t &>
-      new_client_announcement_connection;
+      added_client_announcement_connection;
+  rtpmidid::connection_t<const aseq_t::port_t &>
+      removed_port_announcement_connection;
 
   HwAutoAnnounce(std::shared_ptr<aseq_t> aseq,
                  std::shared_ptr<midirouter_t> router);
   ~HwAutoAnnounce();
 
-  void new_client_announcement(const std::string &name,
+  void added_port_announcement(const std::string &name,
                                aseq_t::client_type_e type,
                                const aseq_t::port_t &port);
+  void removed_port_announcement(const aseq_t::port_t &port);
 };
 
 } // namespace rtpmididns

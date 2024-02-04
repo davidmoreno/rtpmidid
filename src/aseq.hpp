@@ -85,10 +85,12 @@ public:
       other.connected = false;
       return *this;
     }
-    ~connection_t() {
+    void disconnect() {
       if (connected)
         aseq->disconnect(from, to);
+      connected = false;
     }
+    ~connection_t() { disconnect(); }
   };
 
   enum client_type_e {
@@ -108,7 +110,8 @@ public:
   uint8_t client_id;
   std::vector<rtpmidid::poller_t::listener_t> aseq_listener;
   rtpmidid::signal_t<const std::string &, aseq_t::client_type_e, const port_t &>
-      new_client_announcement;
+      added_port_announcement;
+  rtpmidid::signal_t<const port_t &> removed_port_announcement;
 
   aseq_t(std::string name);
   ~aseq_t();
