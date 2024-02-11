@@ -115,10 +115,18 @@ def parse_commands(argv):
 def safe_get(data, *keys, default=""):
     try:
         for key in keys:
-            if key in data:
-                data = data[key]
+            if isinstance(data, list) and isinstance(key, int):
+                if len(data) > key:
+                    data = data[key]
+                else:
+                    return default
+            elif isinstance(data, dict):
+                if key in data:
+                    data = data[key]
+                else:
+                    return default
             else:
-                return default
+                return data
     except:
         return default
     return data
@@ -476,10 +484,16 @@ class Top:
         return safe_get(data, "peer", "status") or safe_get(data, "status")
 
     def get_latency(self, data):
-        avg = safe_get(data, "peer", "latency_ms", "average")
+        latency = safe_get(data, "latency_ms", default=None)
+        latency = latency or safe_get(data, "peer", "latency_ms", default=None)
+        latency = latency or safe_get(data, "peers", 0, "latency_ms", default=None)
+
+        if not latency:
+            return ""
+        avg = latency["average"]
         if avg == "":
             return ""
-        stddev = safe_get(data, "peer", "latency_ms", "stddev")
+        stddev = latency["stddev"]
         return f"{avg}ms \u00B1 {stddev}ms"
 
     def get_name(self, data):
