@@ -137,6 +137,11 @@ void midirouter_t::connect(peer_id_t from, peer_id_t to) {
   }
   // DEBUG("Connect {} -> {}", from, to);
 
+  // Do not add duplicates
+  auto I = std::find(send_peer->send_to.begin(), send_peer->send_to.end(), to);
+  if (I != send_peer->send_to.end())
+    return;
+
   send_peer->send_to.push_back(to);
 }
 
