@@ -112,15 +112,15 @@ def parse_commands(argv):
         yield {"method": cmd[0], "params": prepare_params(cmd[1:])}
 
 
-def safe_get(data, *keys):
+def safe_get(data, *keys, default=""):
     try:
         for key in keys:
             if key in data:
                 data = data[key]
             else:
-                return ""
+                return default
     except:
-        return ""
+        return default
     return data
 
 
@@ -179,17 +179,23 @@ class Top:
                 "align": "left",
             },
             {
-                "name": "Local Name",
-                "get": self.get_local_name,
+                "name": "Name",
+                "get": self.get_name,
                 "width": 0,
                 "align": "left",
             },
-            {
-                "name": "Remote Name",
-                "get": self.get_remote_name,
-                "width": 0,
-                "align": "left",
-            },
+            # {
+            #     "name": "Local Name",
+            #     "get": self.get_local_name,
+            #     "width": 0,
+            #     "align": "left",
+            # },
+            # {
+            #     "name": "Remote Name",
+            #     "get": self.get_remote_name,
+            #     "width": 0,
+            #     "align": "left",
+            # },
             {
                 "name": "Status",
                 "get": self.get_peer_status,
@@ -465,6 +471,8 @@ class Top:
     ##
 
     def get_peer_status(self, data):
+        if "peers" in data:
+            return " ".join([x["status"] for x in data["peers"]])
         return safe_get(data, "peer", "status") or safe_get(data, "status")
 
     def get_latency(self, data):
@@ -474,17 +482,20 @@ class Top:
         stddev = safe_get(data, "peer", "latency_ms", "stddev")
         return f"{avg}ms \u00B1 {stddev}ms"
 
+    def get_name(self, data):
+        return safe_get(data, "name")
+
     def get_local_name(self, data):
         type_ = safe_get(data, "type")
         if type_.startswith("local:"):
             return safe_get(data, "name")
-        return ""
+        return safe_get(data, "local_name", default="")
 
     def get_remote_name(self, data):
         type_ = safe_get(data, "type")
         if type_.startswith("network:"):
             return safe_get(data, "name")
-        return ""
+        return safe_get(data, "remote_name", default="")
 
     ##
     ## Top level components
