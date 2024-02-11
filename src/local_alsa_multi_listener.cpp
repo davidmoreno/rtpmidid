@@ -147,44 +147,13 @@ void local_alsa_multi_listener_t::remove_alsa_connection(
   router->remove_peer(networkpeerI->second);
 }
 
-void local_alsa_multi_listener_t::alsaseq_event(snd_seq_event_t *event) {
-  auto peerI =
-      aseqpeers.find(aseq_t::port_t{event->source.client, event->source.port});
-  if (peerI == aseqpeers.end()) {
-    WARNING("Unknown source for event {}:{}!", event->source.client,
-            event->source.port);
-    for (auto &it : aseqpeers) {
-      DEBUG("Known: {}:{}", it.first.client, it.first.port);
-    }
-    return;
-  }
-  rtpmidid::io_bytes_writer_static<1024> writer;
-  alsatrans_decoder.ev_to_mididata(event, writer);
-  auto midi = mididata_t(writer);
-
-  router->send_midi(peer_id, peerI->second, midi);
-}
-
 void local_alsa_multi_listener_t::send_midi(midipeer_id_t from,
                                             const mididata_t &data) {
-  for (auto &peer : aseqpeers) {
-    // DEBUG("Look for dest alsa peer: {} == {} ? {}", peer.second, from,
-    //       peer.second == from);
-    if (peer.second == from) {
-      auto mididata_copy =
-          mididata_t(data); // Its just the pointers, not the data itself
-      auto port = peer.first;
-      alsatrans_encoder.mididata_to_evs_f(
-          mididata_copy, [this, port](snd_seq_event_t *ev) {
-            // DEBUG("Send to ALSA port {}:{}", port.client, port.port);
-            snd_seq_ev_set_source(ev, this->port);
-            snd_seq_ev_set_dest(ev, port.client, port.port);
-            snd_seq_ev_set_direct(ev);
-            snd_seq_event_output_direct(seq->seq, ev);
-          });
-    }
-  }
+  WARNING_ONCE(
+      "local_alsa_multi_listener_t::send_midi not implemented. It creates "
+      "other midipeer_t which should send and receive midi events");
 }
+
 json_t local_alsa_multi_listener_t::status() {
   json_t connections{};
   for (auto &peer : aseqpeers) {

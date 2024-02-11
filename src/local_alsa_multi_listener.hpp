@@ -71,10 +71,6 @@ public:
   new_alsa_connection(const aseq_t::connection_t &port,
                       const std::string &name);
   void remove_alsa_connection(const aseq_t::port_t &port);
-
-  // received data from the alsa side, look who is the aseqpeer_t
-  // and send pretending its it.
-  void alsaseq_event(snd_seq_event_t *event);
 };
 
 } // namespace rtpmididns
