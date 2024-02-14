@@ -63,36 +63,19 @@ public:
     std::shared_ptr<aseq_t> aseq;
     port_t from;
     port_t to;
-    bool connected = false;
 
     connection_t() = default;
     // NOLINTNEXTLINE
     connection_t(const std::shared_ptr<aseq_t> &aseq_, const port_t &from_,
                  const port_t &to_)
-        : aseq(aseq_), from(from_), to(to_){};
-    connection_t(const connection_t &other) = delete;
-    connection_t(connection_t &&other) noexcept
-        : aseq(other.aseq), from(other.from), to(other.to) {
-      other.from = {0, 0};
-      other.to = {0, 0};
-      other.connected = false;
-    };
-    connection_t &operator=(const connection_t &other) = delete;
-    connection_t &operator=(connection_t &&other) noexcept {
+        : aseq(aseq_), from(from_), to(to_) {}
+    connection_t(const connection_t &other)
+        : aseq(other.aseq), from(other.from), to(other.to) {}
+    connection_t &operator=(const connection_t &other) {
       aseq = other.aseq;
       from = other.from;
       to = other.to;
-      connected = other.connected;
-      other.from = {0, 0};
-      other.to = {0, 0};
-      other.connected = false;
       return *this;
-    }
-    ~connection_t() { disconnect(); }
-    void disconnect() {
-      if (connected)
-        aseq->disconnect(from, to);
-      connected = false;
     }
     port_t get_my_port() const {
       if (from.client == aseq->client_id)

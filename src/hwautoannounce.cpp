@@ -74,7 +74,7 @@ HwAutoAnnounce::~HwAutoAnnounce() {
   for (auto &conn : connections) {
     try {
       DEBUG("Disconnecting {} -> {}", conn.from, conn.to);
-      conn.disconnect();
+      aseq->disconnect(conn.from, conn.to);
     } catch (...) {
       ERROR("Error disconnecting {} -> {}", conn.from, conn.to);
       // Ignore
