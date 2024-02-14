@@ -85,7 +85,7 @@ bool rtppeer_t::is_feedback(io_bytes_reader &pb) {
   // DEBUG("Is feedback? {} {} {}", pb.size() >= 16, pb.start[0] == 0xFF,
   // pb.start[1] == 0xFF);
   return (pb.size() >= 12 && pb.start[0] == 0xFF && pb.start[1] == 0xFF &&
-          pb.start[2] == 0x52 && pb.start[3] == 0x53);
+          pb.start[2] == 'R' && pb.start[3] == 'S');
 }
 
 void rtppeer_t::parse_command(io_bytes_reader &buffer, port_e port) {
