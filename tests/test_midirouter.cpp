@@ -133,7 +133,7 @@ void test_midirouter_from_alsa() {
         ev->source.port = 0;
         // This test the encoder works
         ASSERT_EQUAL(ev->type, SND_SEQ_EVENT_NOTEON);
-        alsanetwork->alsaseq_event(ev);
+        cd->alsaseq_event(ev);
 
         // unknown source
         ev->source.client = 120;
