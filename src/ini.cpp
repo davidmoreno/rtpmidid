@@ -16,10 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "ini.hpp"
 #include "settings.hpp"
 #include "stringpp.hpp"
-#include <algorithm>
 #include <fstream>
 #include <rtpmidid/exceptions.hpp>
 #include <unistd.h>

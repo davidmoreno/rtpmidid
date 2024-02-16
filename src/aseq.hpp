@@ -17,18 +17,13 @@
  */
 
 #pragma once
-#include "rtpmidid/exceptions.hpp"
-#include "rtpmidid/iobytes.hpp"
-#include "rtpmidid/poller.hpp"
-#include "rtpmidid/signal.hpp"
-#include "rtpmidid/utils.hpp"
 #include <alsa/asoundlib.h>
-#include <alsa/seq_midi_event.h>
-#include <functional>
-#include <map>
+#include <fmt/format.h>
 #include <memory>
-#include <string>
-#include <vector>
+#include <rtpmidid/exceptions.hpp>
+#include <rtpmidid/iobytes.hpp>
+#include <rtpmidid/poller.hpp>
+#include <rtpmidid/signal.hpp>
 
 namespace rtpmididns {
 class aseq_t : public std::enable_shared_from_this<aseq_t> {
@@ -181,12 +176,12 @@ template <>
 struct fmt::formatter<rtpmididns::aseq_t::client_type_e>
     : formatter<std::string_view> {
   fmt::appender format(rtpmididns::aseq_t::client_type_e c,
-                           format_context &ctx);
+                       format_context &ctx);
 };
 
 template <>
 struct fmt::formatter<rtpmididns::aseq_t::connection_t>
     : formatter<std::string_view> {
   fmt::appender format(const rtpmididns::aseq_t::connection_t &c,
-                           format_context &ctx);
+                       format_context &ctx);
 };

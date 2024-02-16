@@ -20,8 +20,6 @@
 #pragma once
 #include "./exceptions.hpp"
 #include "logger.hpp"
-#include <cstdint>
-#include <string_view>
 #include <vector>
 
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-avoid-magic-numbers)

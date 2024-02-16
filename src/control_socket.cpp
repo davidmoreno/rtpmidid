@@ -18,18 +18,11 @@
 #include "control_socket.hpp"
 #include "factory.hpp"
 #include "settings.hpp"
-#include <algorithm>
-#include <functional>
-#include <regex>
-#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
-#include <unistd.h>
 
 #include "json.hpp"
 #include "midipeer.hpp"
-#include "rtpmidid/logger.hpp"
-#include "rtpmidid/poller.hpp"
 #include "stringpp.hpp"
 
 namespace rtpmididns {

@@ -17,13 +17,10 @@
  */
 
 #pragma once
-#include <chrono>
+
 #include <fmt/core.h>
 #include <optional>
 #include <regex>
-#include <string>
-#include <string_view>
-#include <vector>
 
 namespace rtpmididns {
 
@@ -78,7 +75,7 @@ template <>
 struct fmt::formatter<rtpmididns::settings_t::alsa_announce_t>
     : formatter<std::string_view> {
   fmt::appender format(const rtpmididns::settings_t::alsa_announce_t &data,
-                           format_context &ctx);
+                       format_context &ctx);
 };
 
 template <>
@@ -92,9 +89,8 @@ struct fmt::formatter<std::vector<rtpmididns::settings_t::alsa_announce_t>>
 template <>
 struct fmt::formatter<rtpmididns::settings_t::rtpmidi_announce_t>
     : formatter<std::string_view> {
-  fmt::appender
-  format(const rtpmididns::settings_t::rtpmidi_announce_t &data,
-         format_context &ctx);
+  fmt::appender format(const rtpmididns::settings_t::rtpmidi_announce_t &data,
+                       format_context &ctx);
 };
 
 template <>
@@ -109,7 +105,7 @@ template <>
 struct fmt::formatter<rtpmididns::settings_t::connect_to_t>
     : formatter<std::string_view> {
   fmt::appender format(const rtpmididns::settings_t::connect_to_t &data,
-                           format_context &ctx);
+                       format_context &ctx);
 };
 
 template <>
@@ -122,8 +118,7 @@ struct fmt::formatter<std::vector<rtpmididns::settings_t::connect_to_t>>
 
 template <>
 struct fmt::formatter<rtpmididns::settings_t> : formatter<std::string_view> {
-  fmt::appender format(const rtpmididns::settings_t &data,
-                           format_context &ctx);
+  fmt::appender format(const rtpmididns::settings_t &data, format_context &ctx);
 };
 
 template <>

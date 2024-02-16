@@ -18,7 +18,6 @@
 
 #include "midipeer.hpp"
 #include "midirouter.hpp"
-#include <rtpmidid/logger.hpp>
 
 #include "json.hpp"
 

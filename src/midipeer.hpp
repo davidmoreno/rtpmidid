@@ -20,9 +20,7 @@
 
 #include "json_fwd.hpp"
 #include "rtpmidid/utils.hpp"
-#include <cstdint>
 #include <limits>
-#include <memory>
 
 namespace rtpmididns {
 

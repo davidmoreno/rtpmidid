@@ -16,15 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "./aseq.hpp"
-#include <alsa/seq.h>
-#include <alsa/seq_event.h>
-#include <alsa/seq_midi_event.h>
-#include <fmt/format.h>
-#include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/logger.hpp>
-#include <rtpmidid/poller.hpp>
-#include <rtpmidid/rtpclient.hpp>
-#include <stdio.h>
 
 namespace rtpmididns {
 void error_handler(const char *file, int line, const char *function, int err,
