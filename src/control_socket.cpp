@@ -40,8 +40,8 @@ const char *const MSG_CLOSE_CONN =
     "{\"event\": \"close\", \"detail\": \"Shutdown\", \"code\": 0}\n";
 const char *const MSG_TOO_LONG =
     "{\"event\": \"close\", \"detail\": \"Message too long\", \"code\": 1}\n";
-const char *const MSG_UNKNOWN_COMMAND =
-    "{\"error\": \"Unknown command\", \"code\": 2}";
+// const char *const MSG_UNKNOWN_COMMAND =
+//     "{\"error\": \"Unknown command\", \"code\": 2}";
 
 static const std::regex PEER_COMMAND_RE = std::regex("^(\\d*)\\.(.*)");
 

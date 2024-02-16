@@ -34,7 +34,7 @@ build: build/bin/rtpmidid
 
 build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -GNinja $(CMAKE_EXTRA_ARGS) 
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -GNinja $(CMAKE_EXTRA_ARGS)
 	cd build && ninja
 
 build-dev: 

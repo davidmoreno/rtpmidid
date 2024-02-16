@@ -63,7 +63,7 @@ local_alsa_multi_listener_t::new_alsa_connection(const aseq_t::port_t &port,
 
   midipeer_id_t networkpeer_id = MIDIPEER_ID_INVALID;
   router->for_each_peer<network_rtpmidi_listener_t>(
-      [this, &name, &networkpeer_id](auto *peer) {
+      [&name, &networkpeer_id](auto *peer) {
         if (peer->name_ == name) {
           peer->use_count++;
           networkpeer_id = peer->peer_id;

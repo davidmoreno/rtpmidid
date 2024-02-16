@@ -43,7 +43,7 @@ network_rtpmidi_client_t::network_rtpmidi_client_t(
       });
 
   disconnect_connection = peer->peer.disconnect_event.connect(
-      [this](rtpmidid::rtppeer_t::disconnect_reason_e reason) {
+      [](rtpmidid::rtppeer_t::disconnect_reason_e reason) {
         DEBUG("Peer disconnected: {}. Remove rtpmidi peer and alsa port too.",
               reason);
         // rtpmidid::poller.call_later([this] {

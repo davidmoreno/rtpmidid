@@ -40,7 +40,7 @@ namespace rtpmididns {
 const char *VERSION = RTPMIDID_VERSION;
 
 // NOLINTNEXTLINE (cppcoreguidelines-pro-bounds-pointer-arithmetic)
-const char *const CMDLINE_HELP = 1 + R"(
+const char *const CMDLINE_HELP = &R"(
 Real Time Protocol Music Instrument Digital Interface Daemon v{}
 (C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
 Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.
@@ -52,7 +52,7 @@ Internet use has not been tested, but may also deliver high latency
 and jitter.
 
 Options:
-)";
+)"[1];
 
 struct argument_t {
   std::string arg;

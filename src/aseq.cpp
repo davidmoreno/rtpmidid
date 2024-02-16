@@ -205,7 +205,7 @@ void aseq_t::read_ready() {
     } break;
     default:
       static std::array<bool, SND_SEQ_EVENT_NONE + 1> warning_raised{};
-      assert(ev->type < warning_raised.size());
+      // assert(ev->type < warning_raised.size());
       // NOLINTNEXTLINE
       if (!warning_raised[ev->type]) {
 

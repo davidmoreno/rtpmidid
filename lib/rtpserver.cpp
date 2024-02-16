@@ -424,7 +424,7 @@ void rtpserver_t::rearm_ck_timeout(std::shared_ptr<rtppeer_t> peer) {
 
   // If no signal in 60 secs, remove the peer
   peerdata->timer_connection =
-      poller.add_timer_event(std::chrono::seconds(60), [peerdata, peer]() {
+      poller.add_timer_event(std::chrono::seconds(60), [peer]() {
         DEBUG("Timeout waiting for CK. Disconnecting.");
         peer->disconnect();
       });
