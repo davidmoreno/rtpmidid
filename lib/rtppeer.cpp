@@ -34,20 +34,15 @@ using namespace rtpmidid;
  * BUGS: It needs two consecutive ports for client, but just ask a random and
  *       expects next to be free. It almost always is, but can fail.
  */
-rtppeer_t::rtppeer_t(std::string _name) : local_name(std::move(_name)) {
-  status = NOT_CONNECTED;
-  remote_ssrc = 0;
-  local_ssrc = ::rtpmidid::rand_u32() & 0x0FFFF;
-  seq_nr = ::rtpmidid::rand_u32() & 0x0FFFF;
+rtppeer_t::rtppeer_t(std::string _name)
+    : local_ssrc(::rtpmidid::rand_u32() & 0x0FFFF),
+      local_name(std::move(_name)), seq_nr(::rtpmidid::rand_u32() & 0x0FFFF),
+      timestamp_start(get_timestamp()) {
+
   seq_nr_ack = seq_nr;
-  remote_seq_nr = 0; // Just not radom memory data
-  timestamp_start = 0;
-  timestamp_start = get_timestamp();
-  initiator_id = 0;
-  latency = 0;
-  waiting_ck = false;
 }
 
+// NOLINTNEXTLINE(bugprone-exception-escape) - If it happens, it is a bug
 rtppeer_t::~rtppeer_t() {
   if (status == CONNECTED) {
     send_goodbye(CONTROL_PORT);
@@ -304,7 +299,7 @@ void rtppeer_t::parse_command_ck(io_bytes_reader &buffer, port_e port) {
     waiting_ck = false;
     INFO("Latency {}: {:.2f} ms (client / 2)", std::string_view(remote_name),
          latency / 10.0);
-    ck_event(latency / 10.0);
+    ck_event(float(latency) / 10.0f);
     stats.add_stat(std::chrono::nanoseconds((int)latency * 100));
   } break;
   case 2: {
@@ -316,7 +311,7 @@ void rtppeer_t::parse_command_ck(io_bytes_reader &buffer, port_e port) {
          latency / 10.0);
     // No need to send message
     stats.add_stat(std::chrono::nanoseconds((int)latency * 100));
-    ck_event(latency / 10.0);
+    ck_event(float(latency) / 10.0f);
     return;
   }
   default:
@@ -504,8 +499,8 @@ void rtppeer_t::parse_midi(io_bytes_reader &buffer) {
   // J = has journal
   // Z = delta time on first MIDI-command present
   // P = no status byte in original midi command
-  auto header = buffer.read_uint8();
-  int16_t length = header & 0x0F;
+  uint8_t header = buffer.read_uint8();
+  int length = header & 0x0F;
   if ((header & 0x80) != 0) {
     length <<= 8;
     length += buffer.read_uint8();
@@ -526,7 +521,7 @@ void rtppeer_t::parse_midi(io_bytes_reader &buffer) {
   if ((header & 0x20) != 0) {
     WARNING("This RTP MIDI payload has delta time for the first command. "
             "Ignoring.");
-    uint32_t delta_time;
+    uint32_t delta_time = 0;
     remaining -= read_delta_time(buffer, delta_time);
   }
   if ((header & 0x10) != 0) {
@@ -551,7 +546,7 @@ void rtppeer_t::parse_midi(io_bytes_reader &buffer) {
     remaining -= length;
 
     if (!sysex.empty() || *buffer.position == 0xF0) {
-      parse_sysex(buffer, length);
+      parse_sysex(buffer, int16_t(length));
     } else if (*buffer.position < 0x80 && running_status) {
       // Abbreviated midi message using running status
       io_bytes_managed midi(length + 1);
@@ -572,7 +567,7 @@ void rtppeer_t::parse_midi(io_bytes_reader &buffer) {
     if (remaining) {
       // DEBUG("Packet with several midi events. {} bytes remaining",
       // remaining); Skip delta
-      uint32_t delta_time;
+      uint32_t delta_time = 0;
       remaining -= read_delta_time(buffer, delta_time);
       // DEBUG("Skip delta_time: {}", delta_time);
     }
@@ -643,11 +638,12 @@ void rtppeer_t::parse_sysex(io_bytes_reader &buffer, int16_t length) {
  * 10 ts = 1ms, 10000 ts = 1s. 1ms = 0.1ts
  */
 uint64_t rtppeer_t::get_timestamp() {
-  struct timespec spec;
+  struct timespec spec {};
 
   clock_gettime(CLOCK_MONOTONIC, &spec);
   // ns is 1e-9s. I need 1e-4s, so / 1e5
-  uint64_t now = spec.tv_sec * 10000 + spec.tv_nsec / 1.0e5;
+  uint64_t now =
+      uint64_t(spec.tv_sec * 10000) + uint64_t(double(spec.tv_nsec) / 1.0e5);
   // DEBUG("{}s {}ns", spec.tv_sec, spec.tv_nsec);
 
   return uint32_t(now - timestamp_start);
@@ -822,7 +818,7 @@ void rtppeer_t::parse_journal_chapter_N(uint8_t channel,
   DEBUG("{} note on count, {} noteoff count", nnoteon, high - low + 1);
 
   // Prepare some struct, will overwrite mem data and write as midi event
-  uint8_t tmp[3];
+  std::array<uint8_t, 3> tmp{0, 0, 0};
 
   for (auto i = 0; i < nnoteon; i++) {
     auto notenum = journal_data.read_uint8();
@@ -837,7 +833,7 @@ void rtppeer_t::parse_journal_chapter_N(uint8_t channel,
       tmp[0] = 0x90 | channel;
       tmp[1] = notenum & 0x7f;
       tmp[2] = notevel & 0x7f;
-      io_bytes event(tmp, 3);
+      io_bytes event(tmp.data(), 3);
       midi_event(event);
     }
   }
@@ -850,7 +846,7 @@ void rtppeer_t::parse_journal_chapter_N(uint8_t channel,
       if (bitmap & (0x80 >> j)) {
         tmp[1] = minnote;
         tmp[2] = 0;
-        io_bytes event(tmp, 3);
+        io_bytes event(tmp.data(), 3);
         midi_event(event);
       }
     }

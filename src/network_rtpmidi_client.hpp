@@ -20,6 +20,7 @@
 #include "midipeer.hpp"
 #include "rtpmidid/rtpclient.hpp"
 #include "rtpmidid/signal.hpp"
+#include "rtpmidid/utils.hpp"
 
 namespace rtpmidid {
 class io_bytes_reader;
@@ -36,6 +37,8 @@ namespace rtpmididns {
  * a rtpmidid::rtpclient_t or rtpmidid::rtpserver_t object.
  */
 class network_rtpmidi_client_t : public midipeer_t {
+  NON_COPYABLE_NOR_MOVABLE(network_rtpmidi_client_t);
+
 public:
   std::shared_ptr<rtpmidid::rtpclient_t> peer;
   rtpmidid::connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
@@ -45,7 +48,7 @@ public:
       connected_connection;
 
   network_rtpmidi_client_t(std::shared_ptr<rtpmidid::rtpclient_t> peer);
-  ~network_rtpmidi_client_t();
+  ~network_rtpmidi_client_t() override;
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;

@@ -16,7 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "control_socket.hpp"
-#include "config.hpp"
 #include "factory.hpp"
 #include "settings.hpp"
 #include <algorithm>
@@ -34,16 +33,17 @@
 #include "stringpp.hpp"
 
 namespace rtpmididns {
-
+// NOLINTNEXTLINE
 extern const char *VERSION;
-const char *MSG_CLOSE_CONN =
+
+const char *const MSG_CLOSE_CONN =
     "{\"event\": \"close\", \"detail\": \"Shutdown\", \"code\": 0}\n";
-const char *MSG_TOO_LONG =
+const char *const MSG_TOO_LONG =
     "{\"event\": \"close\", \"detail\": \"Message too long\", \"code\": 1}\n";
-const char *MSG_UNKNOWN_COMMAND =
+const char *const MSG_UNKNOWN_COMMAND =
     "{\"error\": \"Unknown command\", \"code\": 2}";
 
-static std::regex peer_command_re = std::regex("^(\\d*)\\.(.*)");
+static const std::regex PEER_COMMAND_RE = std::regex("^(\\d*)\\.(.*)");
 
 control_socket_t::control_socket_t() {
   std::string &socketfile = settings.control_filename;
@@ -58,11 +58,13 @@ control_socket_t::control_socket_t() {
     ERROR("Error creating socket: {}", strerror(errno));
     return;
   }
-  struct sockaddr_un addr;
-  memset(&addr, 0, sizeof(struct sockaddr_un));
+  struct sockaddr_un addr = {};
+  // memset(&addr, 0, sizeof(struct sockaddr_un));
   addr.sun_family = AF_UNIX;
+  // NOLINTNEXTLINE
   strncpy(addr.sun_path, socketfile.c_str(), sizeof(addr.sun_path) - 1);
 
+  // NOLINTNEXTLINE
   ret = bind(socket, (const struct sockaddr *)(&addr),
              sizeof(struct sockaddr_un));
   if (ret == -1) {
@@ -84,7 +86,8 @@ control_socket_t::control_socket_t() {
   start_time = time(NULL);
 }
 
-rtpmididns::control_socket_t::~control_socket_t() {
+// NOLINTNEXTLINE(bugprone-exception-escape)
+rtpmididns::control_socket_t::~control_socket_t() noexcept {
   for (auto &client : clients) {
     client.listener.stop();
 
@@ -114,8 +117,8 @@ void rtpmididns::control_socket_t::connection_ready() {
 }
 
 void control_socket_t::data_ready(int fd) {
-  char buf[1024];
-  size_t l = recv(fd, buf, sizeof(buf), 0);
+  char buf[1024];                           // NOLINT
+  size_t l = recv(fd, buf, sizeof(buf), 0); // NOLINT
   if (l <= 0) {
     // DEBUG("Closed control connection: {}", fd);
     auto I = std::find_if(clients.begin(), clients.end(),
@@ -134,8 +137,8 @@ void control_socket_t::data_ready(int fd) {
     }
     return;
   }
-  buf[l] = 0;
-  auto ret = parse_command(trim_copy(buf));
+  buf[l] = 0;                               // NOLINT
+  auto ret = parse_command(trim_copy(buf)); // NOLINT
   ret += "\n";
   auto w = write(fd, ret.c_str(), ret.length());
   if (w < 0) {
@@ -154,7 +157,8 @@ struct command_t {
   std::function<json_t(rtpmididns::control_socket_t &, const json_t &)> func;
 };
 } // namespace control_socket_ns
-std::vector<control_socket_ns::command_t> commands{
+// NOLINTNEXTLINE
+const std::vector<control_socket_ns::command_t> COMMANDS{
     {"status", "Return status of the daemon",
      [](control_socket_t &control, const json_t &) {
        return json_t{
@@ -170,8 +174,7 @@ std::vector<control_socket_ns::command_t> commands{
     {"router.remove", "Remove a peer from the router",
      [](control_socket_t &control, const json_t &params) {
        DEBUG("Params {}", params.dump());
-       peer_id_t peer_id;
-       peer_id = params[0];
+       peer_id_t peer_id = params[0];
        DEBUG("Remove peer_id {}", peer_id);
        control.router->remove_peer(peer_id);
        return "ok";
@@ -180,9 +183,8 @@ std::vector<control_socket_ns::command_t> commands{
      "Connects two peers at the router. Unidirectional conneciton.",
      [](control_socket_t &control, const json_t &params) {
        DEBUG("Params {}", params.dump());
-       peer_id_t from_peer_id, to_peer_id;
-       from_peer_id = params["from"];
-       to_peer_id = params["to"];
+       peer_id_t from_peer_id = params["from"];
+       peer_id_t to_peer_id = params["to"];
        DEBUG("Connect peers: {} -> {}", from_peer_id, to_peer_id);
        control.router->connect(from_peer_id, to_peer_id);
        return "ok";
@@ -238,7 +240,7 @@ std::vector<control_socket_ns::command_t> commands{
     {"help", "Return help text",
      [](control_socket_t &control, const json_t &) {
        auto res = std::vector<json_t>{};
-       for (const auto &cmd : commands) {
+       for (const auto &cmd : COMMANDS) {
          res.push_back({{"name", cmd.name}, {"description", cmd.description}});
        }
        return res;
@@ -253,7 +255,7 @@ std::string control_socket_t::parse_command(const std::string &command) {
   std::string method = js["method"];
   json_t retdata = {{"id", js["id"]}};
   try {
-    for (const auto &cmd : commands) {
+    for (const auto &cmd : COMMANDS) {
       if (cmd.name == method) {
         auto res = cmd.func(*this, js["params"]);
         retdata["result"] = res;
@@ -263,7 +265,7 @@ std::string control_socket_t::parse_command(const std::string &command) {
     }
     // if matches the regex (^d*\..*), its a command to a peer
     std::smatch match;
-    if (std::regex_match(method, match, peer_command_re)) {
+    if (std::regex_match(method, match, PEER_COMMAND_RE)) {
       auto peer_id = std::stoi(match[1]);
       auto cmd = match[2];
       // DEBUG("Peer command: {} -> {}", peer_id, cmd.to_string());

@@ -29,19 +29,25 @@
 namespace rtpmididns {
 void error_handler(const char *file, int line, const char *function, int err,
                    const char *fmt, ...) {
+  // NOLINTNEXTLINE
   va_list arg;
   std::string msg;
+  // NOLINTNEXTLINE
   char buffer[1024];
 
   if (err == ENOENT) /* Ignore those misleading "warnings" */
     return;
+  // NOLINTNEXTLINE
   va_start(arg, fmt);
+  // NOLINTNEXTLINE
   vsprintf(buffer, fmt, arg);
+  // NOLINTNEXTLINE
   msg += buffer;
   if (err) {
     msg += ": ";
     msg += snd_strerror(err);
   }
+  // NOLINTNEXTLINE
   va_end(arg);
   std::string filename = "alsa/";
   filename += file;
@@ -52,6 +58,7 @@ void error_handler(const char *file, int line, const char *function, int err,
 
 snd_seq_addr_t *get_other_ev_client_port(snd_seq_event_t *ev,
                                          uint8_t client_id) {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-union-access)
   auto &connect = ev->data.connect;
   if (connect.sender.client != client_id) {
     return &connect.sender;
@@ -60,6 +67,7 @@ snd_seq_addr_t *get_other_ev_client_port(snd_seq_event_t *ev,
   }
 }
 snd_seq_addr_t *get_my_ev_client_port(snd_seq_event_t *ev, uint8_t client_id) {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-union-access)
   auto &connect = ev->data.connect;
   if (connect.sender.client == client_id) {
     return &connect.sender;
@@ -67,7 +75,7 @@ snd_seq_addr_t *get_my_ev_client_port(snd_seq_event_t *ev, uint8_t client_id) {
     return &connect.dest;
   }
 }
-aseq_t::aseq_t(std::string _name) : name(std::move(_name)) {
+aseq_t::aseq_t(std::string _name) : name(std::move(_name)), seq(nullptr) {
   snd_lib_error_set_handler(error_handler);
   if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0) {
     throw alsa_connect_exception(
@@ -76,13 +84,14 @@ aseq_t::aseq_t(std::string _name) : name(std::move(_name)) {
   snd_seq_set_client_name(seq, name.c_str());
   snd_seq_nonblock(seq, 1);
 
-  snd_seq_client_info_t *info;
+  snd_seq_client_info_t *info = nullptr;
   snd_seq_client_info_malloc(&info);
   snd_seq_get_client_info(seq, info);
   client_id = snd_seq_client_info_get_client(info);
   snd_seq_client_info_free(info);
 
   auto poller_count = snd_seq_poll_descriptors_count(seq, POLLIN);
+  // NOLINTNEXTLINE
   auto pfds = std::make_unique<struct pollfd[]>(poller_count);
   auto poller_count_check =
       snd_seq_poll_descriptors(seq, pfds.get(), poller_count, POLLIN);
@@ -124,7 +133,7 @@ aseq_t::~aseq_t() {
  *                      bandwidth.
  */
 void aseq_t::read_ready() {
-  snd_seq_event_t *ev;
+  snd_seq_event_t *ev = nullptr;
   while (snd_seq_event_input(seq, &ev) > 0) {
     // DEBUG("ALSA MIDI event: {}, pending: {} / {}", ev->type, pending,
     // snd_seq_event_input_pending(seq, 0));
@@ -195,8 +204,12 @@ void aseq_t::read_ready() {
       removed_port_announcement(port);
     } break;
     default:
-      static bool warning_raised[SND_SEQ_EVENT_NONE + 1];
+      static std::array<bool, SND_SEQ_EVENT_NONE + 1> warning_raised{};
+      assert(ev->type < warning_raised.size());
+      // NOLINTNEXTLINE
       if (!warning_raised[ev->type]) {
+
+        // NOLINTNEXTLINE
         warning_raised[ev->type] = true;
         WARNING("This event type {} is not managed yet", ev->type);
       }
@@ -227,8 +240,8 @@ void aseq_t::remove_port(uint8_t port) {
 std::vector<std::string> get_ports(aseq_t *seq) {
   std::vector<std::string> ret;
 
-  snd_seq_client_info_t *cinfo;
-  snd_seq_port_info_t *pinfo;
+  snd_seq_client_info_t *cinfo = nullptr;
+  snd_seq_port_info_t *pinfo = nullptr;
 
   snd_seq_client_info_alloca(&cinfo);
   snd_seq_port_info_alloca(&pinfo);
@@ -315,15 +328,15 @@ aseq_t::client_type_e aseq_t::get_client_type(snd_seq_addr_t *addr) {
 static void disconnect_port_at_subs(snd_seq_t *seq,
                                     snd_seq_query_subscribe_t *subs,
                                     uint8_t port) {
-  snd_seq_port_subscribe_t *port_sub;
+  snd_seq_port_subscribe_t *port_sub = nullptr;
   snd_seq_port_subscribe_alloca(&port_sub);
 
   for (auto type : {SND_SEQ_QUERY_SUBS_READ, SND_SEQ_QUERY_SUBS_WRITE}) {
     snd_seq_query_subscribe_set_type(subs, type);
     snd_seq_query_subscribe_set_index(subs, 0);
     while (snd_seq_query_port_subscribers(seq, subs) >= 0) {
-      const snd_seq_addr_t *addr;
-      const snd_seq_addr_t *root;
+      const snd_seq_addr_t *addr = nullptr;
+      const snd_seq_addr_t *root = nullptr;
       if (snd_seq_query_subscribe_get_type(subs) == SND_SEQ_QUERY_SUBS_READ) {
         addr = snd_seq_query_subscribe_get_addr(subs);
         root = snd_seq_query_subscribe_get_root(subs);
@@ -350,8 +363,8 @@ static void disconnect_port_at_subs(snd_seq_t *seq,
 
 void aseq_t::disconnect_port(uint8_t port) {
   DEBUG("Disconnect alsa port {}", port);
-  snd_seq_query_subscribe_t *subs;
-  snd_seq_port_info_t *portinfo;
+  snd_seq_query_subscribe_t *subs = nullptr;
+  snd_seq_port_info_t *portinfo = nullptr;
 
   snd_seq_port_info_alloca(&portinfo);
   if (snd_seq_get_port_info(seq, port, portinfo) < 0) {
@@ -427,7 +440,7 @@ void aseq_t::disconnect(const port_t &from, const port_t &to) {
 
 /// List all devices
 uint8_t aseq_t::find_device(const std::string &name) {
-  snd_seq_client_info_t *cinfo;
+  snd_seq_client_info_t *cinfo = nullptr;
   int retv = -1;
 
   int ret = snd_seq_client_info_malloc(&cinfo);
@@ -457,7 +470,7 @@ uint8_t aseq_t::find_device(const std::string &name) {
 /// List all ports of a device
 uint8_t aseq_t::find_port(uint8_t device_id, const std::string &name) {
   int retv = 0;
-  snd_seq_port_info_t *pinfo;
+  snd_seq_port_info_t *pinfo = nullptr;
 
   int ret = snd_seq_port_info_malloc(&pinfo);
   if (ret != 0)
@@ -536,11 +549,12 @@ void aseq_t::for_ports(uint8_t device_id,
   snd_seq_port_info_free(pinfo);
 }
 
-mididata_to_alsaevents_t::mididata_to_alsaevents_t() {
+mididata_to_alsaevents_t::mididata_to_alsaevents_t() : buffer(nullptr) {
   snd_midi_event_new(1024, &buffer);
 }
 mididata_to_alsaevents_t::~mididata_to_alsaevents_t() {
-  snd_midi_event_free(buffer);
+  if (buffer)
+    snd_midi_event_free(buffer);
 }
 
 void mididata_to_alsaevents_t::mididata_to_evs_f(

@@ -21,6 +21,7 @@
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/rtppeer.hpp"
+#include "rtpmidid/utils.hpp"
 #include <unordered_map>
 
 namespace rtpmididns {
@@ -43,6 +44,8 @@ namespace rtpmididns {
  * and send the data as if it comes from there to the midirouter.
  */
 class local_alsa_multi_listener_t : public midipeer_t {
+  NON_COPYABLE_NOR_MOVABLE(local_alsa_multi_listener_t);
+
 public:
   std::shared_ptr<aseq_t> seq;
   uint8_t port;
@@ -58,7 +61,7 @@ public:
 
   local_alsa_multi_listener_t(const std::string &name,
                               std::shared_ptr<aseq_t> aseq);
-  ~local_alsa_multi_listener_t();
+  ~local_alsa_multi_listener_t() override;
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;

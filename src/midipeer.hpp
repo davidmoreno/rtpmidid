@@ -19,12 +19,16 @@
 #pragma once
 
 #include "json_fwd.hpp"
+#include "rtpmidid/utils.hpp"
 #include <cstdint>
+#include <limits>
 #include <memory>
 
 namespace rtpmididns {
 
 using midipeer_id_t = uint32_t;
+constexpr midipeer_id_t MIDIPEER_ID_INVALID =
+    std::numeric_limits<uint32_t>::max();
 
 class mididata_t;
 class midirouter_t;
@@ -34,14 +38,17 @@ class midirouter_t;
  * Must be inherited by the real clients
  */
 class midipeer_t : public std::enable_shared_from_this<midipeer_t> {
+  NON_COPYABLE_NOR_MOVABLE(midipeer_t);
+
 public:
   std::shared_ptr<midirouter_t> router;
-  midipeer_id_t peer_id;
+  midipeer_id_t peer_id = 0;
   int packets_sent = 0;
   int packets_recv = 0;
 
-  midipeer_t() : router(nullptr), peer_id(0) {}
+  midipeer_t() = default;
   virtual ~midipeer_t();
+
   virtual json_t status() = 0;
   virtual void send_midi(midipeer_id_t from, const mididata_t &) = 0;
   virtual json_t command(const std::string &cmd, const json_t &data);

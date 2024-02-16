@@ -35,7 +35,9 @@
 
 using namespace std::chrono_literals;
 
-std::vector<std::string> avahi_known_names;
+static std::vector<std::string> avahi_known_names;
+
+const auto AVAHI_ANNOUNCEMENT_TIMEOUT = 10'000;
 
 rtpmidid::config_t parse_cmd_args(std::vector<const char *> &&list) {
   return rtpmidid::parse_cmd_args(list.size(), list.data());
@@ -72,9 +74,9 @@ std::pair<uint8_t, uint8_t> alsa_find_port(rtpmidid::aseq &aseq,
                                            const std::string &gadgetname,
                                            const std::string &portname) {
 
-  snd_seq_client_info_t *cinfo;
-  snd_seq_port_info_t *pinfo;
-  int count;
+  snd_seq_client_info_t *cinfo = nullptr;
+  snd_seq_port_info_t *pinfo = nullptr;
+  int count = 0;
 
   snd_seq_client_info_alloca(&cinfo);
   snd_seq_port_info_alloca(&pinfo);
@@ -110,7 +112,7 @@ void wait_for_avahi_announcement(const std::string &name) {
     const auto wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now() - pre)
                              .count();
-    if (wait_ms > 10'000) {
+    if (wait_ms > AVAHI_ANNOUNCEMENT_TIMEOUT) {
       FAIL(fmt::format("Waiting too long for avahi: {}ms", wait_ms));
     }
   }
@@ -137,7 +139,7 @@ class metronome_t {
 public:
   rtpmidid::aseq aseq;
   rtpmidid::poller_t::timer_t timer;
-  uint8_t port;
+  uint8_t port = 0;
   bool paused = false;
   metronome_t(const std::string &gadgetname, const std::string &portname)
       : aseq("metronome") {

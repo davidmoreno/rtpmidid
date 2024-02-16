@@ -20,6 +20,7 @@
 #include "rtpmidid/logger.hpp"
 #include "settings.hpp"
 #include <algorithm>
+#include <array>
 #include <fmt/core.h>
 #include <functional>
 #include <iterator>
@@ -31,26 +32,27 @@
 namespace rtpmididns {
 
 #ifndef RTPMIDID_VERSION
+// NOLINTNEXTLINE
 #define RTPMIDID_VERSION "unknown"
 #endif
 
+// NOLINTNEXTLINE
 const char *VERSION = RTPMIDID_VERSION;
 
-const char *CMDLINE_HELP =
-    ""
-    "Real Time Protocol Music Instrument Digital Interface Daemon v{}\n"
-    "(C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>\n"
-    "Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.\n"
-    "\n"
-    "rtpmidi allows to use rtpmidi protocol to communicate with MIDI "
-    "equipement \n"
-    "using network equipiment. Recomended use is via ethernet cabling as with "
-    "WiFi\n"
-    "there is a lot more latency. Internet use has not been tested, but may "
-    "also\n"
-    "deliver high latency.\n"
-    "\n"
-    "Options:\n";
+// NOLINTNEXTLINE (cppcoreguidelines-pro-bounds-pointer-arithmetic)
+const char *const CMDLINE_HELP = 1 + R"(
+Real Time Protocol Music Instrument Digital Interface Daemon v{}
+(C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
+Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.
+
+rtpmidi allows to use rtpmidi protocol to communicate with MIDI 
+equipement using network equipiment. Recomended use is via ethernet 
+cabling as with WiFi there is a lot more latency and a lot of jitter. 
+Internet use has not been tested, but may also deliver high latency
+and jitter.
+
+Options:
+)";
 
 struct argument_t {
   std::string arg;
@@ -58,6 +60,7 @@ struct argument_t {
   std::function<void(const std::string &)> fn;
   bool has_second_argument = true;
 
+  // NOLINTNEXTLINE
   argument_t(const std::string &arg, const std::string &comment,
              std::function<void(const std::string &)> fn,
              bool has_second_argument = true)
@@ -67,10 +70,10 @@ struct argument_t {
 
 bool str_to_bool(const std::string &value) {
   // conver t value to lowercase, so True becomes true
-  std::string value_lowercase = value;
-  for (auto &c : value_lowercase) {
-    c = std::tolower(c);
-  }
+  std::string value_lowercase;
+  std::transform(value.begin(), value.end(), value_lowercase.begin(),
+                 ::tolower);
+
   if (value_lowercase == "true") {
     return true;
   }
@@ -81,15 +84,15 @@ bool str_to_bool(const std::string &value) {
 }
 
 static std::string get_hostname() {
-  char hostname[256];
-  gethostname(hostname, std::size(hostname));
-  return hostname;
+  constexpr auto MAX_HOSTNAME_SIZE = 256;
+  std::array<char, MAX_HOSTNAME_SIZE> hostname{0};
+  hostname.fill(0);
+  ::gethostname(hostname.data(), std::size(hostname));
+  return std::string(hostname.data());
 }
 
-// Parses the argv and sets up the settings_t struct
-// for parameters that affect a alsa and rtpmidi announcements, it changes the
-// first announced, and creates it if needed
-void parse_argv(int argc, char **argv) {
+// Setup the argument options
+static std::vector<argument_t> setup_arguments() {
   std::vector<argument_t> arguments;
 
   auto help = [&] {
@@ -164,14 +167,19 @@ void parse_argv(int argc, char **argv) {
         exit(0);
       },
       false);
+  return arguments;
+}
 
-  auto arg = std::string(argv[0]);
+// Parses the argv and sets up the settings_t struct
+// for parameters that affect a alsa and rtpmidi announcements, it changes the
+// first announced, and creates it if needed
+void parse_argv(const std::vector<std::string> &argv) {
+  std::vector<argument_t> arguments = setup_arguments();
   // Necesary for two part arguments
   argument_t *current_argument = nullptr;
 
-  for (int cargc = 1; cargc < argc; cargc++) {
+  for (auto &key : argv) {
     auto parsed = false;
-    auto key = std::string(argv[cargc]);
     if (current_argument && current_argument->has_second_argument) {
       current_argument->fn(key);
       parsed = true;
@@ -201,8 +209,7 @@ void parse_argv(int argc, char **argv) {
     }
     // If none parsed, error
     if (!parsed) {
-      ERROR("Unknown argument: {}", key);
-      help();
+      ERROR("Unknown argument: {}. Try help with --help.", key);
       exit(1);
     }
   }

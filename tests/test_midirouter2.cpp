@@ -34,15 +34,17 @@
 using namespace std::chrono_literals;
 
 namespace rtpmididns {
+// NOLINTNEXTLINE
 settings_t settings;
+// NOLINTNEXTLINE
 std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
-const char *VERSION = "TEST";
+const char *VERSION = "TEST"; // NOLINT
 } // namespace rtpmididns
 
 void test_send_receive_messages() {
   // Setup a similar environment as when running rtpmidid
   auto router = std::make_shared<rtpmididns::midirouter_t>();
-  uint8_t test_client_id;
+  uint8_t test_client_id = 0;
   {
     rtpmididns::settings.alsa_name = "rtpmidid-test";
     // rtpmididns::settings.rtpmidid_name = "rtpmidid-test";
@@ -253,6 +255,7 @@ void test_send_receive_messages() {
   DEBUG("END");
 }
 
+// NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_send_receive_messages),

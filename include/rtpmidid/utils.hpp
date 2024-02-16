@@ -16,7 +16,27 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
+#pragma once
+#include <cstdint>
 
 namespace rtpmidid {
 uint32_t rand_u32(void);
-}
+
+// NOLINTBEGIN(cppcoreguidelines-macro-usage,bugprone-macro-parentheses)
+#define NON_COPYABLE(classname)                                                \
+  classname(const classname &) = delete;                                       \
+  classname &operator=(const classname &) = delete;                            \
+  classname(classname &) = delete;                                             \
+  classname &operator=(classname &) = delete;
+
+#define NON_MOVABLE(classname)                                                 \
+  classname(classname &&) = delete;                                            \
+  classname &operator=(classname &&) = delete;
+
+#define NON_COPYABLE_NOR_MOVABLE(classname)                                    \
+  NON_COPYABLE(classname)                                                      \
+  NON_MOVABLE(classname)
+
+// NOLINTEND(cppcoreguidelines-macro-usage,bugprone-macro-parentheses)
+
+} // namespace rtpmidid

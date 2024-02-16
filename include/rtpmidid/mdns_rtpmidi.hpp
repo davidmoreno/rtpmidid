@@ -20,6 +20,7 @@
 #pragma once
 
 #include "rtpmidid/poller.hpp"
+#include "rtpmidid/utils.hpp"
 #include <functional>
 #include <memory>
 #include <string>
@@ -40,11 +41,12 @@ struct announcement_t {
 };
 
 class mdns_rtpmidi_t {
+  NON_COPYABLE_NOR_MOVABLE(mdns_rtpmidi_t)
 public:
   std::unique_ptr<AvahiPoll> poller_adapter;
-  AvahiClient *client;
-  AvahiEntryGroup *group;
-  AvahiServiceBrowser *service_browser;
+  AvahiClient *client = nullptr;
+  AvahiEntryGroup *group = nullptr;
+  AvahiServiceBrowser *service_browser = nullptr;
   std::vector<announcement_t> announcements;
   // name, address, port
   signal_t<const std::string &, const std::string &, const std::string &>
@@ -56,9 +58,6 @@ public:
 
   mdns_rtpmidi_t();
   ~mdns_rtpmidi_t();
-
-  mdns_rtpmidi_t(const mdns_rtpmidi_t &) = delete;
-  mdns_rtpmidi_t &operator=(const mdns_rtpmidi_t &) = delete;
 
   void setup_mdns_browser();
   void announce_all();

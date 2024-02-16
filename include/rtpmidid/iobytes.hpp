@@ -24,9 +24,14 @@
 #include <string_view>
 #include <vector>
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-avoid-magic-numbers)
+
 namespace rtpmidid {
 class io_bytes_reader;
 class io_bytes_writer;
+
+static constexpr uint32_t BYTE_MASK = 0x0FF;
+
 /**
  * @short iobuffer to read and write bin data.
  *
@@ -39,30 +44,24 @@ class io_bytes_writer;
  */
 class io_bytes {
 public:
-  uint8_t *start;
-  uint8_t *end;
-  uint8_t *position;
+  uint8_t *start = nullptr;
+  uint8_t *end = nullptr;
+  uint8_t *position = nullptr;
 
-  io_bytes() {
-    start = nullptr;
-    end = nullptr;
-    position = nullptr;
-  }
+  io_bytes() {}
+  ~io_bytes() = default;
 
-  io_bytes(io_bytes &other) {
-    this->start = other.start;
-    this->end = other.end;
-    this->position = other.position;
-  }
+  io_bytes(io_bytes &other)
+      : start(other.start), end(other.end), position(other.position) {}
   io_bytes(io_bytes_writer &other);
 
-  io_bytes(uint8_t *start, uint32_t size) {
-    this->start = start;
-    this->end = start + size;
-    this->position = start;
-  }
+  io_bytes(uint8_t *start, uint32_t size)
+      : start(start), end(start + size), position(start) {}
+  io_bytes(io_bytes &&other) = delete;
+  io_bytes &operator=(io_bytes &&other) = delete;
+  io_bytes &operator=(const io_bytes &other) = default;
 
-  void check_enough(int nbytes) const {
+  void check_enough(size_t nbytes) const {
     if (position + nbytes > end)
       throw exception("Try to access end of buffer at {}",
                       (position - start) + nbytes);
@@ -95,44 +94,47 @@ public:
   }
 
   void print_hex(bool to_end = true, bool ascii = false) const {
+    constexpr int LINE_SIZE = 16;
+    constexpr int LINE_SIZE_THIRD = LINE_SIZE / 3;
+
     auto data = start;
     auto n = (to_end ? end : position) - data;
-    printf("\033[1;34m");
+    puts("\033[1;34m");
     for (int i = 0; i < n; i++) {
       if (data == position) {
-        printf("\033[0m");
+        puts("\033[0m");
       }
-      printf("%02X ", (*data) & 0x0FF);
-      if (i % 4 == 3)
-        printf(" ");
-      if (i % 16 == 15)
-        printf("\n");
+      // NOLINTNEXTLINE
+      printf("%02X ", (*data) & BYTE_MASK);
+      if (i % LINE_SIZE_THIRD == (LINE_SIZE_THIRD - 1))
+        puts(" ");
+      if (i % LINE_SIZE == (LINE_SIZE - 1))
+        puts("\n");
       ++data;
     }
-    printf("\n");
+    puts("\n");
     if (!ascii)
       return;
-    printf("\033[1;34m");
+    puts("\033[1;34m");
     data = start;
     for (int i = 0; i < n; i++) {
       if (data == position) {
-        printf("\033[0m");
+        puts("\033[0m");
       }
       if (isprint(*data)) {
-        printf("%c", *data);
+        putc(*data, ::stdout);
       } else {
-        printf(".");
+        puts(".");
       }
       if (i % 4 == 3)
-        printf(" ");
-      if (i % 16 == 15)
-        printf("\n");
+        puts(" ");
+      if (i % LINE_SIZE == (LINE_SIZE - 1))
+        puts("\n");
       ++data;
     }
-    printf("\n");
+    puts("\n");
   }
 };
-
 class io_bytes_writer : public io_bytes {
 public:
   io_bytes_writer(io_bytes &other) {
@@ -148,32 +150,32 @@ public:
 
   void write_uint8(uint16_t n) {
     check_enough(1);
-    *position++ = (n & 0x0FF);
+    *position++ = (n & BYTE_MASK);
   }
-  void write_uint16(uint16_t n) {
+  void write_uint16(uint16_t n) { // NOLINT
     check_enough(2);
-    *position++ = (n >> 8) & 0x0FF;
-    *position++ = (n & 0x0FF);
+    *position++ = (n >> 8) & BYTE_MASK;
+    *position++ = (n & BYTE_MASK);
   }
 
   void write_uint32(uint32_t n) {
     check_enough(4);
-    *position++ = (n >> 24) & 0x0FF;
-    *position++ = (n >> 16) & 0x0FF;
-    *position++ = (n >> 8) & 0x0FF;
-    *position++ = (n & 0x0FF);
+    *position++ = (n >> 24) & BYTE_MASK;
+    *position++ = (n >> 16) & BYTE_MASK;
+    *position++ = (n >> 8) & BYTE_MASK;
+    *position++ = (n & BYTE_MASK);
   }
   void write_uint64(uint64_t n) {
     check_enough(8);
-    *position++ = (n >> 56) & 0x0FF;
-    *position++ = (n >> 48) & 0x0FF;
-    *position++ = (n >> 40) & 0x0FF;
-    *position++ = (n >> 32) & 0x0FF;
+    *position++ = (n >> 56) & BYTE_MASK;
+    *position++ = (n >> 48) & BYTE_MASK;
+    *position++ = (n >> 40) & BYTE_MASK;
+    *position++ = (n >> 32) & BYTE_MASK;
 
-    *position++ = (n >> 24) & 0x0FF;
-    *position++ = (n >> 16) & 0x0FF;
-    *position++ = (n >> 8) & 0x0FF;
-    *position++ = (n & 0x0FF);
+    *position++ = (n >> 24) & BYTE_MASK;
+    *position++ = (n >> 16) & BYTE_MASK;
+    *position++ = (n >> 8) & BYTE_MASK;
+    *position++ = (n & BYTE_MASK);
   }
 
   void write_str0(const std::string_view &view) {
@@ -189,7 +191,7 @@ public:
     copy_from(from, from.end - from.position);
   }
 
-  void copy_from_and_consume(io_bytes &from, uint32_t count) {
+  void copy_from_and_consume(io_bytes &from, size_t count) {
     check_enough(count);
     from.check_enough(count);
     memcpy(position, from.position, count);
@@ -199,14 +201,14 @@ public:
 
   void copy_from(const io_bytes &from) { copy_from(from, from.size()); }
 
-  void copy_from(const io_bytes &from, uint32_t count) {
+  void copy_from(const io_bytes &from, size_t count) {
     check_enough(count);
     from.check_enough(count);
     memcpy(position, from.position, count);
     position += count;
   }
 
-  void copy_from(uint8_t *data, uint32_t count) {
+  void copy_from(uint8_t *data, size_t count) {
     check_enough(count);
     memcpy(position, data, count);
     position += count;
@@ -225,6 +227,7 @@ public:
     end = other.position;
     position = other.start;
   }
+  // NOLINTNEXTLINE
   io_bytes_reader(const io_bytes_reader &other) {
     start = other.start;
     end = other.end;
@@ -235,6 +238,8 @@ public:
     position = data;
     end = start + size;
   }
+  io_bytes_reader(io_bytes_reader &&other) = delete;
+  io_bytes_reader &operator=(io_bytes_reader &&other) = delete;
 
   // Convert a writer into a reader, seeks to the start automatically, can read
   // up to the write point.
@@ -243,6 +248,9 @@ public:
     end = convert.position;
     position = convert.start;
   }
+  ~io_bytes_reader() = default;
+
+  io_bytes_reader &operator=(const io_bytes_reader &other) = default;
 
   uint32_t read_uint32() {
     check_enough(4);
@@ -284,47 +292,66 @@ public:
     }
     // Normally I stopped because of *position == 0.. But I might have got out
     // of range If I'm on range, construct the std::string up tp pos
-    std::string_view ret((char *)strstart, size_t(position - strstart));
+    // NOLINTNEXTLINE
+    std::string_view ret(reinterpret_cast<char *>(strstart),
+                         size_t(position - strstart));
     position++;
     return ret;
   }
 };
 
+// NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)
+
 template <size_t Size> class io_bytes_static : public io_bytes {
 public:
   uint8_t data[Size];
-  io_bytes_static() {
-    start = data;
-    position = data;
-    end = data + Size;
-  }
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
+  io_bytes_static() : io_bytes(data, Size) {}
 };
 
 template <size_t Size> class io_bytes_writer_static : public io_bytes_writer {
 public:
   uint8_t data[Size];
-  io_bytes_writer_static() : io_bytes_writer(&data[0], Size) {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
+  io_bytes_writer_static() : io_bytes_writer(data, Size) {
     memset(data, 0, Size);
   }
 };
+
+// NOLINTEND(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)
 
 class io_bytes_managed : public io_bytes {
 public:
   std::vector<uint8_t> data;
 
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
   io_bytes_managed(int size) : data(size) {
     start = data.data();
     end = data.data() + size;
     position = start;
   }
+  io_bytes_managed(const io_bytes_managed &) = delete;
 
-  io_bytes_managed(io_bytes_managed &&other) {
-    data = std::move(other.data);
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
+  io_bytes_managed(io_bytes_managed &&other) noexcept
+      : data(std::move(other.data)) {
     start = other.start;
     end = other.end;
     position = other.position;
   }
+  io_bytes_managed &operator=(io_bytes_managed &&other) noexcept {
+    data = std::move(other.data);
+    start = other.start;
+    end = other.end;
+    position = other.position;
+    return *this;
+  }
+  ~io_bytes_managed() = default;
+
+  io_bytes_managed &operator=(const io_bytes_managed &other) = delete;
 };
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-avoid-magic-numbers)
 
 } // namespace rtpmidid
 

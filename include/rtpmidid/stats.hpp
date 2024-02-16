@@ -37,12 +37,12 @@ namespace rtpmidid {
 class stats_t {
 public:
   struct stat_t {
-    std::chrono::nanoseconds latency;
-    std::chrono::system_clock::time_point timestamp;
+    std::chrono::nanoseconds latency{};
+    std::chrono::system_clock::time_point timestamp{};
   };
   struct average_and_stddev_t {
-    std::chrono::nanoseconds average;
-    std::chrono::nanoseconds stddev;
+    std::chrono::nanoseconds average{};
+    std::chrono::nanoseconds stddev{};
   };
 
 private:
@@ -53,8 +53,9 @@ private:
   std::chrono::seconds item_time;
 
 public:
-  stats_t(int size = 20,
-          std::chrono::seconds item_time_ = std::chrono::seconds(120));
+  stats_t(int size = 20,                                              // NOLNT
+          std::chrono::seconds item_time_ = std::chrono::seconds(120) // NOLINT
+  );
 
   void add_stat(std::chrono::nanoseconds latency);
   void loop_stats(std::function<void(stat_t const &)> const &f) const;

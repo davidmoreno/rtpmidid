@@ -15,10 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+#pragma once
 
 #include "json_fwd.hpp"
 #include "rtpmidid/rtppeer.hpp"
 
 namespace rtpmididns {
 json_t peer_status(rtpmidid::rtppeer_t &peer);
-};
+}; // namespace rtpmididns

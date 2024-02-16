@@ -20,6 +20,7 @@
 #pragma once
 
 #include "logger.hpp"
+#include "utils.hpp"
 #include <assert.h>
 #include <cstdint>
 #include <functional>
@@ -36,10 +37,14 @@ template <typename... Args> class signal_t {
   typedef std::map<int, std::function<void(Args...)>> VT;
 
 public:
-  signal_t() {
+  signal_t() : slots(std::make_shared<VT>()) {
     DEBUG0("{}::signal_t()", (void *)this);
-    slots = std::make_shared<VT>();
   }
+  signal_t(signal_t<Args...> &&other) = delete;
+  signal_t &operator=(signal_t<Args...> &&other) = delete;
+  signal_t(const signal_t<Args...> &other) = delete;
+  signal_t &operator=(const signal_t<Args...> &other) = delete;
+
   ~signal_t() {
     DEBUG0("{}::~signal_t()", (void *)this);
     disconnect_all();
@@ -119,7 +124,7 @@ private:
   int max_id = 1;
   std::shared_ptr<VT> slots;
 
-  std::map<int, connection_t<Args...> *> connections;
+  std::map<int, connection_t<Args...> *> connections{};
 };
 
 template <typename... Args> class connection_t {
@@ -135,10 +140,9 @@ public:
     signal->replace_connection_ptr(id, this);
   }
   connection_t(connection_t<Args...> &other) = delete;
-  connection_t(connection_t<Args...> &&other) {
+  connection_t(connection_t<Args...> &&other) noexcept
+      : signal(other.signal), id(other.id) {
     DEBUG0("{}::connection_t({})", (void *)this, (void *)&other);
-    signal = other.signal;
-    id = other.id;
     if (signal)
       signal->replace_connection_ptr(id, this);
 
@@ -150,8 +154,11 @@ public:
     DEBUG0("{}::~connection_t()", (void *)this);
     disconnect();
   }
+  connection_t(const connection_t<Args...> &) = delete;
+  connection_t<Args...> &operator=(const connection_t<Args...> &) = delete;
+  connection_t<Args...> &operator=(connection_t<Args...> &other) = delete;
 
-  void operator=(connection_t<Args...> &&other) {
+  connection_t &operator=(connection_t<Args...> &&other) noexcept {
     DEBUG0("{}::=({})", (void *)this, (void *)&other);
     disconnect();
     signal = other.signal;
@@ -160,6 +167,8 @@ public:
 
     other.signal = nullptr;
     other.id = 0;
+
+    return *this;
   }
 
   void disconnect() {

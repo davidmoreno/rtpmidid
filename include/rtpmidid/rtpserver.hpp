@@ -26,10 +26,11 @@
 #include <map>
 #include <memory>
 
-struct sockaddr_in6;
+struct sockaddr_storage;
 
 namespace rtpmidid {
 class rtpserver_t {
+  NON_COPYABLE_NOR_MOVABLE(rtpserver_t)
 public:
   // Callbacks to call when new connections
   signal_t<std::shared_ptr<rtppeer_t>> connected_event;
@@ -53,16 +54,17 @@ public:
   std::vector<peer_data_t> peers;
 
   std::string name;
-  int midi_socket;
-  int control_socket;
+  int midi_socket = -1;
+  int control_socket = -1;
 
-  uint16_t midi_port;
-  uint16_t control_port;
+  uint16_t midi_port = 0;
+  uint16_t control_port = 0;
 
   poller_t::listener_t midi_poller;
   poller_t::listener_t control_poller;
 
   rtpserver_t(std::string name, const std::string &port);
+  // NOLINTNEXTLINE(bugprone-exception-escape)
   ~rtpserver_t();
 
   // Returns the peer for that packet, or nullptr
@@ -71,7 +73,8 @@ public:
   std::shared_ptr<rtppeer_t> get_peer_by_initiator_id(uint32_t initiator_id);
   std::shared_ptr<rtppeer_t> get_peer_by_ssrc(uint32_t ssrc);
 
-  void create_peer_from(io_bytes_reader &&buffer, struct sockaddr_in6 *cliaddr,
+  void create_peer_from(io_bytes_reader &&buffer,
+                        struct sockaddr_storage *cliaddr,
                         rtppeer_t::port_e port);
 
   void send_midi_to_all_peers(const io_bytes_reader &bufer);
@@ -81,6 +84,6 @@ public:
 
   void data_ready(rtppeer_t::port_e port);
   void sendto(const io_bytes_reader &b, rtppeer_t::port_e port,
-              struct sockaddr_in6 *, int remote_base_port);
+              struct sockaddr_storage *, int remote_base_port);
 };
 } // namespace rtpmidid

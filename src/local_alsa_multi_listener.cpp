@@ -61,7 +61,7 @@ local_alsa_multi_listener_t::new_alsa_connection(const aseq_t::port_t &port,
   DEBUG("New connection to network peer {}, from a local connection to {}",
         name, this->name);
 
-  int networkpeer_id = -1;
+  midipeer_id_t networkpeer_id = MIDIPEER_ID_INVALID;
   router->for_each_peer<network_rtpmidi_listener_t>(
       [this, &name, &networkpeer_id](auto *peer) {
         if (peer->name_ == name) {
@@ -72,7 +72,7 @@ local_alsa_multi_listener_t::new_alsa_connection(const aseq_t::port_t &port,
         }
       });
 
-  if (networkpeer_id < 0) {
+  if (networkpeer_id == MIDIPEER_ID_INVALID) {
     std::shared_ptr<midipeer_t> networkpeer =
         make_network_rtpmidi_listener(name);
     networkpeer_id = router->add_peer(networkpeer);

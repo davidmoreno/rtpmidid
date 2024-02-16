@@ -27,25 +27,23 @@ class exception : public std::exception {
   std::string msg;
 
 public:
-  template <typename... Args> exception(Args... args) {
-    msg = fmt::format(args...);
-  }
-  const char *what() const noexcept { return msg.c_str(); }
+  template <typename... Args>
+  exception(Args... args) : msg(fmt::format(args...)) {}
+  const char *what() const noexcept override { return msg.c_str(); }
 };
 
 class not_implemented : public std::exception {
 public:
-  const char *what() const noexcept { return "Not Implemented"; }
+  const char *what() const noexcept override { return "Not Implemented"; }
 };
 class network_exception : public std::exception {
   std::string str;
+  int errno_ = 0;
 
 public:
-  int errno_;
-  network_exception(int errno_) {
-    this->errno_ = errno_;
-    this->str = fmt::format("Network error {} ({})", strerror(errno_), errno_);
+  network_exception(int _errno) : errno_(_errno) {
+    str = fmt::format("Network error {} ({})", strerror(errno_), errno_);
   }
-  const char *what() const noexcept { return str.c_str(); }
+  const char *what() const noexcept override { return str.c_str(); }
 };
 } // namespace rtpmidid

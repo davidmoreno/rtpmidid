@@ -25,6 +25,7 @@
 #include <unistd.h>
 
 namespace logger {
+// NOLINTNEXLINE: A lot of rules are broken here, but I need it like this
 logger __logger;
 
 enum Color {
@@ -36,6 +37,8 @@ enum Color {
   ORANGE = 36,
   WHITE = 37,
 };
+
+// NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)
 
 const char *color(const char *str, Color color, bool highlight = false) {
   int hl = highlight ? 1 : 0;
@@ -97,7 +100,11 @@ void logger::log(const char *filename, int lineno, LogLevel loglevel,
                               lineno, msg);
     *n.out = '\0';
   }
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
   ::fprintf(stderr, "%s", buffer);
 }
 void logger::flush() { ::fflush(stderr); }
+
+// NOLINTEND(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)
+
 } // namespace logger

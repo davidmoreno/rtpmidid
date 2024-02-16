@@ -19,6 +19,7 @@
 
 #pragma once
 #include "logger.hpp"
+#include "utils.hpp"
 #include <chrono>
 #include <ctime>
 #include <functional>
@@ -30,6 +31,7 @@
 #define DEBUG0(...)
 
 namespace rtpmidid {
+class poller_private_data_t;
 /**
  * Simplified fd poller
  *
@@ -37,7 +39,8 @@ namespace rtpmidid {
  * will retrigger.
  */
 class poller_t {
-  void *private_data;
+  NON_COPYABLE_NOR_MOVABLE(poller_t)
+  std::unique_ptr<poller_private_data_t> private_data;
 
 public:
   class timer_t;
@@ -60,6 +63,8 @@ public:
   [[nodiscard]] listener_t add_fd_out(int fd, std::function<void(int)> event_f);
   [[nodiscard]] listener_t add_fd_inout(int fd,
                                         std::function<void(int)> event_f);
+
+  // NOLINTNEXTLINE
   void __remove_fd(int fd);
 
   void wait(std::optional<std::chrono::milliseconds> wait_ms = {});
@@ -68,42 +73,40 @@ public:
   bool is_open();
 };
 // Singleton for all events on the system.
-extern poller_t poller;
+extern poller_t poller; // NOLINT
 
 class poller_t::timer_t {
+  NON_COPYABLE(timer_t)
 public:
   int id;
 
   timer_t();
   timer_t(int id_);
-  timer_t(timer_t &&);
+  timer_t(timer_t &&) noexcept;
   ~timer_t();
-  timer_t &operator=(timer_t &&other);
+  timer_t &operator=(timer_t &&other) noexcept;
   void disable();
-
-  // No copying
-  timer_t(const timer_t &) = delete;
 };
 
 class poller_t::listener_t {
+  NON_COPYABLE(listener_t)
 public:
   int fd = -1;
 
   listener_t(int fd_) : fd(fd_) { DEBUG0("Create from fd {}", fd); };
-  listener_t() : fd(-1) { DEBUG0("Create without fd {}", fd); };
-  listener_t(listener_t &&other) {
+  listener_t() { DEBUG0("Create without fd {}", fd); };
+  listener_t(listener_t &&other) noexcept : fd(other.fd) {
     DEBUG0("Create from other {}", other.fd);
-    fd = other.fd;
     other.fd = -1;
   };
+  // NOLINTNEXTLINE(bugprone-exception-escape)
   ~listener_t() {
     if (fd >= 0)
       poller.__remove_fd(fd);
   }
 
-  listener_t &operator=(listener_t &other) = delete;
-  listener_t &operator=(const listener_t &other) = delete;
-  listener_t &operator=(listener_t &&other) {
+  // NOLINTNEXTLINE(bugprone-exception-escape)
+  listener_t &operator=(listener_t &&other) noexcept {
     if (fd >= 0)
       poller.__remove_fd(fd);
     fd = other.fd;

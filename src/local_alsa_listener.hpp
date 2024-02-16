@@ -22,6 +22,7 @@
 #include "midirouter.hpp"
 #include "rtpmidid/rtpclient.hpp"
 #include "rtpmidid/signal.hpp"
+#include "rtpmidid/utils.hpp"
 
 namespace rtpmididns {
 
@@ -36,6 +37,8 @@ namespace rtpmididns {
  * manually adding remote rtpmidi ports.
  */
 class local_alsa_listener_t : public midipeer_t {
+  NON_COPYABLE_NOR_MOVABLE(local_alsa_listener_t);
+
 public:
   std::string remote_name;
   std::string local_name; // This si the name of the port that connected to us
@@ -62,7 +65,7 @@ public:
       disconnect_connection;
 
   local_alsa_listener_t(const std::string &name, const std::string &hostname,
-                      const std::string &port, std::shared_ptr<aseq_t> aseq);
+                        const std::string &port, std::shared_ptr<aseq_t> aseq);
   ~local_alsa_listener_t() override;
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;

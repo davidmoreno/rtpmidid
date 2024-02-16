@@ -19,12 +19,15 @@
 #pragma once
 #include "aseq.hpp"
 #include "midipeer.hpp"
+#include "rtpmidid/utils.hpp"
 
 namespace rtpmididns {
 /**
  * @short ALSA port that just receives data and send to another midipeer_t
  */
 class local_alsa_peer_t : public midipeer_t {
+  NON_COPYABLE_NOR_MOVABLE(local_alsa_peer_t);
+
 public:
   uint8_t port;
   std::shared_ptr<aseq_t> seq;
@@ -38,8 +41,8 @@ public:
   rtpmidid::connection_t<snd_seq_event_t *> midi_connection;
 
   local_alsa_peer_t(const std::string &name, std::shared_ptr<aseq_t> seq);
-  virtual ~local_alsa_peer_t();
+  ~local_alsa_peer_t() override;
   json_t status() override;
-  virtual void send_midi(midipeer_id_t from, const mididata_t &) override;
+  void send_midi(midipeer_id_t from, const mididata_t &) override;
 };
 } // namespace rtpmididns
