@@ -1,6 +1,8 @@
-add_executable(
-  rtpmidid2-daemon  
-  main.cpp
+# set files for the static library
+add_library(
+  rtpmidid2-static
+  STATIC
+
   aseq.cpp
   argv.cpp
   ini.cpp
@@ -23,6 +25,13 @@ add_executable(
   network_rtpmidi_multi_listener.cpp
   network_rtpmidi_peer.cpp
 )
+
+add_executable(
+  rtpmidid2-daemon  
+  main.cpp
+)
+
+target_link_libraries(rtpmidid2-daemon rtpmidid2-static)
 
 target_link_libraries(rtpmidid2-daemon ${AVAHI_LIBRARIES})
 target_include_directories(rtpmidid2-daemon PUBLIC ${AVAHI_INCLUDE_DIRS})

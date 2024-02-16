@@ -34,9 +34,9 @@ add_test(NAME test_misc COMMAND test_poller)
 # target_compile_options(test_rtpmidid PUBLIC ${ALSA_CFLAGS_OTHER})
 
 add_executable(test_signals
-    test_signals.cpp ../lib/logger.cpp
+    test_signals.cpp
 )
-target_link_libraries(test_signals -lfmt -pthread)
+target_link_libraries(test_signals -lfmt -pthread rtpmidid-shared)
 add_test(NAME test_signals COMMAND test_signals)
 
 
@@ -46,12 +46,8 @@ add_test(NAME test_signals COMMAND test_signals)
 
 add_executable(test_midirouter
     test_midirouter.cpp test_utils.cpp 
-    ../src/midirouter.cpp 
-    ../src/local_alsa_multi_listener.cpp 
-    ../src/aseq.cpp
-    ../src/midipeer.cpp
 )
-target_link_libraries(test_midirouter -lfmt -pthread rtpmidid-shared)
+target_link_libraries(test_midirouter -lfmt -pthread rtpmidid-shared rtpmidid2-static)
 add_test(NAME test_midirouter COMMAND test_midirouter)
 target_link_libraries(test_midirouter ${ALSA_LIBRARIES})
 target_include_directories(test_midirouter PUBLIC ${ALSA_INCLUDE_DIRS})
@@ -63,24 +59,8 @@ target_compile_options(test_midirouter PUBLIC ${ALSA_CFLAGS_OTHER})
 
 add_executable(test_midirouter2
     test_midirouter2.cpp test_utils.cpp 
-    
-    ../src/aseq.cpp
-    ../src/control_socket.cpp
-    ../src/stringpp.cpp
-    ../src/factory.cpp
-    ../src/midirouter.cpp
-    ../src/midipeer.cpp
-    ../src/rtpmidiremotehandler.cpp
-    ../src/utils.cpp
-    ../src/local_alsa_listener.cpp
-    ../src/local_alsa_multi_listener.cpp
-    ../src/local_alsa_peer.cpp
-    ../src/network_rtpmidi_client.cpp
-    ../src/network_rtpmidi_listener.cpp
-    ../src/network_rtpmidi_multi_listener.cpp
-    ../src/network_rtpmidi_peer.cpp
   )
-target_link_libraries(test_midirouter2 -lfmt -pthread rtpmidid-shared)
+target_link_libraries(test_midirouter2 -lfmt -pthread rtpmidid-shared rtpmidid2-static)
 add_test(NAME test_midirouter2 COMMAND test_midirouter2)
 target_link_libraries(test_midirouter2 ${ALSA_LIBRARIES})
 target_include_directories(test_midirouter2 PUBLIC ${ALSA_INCLUDE_DIRS})

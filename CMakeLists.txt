@@ -1,12 +1,23 @@
+cmake_minimum_required(VERSION 3.27)
 project(rtpmidid)
-cmake_minimum_required(VERSION 3.2)
+
+# Add option to enable/disable tests
+option(ENABLE_TESTS "Enable tests" ON)
+# option to enable precompiled headers
+option(ENABLE_PCH "Enable precompiled headers" ON)
+# option to easy use clang compiler
+option(USE_CLANG "Use clang compiler" OFF)
+
+
+if (USE_CLANG)
+  set (CMAKE_CXX_COMPILER "clang++")
+  set (CMAKE_C_COMPILER "clang")
+  message(STATUS "Using clang compiler")
+endif()
+
 add_definitions("-std=gnu++17 -Wall -Werror")
-# set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fstack-protector-strong -fsanitize=address")
-# set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fstack-protector-strong")
 set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer")
-
 message(STATUS "Build type ${CMAKE_BUILD_TYPE}")
 
 # if debug build add -O0
@@ -16,12 +27,24 @@ else()
   add_definitions ("-O2")
 endif()
 
+# # if mold installed, use it
+# find_program(MOLD mold)
+# if (MOLD)
+#   message(STATUS "Using mold linker")
+#   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=lld")
+# else()
+#   find_program(LLD lld)
+#   if (LLD)
+#     message(STATUS "Using lld linker")
+#     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=lld")
+#   else()
+#     message(STATUS "Using default linker. Other options are mold and lld.")
+#   endif()
+# endif()
 
 
-# Add option to enable/disable tests
-option(ENABLE_TESTS "Enable tests" ON)
-# option to enable precompiled headers
-option(ENABLE_PCH "Enable precompiled headers" ON)
+
+
 
 if (ENABLE_PCH)
   # show a log message
