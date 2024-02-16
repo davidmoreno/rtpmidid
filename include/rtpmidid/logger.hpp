@@ -18,6 +18,7 @@
  */
 
 #pragma once
+#include "utils.hpp"
 #include <array>
 #include <fmt/format.h>
 #include <time.h>
@@ -87,16 +88,13 @@ enum LogLevel {
 
 class logger {
 private:
+  NON_COPYABLE_NOR_MOVABLE(logger);
+
   bool is_a_terminal;
 
 public:
   logger();
   ~logger();
-
-  logger(const logger &) = delete;
-  logger(logger &&) = delete;
-  logger &operator=(const logger &) = delete;
-  logger &operator=(logger &&) = delete;
 
   void log(const char *filename, int lineno, LogLevel loglevel,
            const char *msg);
@@ -118,7 +116,7 @@ inline void log(const char *fullpath, int lineno, LogLevel loglevel,
     --filename; // NOLINT
   ++filename;   // NOLINT
 
-  auto n = fmt::format_to_n(buffer.data(), sizeof(buffer), args...);
+  auto n = fmt::format_to_n(buffer.data(), buffer.size(), args...);
   *n.out = '\0';
 
   __logger.log(filename, lineno, loglevel, buffer.data());
