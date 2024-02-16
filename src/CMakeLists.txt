@@ -25,6 +25,7 @@ add_library(
   network_rtpmidi_multi_listener.cpp
   network_rtpmidi_peer.cpp
 )
+add_definitions(-D_REENTRANT)
 
 add_executable(
   rtpmidid2-daemon  
@@ -46,7 +47,8 @@ target_include_directories(rtpmidid2-daemon PUBLIC ${ALSA_INCLUDE_DIRS})
 target_compile_options(rtpmidid2-daemon PUBLIC ${ALSA_CFLAGS_OTHER})
 
 if(ENABLE_PCH)
-  target_precompile_headers(rtpmidid2-daemon PUBLIC precompile.hpp)
+  target_precompile_headers(rtpmidid2-static PRIVATE precompile.hpp)
+  target_precompile_headers(rtpmidid2-daemon REUSE_FROM rtpmidid2-static)
 endif()
 
 target_link_libraries(rtpmidid2-daemon rtpmidid-static)
