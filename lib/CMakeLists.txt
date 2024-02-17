@@ -25,7 +25,6 @@ if(ENABLE_PCH)
 endif(ENABLE_PCH)
 
 
-target_precompile_headers(rtpmidid-static PUBLIC precompile.hpp)
 
 #
 # Shared library
