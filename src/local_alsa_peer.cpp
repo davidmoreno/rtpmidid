@@ -49,33 +49,45 @@ local_alsa_peer_t::local_alsa_peer_t(const std::string &name_,
 void local_alsa_peer_t::initialize() {
   DEBUG("Listening to conn {}", conn.to_string());
   midi_connection = seq->midi_event[conn.get_my_port().port].connect(
-      [this](snd_seq_event *ev) {
-        //        DEBUG("MIDI EVENT RECEIVED, port {}", conn.to_string());
-        auto &source = ev->source;
-        auto &dest = ev->dest;
-        //      DEBUG("Received event {{{}:{} -> {}:{}}}, type: {}",
-        //      source.client,
-        // source.port, dest.client, dest.port, ev->type);
+      [this](snd_seq_event *ev) { alsaseq_event(ev); });
+}
 
-        if (auto their_port = conn.get_their_port(); !their_port.is_empty()) {
-          auto ev_from = aseq_t::port_t{source.client, source.port};
-          if (ev_from != their_port)
-            return;
-        }
-        if (auto my_port = conn.get_my_port(); !my_port.is_empty()) {
-          auto ev_to = aseq_t::port_t{dest.client, dest.port};
-          if (ev_to != my_port)
-            return;
-        }
+void local_alsa_peer_t::alsaseq_event(snd_seq_event *ev) {
+  //        DEBUG("MIDI EVENT RECEIVED, port {}", conn.to_string());
+  auto &source = ev->source;
+  auto &dest = ev->dest;
+  if (router->debug) {
+    DEBUG("Listening events with this source {} and dest {}", conn.from,
+          conn.to);
+    DEBUG("Received event {{{}:{} -> {}:{}}}, type: {}", source.client,
+          source.port, dest.client, dest.port, ev->type);
+  }
 
-        //    DEBUG("For me!");
+  if (auto their_port = conn.get_their_port(); !their_port.is_empty()) {
+    auto ev_from = aseq_t::port_t{source.client, source.port};
+    if (ev_from != their_port) {
+      if (router->debug)
+        DEBUG("Not for me! {} != {}", ev_from.to_string(),
+              their_port.to_string());
+      return;
+    }
+  }
+  if (auto my_port = conn.get_my_port(); !my_port.is_empty()) {
+    auto ev_to = aseq_t::port_t{dest.client, dest.port};
+    if (ev_to != my_port) {
+      if (router->debug)
+        DEBUG("Not for me! {} != {}", ev_to.to_string(), my_port.to_string());
+      return;
+    }
+  }
 
-        rtpmidid::io_bytes_static<1024> data;
-        auto datawriter = rtpmidid::io_bytes_writer(data);
-        mididata_decoder.ev_to_mididata(ev, datawriter);
-        auto mididata = mididata_t(datawriter);
-        router->send_midi(peer_id, mididata);
-      });
+  //    DEBUG("For me!");
+
+  rtpmidid::io_bytes_static<1024> data;
+  auto datawriter = rtpmidid::io_bytes_writer(data);
+  mididata_decoder.ev_to_mididata(ev, datawriter);
+  auto mididata = mididata_t(datawriter);
+  router->send_midi(peer_id, mididata);
 }
 
 local_alsa_peer_t::~local_alsa_peer_t() {

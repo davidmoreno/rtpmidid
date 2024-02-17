@@ -54,20 +54,22 @@ uint32_t midirouter_t::add_peer(std::shared_ptr<midipeer_t> peer) {
   return peer_id;
 }
 
-std::shared_ptr<midipeer_t> midirouter_t::get_peer_by_id(peer_id_t peer_id) {
-  auto peer = peers.find(peer_id);
-  if (peer != peers.end()) {
-    return peer->second.peer;
-  }
-  return nullptr;
-}
-
 peerconnection_t *midirouter_t::get_peerdata_by_id(peer_id_t peer_id) {
   auto peer = peers.find(peer_id);
   if (peer != peers.end()) {
     return &peer->second;
   }
   return nullptr;
+}
+
+void midirouter_t::replace_peer(peer_id_t peer_id,
+                                std::shared_ptr<midipeer_t> new_peer) {
+  if (debug) {
+    DEBUG("Replace peer {} with {}", peer_id, new_peer->peer_id);
+  }
+  peers[peer_id].peer->peer_id = new_peer->peer_id;
+  peers[peer_id].peer = new_peer;
+  new_peer->peer_id = peer_id;
 }
 
 void midirouter_t::peer_connection_loop(
@@ -81,7 +83,7 @@ void midirouter_t::peer_connection_loop(
     // DEBUG("Send data {} to {}", from, to);
     auto peer = get_peer_by_id(to);
     if (peer)
-      func(peer);
+      func(peer->shared_from_this());
   }
 }
 
@@ -125,10 +127,16 @@ void midirouter_t::send_midi(peer_id_t from, peer_id_t to,
     return;
   }
   recv_peer->packets_recv++;
+  if (debug) {
+    DEBUG("Send data from {} to {}. {} bytes.", from, to, data.size());
+  }
   recv_peer->send_midi(from, data);
 }
 
 void midirouter_t::connect(peer_id_t from, peer_id_t to) {
+  if (debug) {
+    DEBUG("Connect {} -> {}", from, to);
+  }
   auto send_peer = get_peerdata_by_id(from);
   auto recv_peer = get_peerdata_by_id(to);
   if (!send_peer || !recv_peer) {

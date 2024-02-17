@@ -44,14 +44,25 @@ class midirouter_t : public std::enable_shared_from_this<midirouter_t> {
 public:
   peer_id_t max_id = 1;
   std::unordered_map<uint32_t, peerconnection_t> peers;
+  bool debug = false;
+
   midirouter_t();
   ~midirouter_t();
 
+  void set_debug(bool on) { debug = on; }
+
   peer_id_t add_peer(std::shared_ptr<midipeer_t>);
-  std::shared_ptr<midipeer_t> get_peer_by_id(peer_id_t peer_id);
+  template <typename T = midipeer_t> T *get_peer_by_id(peer_id_t peer_id) {
+    auto peer = peers.find(peer_id);
+    if (peer != peers.end()) {
+      return dynamic_cast<T *>(peer->second.peer.get());
+    }
+    return nullptr;
+  }
   peerconnection_t *get_peerdata_by_id(peer_id_t peer_id);
 
   void remove_peer(peer_id_t);
+  void replace_peer(peer_id_t peer_id, std::shared_ptr<midipeer_t> new_peer);
   void connect(peer_id_t from, peer_id_t to);
   void peer_connection_loop(peer_id_t peer_id,
                             std::function<void(std::shared_ptr<midipeer_t>)>);

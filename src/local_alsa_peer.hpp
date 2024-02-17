@@ -52,6 +52,8 @@ public:
   // To be called after port, seq and name are properly set
   void initialize();
 
+  void alsaseq_event(snd_seq_event *ev);
+
   json_t status() override;
   void send_midi(midipeer_id_t from, const mididata_t &) override;
 };
