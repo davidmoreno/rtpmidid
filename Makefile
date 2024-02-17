@@ -1,10 +1,10 @@
 # Port for test run 
 PORT:=10000
 # Number of jobs for make
-JOBS:=8
+JOBS:=$(shell nproc)
 
 # To easy change to clang, set CXX
-CMAKE_EXTRA_ARGS := -DCMAKE_CXX_COMPILER=${CXX} -DENABLE_PCH=ON
+CMAKE_EXTRA_ARGS := -DCMAKE_CXX_COMPILER=${CXX} -DENABLE_PCH=OFF
 
 
 .PHONY: help
@@ -39,8 +39,8 @@ build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 
 build-dev: 
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug -GNinja $(CMAKE_EXTRA_ARGS)
-	cd build && ninja
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug $(CMAKE_EXTRA_ARGS)
+	cd build && make -j$(JOBS)
 
 build-deb:
 	mkdir -p build
