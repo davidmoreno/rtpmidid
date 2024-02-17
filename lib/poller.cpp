@@ -22,6 +22,7 @@
 #include <unistd.h>
 
 #include <cassert>
+#include <map>
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/poller.hpp>
