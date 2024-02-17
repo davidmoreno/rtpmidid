@@ -7,6 +7,10 @@ option(ENABLE_TESTS "Enable tests" ON)
 option(ENABLE_PCH "Enable precompiled headers" ON)
 # option to easy use clang compiler
 option(USE_CLANG "Use clang compiler" OFF)
+# option to enable mold linker
+option(USE_LINKER_MOLD "Use mold linker" OFF)
+# option to enable lld linker
+option(USE_LINKER_LLD "Use lld linker" OFF)
 
 
 if (USE_CLANG)
@@ -28,19 +32,27 @@ else()
 endif()
 
 # if mold installed, use it
-find_program(MOLD mold)
-if (MOLD)
-  message(STATUS "Using mold linker")
-  add_link_options("-fuse-ld=lld")
-else()
-  find_program(LLD lld)
-  if (LLD)
-    message(STATUS "Using lld linker")
+if (USE_LINKER_MOLD)
+  find_program(MOLD mold)
+  if (MOLD)
+    message(STATUS "Using mold linker")
     add_link_options("-fuse-ld=lld")
   else()
-    message(STATUS "Using default linker. Other options are mold and lld.")
+    message(STATUS "Using default linker")
+  endif()
+else() 
+  if(USE_LINKER_LLD)
+    find_program(LLD lld)
+    if (LLD)
+      message(STATUS "Using lld linker")
+      add_link_options("-fuse-ld=lld")
+    else()
+      message(STATUS "Using default linker")
+    endif()
   endif()
 endif()
+
+
 
 
 
