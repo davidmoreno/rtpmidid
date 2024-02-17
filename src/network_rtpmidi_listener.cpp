@@ -44,6 +44,9 @@ network_rtpmidi_listener_t::network_rtpmidi_listener_t(const std::string &name)
           return;
         }
         // rtpmididns::mididata_t mididata(data.start, data.pos());
+        if (router->debug) {
+          DEBUG("Sending data to router. {} bytes", data.size());
+        }
         router->send_midi(this->peer_id, data);
       });
 }
@@ -54,6 +57,9 @@ network_rtpmidi_listener_t::~network_rtpmidi_listener_t() {
 
 void network_rtpmidi_listener_t::send_midi(midipeer_id_t from,
                                            const mididata_t &mididata) {
+  if (router->debug) {
+    DEBUG("Sending data to network. {} bytes", mididata.size());
+  }
   server.send_midi_to_all_peers(mididata);
 }
 

@@ -98,6 +98,10 @@ local_alsa_peer_t::~local_alsa_peer_t() {
 }
 
 void local_alsa_peer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
+  if (router->debug) {
+    DEBUG("Sending data to ALSA. {} bytes, my conn is: {}", data.size(), conn);
+  }
+
   packets_recv += 1;
   auto readerdata = rtpmidid::io_bytes_reader(data);
   mididata_encoder.mididata_to_evs_f(readerdata, [this](snd_seq_event_t *ev) {
@@ -108,8 +112,15 @@ void local_alsa_peer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
     auto other_port = conn.get_their_port();
     if (!other_port.is_empty()) {
       snd_seq_ev_set_dest(ev, other_port.client, other_port.port);
+    } else {
+      snd_seq_ev_set_subs(ev); // to all subscribers
     }
-    snd_seq_ev_set_subs(ev); // to all subscribers
+
+    if (router->debug) {
+      DEBUG("Sending event {{{}:{} -> {}:{}}}, type: {}", ev->source.client,
+            ev->source.port, ev->dest.client, ev->dest.port, ev->type);
+    }
+
     snd_seq_ev_set_direct(ev);
     snd_seq_event_output_direct(seq->seq, ev);
   });

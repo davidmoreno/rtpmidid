@@ -178,7 +178,7 @@ void poller_wait_until(const std::function<bool(void)> &f,
   auto start0 = start;
   bool fret = f();
   while (pending > 0s && !fret) {
-    DEBUG("WAIT {}ms or F", pending.count());
+    // DEBUG("WAIT {}ms or F", pending.count());
     rtpmidid::poller.wait(pending / 4);
     auto now = std::chrono::system_clock::now();
     auto elapsed = std::chrono::duration_cast<milliseconds>(now - start);
@@ -190,6 +190,7 @@ void poller_wait_until(const std::function<bool(void)> &f,
   auto elapsed = std::chrono::duration_cast<milliseconds>(now - start0);
   DEBUG("Done in {}ms", elapsed.count());
   if (elapsed > ms) {
+    ERROR("TIMEOUT");
     throw rtpmidid::exception("TEST TIMEOUT");
   }
 }

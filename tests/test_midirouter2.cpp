@@ -44,6 +44,7 @@ const char *VERSION = "TEST"; // NOLINT
 void test_send_receive_messages() {
   // Setup a similar environment as when running rtpmidid
   auto router = std::make_shared<rtpmididns::midirouter_t>();
+  router->set_debug(true);
   uint8_t test_client_id = 0;
   {
     rtpmididns::settings.alsa_name = "rtpmidid-test";
@@ -59,6 +60,7 @@ void test_send_receive_messages() {
       INFO("Skipping test as ALSA is not available.");
       return;
     }
+    INFO("Midirouter ALSA client is {}", aseq->client_id);
 
     test_client_id = aseq->client_id;
 
@@ -99,11 +101,13 @@ void test_send_receive_messages() {
     INFO("Skipping test as ALSA is not available.");
     return;
   }
+  INFO("TEST ALSA client is {}", aseq->client_id);
 
   // 1. ALSA A connect to WR RTPMIDID
   INFO("1. ALSA A connect to WR RTPMIDID");
 
   auto alsa_a = aseq->create_port("ALSA A");
+  DEBUG("TEST listens for midi data at {}:{}", aseq->client_id, alsa_a);
   int midi_packets_alsa_a = 0;
   auto midievent_listener_a = aseq->midi_event[alsa_a].connect(
       [&midi_packets_alsa_a](snd_seq_event_t *ev) {
@@ -111,15 +115,20 @@ void test_send_receive_messages() {
         DEBUG("GOT MIDI DATA A: {}", midi_packets_alsa_a);
       });
 
-  auto alsa_a_to_network_connection = aseq->connect(
+  auto alsa_a_to_network_connection = aseq->connect( //
+      rtpmididns::aseq_t::port_t{test_client_id, 0},
+      rtpmididns::aseq_t::port_t{aseq->client_id, alsa_a} //
+  );
+  auto network_to_alsa_a_connection = aseq->connect( //
       rtpmididns::aseq_t::port_t{aseq->client_id, alsa_a},
-      rtpmididns::aseq_t::port_t{test_client_id, 0}); // Connect to network
-  poller_wait_until([&router]() { return router->peers.size() == 3; });
+      rtpmididns::aseq_t::port_t{test_client_id, 0} //
+  );
+  poller_wait_until([&router]() { return router->peers.size() == 4; });
 
   rtpmididns::json_t status = router->status();
   DEBUG("{}", status.dump(2));
 
-  ASSERT_EQUAL(router->peers.size(), 3);
+  ASSERT_EQUAL(router->peers.size(), 4);
 
   int port = 0;
 
@@ -140,11 +149,12 @@ void test_send_receive_messages() {
 
   status = router->status();
   DEBUG("{}", status.dump(2));
-  ASSERT_EQUAL(router->peers.size(), 3);
+  ASSERT_EQUAL(router->peers.size(), 4);
 
   auto data = hex_to_bin("90 40 40");
   rtppeer_client_a.peer.send_midi(data);
   ASSERT_EQUAL(midi_packets_alsa_a, 0);
+  DEBUG("Waiting for midi data");
   poller_wait_until(
       [&midi_packets_alsa_a]() { return midi_packets_alsa_a == 1; });
   // The signal for midi data has been called.
@@ -170,7 +180,7 @@ void test_send_receive_messages() {
   status = router->status();
   DEBUG("{}", status.dump(2));
   //// 2 more peers: the rtpmidi_worker and the alsa_worker.
-  ASSERT_EQUAL(router->peers.size(), 5);
+  ASSERT_EQUAL(router->peers.size(), 6);
 
   // 4. Connect from network to ALSA A. Nothing of importance should happen
   INFO("4. Connect from network to ALSA A. Nothing of importance should "
@@ -188,7 +198,7 @@ void test_send_receive_messages() {
   DEBUG("{}", status.dump(2));
   //// No more peers
   DEBUG("Found {} peers", router->peers.size());
-  ASSERT_EQUAL(router->peers.size(), 5);
+  ASSERT_EQUAL(router->peers.size(), 6);
 
   // 5. Connect rtpmidi A and B manually, just copy data
   INFO("5. Connect rtpmidi A and B manually, just copy data");
@@ -215,7 +225,7 @@ void test_send_receive_messages() {
   auto alsa_b_to_a_connection =
       aseq->connect({device_id, port_id_b}, {aseq->client_id, alsa_b_rw});
 
-  ASSERT_EQUAL(router->peers.size(), 5);
+  ASSERT_EQUAL(router->peers.size(), 6);
   int midi_packets_alsa_b = 0;
   auto midievent_listener_b = aseq->midi_event[alsa_b_rw].connect(
       [&midi_packets_alsa_b](snd_seq_event_t *ev) {

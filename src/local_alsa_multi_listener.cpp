@@ -76,6 +76,7 @@ local_alsa_multi_listener_t::new_alsa_connection(
     std::shared_ptr<midipeer_t> networkpeer =
         make_network_rtpmidi_listener(name);
     networkpeer_id = router->add_peer(networkpeer);
+    // DEBUG("Created network peer: {}", networkpeer_id);
 
     //  aseqpeers[conn.to.port] = networkpeer_id;
   }
@@ -91,7 +92,7 @@ local_alsa_multi_listener_t::new_alsa_connection(
 
         if (peer_my == my_port && peer_to == their_port) {
           alsapeer_id = peer->peer_id;
-          // DEBUG("Reuse ALSA peer: {}", peer->peer_id);
+          DEBUG("Reuse ALSA peer: {}", peer->peer_id);
         }
       });
 
@@ -99,7 +100,7 @@ local_alsa_multi_listener_t::new_alsa_connection(
     auto peer = make_local_alsa_peer(name, conn, seq);
     router->add_peer(peer);
     alsapeer_id = peer->peer_id;
-    // DEBUG("Created ALSA peer: {}", peer->peer_id);
+    DEBUG("Created ALSA peer: {}", peer->peer_id);
   }
 
   // DEBUG("We now connect {} and {}", alsapeer_id, networkpeer_id);

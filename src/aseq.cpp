@@ -302,7 +302,6 @@ std::string aseq_t::get_client_name(snd_seq_addr_t *addr) {
 aseq_t::client_type_e get_type_by_seq_type(int type) {
   // Known types so far.. may be increased later? Dont know how to make it more
   // future proof. If change here, quite probably will be incompatible changes
-  DEBUG("Type: {:b}", type);
   if (type & 0b01'00000000'00000000) {
     return aseq_t::client_type_e::TYPE_HARDWARE;
   } else if (type == 0x02) {
