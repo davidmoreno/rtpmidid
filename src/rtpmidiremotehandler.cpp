@@ -41,6 +41,7 @@ rtpmidi_remote_handler_t::rtpmidi_remote_handler_t(
 void rtpmidi_remote_handler_t::discover_peer(const std::string &name,
                                              const std::string &hostname,
                                              const std::string &port) {
+  DEBUG("Discover peer: {} {} {}", name, hostname, port);
   for (auto &peer : peers) {
     if (peer.name == name) {
       local_alsa_listener_t *alsawaiter =

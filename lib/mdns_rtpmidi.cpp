@@ -78,9 +78,9 @@ static void entry_group_callback(AvahiEntryGroup *g, AvahiEntryGroupState state,
     /* A service name collision with a remote service
      * happened. Let's pick a new name */
     n = avahi_alternative_service_name(g->name);
+    ERROR("Service name '{}' collision, renaming service to '{}", g->name, n);
     avahi_free(g->name);
     g->name = n;
-    ERROR("Service name collision, renaming service to '{}", g->name);
     /* And recreate the services */
     // create_services(avahi_entry_group_get_client(g));
     break;
@@ -258,7 +258,7 @@ static void resolve_callback(AvahiServiceResolver *r, AvahiIfIndex interface,
   /* Called whenever a service has been resolved successfully or timed out */
   switch (event) {
   case AVAHI_RESOLVER_FAILURE:
-    DEBUG("(Resolver) Failed to resolve service '{}' of type '{}' in domain "
+    ERROR("(Resolver) Failed to resolve service '{}' of type '{}' in domain "
           "'{}': {}",
           name, type, domain,
           avahi_strerror(
@@ -405,10 +405,12 @@ void rtpmidid::mdns_rtpmidi_t::announce_all() {
   }
   int ret = -1;
   for (auto &entry : announcements) {
+    DEBUG("Announce: {} {}", entry.name, entry.port);
     // NOLINTNEXTLINE
     ret = avahi_entry_group_add_service(
-        group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, (AvahiPublishFlags)0,
-        entry.name.c_str(), "_apple-midi._udp", NULL, NULL, entry.port, NULL);
+        group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC,
+        (AvahiPublishFlags)AVAHI_PUBLISH_USE_MULTICAST, entry.name.c_str(),
+        "_apple-midi._udp", NULL, NULL, entry.port, NULL);
     if (ret < 0) {
       if (ret == AVAHI_ERR_COLLISION) {
         ERROR("Name collision.");

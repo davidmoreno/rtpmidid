@@ -67,7 +67,7 @@ local_alsa_multi_listener_t::new_alsa_connection(const aseq_t::port_t &port,
         if (peer->name_ == name) {
           peer->use_count++;
           networkpeer_id = peer->peer_id;
-          DEBUG("One more user for peer: {}, count: ", peer->peer_id,
+          DEBUG("One more user for peer: {}, count: {}", peer->peer_id,
                 peer->use_count);
         }
       });
@@ -96,11 +96,16 @@ void local_alsa_multi_listener_t::remove_alsa_connection(
     }
     return;
   }
+  auto midipeer = router->get_peer_by_id(networkpeerI->second).get();
   network_rtpmidi_listener_t *rtppeer =
-      dynamic_cast<network_rtpmidi_listener_t *>(
-          router->get_peer_by_id(networkpeerI->second).get());
+      dynamic_cast<network_rtpmidi_listener_t *>(midipeer);
   if (!rtppeer) {
     ERROR("Invalid router id is not a rtpmidiserverlistener!");
+    if (midipeer == nullptr) {
+      ERROR("It is a nullptr");
+    } else {
+      INFO("It is a {}", std::string(midipeer->status()["type"]));
+    }
     return;
   }
 
