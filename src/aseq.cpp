@@ -137,10 +137,18 @@ void aseq_t::read_ready() {
       snd_seq_addr_t *other = get_other_ev_client_port(ev, client_id);
       snd_seq_addr_t *me = get_my_ev_client_port(ev, client_id);
 
+      INFO("Event source if {}:{}", ev->source.client, ev->source.port);
+
       name = get_client_name(other);
 
-      INFO("New ALSA connection from port {} ({}:{})", name, other->client,
-           other->port);
+      INFO("New ALSA connection {} from port {}:{} -> {}:{}", name,
+           other->client, other->port, me->client, me->port);
+
+      if (other->client != client_id && me->client != client_id) {
+        INFO("This connection is not to me. Ignore.");
+        continue;
+      }
+
       subscribe_event[me->port](port_t(other->client, other->port), name);
       if (me->client == other->client) {
         // This is an internal connection, should send subscribe from the other
@@ -154,6 +162,13 @@ void aseq_t::read_ready() {
     case SND_SEQ_EVENT_PORT_UNSUBSCRIBED: {
       snd_seq_addr_t *other = get_other_ev_client_port(ev, client_id);
       snd_seq_addr_t *me = get_my_ev_client_port(ev, client_id);
+      DEBUG("Disconnected {}:{} -> {}:{}", other->client, other->port,
+            me->client, me->port);
+
+      if (other->client != client_id && me->client != client_id) {
+        INFO("This disconnection is not to me. Ignore.");
+        continue;
+      }
 
       unsubscribe_event[me->port](port_t(other->client, other->port));
       if (me->client == other->client) {
@@ -161,7 +176,6 @@ void aseq_t::read_ready() {
         // other side too
         unsubscribe_event[other->port](port_t(me->client, me->port));
       }
-      DEBUG("Disconnected");
     } break;
     // case SND_SEQ_EVENT_NOTE:
     case SND_SEQ_EVENT_CLOCK:
