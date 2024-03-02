@@ -91,16 +91,17 @@ static std::string get_hostname() {
   return std::string(hostname.data());
 }
 
+void help(const std::vector<argument_t> &arguments) {
+  fmt::print(CMDLINE_HELP, VERSION);
+  fmt::print("{} args", arguments.size());
+  for (auto &argument : arguments) {
+    fmt::print("  {:<30} {}\n", argument.arg, argument.comment);
+  }
+}
+
 // Setup the argument options
 static std::vector<argument_t> setup_arguments() {
   std::vector<argument_t> arguments;
-
-  auto help = [&] {
-    fmt::print(CMDLINE_HELP, VERSION);
-    for (auto &argument : arguments) {
-      fmt::print("  {:<30} {}\n", argument.arg, argument.comment);
-    }
-  };
 
   arguments.emplace_back( //
       "--ini",            //
@@ -163,7 +164,7 @@ static std::vector<argument_t> setup_arguments() {
       "--help",           //
       "Show this help",
       [&](const std::string &value) {
-        help();
+        help(arguments);
         exit(0);
       },
       false);
