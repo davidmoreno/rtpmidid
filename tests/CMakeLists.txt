@@ -44,27 +44,31 @@ add_test(NAME test_signals COMMAND test_signals)
 # MIDIROUTER
 # 
 
-add_executable(test_midirouter
-    test_midirouter.cpp test_utils.cpp 
-)
-target_link_libraries(test_midirouter -lfmt -pthread rtpmidid-shared rtpmidid2-static)
-add_test(NAME test_midirouter COMMAND test_midirouter)
-target_link_libraries(test_midirouter ${ALSA_LIBRARIES})
-target_include_directories(test_midirouter PUBLIC ${ALSA_INCLUDE_DIRS})
-target_compile_options(test_midirouter PUBLIC ${ALSA_CFLAGS_OTHER})
+if (NOT LIBS_ONLY)
+  add_executable(test_midirouter
+      test_midirouter.cpp test_utils.cpp
+  )
+  target_link_libraries(test_midirouter -lfmt -pthread rtpmidid-shared rtpmidid2-static)
+  add_test(NAME test_midirouter COMMAND test_midirouter)
+  target_link_libraries(test_midirouter ${ALSA_LIBRARIES})
+  target_include_directories(test_midirouter PUBLIC ${ALSA_INCLUDE_DIRS})
+  target_compile_options(test_midirouter PUBLIC ${ALSA_CFLAGS_OTHER})
+endif (NOT LIBS_ONLY)
 
 #
 # MIDIROUTER2
 # 
 
-add_executable(test_midirouter2
-    test_midirouter2.cpp test_utils.cpp 
+if (NOT LIBS_ONLY)
+  add_executable(test_midirouter2
+      test_midirouter2.cpp test_utils.cpp
   )
-target_link_libraries(test_midirouter2 -lfmt -pthread rtpmidid-shared rtpmidid2-static)
-add_test(NAME test_midirouter2 COMMAND test_midirouter2)
-target_link_libraries(test_midirouter2 ${ALSA_LIBRARIES})
-target_include_directories(test_midirouter2 PUBLIC ${ALSA_INCLUDE_DIRS})
-target_compile_options(test_midirouter2 PUBLIC ${ALSA_CFLAGS_OTHER})
+  target_link_libraries(test_midirouter2 -lfmt -pthread rtpmidid-shared rtpmidid2-static)
+  add_test(NAME test_midirouter2 COMMAND test_midirouter2)
+  target_link_libraries(test_midirouter2 ${ALSA_LIBRARIES})
+  target_include_directories(test_midirouter2 PUBLIC ${ALSA_INCLUDE_DIRS})
+  target_compile_options(test_midirouter2 PUBLIC ${ALSA_CFLAGS_OTHER})
+endif (NOT LIBS_ONLY)
 
 
 # disabled as failing 

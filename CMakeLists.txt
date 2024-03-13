@@ -11,6 +11,8 @@ option(USE_CLANG "Use clang compiler" OFF)
 option(USE_LINKER_MOLD "Use mold linker" OFF)
 # option to enable lld linker
 option(USE_LINKER_LLD "Use lld linker" OFF)
+# option to only build shared and static libraries
+option(LIBS_ONLY "Only build libraries" OFF)
 
 
 if (USE_CLANG)
@@ -69,7 +71,9 @@ endif(ENABLE_PCH)
 include(FindPkgConfig)
 pkg_check_modules(AVAHI REQUIRED avahi-client)
 pkg_check_modules(FMT REQUIRED fmt)
-pkg_check_modules(ALSA REQUIRED alsa)
+if(NOT LIBS_ONLY)
+  pkg_check_modules(ALSA REQUIRED alsa)
+endif(NOT LIBS_ONLY)
 
 
 include_directories(${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/include)
@@ -83,7 +87,9 @@ add_definitions(-DRTPMIDID_VERSION=\"${RTPMIDID_VERSION}\")
 message(STATUS "Version ${RTPMIDID_VERSION}")
 
 add_subdirectory(lib)
-add_subdirectory(src)
+if(NOT LIBS_ONLY)
+  add_subdirectory(src)
+endif(NOT LIBS_ONLY)
 
 if (ENABLE_TESTS STREQUAL "ON")
   add_subdirectory(tests)
