@@ -24,6 +24,7 @@
 #include "json.hpp"
 #include "midipeer.hpp"
 #include "stringpp.hpp"
+#include <rtpmidid/mdns_rtpmidi.hpp>
 
 namespace rtpmididns {
 // NOLINTNEXTLINE
@@ -150,6 +151,25 @@ struct command_t {
   std::function<json_t(rtpmididns::control_socket_t &, const json_t &)> func;
 };
 } // namespace control_socket_ns
+
+json_t mdns_status(const std::shared_ptr<rtpmidid::mdns_rtpmidi_t> &mdns) {
+  if (!mdns)
+    return json_t{"status", "Not available"};
+
+  std::vector<json_t> announcements;
+  for (auto &announcement : mdns->announcements) {
+    announcements.push_back({
+        {"name", announcement.name},
+        {"port", announcement.port},
+    });
+  }
+
+  return json_t{
+      {"status", "Available"},
+      {"announcements", announcements},
+  };
+}
+
 // NOLINTNEXTLINE
 const std::vector<control_socket_ns::command_t> COMMANDS{
     {"status", "Return status of the daemon",
@@ -161,7 +181,8 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
                 {"alsa_name", rtpmididns::settings.alsa_name},
                 {"control_filename", rtpmididns::settings.control_filename} //
             }},
-           {"router", control.router->status()} //
+           {"router", control.router->status()}, //
+           {"mdns", mdns_status(control.mdns)},  //
        };
      }},
     {"router.remove", "Remove a peer from the router",

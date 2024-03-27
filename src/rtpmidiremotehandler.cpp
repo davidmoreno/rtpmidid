@@ -23,7 +23,7 @@
 #include "rtpmidid/mdns_rtpmidi.hpp"
 
 namespace rtpmididns {
-extern std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
+extern std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 
 rtpmidi_remote_handler_t::rtpmidi_remote_handler_t(
     std::shared_ptr<midirouter_t> router_, std::shared_ptr<aseq_t> aseq_)

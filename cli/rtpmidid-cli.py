@@ -100,7 +100,6 @@ def parse_commands(argv):
             return d
         return [guess_type(x) for x in cmd]
 
-    print("parse_commands", argv)
     cmd = []
     for x in argv:
         if x == ".":
