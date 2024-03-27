@@ -39,6 +39,11 @@ struct announcement_t {
   std::string name;
   int port;
 };
+struct remote_announcement_t {
+  std::string name;
+  std::string address;
+  int port;
+};
 
 class mdns_rtpmidi_t {
   NON_COPYABLE_NOR_MOVABLE(mdns_rtpmidi_t)
@@ -48,6 +53,7 @@ public:
   AvahiEntryGroup *group = nullptr;
   AvahiServiceBrowser *service_browser = nullptr;
   std::vector<announcement_t> announcements;
+  std::vector<remote_announcement_t> remote_announcements;
   // name, address, port
   signal_t<const std::string &, const std::string &, const std::string &>
       discover_event;
@@ -63,5 +69,7 @@ public:
   void announce_all();
   void announce_rtpmidi(const std::string &name, const int32_t port);
   void unannounce_rtpmidi(const std::string &name, const int32_t port);
+  void discover_remote(const remote_announcement_t &remote);
+  void remove_remote(const std::string &name);
 };
 } // namespace rtpmidid

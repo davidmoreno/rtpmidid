@@ -164,9 +164,19 @@ json_t mdns_status(const std::shared_ptr<rtpmidid::mdns_rtpmidi_t> &mdns) {
     });
   }
 
+  std::vector<json_t> remote_announcements;
+  for (auto &announcement : mdns->remote_announcements) {
+    remote_announcements.push_back({
+        {"name", announcement.name},
+        {"hostname", announcement.address},
+        {"port", announcement.port},
+    });
+  }
+
   return json_t{
       {"status", "Available"},
       {"announcements", announcements},
+      {"remote_announcements", remote_announcements},
   };
 }
 
