@@ -46,7 +46,7 @@ build-dev:
 
 build-deb:
 	mkdir -p build
-	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF -GNinja $(CMAKE_EXTRA_ARGS)
+	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=OFF -GNinja $(CMAKE_EXTRA_ARGS) -DLDD=system
 	cd build && ninja
 
 build-make:
@@ -126,7 +126,8 @@ install: install-rtpmidid install-librtpmidid0 install-librtpmidid0-dev
 install-rtpmidid: build man
 	mkdir -p $(PREFIX)/usr/bin/ 
 	cp build/src/rtpmidid $(PREFIX)/usr/bin/
-	cp cli/rtpmidid-cli.py $(PREFIX)/usr/bin/rtpmidid-cli
+	cd cli && make compile
+	cp build/rtpmidid-cli $(PREFIX)/usr/bin/rtpmidid-cli
 	mkdir -p $(PREFIX)/etc/systemd/system/
 	cp debian/rtpmidid.service $(PREFIX)/etc/systemd/system/
 	mkdir -p $(PREFIX)/etc/rtpmidid/
