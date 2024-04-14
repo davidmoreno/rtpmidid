@@ -274,7 +274,7 @@ class Top:
                 "ontab": self.Tabs.ROUTES,
             },
             {
-                "key": "supr",
+                "key": "delete",
                 "command": self.command_delete_mdns_entry,
                 "help": "Delete mdns entry",
                 "ontab": self.Tabs.MDNS,
@@ -330,6 +330,8 @@ class Top:
                         return "left"
                     elif key == "\033\x1b":
                         return "escape"
+                    elif key == "\033[3":
+                        return "delete"
                     return None
                 if key == "\t":
                     return "tab"
@@ -393,7 +395,26 @@ class Top:
             self.tab = self.Tabs.ROUTES
 
     def command_delete_mdns_entry(self):
-        pass
+        items = (
+            self.status["mdns"]["announcements"]
+            + self.status["mdns"]["remote_announcements"]
+        )
+        item = items[self.selected_row_index]
+        if not item:
+            return
+
+        ret = self.conn.command(
+            {
+                "method": "mdns.delete",
+                "params": {
+                    "name": item["name"],
+                    "hostname": item.get("hostname"),
+                    "port": item["port"],
+                },
+            }
+        )
+        if "error" in ret:
+            self.dialog(ret["error"])
 
     def command_help(self):
         text = ""
