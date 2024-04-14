@@ -322,8 +322,8 @@ class Top:
 
     def command_move_down(self):
         self.selected_row_index += 1
-        if self.selected_row_index >= self.max_rows:
-            self.selected_row_index = self.max_rows - 1
+        # if self.selected_row_index >= self.max_rows:
+        #     self.selected_row_index = self.max_rows - 1
 
     def command_move_left(self):
         self.selected_col_index -= 1
@@ -675,7 +675,7 @@ class Top:
         selected = self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
         not_selected = self.ANSI_BG_BLACK + self.ANSI_TEXT_WHITE
 
-        self.terminal_goto(0, 2)
+        self.terminal_goto(0, 3)
         self.print(self.ANSI_BG_BLACK + "  ")
         if self.tab == self.Tabs.ROUTES:
             self.print(selected + " Routes ")
@@ -690,21 +690,111 @@ class Top:
 
     def print_routes_tab(self):
         self.print_table()
+        data = self.status["router"]
+        self.print_data_table(
+            0,
+            4,
+            self.width,
+            len(data) + 4,
+            self.COLUMNS,
+            data,
+        )
+        self.terminal_goto(0, self.max_rows + 5)
         self.print(self.ANSI_RESET + self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE)
         self.print_padding(f"Current Row {self.height}: ")
         self.print_row(
             0,
-            5 + self.max_rows,
+            6 + self.max_rows,
             self.width,
             self.height - self.max_rows - 5,
             self.selected_row,
         )
 
     def print_mdns_tab(self):
-        self.print_row(0, 4, self.width, self.height - 2, self.status["mdns"])
+        self.print_data_table(
+            0,
+            4,
+            self.width,
+            self.height - 2,
+            [
+                {
+                    "name": "Name",
+                    "width": 40,
+                    "get": lambda data: safe_get(data, "name"),
+                },
+                {
+                    "name": "Hostname",
+                    "width": 40,
+                    "get": lambda data: safe_get(data, "hostname"),
+                },
+                {
+                    "name": "Port",
+                    "width": 8,
+                    "get": lambda data: safe_get(data, "port"),
+                },
+            ],
+            self.status["mdns"]["announcements"]
+            + self.status["mdns"]["remote_announcements"],
+        )
+        # self.print_row(0, 4, self.width, self.height - 2, self.status["mdns"])
 
     def print_clean_tab(self):
         self.print_square(0, 3, self.width, self.height - 2, self.ANSI_BG_DARK_BLUE)
+
+    def print_data_table(self, x, y, width, height, columns, data, style={}):
+        if self.selected_col_index >= len(columns):
+            self.selected_col_index = 0
+        if self.selected_row_index >= len(data):
+            self.selected_row_index = len(data) - 1
+
+        self.terminal_goto(x, y)
+        colwidths = []
+        weight_width = 0
+        for column in columns:
+            weight_width += column["width"]
+        for column in columns:
+            colwidths.append(int(column["width"] / weight_width * width))
+
+        self.print(self.ANSI_TEXT_BOLD)
+        for idx, column in enumerate(columns):
+            colwidth = colwidths[idx]
+            if idx == self.selected_col_index:
+                self.print(style.get("header_bg_color:selected", self.ANSI_BG_CYAN))
+                self.print(
+                    style.get("header_text_color:selected", self.ANSI_TEXT_WHITE)
+                )
+            else:
+                self.print(style.get("header_bg_color", self.ANSI_BG_PURPLE))
+                self.print(style.get("header_text_color", self.ANSI_TEXT_WHITE))
+
+            self.print_padding(column["name"], colwidth)
+            self.print(" ")
+        self.terminal_goto(x, y + 1)
+
+        sortf = columns[self.selected_col_index].get("get_sort_key")
+        if not sortf:
+            sortf = columns[self.selected_col_index]["get"]
+
+        sorted_data = sorted(data, key=lambda x: sortf(x))
+
+        self.print(self.ANSI_RESET)
+        for idx, row in enumerate(sorted_data[: height - 1]):
+            if idx == self.selected_row_index:
+                self.print(style.get("row_bg_color:selected", self.ANSI_BG_WHITE))
+                self.print(style.get("row_text_color:selected", self.ANSI_TEXT_BLACK))
+            else:
+                self.print(style.get("row_bg_color", self.ANSI_BG_BLACK))
+                self.print(style.get("row_text_color", self.ANSI_TEXT_WHITE))
+            self.terminal_goto(x, y + 1 + idx)
+            for column, colwidth in zip(columns, colwidths):
+                value = column["get"](row)
+                if column.get("align") == "right":
+                    self.print("{:>{width}}".format(value, width=colwidth))
+                else:
+                    self.print("{:{width}}".format(value, width=colwidth))
+                # self.print_padding(str(value or ""), colwidth)
+                self.print(" ")
+            self.terminal_goto(x, y + 1)
 
     def refresh_data(self):
         try:
@@ -741,6 +831,8 @@ class Top:
             pass
         finally:
             self.print(self.ANSI_POP_SCREEN)
+            tty.setcbreak(sys.stdin)
+            print("\033[?1049l", end="")
 
 
 def main(argv):
