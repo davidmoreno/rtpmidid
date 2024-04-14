@@ -465,3 +465,18 @@ void rtpmidid::mdns_rtpmidi_t::remove_remote(const std::string &name) {
           [name](const remote_announcement_t &t) { return name == t.name; }),
       remote_announcements.end());
 }
+
+void rtpmidid::mdns_rtpmidi_t::remove_announcement(const std::string &name,
+                                                   const std::string &address,
+                                                   int port) {
+  if (address == "") {
+    unannounce_rtpmidi(name, port);
+  } else {
+    remote_announcements.erase(
+        std::remove_if(
+            remote_announcements.begin(), remote_announcements.end(),
+            [name](const remote_announcement_t &t) { return name == t.name; }),
+        remote_announcements.end());
+    remove_event(name, address, std::to_string(port));
+  }
+}

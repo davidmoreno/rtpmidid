@@ -260,7 +260,20 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
            control.router, name, hostname, port, control.aseq));
        return json_t{"ok"};
      }},
-    // REturn some help text
+    {"mdns.remove", "Delete a mdns announcement",
+     [](control_socket_t &control, const json_t &params) {
+       DEBUG("Params {}", params.dump());
+       std::string name = params["name"];
+       std::string hostname;
+       if (!params["hostname"].is_null()) {
+         hostname = params["hostname"];
+       }
+       int32_t port = params["port"];
+       DEBUG("Delete mdns announcement {}", name);
+       control.mdns->remove_announcement(name, hostname, port);
+       return "ok";
+     }},
+    // Return some help text
     {"help", "Return help text",
      [](control_socket_t &control, const json_t &) {
        auto res = std::vector<json_t>{};
@@ -308,8 +321,10 @@ std::string control_socket_t::parse_command(const std::string &command) {
     }
 
     retdata["error"] = fmt::format("Unknown method '{}'", method);
+    ERROR("Error running method: {}", retdata["error"]);
     return retdata.dump();
   } catch (const std::exception &e) {
+    ERROR("Error running method: {}", e.what());
     retdata["error"] = e.what();
     return retdata.dump();
   }

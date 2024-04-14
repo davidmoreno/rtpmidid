@@ -71,5 +71,7 @@ public:
   void unannounce_rtpmidi(const std::string &name, const int32_t port);
   void discover_remote(const remote_announcement_t &remote);
   void remove_remote(const std::string &name);
+  void remove_announcement(const std::string &name, const std::string &address,
+                           int port);
 };
 } // namespace rtpmidid

@@ -331,7 +331,7 @@ class Top:
 
         ret = self.conn.command(
             {
-                "method": "mdns.delete",
+                "method": "mdns.remove",
                 "params": {
                     "name": item["name"],
                     "hostname": item.get("hostname"),
