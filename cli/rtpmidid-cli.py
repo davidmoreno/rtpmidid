@@ -661,6 +661,26 @@ class Top:
         )
 
     def print_mdns_tab(self):
+        def style(row):
+            hostname = safe_get(row, "hostname")
+            if not hostname:
+                return self.ANSI_TEXT_GREY
+            if ":" in hostname:
+                return self.ANSI_TEXT_PURPLE
+            if hostname == "127.0.0.1":
+                return self.ANSI_TEXT_GREY
+            return self.ANSI_TEXT_WHITE
+
+        def get_type(row):
+            hostname = safe_get(row, "hostname")
+            if not hostname:
+                return "local"
+            if ":" in hostname:
+                return "ipv6"
+            if hostname == "127.0.0.1":
+                return "local"
+            return "ipv4"
+
         self.print_data_table(
             0,
             4,
@@ -668,19 +688,28 @@ class Top:
             self.height - 2,
             [
                 {
+                    "name": "Type",
+                    "width": 4,
+                    "get": get_type,
+                    "style": style,
+                },
+                {
                     "name": "Name",
                     "width": 40,
                     "get": lambda data: safe_get(data, "name"),
+                    "style": style,
                 },
                 {
                     "name": "Hostname",
                     "width": 40,
                     "get": lambda data: safe_get(data, "hostname"),
+                    "style": style,
                 },
                 {
                     "name": "Port",
                     "width": 8,
                     "get": lambda data: safe_get(data, "port"),
+                    "style": style,
                 },
             ],
             self.status["mdns"]["announcements"]
