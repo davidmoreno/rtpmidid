@@ -166,8 +166,6 @@ class Top:
         width, height = shutil.get_terminal_size()
         self.selected_row_index = 0
         self.selected_col_index = 0
-        self.selected_row = None
-        self.max_rows = height - 2
         self.width = width
         self.height = height
         self.status = {}
@@ -263,8 +261,24 @@ class Top:
                 "help": "Sort by next column",
             },
             {"key": "q", "command": self.command_quit, "help": "Quit"},
-            {"key": "k", "command": self.command_kill, "help": "Kill peer"},
-            {"key": "c", "command": self.command_connect, "help": "Connect to peer"},
+            {
+                "key": "k",
+                "command": self.command_kill,
+                "help": "Kill peer",
+                "ontab": self.Tabs.ROUTES,
+            },
+            {
+                "key": "c",
+                "command": self.command_connect,
+                "help": "Connect to peer",
+                "ontab": self.Tabs.ROUTES,
+            },
+            {
+                "key": "supr",
+                "command": self.command_delete_mdns_entry,
+                "help": "Delete mdns entry",
+                "ontab": self.Tabs.MDNS,
+            },
             {
                 "key": "p",
                 "command": self.command_expand_peers,
@@ -336,8 +350,6 @@ class Top:
 
     def command_move_down(self):
         self.selected_row_index += 1
-        # if self.selected_row_index >= self.max_rows:
-        #     self.selected_row_index = self.max_rows - 1
 
     def command_move_left(self):
         self.selected_col_index -= 1
@@ -353,11 +365,13 @@ class Top:
         sys.exit(0)
 
     def command_kill(self):
-        self.conn.command(
-            {"method": "router.remove", "params": [self.selected_row["id"]]}
-        )
+        data = self.status["router"]
+        current_id = data[self.selected_row_index]["id"]
+        self.conn.command({"method": "router.remove", "params": [current_id]})
 
     def command_connect(self):
+        data = self.status["router"]
+        current_id = data[self.selected_row_index]["id"]
         peer_id = self.dialog_ask("Connect to which peer id?")
         if not peer_id:
             return
@@ -365,7 +379,7 @@ class Top:
         self.conn.command(
             {
                 "method": "router.connect",
-                "params": {"from": self.selected_row["id"], "to": int(peer_id)},
+                "params": {"from": current_id, "to": int(peer_id)},
             }
         )
 
@@ -378,9 +392,15 @@ class Top:
         else:
             self.tab = self.Tabs.ROUTES
 
+    def command_delete_mdns_entry(self):
+        pass
+
     def command_help(self):
         text = ""
         for cmd in self.COMMANDS:
+            ontab = cmd.get("ontab")
+            if ontab is not None and ontab != self.tab:
+                continue
             text += f"[{cmd['key']}]{' '*(8-len(cmd['key']))} {cmd['help']}\n"
         text = text.strip()
         self.dialog(text=text)
@@ -599,7 +619,6 @@ class Top:
         self.print_padding("", self.width - 20)
 
     def print_routes_tab(self):
-        self.print_table()
         data = self.status["router"]
         self.print_data_table(
             0,
@@ -609,15 +628,15 @@ class Top:
             self.COLUMNS,
             data,
         )
-        self.terminal_goto(0, self.max_rows + 5)
+        self.terminal_goto(0, len(data) + 5)
         self.print(self.ANSI_RESET + self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE)
         self.print_padding(f"Current Row {self.height}: ")
         self.print_row(
             0,
-            6 + self.max_rows,
+            6 + len(data),
             self.width,
-            self.height - self.max_rows - 5,
-            self.selected_row,
+            self.height - len(data) - 5,
+            data[self.selected_row_index],
         )
 
     def print_mdns_tab(self):
