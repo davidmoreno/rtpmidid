@@ -149,6 +149,8 @@ class Top:
     ANSI_BG_CYAN = "\033[46m"
     ANSI_BG_WHITE = "\033[47m"
     ANSI_BG_GREY = "\033[100m"
+
+    ANSI_BG_DARK_GREY = "\033[48;5;236m"
     ANSI_BG_DARK_BLUE = "\033[48;5;18m"
 
     ANSI_RESET = "\033[0m"
@@ -170,73 +172,6 @@ class Top:
         self.height = height
         self.status = {}
         self.expand_peers = False
-
-        self.STATUS_STYLE = {
-            "WAITING": self.ANSI_TEXT_YELLOW,
-            "CONNECTING": self.ANSI_BG_PURPLE,
-            "CONNECTED": self.ANSI_TEXT_GREEN,
-            "DISCONNECTED": self.ANSI_TEXT_RED,
-        }
-
-        self.COLUMNS = [
-            {
-                "name": "ID",
-                "get": lambda data: safe_get(data, "id"),
-                "width": 8,
-                "align": "right",
-            },
-            {
-                "name": "Type",
-                "get": lambda data: safe_get(data, "type"),
-                "width": 40,
-                "align": "left",
-            },
-            {
-                "name": "Local Name",
-                "get": self.get_local_name,
-                "width": 0,
-                "align": "left",
-            },
-            {
-                "name": "Remote Name",
-                "get": self.get_remote_name,
-                "width": 0,
-                "align": "left",
-            },
-            {
-                "name": "Status",
-                "get": self.get_peer_status,
-                "width": 20,
-                "align": "left",
-                "style": lambda x: self.STATUS_STYLE.get(self.get_peer_status(x)),
-            },
-            {
-                "name": "Sent",
-                "get": lambda data: safe_get(data, "stats", "sent"),
-                "width": 8,
-                "align": "right",
-            },
-            {
-                "name": "Received",
-                "get": lambda data: safe_get(data, "stats", "recv"),
-                "width": 8,
-                "align": "right",
-            },
-            {
-                "name": "Latency",
-                # the unicode symbol for +- is \u00B1
-                "get": self.get_latency,
-                "width": 20,
-                "align": "right",
-            },
-            {
-                "name": "Send To",
-                "get": lambda data: ", ".join(
-                    str(x) for x in safe_get(data, "send_to")
-                ),
-                "width": 10,
-            },
-        ]
 
         self.COMMANDS = [
             {"key": "h", "command": self.command_help, "help": "Show this help"},
@@ -287,13 +222,6 @@ class Top:
             {"key": "tab", "command": self.command_switch_tab, "help": "Switch tabs"},
         ]
 
-        # make Name column as wide as possible
-        auto_width_count = len([x for x in self.COLUMNS if x["width"] == 0])
-        extra_width = self.width - sum((x["width"] + 1) for x in self.COLUMNS) + 1
-        for col in self.COLUMNS:
-            if col["width"] == 0:
-                col["width"] = extra_width // auto_width_count
-        self.max_cols = len(self.COLUMNS)
         self.print_data = []
 
         # set the terminal input in one char per read
@@ -356,12 +284,10 @@ class Top:
     def command_move_left(self):
         self.selected_col_index -= 1
         if self.selected_col_index < 0:
-            self.selected_col_index = self.max_cols - 1
+            self.selected_col_index = 0
 
     def command_move_right(self):
         self.selected_col_index += 1
-        if self.selected_col_index >= self.max_cols:
-            self.selected_col_index = 0
 
     def command_quit(self):
         sys.exit(0)
@@ -540,32 +466,6 @@ class Top:
         self.print(text[:count] + " " * padchars)
 
     ##
-    ## Data gathering
-    ##
-
-    def get_peer_status(self, data):
-        return safe_get(data, "peer", "status") or safe_get(data, "status")
-
-    def get_latency(self, data):
-        avg = safe_get(data, "peer", "latency_ms", "average")
-        if avg == "":
-            return ""
-        stddev = safe_get(data, "peer", "latency_ms", "stddev")
-        return f"{avg}ms \u00B1 {stddev}ms"
-
-    def get_local_name(self, data):
-        type_ = safe_get(data, "type")
-        if type_.startswith("local:"):
-            return safe_get(data, "name")
-        return ""
-
-    def get_remote_name(self, data):
-        type_ = safe_get(data, "type")
-        if type_.startswith("network:"):
-            return safe_get(data, "name")
-        return ""
-
-    ##
     ## Top level components
     ##
 
@@ -587,7 +487,7 @@ class Top:
         self.print_padding(f"{footer_left}{' ' * padding}{footer_right}")
         self.print(self.ANSI_RESET)
 
-    def print_row(self, x, y, width, height, data):
+    def print_json_row(self, x, y, width, height, data):
         if not data:
             return
 
@@ -623,8 +523,8 @@ class Top:
         self.flush()
 
     def print_tabs(self):
-        selected = self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
-        not_selected = self.ANSI_BG_BLACK + self.ANSI_TEXT_WHITE
+        selected = self.ANSI_BG_CYAN + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
+        not_selected = self.ANSI_BG_PURPLE + self.ANSI_TEXT_WHITE
 
         self.terminal_goto(0, 3)
         self.print(self.ANSI_BG_BLACK + "  ")
@@ -635,24 +535,114 @@ class Top:
         if self.tab == self.Tabs.MDNS:
             self.print(selected + " mDNS ")
         else:
-            self.print(self.ANSI_BG_BLACK + self.ANSI_TEXT_WHITE + " mDNS ")
+            self.print(not_selected + " mDNS ")
         self.print(not_selected)
+        self.print(self.ANSI_BG_BLACK + "  ")
         self.print_padding("", self.width - 20)
 
     def print_routes_tab(self):
+        STATUS_STYLE = {
+            "WAITING": self.ANSI_TEXT_YELLOW,
+            "CONNECTING": self.ANSI_BG_PURPLE,
+            "CONNECTED": self.ANSI_TEXT_GREEN,
+            "DISCONNECTED": self.ANSI_TEXT_RED,
+        }
+
+        def get_peer_status(data):
+            return safe_get(data, "peer", "status") or safe_get(data, "status")
+
+        def get_latency(data):
+            avg = safe_get(data, "peer", "latency_ms", "average")
+            if avg == "":
+                return ""
+            stddev = safe_get(data, "peer", "latency_ms", "stddev")
+            return f"{avg}ms \u00B1 {stddev}ms"
+
+        def get_local_name(data):
+            type_ = safe_get(data, "type")
+            if type_.startswith("local:"):
+                return safe_get(data, "name")
+            return ""
+
+        def get_remote_name(data):
+            type_ = safe_get(data, "type")
+            if type_.startswith("network:"):
+                return safe_get(data, "name")
+            return ""
+
+        columns = [
+            {
+                "name": "ID",
+                "get": lambda data: safe_get(data, "id"),
+                "width": 8,
+                "align": "right",
+            },
+            {
+                "name": "Type",
+                "get": lambda data: safe_get(data, "type"),
+                "width": 40,
+                "align": "left",
+            },
+            {
+                "name": "Local Name",
+                "get": get_local_name,
+                "width": 0,
+                "align": "left",
+            },
+            {
+                "name": "Remote Name",
+                "get": get_remote_name,
+                "width": 0,
+                "align": "left",
+            },
+            {
+                "name": "Status",
+                "get": get_peer_status,
+                "width": 20,
+                "align": "left",
+                "style": lambda x: STATUS_STYLE.get(get_peer_status(x)),
+            },
+            {
+                "name": "Sent",
+                "get": lambda data: safe_get(data, "stats", "sent"),
+                "width": 8,
+                "align": "right",
+            },
+            {
+                "name": "Received",
+                "get": lambda data: safe_get(data, "stats", "recv"),
+                "width": 8,
+                "align": "right",
+            },
+            {
+                "name": "Latency",
+                # the unicode symbol for +- is \u00B1
+                "get": get_latency,
+                "width": 20,
+                "align": "right",
+            },
+            {
+                "name": "Send To",
+                "get": lambda data: ", ".join(
+                    str(x) for x in safe_get(data, "send_to")
+                ),
+                "width": 10,
+            },
+        ]
+
         data = self.status["router"]
         self.print_data_table(
             0,
             4,
             self.width,
             len(data) + 4,
-            self.COLUMNS,
+            columns,
             data,
         )
         self.terminal_goto(0, len(data) + 5)
         self.print(self.ANSI_RESET + self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE)
         self.print_padding(f"Current Row {self.height}: ")
-        self.print_row(
+        self.print_json_row(
             0,
             6 + len(data),
             self.width,
@@ -661,7 +651,21 @@ class Top:
         )
 
     def print_mdns_tab(self):
+        if "mdns" not in self.status:
+            self.dialog("mDNS is not available")
+            self.tab = self.Tabs.ROUTES
+            return
+        data = (
+            self.status["mdns"]["announcements"]
+            + self.status["mdns"]["remote_announcements"]
+        )
+
         def style(row):
+            if row is self.current_row:
+                return None
+            if row["name"] == self.current_row["name"]:
+                return self.ANSI_BG_DARK_GREY
+
             hostname = safe_get(row, "hostname")
             if not hostname:
                 return self.ANSI_TEXT_GREY
@@ -695,7 +699,7 @@ class Top:
                 },
                 {
                     "name": "Name",
-                    "width": 40,
+                    "width": 0,
                     "get": lambda data: safe_get(data, "name"),
                     "style": style,
                 },
@@ -712,13 +716,24 @@ class Top:
                     "style": style,
                 },
             ],
-            self.status["mdns"]["announcements"]
-            + self.status["mdns"]["remote_announcements"],
+            data,
         )
         # self.print_row(0, 4, self.width, self.height - 2, self.status["mdns"])
 
     def print_clean_tab(self):
         self.print_square(0, 3, self.width, self.height - 2, self.ANSI_BG_DARK_BLUE)
+
+    def calculate_colwidths(self, columns, width):
+        # make Name column as wide as possible
+        auto_width_count = len([x for x in columns if x["width"] == 0])
+        extra_width = width - sum((x["width"] + 1) for x in columns) + 1
+        colwidths = []
+        for col in columns:
+            if col["width"] == 0:
+                colwidths.append(extra_width // auto_width_count)
+            else:
+                colwidths.append(col["width"])
+        return colwidths
 
     def print_data_table(self, x, y, width, height, columns, data, style={}):
         if self.selected_col_index >= len(columns):
@@ -727,12 +742,7 @@ class Top:
             self.selected_row_index = len(data) - 1
 
         self.terminal_goto(x, y)
-        colwidths = []
-        weight_width = 0
-        for column in columns:
-            weight_width += column["width"]
-        for column in columns:
-            colwidths.append(int(column["width"] / weight_width * width) - 1)
+        colwidths = self.calculate_colwidths(columns, width)
 
         self.print(self.ANSI_TEXT_BOLD)
         for idx, column in enumerate(columns):
@@ -754,7 +764,8 @@ class Top:
         if not sortf:
             sortf = columns[self.selected_col_index]["get"]
 
-        sorted_data = sorted(data, key=lambda x: sortf(x))
+        sorted_data = sorted(sorted(data, key=lambda x: str(x)), key=lambda x: sortf(x))
+        self.current_row = sorted_data[self.selected_row_index]
 
         self.print(self.ANSI_RESET)
         for idx, row in enumerate(sorted_data[: height - 1]):
@@ -777,9 +788,13 @@ class Top:
 
                 value = column["get"](row)
                 if column.get("align") == "right":
-                    self.print("{:>{width}}".format(value, width=colwidth))
+                    self.print(
+                        "{:>{width}}".format(str(value)[:colwidth], width=colwidth)
+                    )
                 else:
-                    self.print("{:{width}}".format(value, width=colwidth))
+                    self.print(
+                        "{:{width}}".format(str(value)[:colwidth], width=colwidth)
+                    )
                 # self.print_padding(str(value or ""), colwidth)
                 self.print(" ")
             self.terminal_goto(x, y + 1)
