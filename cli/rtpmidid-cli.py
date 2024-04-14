@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+from dataclasses import dataclass
 import select
 import tty
 import shutil
@@ -148,8 +149,16 @@ class Top:
     ANSI_BG_CYAN = "\033[46m"
     ANSI_BG_WHITE = "\033[47m"
     ANSI_BG_GREY = "\033[100m"
+    ANSI_BG_DARK_BLUE = "\033[48;5;18m"
 
     ANSI_RESET = "\033[0m"
+
+    @dataclass
+    class Tabs:
+        ROUTES = 1
+        MDNS = 2
+
+    tab: Tabs = Tabs.ROUTES
 
     def __init__(self, conn: Connection):
         # terminal width and height from stty
@@ -253,6 +262,7 @@ class Top:
                 "command": self.command_expand_peers,
                 "help": "Toggle expand peers",
             },
+            {"key": "tab", "command": self.command_switch_tab, "help": "Switch tabs"},
         ]
 
         # make Name column as wide as possible
@@ -293,6 +303,8 @@ class Top:
                     elif key == "\033\x1b":
                         return "escape"
                     return None
+                if key == "\t":
+                    return "tab"
 
                 return key
 
@@ -346,6 +358,12 @@ class Top:
     def command_expand_peers(self):
         self.expand_peers = not self.expand_peers
 
+    def command_switch_tab(self):
+        if self.tab == self.Tabs.ROUTES:
+            self.tab = self.Tabs.MDNS
+        else:
+            self.tab = self.Tabs.ROUTES
+
     def command_help(self):
         text = ""
         for cmd in self.COMMANDS:
@@ -369,6 +387,13 @@ class Top:
 
     def set_cursor(self, x, y):
         self.print("\033[%d;%dH" % (y, x))
+
+    def print_square(self, x, y, width, height, color):
+        self.print(color)
+        for i in range(height):
+            self.terminal_goto(x, y + i)
+            self.print(" " * width)
+        self.print(self.ANSI_RESET)
 
     def dialog(self, text, bottom="Press any key", wait_for_key=True):
         width = max(len(x) for x in text.split("\n")) + 2
@@ -611,38 +636,75 @@ class Top:
         self.print_padding(f"{footer_left}{' ' * padding}{footer_right}")
         self.print(self.ANSI_RESET)
 
-    def print_row(self, row):
-        if not row:
+    def print_row(self, x, y, width, height, data):
+        if not data:
             return
 
-        text = json.dumps(row, indent=2)
+        text = json.dumps(data, indent=2)
 
-        data_rows = self.max_rows
-        top_area = data_rows + 4
-        max_col = self.height - top_area
+        top_area = y
+        max_col = y + height - top_area
 
-        self.print(self.ANSI_RESET + self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE)
-        self.print_padding(f"Current Row {self.height}: ")
         self.print(self.ANSI_RESET)
-        width_2 = self.width // 2
+        width_2 = width // 2
         max_col2 = max_col * 2
         for idx, row in enumerate(text.split("\n")):
             if idx >= max_col2:
                 continue  # skip too many rows
             elif idx < max_col:
-                self.terminal_goto(0, top_area + idx)
-                self.print(row)
+                self.terminal_goto(x, top_area + idx)
+                self.print(row[:width_2])
             else:
-                self.terminal_goto(width_2, top_area + idx - max_col)
-                self.print(f"\u2502 {row}")
+                self.terminal_goto(x + width_2, top_area + idx - max_col)
+                self.print(f"\u2502 {row[:width_2-2]}")
 
     def print_all(self):
         self.print(self.ANSI_CLEAR_SCREEN)
         self.print_header()
-        self.print_table()
-        self.print_row(self.selected_row)
+        self.print_tabs()
+        if self.tab == self.Tabs.ROUTES:
+            self.print_routes_tab()
+        elif self.tab == self.Tabs.MDNS:
+            self.print_mdns_tab()
+        else:
+            self.print_clean_tab()
         self.print_footer()
         self.flush()
+
+    def print_tabs(self):
+        selected = self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
+        not_selected = self.ANSI_BG_BLACK + self.ANSI_TEXT_WHITE
+
+        self.terminal_goto(0, 2)
+        self.print(self.ANSI_BG_BLACK + "  ")
+        if self.tab == self.Tabs.ROUTES:
+            self.print(selected + " Routes ")
+        else:
+            self.print(not_selected + " Routes ")
+        if self.tab == self.Tabs.MDNS:
+            self.print(selected + " mDNS ")
+        else:
+            self.print(self.ANSI_BG_BLACK + self.ANSI_TEXT_WHITE + " mDNS ")
+        self.print(not_selected)
+        self.print_padding("", self.width - 20)
+
+    def print_routes_tab(self):
+        self.print_table()
+        self.print(self.ANSI_RESET + self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE)
+        self.print_padding(f"Current Row {self.height}: ")
+        self.print_row(
+            0,
+            5 + self.max_rows,
+            self.width,
+            self.height - self.max_rows - 5,
+            self.selected_row,
+        )
+
+    def print_mdns_tab(self):
+        self.print_row(0, 4, self.width, self.height - 2, self.status["mdns"])
+
+    def print_clean_tab(self):
+        self.print_square(0, 3, self.width, self.height - 2, self.ANSI_BG_DARK_BLUE)
 
     def refresh_data(self):
         try:
