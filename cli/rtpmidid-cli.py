@@ -173,6 +173,13 @@ class Top:
         self.status = {}
         self.expand_peers = False
 
+        self.STATUS_STYLE = {
+            "WAITING": self.ANSI_TEXT_YELLOW,
+            "CONNECTING": self.ANSI_BG_PURPLE,
+            "CONNECTED": self.ANSI_TEXT_GREEN,
+            "DISCONNECTED": self.ANSI_TEXT_RED,
+        }
+
         self.COLUMNS = [
             {
                 "name": "ID",
@@ -203,6 +210,7 @@ class Top:
                 "get": self.get_peer_status,
                 "width": 20,
                 "align": "left",
+                "style": lambda x: self.STATUS_STYLE.get(self.get_peer_status(x)),
             },
             {
                 "name": "Sent",
@@ -276,6 +284,12 @@ class Top:
 
         # set the terminal input in one char per read
         tty.setcbreak(sys.stdin)
+
+    debug_lines = []
+
+    def debug(self, txt):
+        self.debug_lines.append(txt)
+        return txt
 
     ##
     ## INPUT
@@ -514,110 +528,6 @@ class Top:
     ## Top level components
     ##
 
-    def print_table(self):
-        def get_color_cell(row: dict, rown: int, coln: int):
-            if rown == 0:
-                if coln == self.selected_col_index:
-                    return (
-                        self.ANSI_BG_CYAN + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
-                    )
-                return self.ANSI_BG_PURPLE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
-
-            # we are in the table rows
-            rown -= 1
-            bg = self.ANSI_BG_BLACK
-            fg = self.ANSI_TEXT_WHITE
-
-            if rown == self.selected_row_index:
-                bg = self.ANSI_BG_WHITE
-                fg = self.ANSI_TEXT_BLACK
-
-            status = self.get_peer_status(row)
-            column = self.COLUMNS[coln]
-
-            bold = ""
-
-            if column["name"] == "Status":
-                if status == "CONNECTED":
-                    fg = self.ANSI_TEXT_GREEN
-                elif status == "CONNECTING":
-                    fg = self.ANSI_TEXT_YELLOW
-
-            if row.get("id") in self.selected_row.get("send_to", []):
-                bold = self.ANSI_TEXT_BOLD
-                fg = self.ANSI_TEXT_YELLOW
-
-            if self.selected_row.get("id") in row.get("send_to", []):
-                fg = self.ANSI_TEXT_YELLOW
-                bold = self.ANSI_TEXT_BOLD
-
-            return self.ANSI_RESET + fg + bg + bold
-
-        rows = self.status["router"]
-
-        def get_sort_key(row):
-            value = self.COLUMNS[self.selected_col_index]["get"](row)
-            if value is None or value == "":
-                return "ZZZZZZZ"
-            return value
-
-        rows.sort(key=get_sort_key)
-        if self.selected_row_index >= len(rows):
-            self.selected_row_index = len(rows) - 1
-        self.selected_row = rows[self.selected_row_index]
-        max_cols = self.max_cols - 1
-
-        def print_cell(row: dict, rown: int, coln: int):
-            self.print(get_color_cell(row, rown, coln))
-            column = self.COLUMNS[coln]
-            width = column["width"]
-            value = column["get"](row)
-            value = str(value)[:width]
-            if column.get("align") == "right":
-                self.print("{:>{width}}".format(value, width=width))
-            else:
-                self.print("{:{width}}".format(value, width=width))
-
-        def print_row(row: dict, rown: int):
-            for coln, column in enumerate(self.COLUMNS):
-                print_cell(row, rown, coln)
-                if coln != max_cols:
-                    self.print(" ")
-            self.print("\n")
-
-        for coln, column in enumerate(self.COLUMNS):
-            self.print(get_color_cell({}, 0, coln))
-            width = column["width"]
-            value = column["name"][:width]
-            if column.get("align") == "right":
-                self.print("{:>{width}}".format(value, width=width))
-            else:
-                self.print("{:{width}}".format(value, width=width))
-
-            if coln != max_cols:
-                self.print(" ")
-        self.print("\n")
-
-        rown = 1
-        for row in self.status["router"]:
-            print_row(row, rown)
-            if self.expand_peers and "peers" in row:
-                for peer in row["peers"]:
-                    peer = {
-                        "id": "",
-                        "name": safe_get(peer, "remote", "name"),
-                        "type": "rtppeer",
-                        "peer": peer,
-                    }
-                    print_row(peer, rown)
-                    rown += 1
-            rown += 1
-
-        self.max_rows = rown - 1
-        if self.selected_row_index >= self.max_rows:
-            self.selected_row_index = self.max_rows - 1
-        self.selected_row = self.status["router"][self.selected_row_index]
-
     def print_header(self):
         # write a header with the rtpmidid client, version, with color until the end of line
         self.print(self.ANSI_BG_BLUE + self.ANSI_TEXT_BOLD + self.ANSI_TEXT_WHITE)
@@ -753,7 +663,7 @@ class Top:
         for column in columns:
             weight_width += column["width"]
         for column in columns:
-            colwidths.append(int(column["width"] / weight_width * width))
+            colwidths.append(int(column["width"] / weight_width * width) - 1)
 
         self.print(self.ANSI_TEXT_BOLD)
         for idx, column in enumerate(columns):
@@ -779,14 +689,23 @@ class Top:
 
         self.print(self.ANSI_RESET)
         for idx, row in enumerate(sorted_data[: height - 1]):
-            if idx == self.selected_row_index:
-                self.print(style.get("row_bg_color:selected", self.ANSI_BG_WHITE))
-                self.print(style.get("row_text_color:selected", self.ANSI_TEXT_BLACK))
-            else:
-                self.print(style.get("row_bg_color", self.ANSI_BG_BLACK))
-                self.print(style.get("row_text_color", self.ANSI_TEXT_WHITE))
             self.terminal_goto(x, y + 1 + idx)
             for column, colwidth in zip(columns, colwidths):
+                if idx == self.selected_row_index:
+                    self.print(style.get("row_bg_color:selected", self.ANSI_BG_WHITE))
+                    self.print(
+                        style.get("row_text_color:selected", self.ANSI_TEXT_BLACK)
+                    )
+                else:
+                    self.print(style.get("row_bg_color", self.ANSI_BG_BLACK))
+                    self.print(style.get("row_text_color", self.ANSI_TEXT_WHITE))
+
+                cstyle = column.get("style")
+                if cstyle:
+                    cstyle = cstyle(row)
+                    if cstyle:
+                        self.print(cstyle)
+
                 value = column["get"](row)
                 if column.get("align") == "right":
                     self.print("{:>{width}}".format(value, width=colwidth))
@@ -833,6 +752,7 @@ class Top:
             self.print(self.ANSI_POP_SCREEN)
             tty.setcbreak(sys.stdin)
             print("\033[?1049l", end="")
+            print("\n".join(str(x) for x in self.debug_lines if x))
 
 
 def main(argv):
