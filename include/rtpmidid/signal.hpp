@@ -37,7 +37,7 @@ template <typename... Args> class signal_t {
   typedef std::map<int, std::function<void(Args...)>> VT;
 
 public:
-  signal_t() : slots(std::make_shared<VT>()) {
+  signal_t() : slots_(std::make_shared<VT>()) {
     DEBUG0("{}::signal_t()", (void *)this);
   }
   signal_t(signal_t<Args...> &&other) = delete;
@@ -55,10 +55,10 @@ public:
   [[nodiscard]] connection_t<Args...>
   connect(std::function<void(Args...)> const &&f) {
     auto cid = max_id++;
-    // Copy to next slots current slots, as if in use will still be valid, and
+    // Copy to next slots_ current slots_, as if in use will still be valid, and
     // later will be replaced.
-    slots = std::make_shared<VT>(*slots);
-    slots->insert(std::make_pair(cid, std::move(f)));
+    slots_ = std::make_shared<VT>(*slots_);
+    slots_->insert(std::make_pair(cid, std::move(f)));
     DEBUG0("{}::signal_t::connect(f) -> {}", (void *)this, cid);
     connections[cid] = nullptr;
     return connection_t(this, cid);
@@ -66,8 +66,8 @@ public:
 
   void disconnect(int id) {
     DEBUG0("{}::signal_t::disconnect({})", (void *)this, id);
-    slots = std::make_shared<VT>(*slots);
-    slots->erase(id);
+    slots_ = std::make_shared<VT>(*slots_);
+    slots_->erase(id);
     connections.erase(id);
   }
 
@@ -79,8 +79,8 @@ public:
       conn->second->disconnect();
     }
     DEBUG0("{}::signal_t::disconnect_all(), has {}", (void *)this,
-           slots->size());
-    assert(slots->size() == 0);
+           slots_->size());
+    assert(slots_->size() == 0);
     assert(connections.size() == 0);
   }
 
@@ -94,10 +94,10 @@ public:
    * not call a not valid callback anymore.
    */
   void operator()(Args... args) {
-    auto slots = this->slots;
-    DEBUG0("{}::signal_t::() {} slots", (void *)this, slots->size());
-    for (auto const &f : *slots) {
-      if (this->slots->find(f.first) == this->slots->end())
+    auto slots_ = this->slots_;
+    DEBUG0("{}::signal_t::() {} slots_", (void *)this, slots_->size());
+    for (auto const &f : *slots_) {
+      if (this->slots_->find(f.first) == this->slots_->end())
         continue; // this element was removed while looping, do not call
       DEBUG0("{}::signal_t::() calling {}", (void *)this, f.first);
       f.second(args...);
@@ -118,11 +118,11 @@ public:
     }
   }
 
-  size_t count() { return slots->size(); }
+  size_t count() { return slots_->size(); }
 
 private:
   int max_id = 1;
-  std::shared_ptr<VT> slots;
+  std::shared_ptr<VT> slots_;
 
   std::map<int, connection_t<Args...> *> connections{};
 };
