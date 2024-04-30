@@ -526,19 +526,26 @@ class Top:
         selected = self.ANSI_BG_CYAN + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
         not_selected = self.ANSI_BG_PURPLE + self.ANSI_TEXT_WHITE
 
+        tabs = ["Routes", "mDNS"]
+
         self.terminal_goto(0, 3)
         self.print(self.ANSI_BG_BLACK + "  ")
-        if self.tab == self.Tabs.ROUTES:
-            self.print(selected + " Routes ")
-        else:
-            self.print(not_selected + " Routes ")
-        if self.tab == self.Tabs.MDNS:
-            self.print(selected + " mDNS ")
-        else:
-            self.print(not_selected + " mDNS ")
-        self.print(not_selected)
-        self.print(self.ANSI_BG_BLACK + "  ")
-        self.print_padding("", self.width - 20)
+        pending_width = self.width - 2
+        for current_tab, tab in enumerate(tabs, 1):
+            tab_width = len(tab) + 2
+            if pending_width < tab_width:
+                break
+            if self.tab == current_tab:
+                self.print(selected)
+            else:
+                self.print(not_selected)
+            self.print(f" {tab} ")
+            self.print(self.ANSI_BG_BLACK)
+            self.print(" ")
+
+            pending_width -= tab_width
+
+        self.print_padding("", pending_width)
 
     def print_routes_tab(self):
         STATUS_STYLE = {
