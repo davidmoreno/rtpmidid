@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+from dataclasses import dataclass
 import select
 import tty
 import shutil
@@ -100,7 +101,6 @@ def parse_commands(argv):
             return d
         return [guess_type(x) for x in cmd]
 
-    print("parse_commands", argv)
     cmd = []
     for x in argv:
         if x == ".":
@@ -150,7 +150,17 @@ class Top:
     ANSI_BG_WHITE = "\033[47m"
     ANSI_BG_GREY = "\033[100m"
 
+    ANSI_BG_DARK_GREY = "\033[48;5;236m"
+    ANSI_BG_DARK_BLUE = "\033[48;5;18m"
+
     ANSI_RESET = "\033[0m"
+
+    @dataclass
+    class Tabs:
+        ROUTES = 1
+        MDNS = 2
+
+    tab: Tabs = Tabs.ROUTES
 
     def __init__(self, conn: Connection):
         # terminal width and height from stty
@@ -158,71 +168,10 @@ class Top:
         width, height = shutil.get_terminal_size()
         self.selected_row_index = 0
         self.selected_col_index = 0
-        self.selected_row = None
-        self.max_rows = height - 2
         self.width = width
         self.height = height
         self.status = {}
         self.expand_peers = False
-
-        self.COLUMNS = [
-            {
-                "name": "ID",
-                "get": lambda data: safe_get(data, "id"),
-                "width": 8,
-                "align": "right",
-            },
-            {
-                "name": "Type",
-                "get": lambda data: safe_get(data, "type"),
-                "width": 40,
-                "align": "left",
-            },
-            {
-                "name": "Local Name",
-                "get": self.get_local_name,
-                "width": 0,
-                "align": "left",
-            },
-            {
-                "name": "Remote Name",
-                "get": self.get_remote_name,
-                "width": 0,
-                "align": "left",
-            },
-            {
-                "name": "Status",
-                "get": self.get_peer_status,
-                "width": 20,
-                "align": "left",
-            },
-            {
-                "name": "Sent",
-                "get": lambda data: safe_get(data, "stats", "sent"),
-                "width": 8,
-                "align": "right",
-            },
-            {
-                "name": "Received",
-                "get": lambda data: safe_get(data, "stats", "recv"),
-                "width": 8,
-                "align": "right",
-            },
-            {
-                "name": "Latency",
-                # the unicode symbol for +- is \u00B1
-                "get": self.get_latency,
-                "width": 20,
-                "align": "right",
-            },
-            {
-                "name": "Send To",
-                "get": lambda data: ", ".join(
-                    str(x) for x in safe_get(data, "send_to")
-                ),
-                "width": 10,
-            },
-        ]
 
         self.COMMANDS = [
             {"key": "h", "command": self.command_help, "help": "Show this help"},
@@ -247,26 +196,42 @@ class Top:
                 "help": "Sort by next column",
             },
             {"key": "q", "command": self.command_quit, "help": "Quit"},
-            {"key": "k", "command": self.command_kill, "help": "Kill peer"},
-            {"key": "c", "command": self.command_connect, "help": "Connect to peer"},
+            {
+                "key": "k",
+                "command": self.command_kill,
+                "help": "Kill peer",
+                "ontab": self.Tabs.ROUTES,
+            },
+            {
+                "key": "c",
+                "command": self.command_connect,
+                "help": "Connect to peer",
+                "ontab": self.Tabs.ROUTES,
+            },
+            {
+                "key": "delete",
+                "command": self.command_delete_mdns_entry,
+                "help": "Delete mdns entry",
+                "ontab": self.Tabs.MDNS,
+            },
             {
                 "key": "p",
                 "command": self.command_expand_peers,
                 "help": "Toggle expand peers",
             },
+            {"key": "tab", "command": self.command_switch_tab, "help": "Switch tabs"},
         ]
 
-        # make Name column as wide as possible
-        auto_width_count = len([x for x in self.COLUMNS if x["width"] == 0])
-        extra_width = self.width - sum((x["width"] + 1) for x in self.COLUMNS) + 1
-        for col in self.COLUMNS:
-            if col["width"] == 0:
-                col["width"] = extra_width // auto_width_count
-        self.max_cols = len(self.COLUMNS)
         self.print_data = []
 
         # set the terminal input in one char per read
         tty.setcbreak(sys.stdin)
+
+    debug_lines = []
+
+    def debug(self, txt):
+        self.debug_lines.append(txt)
+        return txt
 
     ##
     ## INPUT
@@ -293,7 +258,11 @@ class Top:
                         return "left"
                     elif key == "\033\x1b":
                         return "escape"
+                    elif key == "\033[3":
+                        return "delete"
                     return None
+                if key == "\t":
+                    return "tab"
 
                 return key
 
@@ -311,28 +280,26 @@ class Top:
 
     def command_move_down(self):
         self.selected_row_index += 1
-        if self.selected_row_index >= self.max_rows:
-            self.selected_row_index = self.max_rows - 1
 
     def command_move_left(self):
         self.selected_col_index -= 1
         if self.selected_col_index < 0:
-            self.selected_col_index = self.max_cols - 1
+            self.selected_col_index = 0
 
     def command_move_right(self):
         self.selected_col_index += 1
-        if self.selected_col_index >= self.max_cols:
-            self.selected_col_index = 0
 
     def command_quit(self):
         sys.exit(0)
 
     def command_kill(self):
-        self.conn.command(
-            {"method": "router.remove", "params": [self.selected_row["id"]]}
-        )
+        data = self.status["router"]
+        current_id = data[self.selected_row_index]["id"]
+        self.conn.command({"method": "router.remove", "params": [current_id]})
 
     def command_connect(self):
+        data = self.status["router"]
+        current_id = data[self.selected_row_index]["id"]
         peer_id = self.dialog_ask("Connect to which peer id?")
         if not peer_id:
             return
@@ -340,16 +307,47 @@ class Top:
         self.conn.command(
             {
                 "method": "router.connect",
-                "params": {"from": self.selected_row["id"], "to": int(peer_id)},
+                "params": {"from": current_id, "to": int(peer_id)},
             }
         )
 
     def command_expand_peers(self):
         self.expand_peers = not self.expand_peers
 
+    def command_switch_tab(self):
+        if self.tab == self.Tabs.ROUTES:
+            self.tab = self.Tabs.MDNS
+        else:
+            self.tab = self.Tabs.ROUTES
+
+    def command_delete_mdns_entry(self):
+        items = (
+            self.status["mdns"]["announcements"]
+            + self.status["mdns"]["remote_announcements"]
+        )
+        item = items[self.selected_row_index]
+        if not item:
+            return
+
+        ret = self.conn.command(
+            {
+                "method": "mdns.remove",
+                "params": {
+                    "name": item["name"],
+                    "hostname": item.get("hostname"),
+                    "port": item["port"],
+                },
+            }
+        )
+        if "error" in ret:
+            self.dialog(ret["error"])
+
     def command_help(self):
         text = ""
         for cmd in self.COMMANDS:
+            ontab = cmd.get("ontab")
+            if ontab is not None and ontab != self.tab:
+                continue
             text += f"[{cmd['key']}]{' '*(8-len(cmd['key']))} {cmd['help']}\n"
         text = text.strip()
         self.dialog(text=text)
@@ -370,6 +368,13 @@ class Top:
 
     def set_cursor(self, x, y):
         self.print("\033[%d;%dH" % (y, x))
+
+    def print_square(self, x, y, width, height, color):
+        self.print(color)
+        for i in range(height):
+            self.terminal_goto(x, y + i)
+            self.print(" " * width)
+        self.print(self.ANSI_RESET)
 
     def dialog(self, text, bottom="Press any key", wait_for_key=True):
         width = max(len(x) for x in text.split("\n")) + 2
@@ -461,138 +466,8 @@ class Top:
         self.print(text[:count] + " " * padchars)
 
     ##
-    ## Data gathering
-    ##
-
-    def get_peer_status(self, data):
-        return safe_get(data, "peer", "status") or safe_get(data, "status")
-
-    def get_latency(self, data):
-        avg = safe_get(data, "peer", "latency_ms", "average")
-        if avg == "":
-            return ""
-        stddev = safe_get(data, "peer", "latency_ms", "stddev")
-        return f"{avg}ms \u00B1 {stddev}ms"
-
-    def get_local_name(self, data):
-        type_ = safe_get(data, "type")
-        if type_.startswith("local:"):
-            return safe_get(data, "name")
-        return ""
-
-    def get_remote_name(self, data):
-        type_ = safe_get(data, "type")
-        if type_.startswith("network:"):
-            return safe_get(data, "name")
-        return ""
-
-    ##
     ## Top level components
     ##
-
-    def print_table(self):
-        def get_color_cell(row: dict, rown: int, coln: int):
-            if rown == 0:
-                if coln == self.selected_col_index:
-                    return (
-                        self.ANSI_BG_CYAN + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
-                    )
-                return self.ANSI_BG_PURPLE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
-
-            # we are in the table rows
-            rown -= 1
-            bg = self.ANSI_BG_BLACK
-            fg = self.ANSI_TEXT_WHITE
-
-            if rown == self.selected_row_index:
-                bg = self.ANSI_BG_WHITE
-                fg = self.ANSI_TEXT_BLACK
-
-            status = self.get_peer_status(row)
-            column = self.COLUMNS[coln]
-
-            bold = ""
-
-            if column["name"] == "Status":
-                if status == "CONNECTED":
-                    fg = self.ANSI_TEXT_GREEN
-                elif status == "CONNECTING":
-                    fg = self.ANSI_TEXT_YELLOW
-
-            if row.get("id") in self.selected_row.get("send_to", []):
-                bold = self.ANSI_TEXT_BOLD
-                fg = self.ANSI_TEXT_YELLOW
-
-            if self.selected_row.get("id") in row.get("send_to", []):
-                fg = self.ANSI_TEXT_YELLOW
-                bold = self.ANSI_TEXT_BOLD
-
-            return self.ANSI_RESET + fg + bg + bold
-
-        rows = self.status["router"]
-
-        def get_sort_key(row):
-            value = self.COLUMNS[self.selected_col_index]["get"](row)
-            if value is None or value == "":
-                return "ZZZZZZZ"
-            return value
-
-        rows.sort(key=get_sort_key)
-        if self.selected_row_index >= len(rows):
-            self.selected_row_index = len(rows) - 1
-        self.selected_row = rows[self.selected_row_index]
-        max_cols = self.max_cols - 1
-
-        def print_cell(row: dict, rown: int, coln: int):
-            self.print(get_color_cell(row, rown, coln))
-            column = self.COLUMNS[coln]
-            width = column["width"]
-            value = column["get"](row)
-            value = str(value)[:width]
-            if column.get("align") == "right":
-                self.print("{:>{width}}".format(value, width=width))
-            else:
-                self.print("{:{width}}".format(value, width=width))
-
-        def print_row(row: dict, rown: int):
-            for coln, column in enumerate(self.COLUMNS):
-                print_cell(row, rown, coln)
-                if coln != max_cols:
-                    self.print(" ")
-            self.print("\n")
-
-        for coln, column in enumerate(self.COLUMNS):
-            self.print(get_color_cell({}, 0, coln))
-            width = column["width"]
-            value = column["name"][:width]
-            if column.get("align") == "right":
-                self.print("{:>{width}}".format(value, width=width))
-            else:
-                self.print("{:{width}}".format(value, width=width))
-
-            if coln != max_cols:
-                self.print(" ")
-        self.print("\n")
-
-        rown = 1
-        for row in self.status["router"]:
-            print_row(row, rown)
-            if self.expand_peers and "peers" in row:
-                for peer in row["peers"]:
-                    peer = {
-                        "id": "",
-                        "name": safe_get(peer, "remote", "name"),
-                        "type": "rtppeer",
-                        "peer": peer,
-                    }
-                    print_row(peer, rown)
-                    rown += 1
-            rown += 1
-
-        self.max_rows = rown - 1
-        if self.selected_row_index >= self.max_rows:
-            self.selected_row_index = self.max_rows - 1
-        self.selected_row = self.status["router"][self.selected_row_index]
 
     def print_header(self):
         # write a header with the rtpmidid client, version, with color until the end of line
@@ -612,38 +487,324 @@ class Top:
         self.print_padding(f"{footer_left}{' ' * padding}{footer_right}")
         self.print(self.ANSI_RESET)
 
-    def print_row(self, row):
-        if not row:
+    def print_json_row(self, x, y, width, height, data):
+        if not data:
             return
 
-        text = json.dumps(row, indent=2)
+        text = json.dumps(data, indent=2)
 
-        data_rows = self.max_rows
-        top_area = data_rows + 4
-        max_col = self.height - top_area
+        top_area = y
+        max_col = y + height - top_area
 
-        self.print(self.ANSI_RESET + self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE)
-        self.print_padding(f"Current Row {self.height}: ")
         self.print(self.ANSI_RESET)
-        width_2 = self.width // 2
+        width_2 = width // 2
         max_col2 = max_col * 2
         for idx, row in enumerate(text.split("\n")):
             if idx >= max_col2:
                 continue  # skip too many rows
             elif idx < max_col:
-                self.terminal_goto(0, top_area + idx)
-                self.print(row)
+                self.terminal_goto(x, top_area + idx)
+                self.print(row[:width_2])
             else:
-                self.terminal_goto(width_2, top_area + idx - max_col)
-                self.print(f"\u2502 {row}")
+                self.terminal_goto(x + width_2, top_area + idx - max_col)
+                self.print(f"\u2502 {row[:width_2-2]}")
 
     def print_all(self):
         self.print(self.ANSI_CLEAR_SCREEN)
         self.print_header()
-        self.print_table()
-        self.print_row(self.selected_row)
+        self.print_tabs()
+        if self.tab == self.Tabs.ROUTES:
+            self.print_routes_tab()
+        elif self.tab == self.Tabs.MDNS:
+            self.print_mdns_tab()
+        else:
+            self.print_clean_tab()
         self.print_footer()
         self.flush()
+
+    def print_tabs(self):
+        selected = self.ANSI_BG_CYAN + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
+        not_selected = self.ANSI_BG_PURPLE + self.ANSI_TEXT_WHITE
+
+        tabs = ["Routes", "mDNS"]
+
+        self.terminal_goto(0, 3)
+        self.print(self.ANSI_BG_BLACK + "  ")
+        pending_width = self.width - 2
+        for current_tab, tab in enumerate(tabs, 1):
+            tab_width = len(tab) + 2
+            if pending_width < tab_width:
+                break
+            if self.tab == current_tab:
+                self.print(selected)
+            else:
+                self.print(not_selected)
+            self.print(f" {tab} ")
+            self.print(self.ANSI_BG_BLACK)
+            self.print(" ")
+
+            pending_width -= tab_width
+
+        self.print_padding("", pending_width)
+
+    def print_routes_tab(self):
+        STATUS_STYLE = {
+            "WAITING": self.ANSI_TEXT_YELLOW,
+            "CONNECTING": self.ANSI_BG_PURPLE,
+            "CONNECTED": self.ANSI_TEXT_GREEN,
+            "DISCONNECTED": self.ANSI_TEXT_RED,
+        }
+
+        def get_peer_status(data):
+            return safe_get(data, "peer", "status") or safe_get(data, "status")
+
+        def get_latency(data):
+            avg = safe_get(data, "peer", "latency_ms", "average")
+            if avg == "":
+                return ""
+            stddev = safe_get(data, "peer", "latency_ms", "stddev")
+            return f"{avg}ms \u00B1 {stddev}ms"
+
+        def get_local_name(data):
+            type_ = safe_get(data, "type")
+            if type_.startswith("local:"):
+                return safe_get(data, "name")
+            return ""
+
+        def get_remote_name(data):
+            type_ = safe_get(data, "type")
+            if type_.startswith("network:"):
+                return safe_get(data, "name")
+            return ""
+
+        columns = [
+            {
+                "name": "ID",
+                "get": lambda data: safe_get(data, "id"),
+                "width": 8,
+                "align": "right",
+            },
+            {
+                "name": "Type",
+                "get": lambda data: safe_get(data, "type"),
+                "width": 40,
+                "align": "left",
+            },
+            {
+                "name": "Local Name",
+                "get": get_local_name,
+                "width": 0,
+                "align": "left",
+            },
+            {
+                "name": "Remote Name",
+                "get": get_remote_name,
+                "width": 0,
+                "align": "left",
+            },
+            {
+                "name": "Status",
+                "get": get_peer_status,
+                "width": 20,
+                "align": "left",
+                "style": lambda x: STATUS_STYLE.get(get_peer_status(x)),
+            },
+            {
+                "name": "Sent",
+                "get": lambda data: safe_get(data, "stats", "sent"),
+                "width": 8,
+                "align": "right",
+            },
+            {
+                "name": "Received",
+                "get": lambda data: safe_get(data, "stats", "recv"),
+                "width": 8,
+                "align": "right",
+            },
+            {
+                "name": "Latency",
+                # the unicode symbol for +- is \u00B1
+                "get": get_latency,
+                "width": 20,
+                "align": "right",
+            },
+            {
+                "name": "Send To",
+                "get": lambda data: ", ".join(
+                    str(x) for x in safe_get(data, "send_to")
+                ),
+                "width": 10,
+            },
+        ]
+
+        data = self.status["router"]
+        self.print_data_table(
+            0,
+            4,
+            self.width,
+            len(data) + 4,
+            columns,
+            data,
+        )
+        self.terminal_goto(0, len(data) + 5)
+        self.print(self.ANSI_RESET + self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE)
+        self.print_padding(f"Current Row {self.height}: ")
+        self.print_json_row(
+            0,
+            6 + len(data),
+            self.width,
+            self.height - len(data) - 5,
+            data[self.selected_row_index],
+        )
+
+    def print_mdns_tab(self):
+        if "mdns" not in self.status:
+            self.dialog("mDNS is not available")
+            self.tab = self.Tabs.ROUTES
+            return
+        data = (
+            self.status["mdns"]["announcements"]
+            + self.status["mdns"]["remote_announcements"]
+        )
+
+        def style(row):
+            if row is self.current_row:
+                return None
+            if row["name"] == self.current_row["name"]:
+                return self.ANSI_BG_DARK_GREY
+
+            hostname = safe_get(row, "hostname")
+            if not hostname:
+                return self.ANSI_TEXT_GREY
+            if ":" in hostname:
+                return self.ANSI_TEXT_PURPLE
+            if hostname == "127.0.0.1":
+                return self.ANSI_TEXT_GREY
+            return self.ANSI_TEXT_WHITE
+
+        def get_type(row):
+            hostname = safe_get(row, "hostname")
+            if not hostname:
+                return "local"
+            if ":" in hostname:
+                return "ipv6"
+            if hostname == "127.0.0.1":
+                return "local"
+            return "ipv4"
+
+        self.print_data_table(
+            0,
+            4,
+            self.width,
+            self.height - 2,
+            [
+                {
+                    "name": "Type",
+                    "width": 4,
+                    "get": get_type,
+                    "style": style,
+                },
+                {
+                    "name": "Name",
+                    "width": 0,
+                    "get": lambda data: safe_get(data, "name"),
+                    "style": style,
+                },
+                {
+                    "name": "Hostname",
+                    "width": 40,
+                    "get": lambda data: safe_get(data, "hostname"),
+                    "style": style,
+                },
+                {
+                    "name": "Port",
+                    "width": 8,
+                    "get": lambda data: safe_get(data, "port"),
+                    "style": style,
+                },
+            ],
+            data,
+        )
+        # self.print_row(0, 4, self.width, self.height - 2, self.status["mdns"])
+
+    def print_clean_tab(self):
+        self.print_square(0, 3, self.width, self.height - 2, self.ANSI_BG_DARK_BLUE)
+
+    def calculate_colwidths(self, columns, width):
+        # make Name column as wide as possible
+        auto_width_count = len([x for x in columns if x["width"] == 0])
+        extra_width = width - sum((x["width"] + 1) for x in columns) + 1
+        colwidths = []
+        for col in columns:
+            if col["width"] == 0:
+                colwidths.append(extra_width // auto_width_count)
+            else:
+                colwidths.append(col["width"])
+        return colwidths
+
+    def print_data_table(self, x, y, width, height, columns, data, style={}):
+        if self.selected_col_index >= len(columns):
+            self.selected_col_index = 0
+        if self.selected_row_index >= len(data):
+            self.selected_row_index = len(data) - 1
+
+        self.terminal_goto(x, y)
+        colwidths = self.calculate_colwidths(columns, width)
+
+        self.print(self.ANSI_TEXT_BOLD)
+        for idx, column in enumerate(columns):
+            colwidth = colwidths[idx]
+            if idx == self.selected_col_index:
+                self.print(style.get("header_bg_color:selected", self.ANSI_BG_CYAN))
+                self.print(
+                    style.get("header_text_color:selected", self.ANSI_TEXT_WHITE)
+                )
+            else:
+                self.print(style.get("header_bg_color", self.ANSI_BG_PURPLE))
+                self.print(style.get("header_text_color", self.ANSI_TEXT_WHITE))
+
+            self.print_padding(column["name"], colwidth)
+            self.print(" ")
+        self.terminal_goto(x, y + 1)
+
+        sortf = columns[self.selected_col_index].get("get_sort_key")
+        if not sortf:
+            sortf = columns[self.selected_col_index]["get"]
+
+        sorted_data = sorted(sorted(data, key=lambda x: str(x)), key=lambda x: sortf(x))
+        self.current_row = sorted_data[self.selected_row_index]
+
+        self.print(self.ANSI_RESET)
+        for idx, row in enumerate(sorted_data[: height - 1]):
+            self.terminal_goto(x, y + 1 + idx)
+            for column, colwidth in zip(columns, colwidths):
+                if idx == self.selected_row_index:
+                    self.print(style.get("row_bg_color:selected", self.ANSI_BG_WHITE))
+                    self.print(
+                        style.get("row_text_color:selected", self.ANSI_TEXT_BLACK)
+                    )
+                else:
+                    self.print(style.get("row_bg_color", self.ANSI_BG_BLACK))
+                    self.print(style.get("row_text_color", self.ANSI_TEXT_WHITE))
+
+                cstyle = column.get("style")
+                if cstyle:
+                    cstyle = cstyle(row)
+                    if cstyle:
+                        self.print(cstyle)
+
+                value = column["get"](row)
+                if column.get("align") == "right":
+                    self.print(
+                        "{:>{width}}".format(str(value)[:colwidth], width=colwidth)
+                    )
+                else:
+                    self.print(
+                        "{:{width}}".format(str(value)[:colwidth], width=colwidth)
+                    )
+                # self.print_padding(str(value or ""), colwidth)
+                self.print(" ")
+            self.terminal_goto(x, y + 1)
 
     def refresh_data(self):
         try:
@@ -680,6 +841,9 @@ class Top:
             pass
         finally:
             self.print(self.ANSI_POP_SCREEN)
+            tty.setcbreak(sys.stdin)
+            print("\033[?1049l", end="")
+            print("\n".join(str(x) for x in self.debug_lines if x))
 
 
 def main(argv):

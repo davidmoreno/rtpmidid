@@ -26,7 +26,7 @@
 #include "utils.hpp"
 
 namespace rtpmididns {
-extern std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
+extern std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 
 /**
  * @short A rtpmidi server that just sends data to another peer

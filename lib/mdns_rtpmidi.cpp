@@ -297,7 +297,11 @@ static void resolve_callback(AvahiServiceResolver *r, AvahiIfIndex interface,
 
     // FIXME: address is not correct for interface (!), so is not unique, how to
     // make unique? or filter on interface?
-    mr->discover_event(name, avahi_address_str.data(), std::to_string(port));
+    mr->discover_remote(rtpmidid::remote_announcement_t{
+        name,
+        avahi_address_str.data(),
+        port,
+    });
   }
   }
   avahi_service_resolver_free(r);
@@ -334,7 +338,7 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface,
   case AVAHI_BROWSER_REMOVE:
     INFO("(Browser) REMOVE: service '{}' of type '{}' in domain '{}'", name,
          type, domain);
-    mr->remove_event(name, "*", "*");
+    mr->remove_remote(name);
     break;
   case AVAHI_BROWSER_ALL_FOR_NOW:
   case AVAHI_BROWSER_CACHE_EXHAUSTED:
@@ -447,4 +451,34 @@ void rtpmidid::mdns_rtpmidi_t::unannounce_rtpmidi(const std::string &name,
                                      }),
                       announcements.end());
   announce_all();
+}
+
+void rtpmidid::mdns_rtpmidi_t::discover_remote(
+    const remote_announcement_t &remote) {
+  discover_event(remote.name, remote.address, std::to_string(remote.port));
+  remote_announcements.push_back(remote);
+}
+
+void rtpmidid::mdns_rtpmidi_t::remove_remote(const std::string &name) {
+  remove_event(name, "", "");
+  remote_announcements.erase(
+      std::remove_if(
+          remote_announcements.begin(), remote_announcements.end(),
+          [name](const remote_announcement_t &t) { return name == t.name; }),
+      remote_announcements.end());
+}
+
+void rtpmidid::mdns_rtpmidi_t::remove_announcement(const std::string &name,
+                                                   const std::string &address,
+                                                   int port) {
+  if (address == "") {
+    unannounce_rtpmidi(name, port);
+  } else {
+    remote_announcements.erase(
+        std::remove_if(
+            remote_announcements.begin(), remote_announcements.end(),
+            [name](const remote_announcement_t &t) { return name == t.name; }),
+        remote_announcements.end());
+    remove_event(name, address, std::to_string(port));
+  }
 }

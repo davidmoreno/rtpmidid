@@ -24,6 +24,7 @@
 #include "json.hpp"
 #include "midipeer.hpp"
 #include "stringpp.hpp"
+#include <rtpmidid/mdns_rtpmidi.hpp>
 
 namespace rtpmididns {
 // NOLINTNEXTLINE
@@ -150,6 +151,35 @@ struct command_t {
   std::function<json_t(rtpmididns::control_socket_t &, const json_t &)> func;
 };
 } // namespace control_socket_ns
+
+json_t mdns_status(const std::shared_ptr<rtpmidid::mdns_rtpmidi_t> &mdns) {
+  if (!mdns)
+    return json_t{"status", "Not available"};
+
+  std::vector<json_t> announcements;
+  for (auto &announcement : mdns->announcements) {
+    announcements.push_back({
+        {"name", announcement.name},
+        {"port", announcement.port},
+    });
+  }
+
+  std::vector<json_t> remote_announcements;
+  for (auto &announcement : mdns->remote_announcements) {
+    remote_announcements.push_back({
+        {"name", announcement.name},
+        {"hostname", announcement.address},
+        {"port", announcement.port},
+    });
+  }
+
+  return json_t{
+      {"status", "Available"},
+      {"announcements", announcements},
+      {"remote_announcements", remote_announcements},
+  };
+}
+
 // NOLINTNEXTLINE
 const std::vector<control_socket_ns::command_t> COMMANDS{
     {"status", "Return status of the daemon",
@@ -161,7 +191,8 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
                 {"alsa_name", rtpmididns::settings.alsa_name},
                 {"control_filename", rtpmididns::settings.control_filename} //
             }},
-           {"router", control.router->status()} //
+           {"router", control.router->status()}, //
+           {"mdns", mdns_status(control.mdns)},  //
        };
      }},
     {"router.remove", "Remove a peer from the router",
@@ -220,7 +251,7 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
        }
        if (error)
          return json_t{"error",
-                       "Need 1 param (hostn ame:hostname:5004), 2 params "
+                       "Need 1 param (hostname:hostname:5004), 2 params "
                        "(hostname:port), "
                        "3 params (name,hostname,port) or a dict{name, "
                        "hostname, port}"};
@@ -229,7 +260,20 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
            control.router, name, hostname, port, control.aseq));
        return json_t{"ok"};
      }},
-    // REturn some help text
+    {"mdns.remove", "Delete a mdns announcement",
+     [](control_socket_t &control, const json_t &params) {
+       DEBUG("Params {}", params.dump());
+       std::string name = params["name"];
+       std::string hostname;
+       if (!params["hostname"].is_null()) {
+         hostname = params["hostname"];
+       }
+       int32_t port = params["port"];
+       DEBUG("Delete mdns announcement {}", name);
+       control.mdns->remove_announcement(name, hostname, port);
+       return "ok";
+     }},
+    // Return some help text
     {"help", "Return help text",
      [](control_socket_t &control, const json_t &) {
        auto res = std::vector<json_t>{};
@@ -277,8 +321,10 @@ std::string control_socket_t::parse_command(const std::string &command) {
     }
 
     retdata["error"] = fmt::format("Unknown method '{}'", method);
+    ERROR("Error running method: {}", retdata["error"]);
     return retdata.dump();
   } catch (const std::exception &e) {
+    ERROR("Error running method: {}", e.what());
     retdata["error"] = e.what();
     return retdata.dump();
   }

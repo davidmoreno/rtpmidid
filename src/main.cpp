@@ -31,7 +31,7 @@
 
 namespace rtpmididns {
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
+std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 settings_t settings;
 void parse_argv(const std::vector<std::string> &argv);
@@ -78,6 +78,7 @@ int main(int argc, char **argv) {
     rtpmididns::control_socket_t control;
     control.router = router;
     control.aseq = aseq;
+    control.mdns = rtpmididns::mdns;
     rtpmididns::rtpmidi_remote_handler_t rtpmidi_remote_handler(router, aseq);
 
     // Create all the alsa network midipeers
@@ -107,7 +108,7 @@ int main(int argc, char **argv) {
   } catch (...) {
     ERROR("Unhandled exception!");
   }
-  rtpmididns::mdns.reset(nullptr);
+  rtpmididns::mdns = nullptr;
 
   INFO("FIN");
   return 0;

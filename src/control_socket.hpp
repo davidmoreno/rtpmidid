@@ -24,6 +24,10 @@
 #include <string>
 #include <vector>
 
+namespace rtpmidid {
+class mdns_rtpmidi_t;
+}
+
 namespace rtpmididns {
 class control_socket_t {
   NON_COPYABLE_NOR_MOVABLE(control_socket_t)
@@ -40,6 +44,7 @@ public:
   time_t start_time;
   std::shared_ptr<midirouter_t> router = nullptr;
   std::shared_ptr<aseq_t> aseq = nullptr;
+  std::shared_ptr<rtpmidid::mdns_rtpmidi_t> mdns = nullptr;
 
 public:
   control_socket_t();

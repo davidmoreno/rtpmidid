@@ -37,7 +37,7 @@ namespace rtpmididns {
 // NOLINTNEXTLINE
 settings_t settings;
 // NOLINTNEXTLINE
-std::unique_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
+std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 const char *VERSION = "TEST"; // NOLINT
 } // namespace rtpmididns
 
