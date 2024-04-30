@@ -251,7 +251,7 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
        }
        if (error)
          return json_t{"error",
-                       "Need 1 param (hostn ame:hostname:5004), 2 params "
+                       "Need 1 param (hostname:hostname:5004), 2 params "
                        "(hostname:port), "
                        "3 params (name,hostname,port) or a dict{name, "
                        "hostname, port}"};
