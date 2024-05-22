@@ -17,6 +17,7 @@
  */
 
 #include "settings.hpp"
+#include <fmt/format.h>
 
 fmt::appender fmt::formatter<rtpmididns::settings_t::alsa_announce_t>::format(
     const rtpmididns::settings_t::alsa_announce_t &data, format_context &ctx) {
@@ -110,7 +111,7 @@ fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_t>::format(
   return fmt::format_to(ctx.out(), "{}", result);
 }
 
-fmt::appender
+auto
 fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_type_e>::format(
     const rtpmididns::settings_t::alsa_hw_auto_export_type_e &data,
     format_context &ctx) {
@@ -132,4 +133,5 @@ fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_type_e>::format(
   }
   result += "]";
   return fmt::format_to(ctx.out(), "{}", result);
+  // return fmt::formatter<fmt::string_view>::format(result, ctx);
 }

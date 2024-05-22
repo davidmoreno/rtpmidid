@@ -152,9 +152,9 @@ public:
 
 template <>
 struct fmt::formatter<rtpmidid::rtppeer_t::status_e>
-    : formatter<std::string_view> {
+    : formatter<fmt::string_view> {
   auto format(rtpmidid::rtppeer_t::status_e c, format_context &ctx) {
-    std::string_view name = "UNKNOWN";
+    fmt::string_view name = "UNKNOWN";
     switch (c) {
     case rtpmidid::rtppeer_t::status_e::NOT_CONNECTED:
       name = "NOT_CONNECTED";
@@ -169,13 +169,13 @@ struct fmt::formatter<rtpmidid::rtppeer_t::status_e>
       name = "CONNECTED";
       break;
     }
-    return formatter<std::string_view>::format(name, ctx); // NOLINT
+    return formatter<fmt::string_view>::format(name, ctx); // NOLINT
   }
 };
 
 template <>
 struct fmt::formatter<rtpmidid::rtppeer_t::port_e>
-    : formatter<std::string_view> {
+    : formatter<fmt::string_view> {
   auto format(rtpmidid::rtppeer_t::port_e c, format_context &ctx) {
     const char *name = "UNKNOWN"; // NOLINT
     switch (c) {
@@ -186,13 +186,13 @@ struct fmt::formatter<rtpmidid::rtppeer_t::port_e>
       name = "CONTROL_PORT";
       break;
     }
-    return formatter<std::string_view>::format(name, ctx); // NOLINT
+    return formatter<fmt::string_view>::format(name, ctx); // NOLINT
   }
 };
 
 template <>
 struct fmt::formatter<rtpmidid::rtppeer_t::disconnect_reason_e>
-    : formatter<std::string_view> {
+    : formatter<fmt::string_view> {
   auto format(rtpmidid::rtppeer_t::disconnect_reason_e c, format_context &ctx) {
     const char *name = "UNKNOWN"; // NOLINT
     switch (c) {
@@ -218,6 +218,6 @@ struct fmt::formatter<rtpmidid::rtppeer_t::disconnect_reason_e>
       name = "NETWORK_ERROR";
       break;
     }
-    return formatter<std::string_view>::format(name, ctx); // NOLINT
+    return formatter<fmt::string_view>::format(name, ctx); // NOLINT
   }
 };

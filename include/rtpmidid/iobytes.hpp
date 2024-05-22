@@ -354,9 +354,9 @@ public:
 } // namespace rtpmidid
 
 template <>
-struct fmt::formatter<rtpmidid::io_bytes_reader> : formatter<std::string_view> {
+struct fmt::formatter<rtpmidid::io_bytes_reader> : formatter<fmt::string_view> {
   auto format(const rtpmidid::io_bytes_reader &data, format_context &ctx) {
-    return formatter<std::string_view>::format(
+    return formatter<fmt::string_view>::format(
         fmt::format("[io_bytes_reader {} to {}, at {}, {}B left]",
                     (void *)data.start, (void *)data.end, (void *)data.position,
                     data.end - data.position),
@@ -364,9 +364,9 @@ struct fmt::formatter<rtpmidid::io_bytes_reader> : formatter<std::string_view> {
   }
 };
 template <>
-struct fmt::formatter<rtpmidid::io_bytes_writer> : formatter<std::string_view> {
+struct fmt::formatter<rtpmidid::io_bytes_writer> : formatter<fmt::string_view> {
   auto format(const rtpmidid::io_bytes_reader &data, format_context &ctx) {
-    return formatter<std::string_view>::format(
+    return formatter<fmt::string_view>::format(
         fmt::format("[io_bytes_writer {} to {}, at {}, {}B left]",
                     (void *)data.start, (void *)data.end, (void *)data.position,
                     data.end - data.position),

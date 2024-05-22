@@ -44,7 +44,7 @@ inline in6_addr *sockaddr_storage_get_addr_in6(sockaddr_storage *addr) {
 } // namespace rtpmidid
 
 template <>
-struct fmt::formatter<sockaddr_storage> : formatter<std::string_view> {
+struct fmt::formatter<sockaddr_storage> : formatter<fmt::string_view> {
   auto format(const sockaddr_storage &addr, format_context &ctx) {
     // print ip address and port
     std::array<char, INET6_ADDRSTRLEN> name{};
@@ -53,7 +53,7 @@ struct fmt::formatter<sockaddr_storage> : formatter<std::string_view> {
       auto *s = reinterpret_cast<const sockaddr_in *>(&addr);
       inet_ntop(AF_INET, &s->sin_addr, name.data(), name.size());
 
-      return formatter<std::string_view>::format(
+      return formatter<fmt::string_view>::format(
           fmt::format("{}:{}", name.data(), ntohs(s->sin_port)), ctx);
     }
     if (addr.ss_family != AF_INET6) {
@@ -61,9 +61,9 @@ struct fmt::formatter<sockaddr_storage> : formatter<std::string_view> {
       auto *s = reinterpret_cast<const sockaddr_in6 *>(&addr);
       inet_ntop(AF_INET6, &s->sin6_addr, name.data(), name.size());
 
-      return formatter<std::string_view>::format(
+      return formatter<fmt::string_view>::format(
           fmt::format("{}:{}", name.data(), ntohs(s->sin6_port)), ctx);
     }
-    return formatter<std::string_view>::format("unknown", ctx);
+    return formatter<fmt::string_view>::format("unknown", ctx);
   }
 };

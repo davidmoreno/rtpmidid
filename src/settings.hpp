@@ -73,14 +73,14 @@ extern settings_t settings; // NOLINT
 
 template <>
 struct fmt::formatter<rtpmididns::settings_t::alsa_announce_t>
-    : formatter<std::string_view> {
+    : formatter<fmt::string_view> {
   fmt::appender format(const rtpmididns::settings_t::alsa_announce_t &data,
                        format_context &ctx);
 };
 
 template <>
 struct fmt::formatter<std::vector<rtpmididns::settings_t::alsa_announce_t>>
-    : formatter<std::string_view> {
+    : formatter<fmt::string_view> {
   fmt::appender
   format(const std::vector<rtpmididns::settings_t::alsa_announce_t> &data,
          format_context &ctx);
@@ -88,14 +88,14 @@ struct fmt::formatter<std::vector<rtpmididns::settings_t::alsa_announce_t>>
 
 template <>
 struct fmt::formatter<rtpmididns::settings_t::rtpmidi_announce_t>
-    : formatter<std::string_view> {
+    : formatter<fmt::string_view> {
   fmt::appender format(const rtpmididns::settings_t::rtpmidi_announce_t &data,
                        format_context &ctx);
 };
 
 template <>
 struct fmt::formatter<std::vector<rtpmididns::settings_t::rtpmidi_announce_t>>
-    : formatter<std::string_view> {
+    : formatter<fmt::string_view> {
   fmt::appender
   format(const std::vector<rtpmididns::settings_t::rtpmidi_announce_t> &data,
          format_context &ctx);
@@ -103,27 +103,27 @@ struct fmt::formatter<std::vector<rtpmididns::settings_t::rtpmidi_announce_t>>
 
 template <>
 struct fmt::formatter<rtpmididns::settings_t::connect_to_t>
-    : formatter<std::string_view> {
+    : formatter<fmt::string_view> {
   fmt::appender format(const rtpmididns::settings_t::connect_to_t &data,
                        format_context &ctx);
 };
 
 template <>
 struct fmt::formatter<std::vector<rtpmididns::settings_t::connect_to_t>>
-    : formatter<std::string_view> {
+    : formatter<fmt::string_view> {
   fmt::appender
   format(const std::vector<rtpmididns::settings_t::connect_to_t> &data,
          format_context &ctx);
 };
 
 template <>
-struct fmt::formatter<rtpmididns::settings_t> : formatter<std::string_view> {
+struct fmt::formatter<rtpmididns::settings_t> : formatter<fmt::string_view> {
   fmt::appender format(const rtpmididns::settings_t &data, format_context &ctx);
 };
 
 template <>
 struct fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_t>
-    : formatter<std::string_view> {
+    : formatter<fmt::string_view> {
   fmt::appender
   format(const rtpmididns::settings_t::alsa_hw_auto_export_t &data,
          format_context &ctx);
@@ -131,8 +131,8 @@ struct fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_t>
 
 template <>
 struct fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_type_e>
-    : formatter<std::string_view> {
-  fmt::appender
+    : formatter<fmt::string_view> {
+  auto
   format(const rtpmididns::settings_t::alsa_hw_auto_export_type_e &data,
          format_context &ctx);
 };

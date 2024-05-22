@@ -168,20 +168,20 @@ template <> struct hash<rtpmididns::aseq_t::port_t> {
 
 template <>
 struct fmt::formatter<rtpmididns::aseq_t::port_t>
-    : formatter<std::string_view> {
+    : formatter<fmt::string_view> {
   fmt::appender format(rtpmididns::aseq_t::port_t c, format_context &ctx);
 };
 
 template <>
 struct fmt::formatter<rtpmididns::aseq_t::client_type_e>
-    : formatter<std::string_view> {
+    : formatter<fmt::string_view> {
   fmt::appender format(rtpmididns::aseq_t::client_type_e c,
                        format_context &ctx);
 };
 
 template <>
 struct fmt::formatter<rtpmididns::aseq_t::connection_t>
-    : formatter<std::string_view> {
+    : formatter<fmt::string_view> {
   fmt::appender format(const rtpmididns::aseq_t::connection_t &c,
                        format_context &ctx);
 };
