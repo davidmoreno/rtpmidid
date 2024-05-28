@@ -36,7 +36,7 @@ public:
 } // namespace rtpmididns
 
 template <>
-struct fmt::formatter<rtpmididns::mididata_t> : formatter<std::string_view> {
+struct fmt::formatter<rtpmididns::mididata_t> : formatter<fmt::string_view> {
   auto format(const rtpmididns::mididata_t &data, format_context &ctx) {
 
     return fmt::format_to(ctx.out(), "[mididata_t {} + {}, at {}]",

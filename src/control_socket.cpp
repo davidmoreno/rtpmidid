@@ -321,7 +321,7 @@ std::string control_socket_t::parse_command(const std::string &command) {
     }
 
     retdata["error"] = fmt::format("Unknown method '{}'", method);
-    ERROR("Error running method: {}", retdata["error"]);
+    ERROR("Error running method: {}", std::string(retdata["error"]));
     return retdata.dump();
   } catch (const std::exception &e) {
     ERROR("Error running method: {}", e.what());
