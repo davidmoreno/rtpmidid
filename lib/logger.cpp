@@ -42,7 +42,7 @@ enum Color {
 
 const char *color(const char *str, Color color, bool highlight = false) {
   int hl = highlight ? 1 : 0;
-  static char buffer[256];
+  static char buffer[512];
   auto n = fmt::format_to_n(buffer, sizeof(buffer), "\033[{};{}m{}\033[0m", hl,
                             (int)color, str);
   *n.out = '\0';
@@ -63,7 +63,7 @@ logger::logger() { is_a_terminal = isatty(fileno(stdout)); }
 logger::~logger() {}
 void logger::log(const char *filename, int lineno, LogLevel loglevel,
                  const char *msg) {
-  static char buffer[512];
+  static std::array<char, LOG_BUFFER_SIZE> buffer;
   if (is_a_terminal) {
     time_t now = time(nullptr);
     char timestamp[sizeof "2011-10-08T07:07:09Z"];
@@ -88,20 +88,20 @@ void logger::log(const char *filename, int lineno, LogLevel loglevel,
       break;
     }
 
-    auto n = fmt::format_to_n(buffer, sizeof(buffer), "[{}] [{}:{}]", timestamp,
-                              filename, lineno);
+    auto n = fmt::format_to_n(buffer.data(), buffer.size(), "[{}] [{}:{}]",
+                              timestamp, filename, lineno);
     *n.out = '\0';
-    n = fmt::format_to_n(buffer, sizeof(buffer), "{} {}\n",
-                         color(buffer, my_color),
-                         msg); // color("msg"), RED);
+    const char *colored_data = color(buffer.data(), my_color);
+    n = fmt::format_to_n(buffer.data(), buffer.size(), "{} {}\n", colored_data,
+                         msg);
     *n.out = '\0';
   } else {
-    auto n = fmt::format_to_n(buffer, sizeof(buffer), " [{}:{}] {}\n", filename,
-                              lineno, msg);
+    auto n = fmt::format_to_n(buffer.data(), buffer.size(), " [{}:{}] {}\n",
+                              filename, lineno, msg);
     *n.out = '\0';
   }
   // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-  ::fprintf(stderr, "%s", buffer);
+  ::fprintf(stderr, "%s", buffer.data());
 }
 void logger::flush() { ::fflush(stderr); }
 
