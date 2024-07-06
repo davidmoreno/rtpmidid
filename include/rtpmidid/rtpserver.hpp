@@ -36,7 +36,9 @@ public:
   signal_t<std::shared_ptr<rtppeer_t>> connected_event;
   signal_t<const io_bytes_reader &> midi_event;
 
+  int max_peer_data_id = 1;
   struct peer_data_t {
+    int id;
     std::shared_ptr<rtppeer_t> peer;
 
     connection_t<const io_bytes_reader &, rtppeer_t::port_e>
@@ -80,10 +82,12 @@ public:
   void send_midi_to_all_peers(const io_bytes_reader &bufer);
   // Call from time to time when there are events to
   // avoid disconnection. Normally on cks.
-  void rearm_ck_timeout(std::shared_ptr<rtppeer_t> peer);
+  void rearm_ck_timeout(int peerdata_id);
 
   void data_ready(rtppeer_t::port_e port);
   void sendto(const io_bytes_reader &b, rtppeer_t::port_e port,
               struct sockaddr_storage *, int remote_base_port);
+
+  peer_data_t *find_peer_data_by_id(int id);
 };
 } // namespace rtpmidid
