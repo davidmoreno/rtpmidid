@@ -26,6 +26,10 @@
 #include <list>
 #include <string>
 
+extern "C" {
+struct addrinfo;
+}
+
 namespace rtpmidid {
 struct address_port_t {
   std::string address;
@@ -70,16 +74,63 @@ public:
   poller_t::listener_t control_poller;
   signal_t<const std::string &, rtppeer_t::status_e> connected_event;
 
-  rtpclient_t(std::string name);
-  ~rtpclient_t();
-  void reset();
-  void sendto(const io_bytes &pb, rtppeer_t::port_e port);
+  /// The states fot eh state machine. They correspond directly to functions
+  /// with same name
+  enum states_e {
+    WaitToStart,
+    PrepareNextDNS,
+    ConnectNextIpPort,
+    ConnectControl,
+    ConnectMidi,
+    DisconnectControl,
+    AllConnected,
+    ErrorCantConnect,
+  };
+
+  enum event_e {
+    Started,
+    Connected,
+    Resolved,
+    ConnectListExhausted,
+    ResolveListExhausted,
+    ConnectFailed,
+    ResolveFailed,
+  };
+
+  states_e state;
 
   struct endpoint_t {
     std::string hostname;
     std::string port;
   };
   std::list<endpoint_t> address_port_pending;
+
+  // Currently conneting / connected endpoint
+  endpoint_t resolve_next_dns_endpoint;
+  // Needed at resolve_next_dns
+  addrinfo *resolve_next_dns_sockaddress_list = nullptr;
+  // Currently connected sock address
+  addrinfo *resolve_next_dns_sockaddress = nullptr;
+  // Connected to control port
+  int connect_control_base_port = 0;
+
+  rtpclient_t(std::string name);
+  ~rtpclient_t();
+  void sendto(const io_bytes &pb, rtppeer_t::port_e port);
+
+  // receives event and call proper state function
+  void state_machine(event_e event);
+
+  // State functions
+  void resolve_next_dns();
+  void error_cant_connect();
+  void connect_next_ip_port();
+  void connect_control();
+  void connect_midi();
+  void disconnect_control();
+  void connected_();
+
+  void reset();
 
   /// try to connect to the given addresses in order
   bool connect_to(const std::vector<endpoint_t> &address_port);

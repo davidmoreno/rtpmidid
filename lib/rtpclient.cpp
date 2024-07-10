@@ -41,6 +41,23 @@
 using namespace std::chrono_literals;
 using namespace rtpmidid;
 
+/**
+ * @short Create the rtp client
+ *
+ * @param name Name of the client.
+ *
+ * This client will try to connect to the list of `connect_to` addresses:ports,
+ * one by one.
+ *
+ * On each call to `connect_next` it will try to connect to the next address.
+ *
+ * Each connection has some internal state, as resolve dns, connect control,
+ * connect midi and finally connected. But each one of these may fail an then
+ * try to connect the next address.
+ *
+ * The flow is as follows:
+ *
+ */
 rtpclient_t::rtpclient_t(std::string name) : peer(std::move(name)) {
   peer.initiator_id = ::rtpmidid::rand_u32();
   send_connection = peer.send_event.connect(
@@ -458,3 +475,190 @@ void rtpclient_t::data_ready(rtppeer_t::port_e port) {
   peer.data_ready(std::move(buffer), port);
 }
 // NOLINTEND(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)
+
+void rtpclient_t::state_machine(rtpclient_t::event_e event) {
+  // The state machine itself
+  rtpclient_t::states_e next_state =
+      ErrorCantConnect; // default state, if not changed
+  switch (state) {
+  case WaitToStart:
+    if (event == Started) {
+      next_state = PrepareNextDNS;
+    }
+    break;
+  case PrepareNextDNS:
+    if (event == ResolveListExhausted) {
+      next_state = ErrorCantConnect;
+    } else if (event == Resolved) {
+      next_state = ConnectNextIpPort;
+    }
+    break;
+  case ConnectNextIpPort:
+    if (event == ConnectFailed) {
+      next_state = PrepareNextDNS;
+    } else if (event == Connected) {
+      next_state = ConnectControl;
+    }
+    break;
+  case ConnectControl:
+    if (event == ConnectFailed) {
+      next_state = DisconnectControl;
+    } else if (event == Connected) {
+      next_state = ConnectMidi;
+    }
+    break;
+  case ConnectMidi:
+    if (event == ConnectFailed) {
+      next_state = DisconnectControl;
+    } else if (event == Connected) {
+      next_state = AllConnected;
+    }
+    break;
+    // Terminal cases
+  case DisconnectControl:
+    if (event == ConnectFailed) {
+      next_state = PrepareNextDNS;
+    }
+    break;
+  case AllConnected:
+  case ErrorCantConnect:
+    break;
+  }
+  state = next_state;
+
+  // Call the new state functions
+  switch (state) {
+  case WaitToStart:
+    break;
+  case PrepareNextDNS:
+    resolve_next_dns();
+    break;
+  case ConnectNextIpPort:
+    connect_next_ip_port();
+    break;
+  case ConnectControl:
+    connect_control();
+    break;
+  case ConnectMidi:
+    connect_midi();
+    break;
+  case AllConnected:
+    connected_();
+    break;
+  case ErrorCantConnect:
+    error_cant_connect();
+    break;
+  case DisconnectControl:
+    disconnect_control();
+    break;
+  }
+}
+
+void rtpclient_t::resolve_next_dns() {
+  if (address_port_pending.empty()) {
+    state_machine(ConnectListExhausted);
+  }
+  resolve_next_dns_endpoint = address_port_pending.front();
+  address_port_pending.pop_front();
+
+  state_machine(Resolved);
+}
+
+void rtpclient_t::connect_next_ip_port() {
+  // First time, get next address and resolve
+  if (!resolve_next_dns_sockaddress_list) {
+    struct addrinfo hints {};
+    int res = 0;
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_flags = 0;
+    hints.ai_protocol = 0;
+
+    res = getaddrinfo(resolve_next_dns_endpoint.hostname.c_str(),
+                      resolve_next_dns_endpoint.port.c_str(), &hints,
+                      &resolve_next_dns_sockaddress_list);
+    if (res < 0) {
+      state_machine(ResolveFailed);
+    }
+
+    resolve_next_dns_sockaddress = resolve_next_dns_sockaddress_list;
+  } else {
+    // Following use the next resolved item
+    resolve_next_dns_sockaddress = resolve_next_dns_sockaddress->ai_next;
+  }
+
+  // If any left, go for it, if not failed resolve this address port pair
+  if (resolve_next_dns_sockaddress) {
+    char host[NI_MAXHOST];
+    char port[NI_MAXSERV];
+    host[0] = port[0] = '\0';
+    getnameinfo(resolve_next_dns_sockaddress->ai_addr,
+                resolve_next_dns_sockaddress->ai_addrlen, host, NI_MAXHOST,
+                port, NI_MAXSERV, NI_NUMERICSERV);
+
+    DEBUG("Try to connect to address: {}:{}", host, port);
+
+    state_machine(Resolved);
+  } else {
+    freeaddrinfo(resolve_next_dns_sockaddress_list);
+    resolve_next_dns_sockaddress_list = nullptr;
+    state_machine(ResolveFailed);
+  }
+}
+
+void rtpclient_t::connect_control() {
+  auto control =
+      connect_udp_port(local_base_port, resolve_next_dns_sockaddress);
+  if (!control) {
+    DEBUG("Could not connect {}:{} to control port",
+          resolve_next_dns_endpoint.hostname, resolve_next_dns_endpoint.port);
+    state_machine(ConnectFailed);
+    return;
+  }
+
+  connect_control_base_port =
+      ntohs(((sockaddr_in *)resolve_next_dns_sockaddress->ai_addr)->sin_port);
+
+  control_socket = control->socket;
+
+  // TODO: Actual send the control connect message, wait for ACK, then connected
+  // event
+
+  state_machine(Connected);
+}
+
+void rtpclient_t::connect_midi() {
+  // advance the port by 1, so it points to midi
+  auto base_port =
+      ntohs(((sockaddr_in *)resolve_next_dns_sockaddress->ai_addr)->sin_port);
+  ((sockaddr_in *)resolve_next_dns_sockaddress->ai_addr)->sin_port =
+      htons(base_port + 1);
+
+  auto midi =
+      connect_udp_port(local_base_port + 1, resolve_next_dns_sockaddress);
+  if (!midi) {
+    DEBUG("Could not connect {}:{} to midi port",
+          resolve_next_dns_endpoint.hostname, resolve_next_dns_endpoint.port);
+    state_machine(ConnectFailed);
+    return;
+  }
+
+  midi_socket = midi->socket;
+
+  // TODO: Actual send the midi connect message, wait for ACK, then connected
+  // event
+
+  state_machine(Connected);
+}
+
+void rtpclient_t::disconnect_control() {
+  // TODO send goodbye to control
+  close(control_socket);
+  state_machine(ConnectFailed);
+}
+
+void rtpclient_t::connected_() { INFO("Connected"); }
+void rtpclient_t::error_cant_connect() {
+  connected_event("", rtppeer_t::NOT_CONNECTED);
+}
