@@ -46,7 +46,8 @@ Events:
 - Connected
 - ConnectListExhausted
 - ResolveListExhausted
-- FailedConnect
+- ConnectFailed
+- ResolveFailed
 
 ```mermaid
 stateDiagram
@@ -54,8 +55,8 @@ stateDiagram
     PrepareNextDNS --> ResolveNextIpPort: NextReady
     PrepareNextDNS --> ErrorCantConnect: ResolveListExhausted
     ResolveNextIpPort --> PrepareNextDNS: ConnectListExhausted
-    ResolveNextIpPort --> ResolveNextIpPort: FailedConnect
-    ResolveNextIpPort --> ConnectControl: Connected
+    ResolveNextIpPort --> ResolveNextIpPort: ResolveFailed
+    ResolveNextIpPort --> ConnectControl: Resolved
     ConnectControl --> ResolveNextIpPort: ConnectFailed
     ConnectControl --> ConnectMidi: Connected
     ConnectMidi --> AllConnected: Connected
