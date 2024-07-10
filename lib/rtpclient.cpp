@@ -476,53 +476,48 @@ void rtpclient_t::data_ready(rtppeer_t::port_e port) {
 }
 // NOLINTEND(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)
 
+// Make the order follow as written at statemachines.md, so can
+// filled with simple copy/paste and multicursors
+struct state_change_t {
+  rtpclient_t::states_e state;
+  rtpclient_t::states_e next_state;
+  rtpclient_t::event_e event;
+};
+
+state_change_t state_changes[] = {
+    {rtpclient_t::WaitToStart, rtpclient_t::PrepareNextDNS,
+     rtpclient_t::Started},
+    {rtpclient_t::PrepareNextDNS, rtpclient_t::ResolveNextIpPort,
+     rtpclient_t::NextReady},
+    {rtpclient_t::PrepareNextDNS, rtpclient_t::ErrorCantConnect,
+     rtpclient_t::ResolveListExhausted},
+    {rtpclient_t::ResolveNextIpPort, rtpclient_t::PrepareNextDNS,
+     rtpclient_t::ConnectListExhausted},
+    {rtpclient_t::ResolveNextIpPort, rtpclient_t::ResolveNextIpPort,
+     rtpclient_t::ResolveFailed},
+    {rtpclient_t::ResolveNextIpPort, rtpclient_t::ConnectControl,
+     rtpclient_t::Resolved},
+    {rtpclient_t::ConnectControl, rtpclient_t::ResolveNextIpPort,
+     rtpclient_t::ConnectFailed},
+    {rtpclient_t::ConnectControl, rtpclient_t::ConnectMidi,
+     rtpclient_t::Connected},
+    {rtpclient_t::ConnectMidi, rtpclient_t::AllConnected,
+     rtpclient_t::Connected},
+    {rtpclient_t::ConnectMidi, rtpclient_t::DisconnectControl,
+     rtpclient_t::ConnectFailed},
+    {rtpclient_t::DisconnectControl, rtpclient_t::ResolveNextIpPort,
+     rtpclient_t::ConnectFailed},
+};
+
 void rtpclient_t::state_machine(rtpclient_t::event_e event) {
   // The state machine itself
   rtpclient_t::states_e next_state =
       ErrorCantConnect; // default state, if not changed
-  switch (state) {
-  case WaitToStart:
-    if (event == Started) {
-      next_state = PrepareNextDNS;
+  for (auto &change : state_changes) {
+    if (state == change.state && event == change.event) {
+      next_state = change.next_state;
+      break;
     }
-    break;
-  case PrepareNextDNS:
-    if (event == ResolveListExhausted) {
-      next_state = ErrorCantConnect;
-    } else if (event == Resolved) {
-      next_state = ConnectNextIpPort;
-    }
-    break;
-  case ConnectNextIpPort:
-    if (event == ConnectFailed) {
-      next_state = PrepareNextDNS;
-    } else if (event == Connected) {
-      next_state = ConnectControl;
-    }
-    break;
-  case ConnectControl:
-    if (event == ConnectFailed) {
-      next_state = DisconnectControl;
-    } else if (event == Connected) {
-      next_state = ConnectMidi;
-    }
-    break;
-  case ConnectMidi:
-    if (event == ConnectFailed) {
-      next_state = DisconnectControl;
-    } else if (event == Connected) {
-      next_state = AllConnected;
-    }
-    break;
-    // Terminal cases
-  case DisconnectControl:
-    if (event == ConnectFailed) {
-      next_state = PrepareNextDNS;
-    }
-    break;
-  case AllConnected:
-  case ErrorCantConnect:
-    break;
   }
   state = next_state;
 
@@ -533,7 +528,7 @@ void rtpclient_t::state_machine(rtpclient_t::event_e event) {
   case PrepareNextDNS:
     resolve_next_dns();
     break;
-  case ConnectNextIpPort:
+  case ResolveNextIpPort:
     connect_next_ip_port();
     break;
   case ConnectControl:
@@ -561,7 +556,7 @@ void rtpclient_t::resolve_next_dns() {
   resolve_next_dns_endpoint = address_port_pending.front();
   address_port_pending.pop_front();
 
-  state_machine(Resolved);
+  state_machine(NextReady);
 }
 
 void rtpclient_t::connect_next_ip_port() {

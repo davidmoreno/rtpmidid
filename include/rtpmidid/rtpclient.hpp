@@ -79,7 +79,7 @@ public:
   enum states_e {
     WaitToStart,
     PrepareNextDNS,
-    ConnectNextIpPort,
+    ResolveNextIpPort,
     ConnectControl,
     ConnectMidi,
     DisconnectControl,
@@ -89,6 +89,7 @@ public:
 
   enum event_e {
     Started,
+    NextReady,
     Connected,
     Resolved,
     ConnectListExhausted,
