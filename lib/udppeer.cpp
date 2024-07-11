@@ -26,6 +26,9 @@
 #include <unistd.h>
 
 namespace rtpmidid {
+
+const auto MAX_ADDRESS_CACHE_SIZE = 100;
+
 int udppeer_t::open(const std::string &address, const std::string &port) {
   struct addrinfo *sockaddress_list = nullptr;
   struct addrinfo hints {};
@@ -127,6 +130,30 @@ void udppeer_t::data_ready() {
 
 void udppeer_t::send(io_bytes &buffer, const std::string &address,
                      const std::string &port) {
+
+  auto addr = get_address(address, port);
+
+  auto res =
+      sendto(fd, buffer.start, buffer.size(), 0, &(addr->addr), addr->len);
+
+  if (res < 0) {
+    ERROR("Error sending to {}:{}", address, port);
+    throw rtpmidid::exception("Can not send to address {}:{}. {}", address,
+                              port, strerror(errno));
+  }
+
+  DEBUG("Sent to {}:{}, {} bytes", address, port, buffer.size());
+}
+
+udppeer_t::sockaddr_t *udppeer_t::get_address(const std::string &address,
+                                              const std::string &port) {
+
+  auto I = addresses_cache.find(std::pair(address, port));
+  if (I != addresses_cache.end()) {
+    DEBUG("Cache hit!");
+    return &I->second;
+  }
+
   struct addrinfo *sockaddress_list = nullptr;
   struct addrinfo hints {};
 
@@ -152,18 +179,19 @@ void udppeer_t::send(io_bytes &buffer, const std::string &address,
                               port, strerror(errno));
   }
 
-  res = sendto(fd, buffer.start, buffer.size(), 0, sockaddress_list->ai_addr,
-               sockaddress_list->ai_addrlen);
+  sockaddr addr;
+  ::memcpy(&addr, sockaddress_list->ai_addr, sockaddress_list->ai_addrlen);
 
-  if (res < 0) {
-    ERROR("Error sending to {}:{}", address, port);
-    throw rtpmidid::exception("Can not send to address {}:{}. {}", address,
-                              port, strerror(errno));
+  if (addresses_cache.size() > MAX_ADDRESS_CACHE_SIZE) {
+    addresses_cache.clear();
   }
 
-  freeaddrinfo(sockaddress_list);
+  auto [J, _] = addresses_cache.emplace(
+      std::pair(address, port),
+      sockaddr_t{addr, int(sockaddress_list->ai_addrlen)});
 
-  DEBUG("Sent to {}:{}, {} bytes", address, port, buffer.size());
+  freeaddrinfo(sockaddress_list);
+  return &J->second;
 }
 
 void udppeer_t::close() {

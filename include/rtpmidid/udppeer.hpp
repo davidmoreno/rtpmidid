@@ -22,6 +22,7 @@
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/signal.hpp"
 #include <string>
+#include <sys/socket.h>
 
 namespace rtpmidid {
 class udppeer_t {
@@ -42,12 +43,20 @@ public:
   void close();
 
 private:
+  struct sockaddr_t {
+    sockaddr addr;
+    int len;
+  };
+
   std::string address;
   int port = 0;
   int fd = -1;
   poller_t::listener_t listener;
+  std::map<std::pair<std::string, std::string>, sockaddr_t> addresses_cache;
 
   void data_ready();
+
+  sockaddr_t *get_address(const std::string &address, const std::string &port);
 };
 
 } // namespace rtpmidid
