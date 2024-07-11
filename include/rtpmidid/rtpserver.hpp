@@ -23,7 +23,6 @@
 #include "./rtppeer.hpp"
 #include "rtpmidid/signal.hpp"
 #include <cstdint>
-#include <map>
 #include <memory>
 
 struct sockaddr_storage;
