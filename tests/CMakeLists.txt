@@ -15,8 +15,8 @@ add_executable(test_misc test_misc.cpp test_utils.cpp)
 target_link_libraries(test_misc rtpmidid-shared -lfmt -pthread)
 add_test(NAME test_misc COMMAND test_poller)
 
-# add_executable(test_rtpmidid 
-#     test_rtpmidid.cpp test_utils.cpp 
+# add_executable(test_rtpmidid
+#     test_rtpmidid.cpp test_utils.cpp
 #     ../src/aseq.cpp  ../src/config.cpp ../src/control_socket.cpp ../src/rtpmidid.cpp ../src/stringpp.cpp
 # )
 # target_link_libraries(test_rtpmidid rtpmidid-shared -lfmt -pthread)
@@ -42,7 +42,7 @@ add_test(NAME test_signals COMMAND test_signals)
 
 #
 # MIDIROUTER
-# 
+#
 
 if (NOT LIBS_ONLY)
   add_executable(test_midirouter
@@ -57,7 +57,7 @@ endif (NOT LIBS_ONLY)
 
 #
 # MIDIROUTER2
-# 
+#
 
 if (NOT LIBS_ONLY)
   add_executable(test_midirouter2
@@ -71,5 +71,20 @@ if (NOT LIBS_ONLY)
 endif (NOT LIBS_ONLY)
 
 
-# disabled as failing 
+# disabled as failing
 # add_test(NAME test_rtpmidid COMMAND test_rtpmidid)
+
+#
+# RTPCLIENT
+#
+
+if (NOT LIBS_ONLY)
+    add_executable(test_rtpclient
+        test_rtpclient.cpp test_utils.cpp
+    )
+    target_link_libraries(test_rtpclient -lfmt -pthread rtpmidid-shared)
+    add_test(NAME test_rtpclient COMMAND test_rtpclient)
+    target_link_libraries(test_rtpclient ${ALSA_LIBRARIES})
+    target_include_directories(test_rtpclient PUBLIC ${ALSA_INCLUDE_DIRS})
+    target_compile_options(test_rtpclient PUBLIC ${ALSA_CFLAGS_OTHER})
+endif (NOT LIBS_ONLY)
