@@ -70,6 +70,11 @@ void test_udppeer() {
 
   poller_wait_until([&]() { return read_at_a == 1; });
   ASSERT_EQUAL(read_at_a, 1);
+
+  peerB.send(data, "localhost", "13001");
+
+  poller_wait_until([&]() { return read_at_a == 2; });
+  ASSERT_EQUAL(read_at_a, 2);
 }
 
 static std::string get_hostname() {
