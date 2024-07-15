@@ -19,17 +19,21 @@
 #pragma once
 
 #include "rtpmidid/iobytes.hpp"
+#include "rtpmidid/network.hpp"
+#include "rtpmidid/networkaddress.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/signal.hpp"
+#include <stddef.h>
 #include <string>
 #include <sys/socket.h>
 
 namespace rtpmidid {
+
 class udppeer_t {
 
 public:
   // Read some data from address and port
-  signal_t<io_bytes_reader &, const std::string &, int> on_read;
+  signal_t<io_bytes_reader &, const network_address_t &> on_read;
 
   udppeer_t() { open("::", "0"); };
   udppeer_t(const std::string &address, const std::string &port) {
@@ -43,20 +47,15 @@ public:
   void close();
 
 private:
-  struct sockaddr_t {
-    sockaddr addr;
-    int len;
-  };
-
-  std::string address;
-  int port = 0;
   int fd = -1;
   poller_t::listener_t listener;
-  std::map<std::pair<std::string, std::string>, sockaddr_t> addresses_cache;
+  std::map<std::pair<std::string, std::string>, network_address_t>
+      addresses_cache;
 
   void data_ready();
 
-  sockaddr_t *get_address(const std::string &address, const std::string &port);
+  network_address_t const *get_address(const std::string &address,
+                                       const std::string &port);
 };
 
 } // namespace rtpmidid

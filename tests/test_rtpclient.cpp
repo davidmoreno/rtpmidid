@@ -19,6 +19,7 @@
 #include "../tests/test_case.hpp"
 #include "../tests/test_utils.hpp"
 #include <rtpmidid/iobytes.hpp>
+#include <rtpmidid/logger.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtpclient.hpp>
 #include <rtpmidid/rtpserver.hpp>
@@ -36,24 +37,28 @@ void test_udppeer() {
   int read_at_a = 0;
   int read_at_b = 0;
 
-  auto conn_on_read_a = peerA.on_read.connect(
-      [&](rtpmidid::io_bytes_reader &data, const std::string &ip, int port) {
-        DEBUG("Got data on read {}:{}, {} bytes", ip, port, data.size());
+  auto conn_on_read_a =
+      peerA.on_read.connect([&](rtpmidid::io_bytes_reader &data,
+                                const rtpmidid::network_address_t &c) {
+        DEBUG("Got data on read {}, {} bytes", c.to_string(), data.size());
         std::string str = std::string(data.read_str0());
         ASSERT_TRUE(str == "test data");
         auto hostname = get_hostname();
-        ASSERT_TRUE(ip == hostname);
-        ASSERT_TRUE(port == 13002);
+        ASSERT_TRUE(c.hostname() == hostname);
+        ASSERT_TRUE(c.ip() == "127.0.0.2");
+        ASSERT_TRUE(c.port() == 13002);
 
         read_at_a++;
       });
-  auto conn_on_read_b = peerB.on_read.connect(
-      [&](rtpmidid::io_bytes_reader &data, const std::string &ip, int port) {
-        DEBUG("Got data on read {}:{}, {} bytes", ip, port, data.size());
+  auto conn_on_read_b =
+      peerB.on_read.connect([&](rtpmidid::io_bytes_reader &data,
+                                const rtpmidid::network_address_t &c) {
+        DEBUG("Got data on read {}, {} bytes", c.to_string(), data.size());
         std::string str = std::string(data.read_str0());
         ASSERT_TRUE(str == "test data");
-        ASSERT_TRUE(ip == "localhost");
-        ASSERT_TRUE(port == 13001);
+        ASSERT_TRUE(c.hostname() == "localhost");
+        ASSERT_TRUE(c.ip() == "127.0.0.1");
+        ASSERT_TRUE(c.port() == 13001);
 
         read_at_b++;
       });
