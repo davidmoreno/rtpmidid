@@ -18,6 +18,7 @@
 
 #include "rtpmidid/udppeer.hpp"
 #include "rtpmidid/network.hpp"
+#include "rtpmidid/networkaddress.hpp"
 #include "rtpmidid/poller.hpp"
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -30,77 +31,31 @@ namespace rtpmidid {
 const auto MAX_ADDRESS_CACHE_SIZE = 100;
 
 int udppeer_t::open(const std::string &address, const std::string &port) {
-  struct addrinfo *sockaddress_list = nullptr;
-  struct addrinfo hints {};
 
-  int res = -1;
-  memset(&hints, 0, sizeof(struct addrinfo));
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_DGRAM;
-  hints.ai_flags = AI_PASSIVE;
-
-  const char *cport = port.c_str();
-  const char *caddress = address.c_str();
-
-  res = getaddrinfo(caddress, cport, &hints, &sockaddress_list);
-  if (res < 0) {
-    DEBUG("Error resolving address {}:{}", "::", port);
-    throw rtpmidid::exception("Can not resolve address {}:{}. {}", "::", port,
-                              strerror(errno));
-  }
-  // Get addr info may return several options, try them in order.
-  // we asume that if the control success to be created the midi will too.
-  std::array<char, NI_MAXHOST> host{};
-  std::array<char, NI_MAXHOST> service{};
-  socklen_t peer_addr_len = NI_MAXHOST;
-  auto listenaddr = sockaddress_list;
-  for (; listenaddr != nullptr; listenaddr = listenaddr->ai_next) {
-    host[0] = service[0] = 0x00;
-    getnameinfo(listenaddr->ai_addr, peer_addr_len, host.data(), NI_MAXHOST,
-                service.data(), NI_MAXSERV, NI_NUMERICSERV);
-    DEBUG("Try listen at {}:{}", host.data(), service.data());
-
-    fd = socket(listenaddr->ai_family, listenaddr->ai_socktype,
-                listenaddr->ai_protocol);
+  network_address_t::resolve_loop(address, port, [this](const addrinfo *addr) {
+    fd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
     if (fd < 0) {
-      continue; // Bad socket. Try next.
+      return false; // Bad socket, try next
     }
-    if (bind(fd, listenaddr->ai_addr, listenaddr->ai_addrlen) == 0) {
-      break;
+    auto ret = bind(fd, addr->ai_addr, addr->ai_addrlen);
+    if (ret != 0) {
+      ::close(fd);
+      fd = -1;
+      return false;
     }
-    ::close(fd);
-    fd = -1;
-  }
-  if (!listenaddr) {
-    throw rtpmidid::exception("Can not open udp socket. {}.", strerror(errno));
-  }
-  struct sockaddr_storage addr {};
-  unsigned int len = sizeof(addr);
-  res = ::getsockname(fd, sockaddr_storage_to_sockaddr(&addr), &len);
-  if (res < 0) {
-    throw rtpmidid::exception("Error getting info the newly created midi "
-                              "socket. Can not create server.");
-  }
-  if (listenaddr->ai_family == AF_INET) {
-    auto *addr4 = reinterpret_cast<struct sockaddr_in *>(&addr);
-    this->port = ntohs(addr4->sin_port);
-  } else {
-    auto *addr6 = reinterpret_cast<struct sockaddr_in6 *>(&addr);
-    this->port = ntohs(addr6->sin6_port);
-  }
-  this->address = host.data();
+    return true; // Success
+  });
+
+  network_address_t myaddress{fd};
+
+  DEBUG("UDP port listen ready, at {}, fd {}", myaddress.to_string(), fd);
 
   listener = poller.add_fd_in(fd, [this](int fd) {
     assert(fd == this->fd); // Should be the same.
     data_ready();
   });
 
-  freeaddrinfo(sockaddress_list);
-
-  DEBUG("UDP port listen ready, at {}:{}, fd {}", this->address, this->port,
-        fd);
-
-  return res;
+  return fd;
 }
 
 void udppeer_t::data_ready() {
@@ -110,22 +65,18 @@ void udppeer_t::data_ready() {
   auto n = recvfrom(fd, raw.data(), 1500, MSG_DONTWAIT,
                     sockaddr_storage_to_sockaddr(&cliaddr), &len);
   // DEBUG("Got some data from control: {}", n);
+
+  network_address_t network_address{&cliaddr, len};
+
   if (n < 0) {
-    throw exception("Error reading at {}:{}", address, port);
+    throw exception("Error reading at {}", network_address.to_string());
   }
 
   auto buffer = io_bytes_reader(raw.data(), n);
-  std::array<char, NI_MAXHOST> host{};
-  std::array<char, NI_MAXSERV> service{};
 
-  getnameinfo(sockaddr_storage_to_sockaddr(&cliaddr), len, host.data(),
-              NI_MAXHOST, service.data(), NI_MAXSERV, NI_NUMERICSERV);
+  DEBUG("Got data from {}, {} bytes", network_address.to_string(), n);
 
-  std::string remote_address = std::string(host.data());
-  int remote_port = std::stoi(service.data());
-  DEBUG("Got data from {}:{}, {} bytes", remote_address, remote_port, n);
-
-  on_read(buffer, remote_address, remote_port);
+  on_read(buffer, network_address);
 }
 
 void udppeer_t::send(io_bytes &buffer, const std::string &address,
@@ -133,8 +84,8 @@ void udppeer_t::send(io_bytes &buffer, const std::string &address,
 
   auto addr = get_address(address, port);
 
-  auto res =
-      sendto(fd, buffer.start, buffer.size(), 0, &(addr->addr), addr->len);
+  auto res = sendto(fd, buffer.start, buffer.size(), 0, addr->get_sockaddr(),
+                    addr->get_socklen());
 
   if (res < 0) {
     ERROR("Error sending to {}:{}", address, port);
@@ -145,8 +96,8 @@ void udppeer_t::send(io_bytes &buffer, const std::string &address,
   DEBUG("Sent to {}:{}, {} bytes", address, port, buffer.size());
 }
 
-udppeer_t::sockaddr_t *udppeer_t::get_address(const std::string &address,
-                                              const std::string &port) {
+network_address_t const *udppeer_t::get_address(const std::string &address,
+                                                const std::string &port) {
 
   auto I = addresses_cache.find(std::pair(address, port));
   if (I != addresses_cache.end()) {
@@ -154,44 +105,23 @@ udppeer_t::sockaddr_t *udppeer_t::get_address(const std::string &address,
     return &I->second;
   }
 
-  struct addrinfo *sockaddress_list = nullptr;
-  struct addrinfo hints {};
+  auto resolved = network_address_t::resolve_loop(
+      address, port, [this, &address, &port](const network_address_t &addr) {
+        addresses_cache.emplace(std::pair(address, port), addr.dup());
+        return true;
+      });
 
-  int res = -1;
-  memset(&hints, 0, sizeof(struct addrinfo));
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_DGRAM;
-
-  const char *cport = port.c_str();
-  const char *caddress = address.c_str();
-
-  res = getaddrinfo(caddress, cport, &hints, &sockaddress_list);
-
-  if (res < 0) {
+  if (!resolved) {
     ERROR("Error resolving address {}:{}", address, port);
-    throw rtpmidid::exception("Can not resolve address {}:{}. {}", address,
-                              port, strerror(errno));
+    return nullptr;
   }
 
-  if (sockaddress_list == nullptr) {
-    ERROR("Error resolving address {}:{}", address, port);
-    throw rtpmidid::exception("Can not resolve address {}:{}. {}", address,
-                              port, strerror(errno));
+  I = addresses_cache.find(std::pair(address, port));
+  if (I == addresses_cache.end()) {
+    ERROR("Error getting address {}:{} from cache", address, port);
+    return nullptr;
   }
-
-  sockaddr addr;
-  ::memcpy(&addr, sockaddress_list->ai_addr, sockaddress_list->ai_addrlen);
-
-  if (addresses_cache.size() > MAX_ADDRESS_CACHE_SIZE) {
-    addresses_cache.clear();
-  }
-
-  auto [J, _] = addresses_cache.emplace(
-      std::pair(address, port),
-      sockaddr_t{addr, int(sockaddress_list->ai_addrlen)});
-
-  freeaddrinfo(sockaddress_list);
-  return &J->second;
+  return &I->second;
 }
 
 void udppeer_t::close() {
