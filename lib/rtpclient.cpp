@@ -34,8 +34,10 @@
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/network.hpp>
+#include <rtpmidid/networkaddress.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtpclient.hpp>
+#include <rtpmidid/udppeer.hpp>
 #include <rtpmidid/utils.hpp>
 
 using namespace std::chrono_literals;
@@ -519,6 +521,8 @@ void rtpclient_t::state_machine(rtpclient_t::event_e event) {
       break;
     }
   }
+  INFO("State machine: {} -[{}]-> {}", state, event, next_state);
+
   state = next_state;
 
   // Call the new state functions
@@ -552,9 +556,10 @@ void rtpclient_t::state_machine(rtpclient_t::event_e event) {
 void rtpclient_t::resolve_next_dns() {
   if (address_port_pending.empty()) {
     state_machine(ConnectListExhausted);
+    return;
   }
-  resolve_next_dns_endpoint = address_port_pending.front();
-  address_port_pending.pop_front();
+  resolve_next_dns_endpoint = address_port_pending.back();
+  address_port_pending.pop_back();
 
   state_machine(NextReady);
 }
@@ -598,29 +603,32 @@ void rtpclient_t::connect_next_ip_port() {
   } else {
     freeaddrinfo(resolve_next_dns_sockaddress_list);
     resolve_next_dns_sockaddress_list = nullptr;
-    state_machine(ResolveFailed);
+    state_machine(ConnectListExhausted);
   }
 }
 
 void rtpclient_t::connect_control() {
-  auto control =
-      connect_udp_port(local_base_port, resolve_next_dns_sockaddress);
-  if (!control) {
+  control_peer = std::move(
+      udppeer_t(network_address_t(resolve_next_dns_sockaddress->ai_addr,
+                                  resolve_next_dns_sockaddress->ai_addrlen)));
+  if (!control_peer.is_open()) {
     DEBUG("Could not connect {}:{} to control port",
           resolve_next_dns_endpoint.hostname, resolve_next_dns_endpoint.port);
     state_machine(ConnectFailed);
     return;
   }
-
-  connect_control_base_port =
-      ntohs(((sockaddr_in *)resolve_next_dns_sockaddress->ai_addr)->sin_port);
-
-  control_socket = control->socket;
-
-  // TODO: Actual send the control connect message, wait for ACK, then connected
-  // event
-
-  state_machine(Connected);
+  control_connected_event_connection = peer.connected_event.connect(
+      [this](const std::string &name, rtppeer_t::status_e status) {
+        if (status == rtppeer_t::CONTROL_CONNECTED) {
+          auto address = control_peer.get_address();
+          DEBUG("Connected control port {} to {}:{}", address.port(),
+                address.hostname(), address.port());
+          control_connected_event_connection.disconnect();
+          state_machine(Connected);
+        } else {
+          state_machine(ConnectFailed);
+        }
+      });
 }
 
 void rtpclient_t::connect_midi() {
@@ -657,3 +665,10 @@ void rtpclient_t::connected_() { INFO("Connected"); }
 void rtpclient_t::error_cant_connect() {
   connected_event("", rtppeer_t::NOT_CONNECTED);
 }
+
+void rtpclient_t::add_server_address(const std::string &address,
+                                     const std::string &port) {
+  address_port_pending.push_back({address, port});
+}
+
+void rtpclient_t::connect() { state_machine(Started); }

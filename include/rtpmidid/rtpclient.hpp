@@ -23,6 +23,7 @@
 #include "./poller.hpp"
 #include "./rtppeer.hpp"
 #include "./signal.hpp"
+#include "./udppeer.hpp"
 #include <list>
 #include <string>
 
@@ -75,6 +76,9 @@ public:
   poller_t::listener_t control_poller;
   signal_t<const std::string &, rtppeer_t::status_e> connected_event;
 
+  udppeer_t control_peer;
+  udppeer_t midi_peer;
+
   /// The states fot eh state machine. They correspond directly to functions
   /// with same name
   enum states_e {
@@ -99,7 +103,7 @@ public:
     ResolveFailed,
   };
 
-  states_e state;
+  states_e state = WaitToStart;
 
   struct endpoint_t {
     std::string hostname;
@@ -133,6 +137,10 @@ public:
   void connected_();
 
   void reset();
+
+  // Public interface
+  void add_server_address(const std::string &address, const std::string &port);
+  void connect();
 
   /// try to connect to the given addresses in order
   bool connect_to(const std::vector<endpoint_t> &address_port);
@@ -184,5 +192,62 @@ struct fmt::formatter<std::list<rtpmidid::rtpclient_t::endpoint_t>>
     }
     result += "]";
     return formatter<fmt::string_view>::format(result, ctx);
+  }
+};
+
+// state machine formatter
+template <>
+struct fmt::formatter<rtpmidid::rtpclient_t::states_e>
+    : formatter<fmt::string_view> {
+  auto format(const rtpmidid::rtpclient_t::states_e &data,
+              format_context &ctx) {
+    switch (data) {
+    case rtpmidid::rtpclient_t::WaitToStart:
+      return formatter<fmt::string_view>::format("WaitToStart", ctx);
+    case rtpmidid::rtpclient_t::PrepareNextDNS:
+      return formatter<fmt::string_view>::format("PrepareNextDNS", ctx);
+    case rtpmidid::rtpclient_t::ResolveNextIpPort:
+      return formatter<fmt::string_view>::format("ResolveNextIpPort", ctx);
+    case rtpmidid::rtpclient_t::ConnectControl:
+      return formatter<fmt::string_view>::format("ConnectControl", ctx);
+    case rtpmidid::rtpclient_t::ConnectMidi:
+      return formatter<fmt::string_view>::format("ConnectMidi", ctx);
+    case rtpmidid::rtpclient_t::DisconnectControl:
+      return formatter<fmt::string_view>::format("DisconnectControl", ctx);
+    case rtpmidid::rtpclient_t::AllConnected:
+      return formatter<fmt::string_view>::format("AllConnected", ctx);
+    case rtpmidid::rtpclient_t::ErrorCantConnect:
+      return formatter<fmt::string_view>::format("ErrorCantConnect", ctx);
+    default:
+      return formatter<fmt::string_view>::format("Unknown", ctx);
+    }
+  }
+};
+
+// event formatter
+template <>
+struct fmt::formatter<rtpmidid::rtpclient_t::event_e>
+    : formatter<fmt::string_view> {
+  auto format(const rtpmidid::rtpclient_t::event_e &data, format_context &ctx) {
+    switch (data) {
+    case rtpmidid::rtpclient_t::Started:
+      return formatter<fmt::string_view>::format("Started", ctx);
+    case rtpmidid::rtpclient_t::NextReady:
+      return formatter<fmt::string_view>::format("NextReady", ctx);
+    case rtpmidid::rtpclient_t::Connected:
+      return formatter<fmt::string_view>::format("Connected", ctx);
+    case rtpmidid::rtpclient_t::Resolved:
+      return formatter<fmt::string_view>::format("Resolved", ctx);
+    case rtpmidid::rtpclient_t::ConnectListExhausted:
+      return formatter<fmt::string_view>::format("ConnectListExhausted", ctx);
+    case rtpmidid::rtpclient_t::ResolveListExhausted:
+      return formatter<fmt::string_view>::format("ResolveListExhausted", ctx);
+    case rtpmidid::rtpclient_t::ConnectFailed:
+      return formatter<fmt::string_view>::format("ConnectFailed", ctx);
+    case rtpmidid::rtpclient_t::ResolveFailed:
+      return formatter<fmt::string_view>::format("ResolveFailed", ctx);
+    default:
+      return formatter<fmt::string_view>::format("Unknown", ctx);
+    }
   }
 };
