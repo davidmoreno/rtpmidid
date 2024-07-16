@@ -95,9 +95,11 @@ public:
   int remote_base_port = 0;
 
   /// Event for connected
-  signal_t<const std::string &, status_e> connected_event;
+  typedef signal_t<const std::string &, status_e> connected_event_t;
+  connected_event_t connected_event;
   /// Event for disconnect
-  signal_t<disconnect_reason_e> disconnect_event;
+  typedef signal_t<disconnect_reason_e> disconnect_event_t;
+  disconnect_event_t disconnect_event;
   /// Event for send MIDI.
   // It is const & to make automatic conversion from io_bytes_writer. Need the
   // const or the compiler thinks you are stupid and why give a object to
@@ -106,12 +108,15 @@ public:
   // reader and conversion at connect:
   // `midi_event.connect([](io_bytes_reader reader){})`
   // And everybody happy.
-  signal_t<const io_bytes_reader &> midi_event;
+  typedef signal_t<const io_bytes_reader &> midi_event_t;
+  midi_event_t midi_event;
   /// Event for send data to network.
-  signal_t<const io_bytes_reader &, port_e> send_event;
+  typedef signal_t<const io_bytes_reader &, port_e> send_event_t;
+  send_event_t send_event;
 
   // Clock latency check received. in ms
-  signal_t<float> ck_event;
+  typedef signal_t<float> ck_event_t;
+  ck_event_t ck_event;
 
   static bool is_command(io_bytes_reader &);
   static bool is_feedback(io_bytes_reader &);
