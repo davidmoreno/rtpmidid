@@ -40,10 +40,9 @@ public:
     int id;
     std::shared_ptr<rtppeer_t> peer;
 
-    connection_t<const io_bytes_reader &, rtppeer_t::port_e>
-        send_event_connection;
-    connection_t<const std::string &, rtppeer_t::status_e>
-        connected_event_connection;
+    rtppeer_t::send_event_t::connection_t send_event_connection;
+    rtppeer_t::connected_event_t::connection_t connected_event_connection;
+
     connection_t<const io_bytes_reader &> midi_event_connection;
     connection_t<rtpmidid::rtppeer_t::disconnect_reason_e>
         disconnect_event_connection;

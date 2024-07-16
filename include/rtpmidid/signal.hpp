@@ -37,6 +37,8 @@ template <typename... Args> class signal_t {
   typedef std::map<int, std::function<void(Args...)>> VT;
 
 public:
+  using connection_t = ::rtpmidid::connection_t<Args...>;
+
   signal_t() : slots_(std::make_shared<VT>()) {
     DEBUG0("{}::signal_t()", (void *)this);
   }
@@ -52,8 +54,7 @@ public:
   }
 
   // Must keep the connection, when deleted will be disconnected
-  [[nodiscard]] connection_t<Args...>
-  connect(std::function<void(Args...)> const &&f) {
+  [[nodiscard]] connection_t connect(std::function<void(Args...)> const &&f) {
     auto cid = max_id++;
     // Copy to next slots_ current slots_, as if in use will still be valid, and
     // later will be replaced.
@@ -61,7 +62,7 @@ public:
     slots_->insert(std::make_pair(cid, std::move(f)));
     DEBUG0("{}::signal_t::connect(f) -> {}", (void *)this, cid);
     connections[cid] = nullptr;
-    return connection_t(this, cid);
+    return ::rtpmidid::connection_t(this, cid);
   }
 
   void disconnect(int id) {
@@ -106,7 +107,7 @@ public:
     DEBUG0("{}::signal_t::() END", (void *)this);
   }
 
-  void replace_connection_ptr(int id, connection_t<Args...> *ptr) {
+  void replace_connection_ptr(int id, connection_t *ptr) {
     DEBUG0("{}::replace_connection_ptr::({})", (void *)this, id);
     for (auto &f : connections) {
       DEBUG0("Got {}", f.first);
@@ -124,7 +125,7 @@ private:
   int max_id = 1;
   std::shared_ptr<VT> slots_;
 
-  std::map<int, connection_t<Args...> *> connections{};
+  std::map<int, connection_t *> connections{};
 };
 
 template <typename... Args> class connection_t {
