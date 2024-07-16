@@ -23,7 +23,7 @@
 namespace rtpmidid {
 
 network_address_t::network_address_t(int fd) {
-  addr = sockaddr_storage_to_sockaddr(new sockaddr_storage());
+  auto addr = sockaddr_storage_to_sockaddr(new sockaddr_storage());
   len = sizeof(sockaddr_storage);
   managed = true;
 
@@ -33,6 +33,7 @@ network_address_t::network_address_t(int fd) {
     throw rtpmidid::exception("Error getting info the newly created midi "
                               "socket. Can not create server.");
   }
+  this->addr = addr;
 }
 
 network_address_t::~network_address_t() {
@@ -43,19 +44,19 @@ network_address_t::~network_address_t() {
 
 int network_address_t::port() const {
   if (addr->sa_family == AF_INET) {
-    return ntohs(reinterpret_cast<sockaddr_in *>(addr)->sin_port);
+    return ntohs(reinterpret_cast<const sockaddr_in *>(addr)->sin_port);
   }
-  return ntohs(reinterpret_cast<sockaddr_in6 *>(addr)->sin6_port);
+  return ntohs(reinterpret_cast<const sockaddr_in6 *>(addr)->sin6_port);
 }
 
 std::string network_address_t::ip() const {
   std::array<char, INET6_ADDRSTRLEN> name{};
   if (addr->sa_family == AF_INET) {
-    inet_ntop(AF_INET, &reinterpret_cast<sockaddr_in *>(addr)->sin_addr,
+    inet_ntop(AF_INET, &reinterpret_cast<const sockaddr_in *>(addr)->sin_addr,
               name.data(), name.size());
     return name.data();
   }
-  inet_ntop(AF_INET6, &reinterpret_cast<sockaddr_in6 *>(addr)->sin6_addr,
+  inet_ntop(AF_INET6, &reinterpret_cast<const sockaddr_in6 *>(addr)->sin6_addr,
             name.data(), name.size());
   return name.data();
 }
@@ -71,15 +72,17 @@ std::string network_address_t::hostname() const {
 std::string network_address_t::to_string() const {
   std::array<char, INET6_ADDRSTRLEN> name{};
   if (addr->sa_family == AF_INET) {
-    inet_ntop(AF_INET, &reinterpret_cast<sockaddr_in *>(addr)->sin_addr,
+    inet_ntop(AF_INET, &reinterpret_cast<const sockaddr_in *>(addr)->sin_addr,
               name.data(), name.size());
-    return fmt::format("{}:{}", name.data(),
-                       ntohs(reinterpret_cast<sockaddr_in *>(addr)->sin_port));
+    return fmt::format(
+        "{}:{}", name.data(),
+        ntohs(reinterpret_cast<const sockaddr_in *>(addr)->sin_port));
   }
-  inet_ntop(AF_INET6, &reinterpret_cast<sockaddr_in6 *>(addr)->sin6_addr,
+  inet_ntop(AF_INET6, &reinterpret_cast<const sockaddr_in6 *>(addr)->sin6_addr,
             name.data(), name.size());
-  return fmt::format("{}:{}", name.data(),
-                     ntohs(reinterpret_cast<sockaddr_in6 *>(addr)->sin6_port));
+  return fmt::format(
+      "{}:{}", name.data(),
+      ntohs(reinterpret_cast<const sockaddr_in6 *>(addr)->sin6_port));
 }
 
 bool network_address_t::resolve_loop(

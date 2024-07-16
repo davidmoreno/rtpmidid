@@ -58,6 +58,25 @@ int udppeer_t::open(const std::string &address, const std::string &port) {
   return fd;
 }
 
+udppeer_t::udppeer_t(const network_address_t &addr) {
+  fd = socket(addr.get_aifamily(), SOCK_DGRAM, 0);
+  if (fd < 0) {
+    return;
+  }
+
+  auto ret = bind(fd, addr.get_sockaddr(), addr.get_socklen());
+  if (ret != 0) {
+    ::close(fd);
+    fd = -1;
+    return;
+  }
+
+  listener = poller.add_fd_in(fd, [this](int fd) {
+    assert(fd == this->fd); // Should be the same.
+    data_ready();
+  });
+}
+
 void udppeer_t::data_ready() {
   std::array<uint8_t, 1500> raw{};
   struct sockaddr_storage cliaddr {};
@@ -122,6 +141,15 @@ network_address_t const *udppeer_t::get_address(const std::string &address,
     return nullptr;
   }
   return &I->second;
+}
+
+network_address_t udppeer_t::get_address() {
+  struct sockaddr_storage addr;
+  socklen_t len = sizeof(addr);
+  if (getsockname(fd, sockaddr_storage_to_sockaddr(&addr), &len) < 0) {
+    throw rtpmidid::exception("Error getting address");
+  }
+  return network_address_t{&addr, len}.dup();
 }
 
 void udppeer_t::close() {

@@ -23,6 +23,7 @@
 #include "rtpmidid/networkaddress.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/signal.hpp"
+#include "rtpmidid/utils.hpp"
 #include <stddef.h>
 #include <string>
 #include <sys/socket.h>
@@ -30,6 +31,7 @@
 namespace rtpmidid {
 
 class udppeer_t {
+  NON_COPYABLE(udppeer_t);
 
 public:
   // Read some data from address and port
@@ -39,12 +41,31 @@ public:
   udppeer_t(const std::string &address, const std::string &port) {
     open(address, port);
   }
+  udppeer_t(const network_address_t &addr);
+  udppeer_t(const sockaddr *addr, socklen_t socklen)
+      : udppeer_t(network_address_t(addr, socklen)){};
+  udppeer_t(udppeer_t &&other) {
+    fd = other.fd;
+    listener = std::move(other.listener);
+    addresses_cache = std::move(other.addresses_cache);
+    other.fd = -1;
+  }
+  void operator=(udppeer_t &&other){
+    fd = other.fd;
+    listener = std::move(other.listener);
+    addresses_cache = std::move(other.addresses_cache);
+    other.fd=-1;
+  }
+
   ~udppeer_t() { close(); }
 
   int open(const std::string &address, const std::string &port);
   void send(io_bytes &reader, const std::string &address,
             const std::string &port);
   void close();
+
+  bool is_open() const { return fd >= 0; }
+  network_address_t get_address();
 
 private:
   int fd = -1;

@@ -30,8 +30,9 @@ class network_address_t {
   NON_COPYABLE(network_address_t);
 
 public:
-  network_address_t(sockaddr *addr, size_t len) : addr(addr), len(len){};
-  network_address_t(sockaddr_storage *addr, size_t len)
+  network_address_t(const sockaddr *addr, socklen_t len)
+      : addr(addr), len(len){};
+  network_address_t(sockaddr_storage *addr, socklen_t len)
       : addr(sockaddr_storage_to_sockaddr(addr)), len(len){};
   network_address_t(int fd);
   network_address_t(network_address_t &&other) {
@@ -48,7 +49,7 @@ public:
   std::string ip() const;
   std::string hostname() const;
   std::string to_string() const;
-  sockaddr *get_address() const { return addr; }
+  sockaddr const *get_address() const { return addr; }
   network_address_t dup() const {
     sockaddr_storage *addr = new sockaddr_storage();
     memcpy(addr, this->addr, this->len);
@@ -68,7 +69,7 @@ public:
                            std::function<bool(const addrinfo *)> cb);
 
 private:
-  sockaddr *addr;
+  const sockaddr *addr;
   socklen_t len;
   bool managed = false; // If managed, release memory on destruction
 };

@@ -90,9 +90,18 @@ static std::string get_hostname() {
   return std::string(hostname.data());
 }
 
+void test_client_state_machine() {
+  rtpmidid::rtpclient_t client("Test");
+  rtpmidid::udppeer_t peerA("localhost", "13001");
+
+  client.add_server_address("localhost", "13001");
+  client.connect();
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_udppeer),
+      TEST(test_client_state_machine),
   };
 
   testcase.run(argc, argv);
