@@ -60,7 +60,7 @@ using namespace rtpmidid;
  * The flow is as follows:
  *
  */
-rtpclient_t::rtpclient_t(std::string name) : peer(std::move(name)) {
+rtpclient_t::rtpclient_t(const std::string name) : peer(std::move(name)) {
   peer.initiator_id = ::rtpmidid::rand_u32();
   send_connection = peer.send_event.connect(
       [this](const io_bytes_reader &data, rtppeer_t::port_e port) {
@@ -411,45 +411,25 @@ void rtpclient_t::send_ck0_with_timeout() {
 }
 
 void rtpclient_t::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
-  sockaddr_storage *peer_addr = nullptr;
-  int socket = -1;
-
+  ssize_t res;
   if (port == rtppeer_t::MIDI_PORT) {
-    socket = midi_socket;
-    peer_addr = &midi_addr;
+    res = midi_peer.sendto(pb, midi_address);
+    return;
+
   } else if (port == rtppeer_t::CONTROL_PORT) {
-    socket = control_socket;
-    peer_addr = &control_addr;
+    // socket = control_socket;
+    // peer_addr = &control_addr;
+
+    res = control_peer.sendto(pb, control_address);
+    return;
   } else {
     throw exception("Unknown port {}", port);
   }
 
-  // DEBUG("Send {} bytes to {} {}, socket {}", port, pb.size(), *peer_addr,
-  //       socket);
-
-  // NOLINTNEXTLINE
-  sockaddr *peer_addr_sockaddr = reinterpret_cast<sockaddr *>(peer_addr);
-
-  for (;;) {
-    ssize_t res = ::sendto(socket, pb.start, pb.size(), 0, peer_addr_sockaddr,
-                           sizeof(sockaddr_storage));
-
-    if (static_cast<uint32_t>(res) == pb.size())
-      break;
-
-    if (res == -1) {
-      if (errno == EINTR) {
-        DEBUG("Retry sendto because of EINTR");
-        continue;
-      }
-
-      ERROR("Client: Could not send all data to {}. Sent {}. {} ({})",
-            *peer_addr, res, strerror(errno), errno);
-      throw network_exception(errno);
-    }
-
-    DEBUG("Could not send whole message: only {} of {}", res, pb.size());
-    break;
+  if (res == -1) {
+    ERROR("Client: Could not send all data to {}. Sent {}. {} ({})", port, res,
+          strerror(errno), errno);
+    throw network_exception(errno);
   }
 }
 
@@ -566,93 +546,82 @@ void rtpclient_t::resolve_next_dns() {
 
 void rtpclient_t::connect_next_ip_port() {
   // First time, get next address and resolve
-  if (!resolve_next_dns_sockaddress_list) {
-    struct addrinfo hints {};
-    int res = 0;
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = 0;
-    hints.ai_protocol = 0;
-
-    res = getaddrinfo(resolve_next_dns_endpoint.hostname.c_str(),
-                      resolve_next_dns_endpoint.port.c_str(), &hints,
-                      &resolve_next_dns_sockaddress_list);
-    if (res < 0) {
-      state_machine(ResolveFailed);
-    }
-
-    resolve_next_dns_sockaddress = resolve_next_dns_sockaddress_list;
+  if (!resolve_next_dns_sockaddress_list.is_valid()) {
+    resolve_next_dns_sockaddress_list = network_address_list_t(
+        resolve_next_dns_endpoint.hostname, resolve_next_dns_endpoint.port);
+    resolve_next_dns_sockaddress_list_I =
+        resolve_next_dns_sockaddress_list.begin();
   } else {
     // Following use the next resolved item
-    resolve_next_dns_sockaddress = resolve_next_dns_sockaddress->ai_next;
+    resolve_next_dns_sockaddress_list_I++;
   }
 
   // If any left, go for it, if not failed resolve this address port pair
-  if (resolve_next_dns_sockaddress) {
-    char host[NI_MAXHOST];
-    char port[NI_MAXSERV];
-    host[0] = port[0] = '\0';
-    getnameinfo(resolve_next_dns_sockaddress->ai_addr,
-                resolve_next_dns_sockaddress->ai_addrlen, host, NI_MAXHOST,
-                port, NI_MAXSERV, NI_NUMERICSERV);
+  if (resolve_next_dns_sockaddress_list_I !=
+      resolve_next_dns_sockaddress_list.end()) {
+    control_address = (*resolve_next_dns_sockaddress_list_I).dup();
 
-    DEBUG("Try to connect to address: {}:{}", host, port);
+    DEBUG("Try to connect to address: {}", control_address.to_string());
 
     state_machine(Resolved);
   } else {
-    freeaddrinfo(resolve_next_dns_sockaddress_list);
-    resolve_next_dns_sockaddress_list = nullptr;
+    resolve_next_dns_sockaddress_list = network_address_list_t();
     state_machine(ConnectListExhausted);
   }
 }
 
 void rtpclient_t::connect_control() {
-  control_peer = std::move(
-      udppeer_t(network_address_t(resolve_next_dns_sockaddress->ai_addr,
-                                  resolve_next_dns_sockaddress->ai_addrlen)));
+  // Any, but could force the initial control port here
+  control_peer.open(network_address_list_t("::", "0"));
+
   if (!control_peer.is_open()) {
-    DEBUG("Could not connect {}:{} to control port",
+    ERROR("Could not connect {}:{} to control port",
           resolve_next_dns_endpoint.hostname, resolve_next_dns_endpoint.port);
     state_machine(ConnectFailed);
     return;
   }
+  local_base_port = control_peer.get_address().port();
+
   control_connected_event_connection = peer.connected_event.connect(
       [this](const std::string &name, rtppeer_t::status_e status) {
+        control_connected_event_connection.disconnect();
         if (status == rtppeer_t::CONTROL_CONNECTED) {
           auto address = control_peer.get_address();
-          DEBUG("Connected control port {} to {}:{}", address.port(),
+          ERROR("Connected control port {} to {}:{}", address.port(),
                 address.hostname(), address.port());
-          control_connected_event_connection.disconnect();
           state_machine(Connected);
         } else {
           state_machine(ConnectFailed);
         }
       });
+  peer.connect_to(rtppeer_t::CONTROL_PORT);
 }
 
 void rtpclient_t::connect_midi() {
-  // advance the port by 1, so it points to midi
-  auto base_port =
-      ntohs(((sockaddr_in *)resolve_next_dns_sockaddress->ai_addr)->sin_port);
-  ((sockaddr_in *)resolve_next_dns_sockaddress->ai_addr)->sin_port =
-      htons(base_port + 1);
+  midi_peer.open(network_address_list_t(
+      control_address.ip(), std::to_string(control_address.port() + 1)));
 
-  auto midi =
-      connect_udp_port(local_base_port + 1, resolve_next_dns_sockaddress);
-  if (!midi) {
-    DEBUG("Could not connect {}:{} to midi port",
-          resolve_next_dns_endpoint.hostname, resolve_next_dns_endpoint.port);
+  if (!midi_peer.is_open()) {
+    ERROR("Could not connect {}:{} to midi port", control_address.ip(),
+          control_address.port() + 1);
     state_machine(ConnectFailed);
     return;
   }
 
-  midi_socket = midi->socket;
-
-  // TODO: Actual send the midi connect message, wait for ACK, then connected
+  control_connected_event_connection = peer.connected_event.connect(
+      [this](const std::string &name, rtppeer_t::status_e status) {
+        control_connected_event_connection.disconnect();
+        if (status == rtppeer_t::MIDI_CONNECTED) {
+          auto address = midi_peer.get_address();
+          ERROR("Connected midi port {} to {}:{}", address.port(),
+                address.hostname(), address.port());
+          state_machine(Connected);
+        } else {
+          state_machine(ConnectFailed);
+        }
+      });
   // event
-
-  state_machine(Connected);
+  peer.connect_to(rtppeer_t::MIDI_PORT);
 }
 
 void rtpclient_t::disconnect_control() {

@@ -78,6 +78,8 @@ public:
 
   udppeer_t control_peer;
   udppeer_t midi_peer;
+  network_address_t control_address;
+  network_address_t midi_address;
 
   /// The states fot eh state machine. They correspond directly to functions
   /// with same name
@@ -114,9 +116,9 @@ public:
   // Currently conneting / connected endpoint
   endpoint_t resolve_next_dns_endpoint;
   // Needed at resolve_next_dns
-  addrinfo *resolve_next_dns_sockaddress_list = nullptr;
-  // Currently connected sock address
-  addrinfo *resolve_next_dns_sockaddress = nullptr;
+  network_address_list_t resolve_next_dns_sockaddress_list;
+  // Iterator to the current endpoint
+  network_address_list_t::iterator_t resolve_next_dns_sockaddress_list_I;
   // Connected to control port
   int connect_control_base_port = 0;
 

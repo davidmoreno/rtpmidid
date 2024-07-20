@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <rtpmidid/exceptions.hpp>
+#include <rtpmidid/logger.hpp>
 #include <rtpmidid/networkaddress.hpp>
 
 namespace rtpmidid {
@@ -70,6 +71,10 @@ std::string network_address_t::hostname() const {
 }
 
 std::string network_address_t::to_string() const {
+  if (!addr) {
+    return "null";
+  }
+
   std::array<char, INET6_ADDRSTRLEN> name{};
   if (addr->sa_family == AF_INET) {
     inet_ntop(AF_INET, &reinterpret_cast<const sockaddr_in *>(addr)->sin_addr,
@@ -124,4 +129,26 @@ bool network_address_t::resolve_loop(const std::string &address,
   return false;
 }
 
+network_address_list_t::network_address_list_t(const std::string &name,
+                                               const std::string &port) {
+  addrinfo hints{};
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_DGRAM;
+  hints.ai_flags = AI_PASSIVE;
+  hints.ai_protocol = 0;
+  hints.ai_canonname = nullptr;
+  hints.ai_addr = nullptr;
+  hints.ai_next = nullptr;
+
+  if (getaddrinfo(name.c_str(), port.c_str(), &hints, &info) != 0) {
+    ERROR("Error getting address info for {}:{}", name, port);
+    info = nullptr;
+  }
+}
+
+network_address_list_t::~network_address_list_t() {
+  if (info) {
+    freeaddrinfo(info);
+  }
+}
 } // namespace rtpmidid

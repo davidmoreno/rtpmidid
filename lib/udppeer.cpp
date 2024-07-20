@@ -28,53 +28,49 @@
 
 namespace rtpmidid {
 
-const auto MAX_ADDRESS_CACHE_SIZE = 100;
+udppeer_t::udppeer_t(const network_address_t &addr) { open(addr); }
 
-int udppeer_t::open(const std::string &address, const std::string &port) {
+int udppeer_t::open(const network_address_t &address) {
+  auto addr = address.get_sockaddr();
+  auto addrlen = address.get_socklen();
 
-  network_address_t::resolve_loop(address, port, [this](const addrinfo *addr) {
-    fd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
-    if (fd < 0) {
-      return false; // Bad socket, try next
-    }
-    auto ret = bind(fd, addr->ai_addr, addr->ai_addrlen);
-    if (ret != 0) {
-      ::close(fd);
-      fd = -1;
-      return false;
-    }
-    return true; // Success
-  });
+  DEBUG("Opening UDP port at {}", address.to_string());
+
+  fd = socket(address.get_aifamily(), SOCK_DGRAM | SOCK_CLOEXEC, 0);
+
+  if (fd < 0) {
+    ERROR("Error creating socket: {}", strerror(errno));
+    return -1; // Bad socket, try next
+  }
+  auto ret = bind(fd, addr, addrlen);
+  if (ret != 0) {
+    ERROR("Error binding socket: {} {}", address.to_string(), strerror(errno));
+    ::close(fd);
+    fd = -1;
+    return -1;
+  }
 
   network_address_t myaddress{fd};
 
   DEBUG("UDP port listen ready, at {}, fd {}", myaddress.to_string(), fd);
 
-  listener = poller.add_fd_in(fd, [this](int fd) {
-    assert(fd == this->fd); // Should be the same.
-    data_ready();
-  });
+  if (!listener) {
+    listener = poller.add_fd_in(fd, [this](int fd) {
+      assert(fd == this->fd); // Should be the same.
+      data_ready();
+    });
+  }
 
   return fd;
 }
 
-udppeer_t::udppeer_t(const network_address_t &addr) {
-  fd = socket(addr.get_aifamily(), SOCK_DGRAM, 0);
-  if (fd < 0) {
-    return;
+int udppeer_t::open(const network_address_list_t &address_list) {
+  for (auto &address : address_list) {
+    if (open(address) >= 0) {
+      return fd;
+    }
   }
-
-  auto ret = bind(fd, addr.get_sockaddr(), addr.get_socklen());
-  if (ret != 0) {
-    ::close(fd);
-    fd = -1;
-    return;
-  }
-
-  listener = poller.add_fd_in(fd, [this](int fd) {
-    assert(fd == this->fd); // Should be the same.
-    data_ready();
-  });
+  return -1;
 }
 
 void udppeer_t::data_ready() {
@@ -98,56 +94,32 @@ void udppeer_t::data_ready() {
   on_read(buffer, network_address);
 }
 
-void udppeer_t::send(io_bytes &buffer, const std::string &address,
-                     const std::string &port) {
+ssize_t udppeer_t::sendto(const io_bytes &buffer,
+                          const network_address_t &addr) {
+  auto res = ::sendto(fd, buffer.start, buffer.size(), 0, addr.get_sockaddr(),
+                      addr.get_socklen());
 
-  auto addr = get_address(address, port);
-
-  auto res = sendto(fd, buffer.start, buffer.size(), 0, addr->get_sockaddr(),
-                    addr->get_socklen());
+  std::string addr_str = addr.to_string();
 
   if (res < 0) {
-    ERROR("Error sending to {}:{}", address, port);
-    throw rtpmidid::exception("Can not send to address {}:{}. {}", address,
-                              port, strerror(errno));
+    ERROR("Error sending to {}", addr_str);
+    throw rtpmidid::exception("Can not send to address {}. {}", addr_str,
+                              strerror(errno));
   }
 
-  DEBUG("Sent to {}:{}, {} bytes", address, port, buffer.size());
-}
-
-network_address_t const *udppeer_t::get_address(const std::string &address,
-                                                const std::string &port) {
-
-  auto I = addresses_cache.find(std::pair(address, port));
-  if (I != addresses_cache.end()) {
-    DEBUG("Cache hit!");
-    return &I->second;
-  }
-
-  auto resolved = network_address_t::resolve_loop(
-      address, port, [this, &address, &port](const network_address_t &addr) {
-        addresses_cache.emplace(std::pair(address, port), addr.dup());
-        return true;
-      });
-
-  if (!resolved) {
-    ERROR("Error resolving address {}:{}", address, port);
-    return nullptr;
-  }
-
-  I = addresses_cache.find(std::pair(address, port));
-  if (I == addresses_cache.end()) {
-    ERROR("Error getting address {}:{} from cache", address, port);
-    return nullptr;
-  }
-  return &I->second;
+  DEBUG("Sent to {} {} bytes", addr_str, buffer.size());
+  return res;
 }
 
 network_address_t udppeer_t::get_address() {
   struct sockaddr_storage addr;
   socklen_t len = sizeof(addr);
+  if (fd < 0) {
+    return network_address_t();
+  }
+
   if (getsockname(fd, sockaddr_storage_to_sockaddr(&addr), &len) < 0) {
-    throw rtpmidid::exception("Error getting address");
+    throw rtpmidid::exception("Error getting address {}", strerror(errno));
   }
   return network_address_t{&addr, len}.dup();
 }

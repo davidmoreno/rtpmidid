@@ -33,50 +33,47 @@ namespace rtpmidid {
 class udppeer_t {
   NON_COPYABLE(udppeer_t);
 
-public:
-  // Read some data from address and port
-  signal_t<io_bytes_reader &, const network_address_t &> on_read;
-
-  udppeer_t() { open("::", "0"); };
-  udppeer_t(const std::string &address, const std::string &port) {
-    open(address, port);
-  }
-  udppeer_t(const network_address_t &addr);
-  udppeer_t(const sockaddr *addr, socklen_t socklen)
-      : udppeer_t(network_address_t(addr, socklen)){};
-  udppeer_t(udppeer_t &&other) {
-    fd = other.fd;
-    listener = std::move(other.listener);
-    addresses_cache = std::move(other.addresses_cache);
-    other.fd = -1;
-  }
-  void operator=(udppeer_t &&other){
-    fd = other.fd;
-    listener = std::move(other.listener);
-    addresses_cache = std::move(other.addresses_cache);
-    other.fd=-1;
-  }
-
-  ~udppeer_t() { close(); }
-
-  int open(const std::string &address, const std::string &port);
-  void send(io_bytes &reader, const std::string &address,
-            const std::string &port);
-  void close();
-
-  bool is_open() const { return fd >= 0; }
-  network_address_t get_address();
-
 private:
   int fd = -1;
   poller_t::listener_t listener;
-  std::map<std::pair<std::string, std::string>, network_address_t>
-      addresses_cache;
 
   void data_ready();
 
   network_address_t const *get_address(const std::string &address,
                                        const std::string &port);
+
+public:
+  // Read some data from address and port
+  signal_t<io_bytes_reader &, const network_address_t &> on_read;
+
+  udppeer_t() { fd = -1; };
+  udppeer_t(const std::string &address, const std::string &port) {
+    open(network_address_list_t(address, port));
+  }
+  udppeer_t(const network_address_t &addr);
+  udppeer_t(const network_address_list_t &addrlist) { open(addrlist); };
+  udppeer_t(const sockaddr *addr, socklen_t socklen)
+      : udppeer_t(network_address_t(addr, socklen)){};
+  udppeer_t(udppeer_t &&other) {
+    fd = other.fd;
+    listener = std::move(other.listener);
+    other.fd = -1;
+  }
+  void operator=(udppeer_t &&other) {
+    fd = other.fd;
+    listener = std::move(other.listener);
+    other.fd = -1;
+  }
+
+  ~udppeer_t() { close(); }
+
+  int open(const network_address_t &addr);
+  int open(const network_address_list_t &addr);
+  ssize_t sendto(const io_bytes &reader, const network_address_t &address);
+  void close();
+
+  bool is_open() const { return fd >= 0; }
+  network_address_t get_address();
 };
 
 } // namespace rtpmidid
