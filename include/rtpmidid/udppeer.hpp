@@ -43,8 +43,9 @@ private:
                                        const std::string &port);
 
 public:
+  using on_read_t = signal_t<io_bytes_reader &, const network_address_t &>;
   // Read some data from address and port
-  signal_t<io_bytes_reader &, const network_address_t &> on_read;
+  on_read_t on_read;
 
   udppeer_t() { fd = -1; };
   udppeer_t(const std::string &address, const std::string &port) {
@@ -69,6 +70,8 @@ public:
 
   int open(const network_address_t &addr);
   int open(const network_address_list_t &addr);
+  ssize_t sendto(const uint8_t *data, size_t len,
+                 const network_address_t &addr);
   ssize_t sendto(const io_bytes &reader, const network_address_t &address);
   void close();
 

@@ -18,6 +18,7 @@
  */
 
 #include "rtpmidid/exceptions.hpp"
+#include "rtpmidid/rtppeer.hpp"
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <optional>
@@ -560,6 +561,11 @@ void rtpclient_t::connect_next_ip_port() {
   if (resolve_next_dns_sockaddress_list_I !=
       resolve_next_dns_sockaddress_list.end()) {
     control_address = (*resolve_next_dns_sockaddress_list_I).dup();
+    midi_address =
+        network_address_list_t(control_address.ip(),
+                               std::to_string(control_address.port() + 1))
+            .get_first()
+            .dup();
 
     DEBUG("Try to connect to address: {}", control_address.to_string());
 
@@ -573,6 +579,11 @@ void rtpclient_t::connect_next_ip_port() {
 void rtpclient_t::connect_control() {
   // Any, but could force the initial control port here
   control_peer.open(network_address_list_t("::", "0"));
+  control_on_read_connection = control_peer.on_read.connect(
+      [this](io_bytes_reader &data, const network_address_t &) {
+        DEBUG("Data ready for control!");
+        this->peer.data_ready(std::move(data), rtppeer_t::CONTROL_PORT);
+      });
 
   if (!control_peer.is_open()) {
     ERROR("Could not connect {}:{} to control port",
@@ -585,40 +596,47 @@ void rtpclient_t::connect_control() {
   control_connected_event_connection = peer.connected_event.connect(
       [this](const std::string &name, rtppeer_t::status_e status) {
         control_connected_event_connection.disconnect();
-        if (status == rtppeer_t::CONTROL_CONNECTED) {
-          auto address = control_peer.get_address();
-          ERROR("Connected control port {} to {}:{}", address.port(),
-                address.hostname(), address.port());
-          state_machine(Connected);
-        } else {
+        if (status != rtppeer_t::CONTROL_CONNECTED) {
           state_machine(ConnectFailed);
+          return;
         }
+
+        auto address = control_peer.get_address();
+        INFO("Connected control port {} to {}:{}", address.port(),
+             address.hostname(), address.port());
+        state_machine(Connected);
       });
   peer.connect_to(rtppeer_t::CONTROL_PORT);
 }
 
 void rtpclient_t::connect_midi() {
-  midi_peer.open(network_address_list_t(
-      control_address.ip(), std::to_string(control_address.port() + 1)));
+  midi_peer.open(
+      network_address_list_t("::", std::to_string(local_base_port + 1)));
 
   if (!midi_peer.is_open()) {
-    ERROR("Could not connect {}:{} to midi port", control_address.ip(),
-          control_address.port() + 1);
+    ERROR("Could not connect {}:{} to midi port", midi_address.ip(),
+          midi_address.port() + 1);
     state_machine(ConnectFailed);
     return;
   }
 
-  control_connected_event_connection = peer.connected_event.connect(
+  midi_on_read_connection = midi_peer.on_read.connect(
+      [this](io_bytes_reader &data, const network_address_t &) {
+        DEBUG("Data ready for midi!");
+        this->peer.data_ready(std::move(data), rtppeer_t::MIDI_PORT);
+      });
+
+  midi_connected_event_connection = peer.connected_event.connect(
       [this](const std::string &name, rtppeer_t::status_e status) {
-        control_connected_event_connection.disconnect();
-        if (status == rtppeer_t::MIDI_CONNECTED) {
-          auto address = midi_peer.get_address();
-          ERROR("Connected midi port {} to {}:{}", address.port(),
-                address.hostname(), address.port());
-          state_machine(Connected);
-        } else {
+        midi_connected_event_connection.disconnect();
+        if (status != rtppeer_t::CONNECTED) {
           state_machine(ConnectFailed);
+          return;
         }
+        auto address = midi_peer.get_address();
+        DEBUG("Connected midi port {} to {}:{}", address.port(),
+              address.hostname(), address.port());
+        state_machine(Connected);
       });
   // event
   peer.connect_to(rtppeer_t::MIDI_PORT);

@@ -22,6 +22,7 @@
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtpclient.hpp>
+#include <rtpmidid/rtpmidipacket.hpp>
 #include <rtpmidid/rtpserver.hpp>
 #include <rtpmidid/udppeer.hpp>
 #include <unistd.h>
@@ -140,26 +141,99 @@ static std::string get_hostname() {
 
 void test_client_state_machine() {
   rtpmidid::rtpclient_t client("Test");
-  rtpmidid::udppeer_t peerA("localhost", "13001");
+
+  rtpmidid::udppeer_t peerA_control("localhost", "13001");
+  rtpmidid::udppeer_t peerA_midi("localhost", "13002");
 
   bool got_control_connection = false;
-  auto peerA_on_read_connection =
-      peerA.on_read.connect([&](rtpmidid::io_bytes_reader &data,
-                                const rtpmidid::network_address_t &c) {
-        DEBUG("Got data on read {}, {} bytes", c.to_string(), data.size());
-        std::string str = std::string(data.read_str0());
-        ASSERT_TRUE(c.hostname() == "localhost");
+  bool got_midi_connection = false;
+  auto peerA_on_read_connection_control = peerA_control.on_read.connect(
+      [&](rtpmidid::io_bytes_reader &data,
+          const rtpmidid::network_address_t &data_address) {
+        auto packet_type =
+            rtpmidid::packet_t::get_packet_type(data.position, data.size());
+        DEBUG("Received a CONTROL {} packet", packet_type);
+        if (packet_type == rtpmidid::packet_type_e::COMMAND) {
+          rtpmidid::command_packet_t req(data.position, data.remaining());
+          DEBUG("Packet: {}", req.to_string());
+        }
+
+        ASSERT_FALSE(got_control_connection);
+        ASSERT_FALSE(got_midi_connection);
+        DEBUG("Got data on read {}, {} bytes", data_address.to_string(),
+              data.size());
         DEBUG("Control port is {}", client.control_address.port());
-        ASSERT_TRUE(c.port() == client.local_base_port);
-        got_control_connection = true;
+        ASSERT_TRUE(data_address.port() == client.local_base_port);
+
+        data.print_hex(true, true);
+
+        ASSERT_TRUE(packet_type == rtpmidid::packet_type_e::COMMAND);
+
+        rtpmidid::command_packet_t req(data.position, data.remaining());
+        got_control_connection = req.is_command_packet();
+        DEBUG("Packet: {}", req.to_string());
+
+        std::array<uint8_t, 1500> buffer;
+        rtpmidid::command_packet_t response(buffer.data(), buffer.size());
+        response.initialize()
+            .set_command(rtpmidid::command_e::OK)
+            .set_sender_ssrc(0xBEEF)
+            .set_initiator_token(req.get_initiator_token())
+            .set_name("Manual packets");
+        DEBUG("Response: {} {} bytes", response, response.get_size_to_send());
+        ASSERT_GT(response.get_size_to_send(), 16);
+
+        peerA_control.sendto(response.get_data(), response.get_size_to_send(),
+                             data_address);
+      });
+
+  auto peerA_on_read_connection_midi = peerA_midi.on_read.connect(
+      [&](rtpmidid::io_bytes_reader &data,
+          const rtpmidid::network_address_t &data_address) {
+        auto packet_type =
+            rtpmidid::packet_t::get_packet_type(data.position, data.size());
+        DEBUG("Received a MIDI {} packet", packet_type);
+
+        ASSERT_FALSE(got_midi_connection);
+        DEBUG("Got data on read {}, {} bytes", data_address.to_string(),
+              data.size());
+        DEBUG("MIDI port is {}", client.midi_address.port());
+        ASSERT_TRUE(data_address.port() == client.local_base_port + 1);
+
+        data.print_hex(true, true);
+
+        ASSERT_TRUE(packet_type == rtpmidid::packet_type_e::COMMAND);
+
+        rtpmidid::command_packet_t req(data.position, data.remaining());
+        DEBUG("Packet: {}", req.to_string());
+
+        std::array<uint8_t, 1500> buffer;
+        rtpmidid::command_packet_t response(buffer.data(), buffer.size());
+        response.initialize()
+            .set_command(rtpmidid::command_e::OK)
+            .set_sender_ssrc(0xBEEF)
+            .set_initiator_token(req.get_initiator_token())
+            .set_name("Manual packets");
+
+        DEBUG("Response: {} {} bytes", response, response.get_size_to_send());
+        ASSERT_GT(response.get_size_to_send(), 16);
+        peerA_midi.sendto(response.get_data(), response.get_size_to_send(),
+                          data_address);
+
+        got_midi_connection = true;
       });
 
   client.add_server_address("localhost", "13001");
   client.connect();
 
   poller_wait_until([&]() { return got_control_connection; });
-
   ASSERT_TRUE(got_control_connection)
+  poller_wait_until([&]() { return got_midi_connection; });
+  ASSERT_TRUE(got_midi_connection)
+
+  poller_wait_until([&]() {
+    return client.state == rtpmidid::rtpclient_t::states_e::AllConnected;
+  });
 }
 
 int main(int argc, char **argv) {
