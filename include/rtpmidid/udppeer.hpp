@@ -18,7 +18,6 @@
 
 #pragma once
 
-#include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/network.hpp"
 #include "rtpmidid/networkaddress.hpp"
 #include "rtpmidid/packet.hpp"
@@ -44,7 +43,7 @@ private:
                                        const std::string &port);
 
 public:
-  using on_read_t = signal_t<io_bytes_reader &, const network_address_t &>;
+  using on_read_t = signal_t<const packet_t &, const network_address_t &>;
   // Read some data from address and port
   on_read_t on_read;
 
@@ -72,7 +71,6 @@ public:
   int open(const network_address_t &addr);
   int open(const network_address_list_t &addr);
   ssize_t sendto(const packet_t &packet, const network_address_t &addr);
-  ssize_t sendto(const io_bytes &reader, const network_address_t &address);
   void close();
 
   bool is_open() const { return fd >= 0; }

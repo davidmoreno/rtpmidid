@@ -20,6 +20,7 @@
 #include "../tests/test_utils.hpp"
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
+#include <rtpmidid/packet.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/rtpclient.hpp>
 #include <rtpmidid/rtpmidipacket.hpp>
@@ -87,10 +88,10 @@ void test_udppeer() {
   int read_at_b = 0;
 
   auto conn_on_read_a =
-      peerA.on_read.connect([&](rtpmidid::io_bytes_reader &data,
+      peerA.on_read.connect([&](const rtpmidid::packet_t &data,
                                 const rtpmidid::network_address_t &c) {
-        DEBUG("Got data on read {}, {} bytes", c.to_string(), data.size());
-        std::string str = std::string(data.read_str0());
+        DEBUG("Got data on read {}, {} bytes", c.to_string(), data);
+        std::string str = std::string((const char *)data.get_data());
         ASSERT_TRUE(str == "test data");
         auto hostname = get_hostname();
         ASSERT_TRUE(c.hostname() == hostname);
@@ -100,10 +101,10 @@ void test_udppeer() {
         read_at_a++;
       });
   auto conn_on_read_b =
-      peerB.on_read.connect([&](rtpmidid::io_bytes_reader &data,
+      peerB.on_read.connect([&](const rtpmidid::packet_t &data,
                                 const rtpmidid::network_address_t &c) {
-        DEBUG("Got data on read {}, {} bytes", c.to_string(), data.size());
-        std::string str = std::string(data.read_str0());
+        DEBUG("Got data on read {}, {} bytes", c.to_string(), data);
+        std::string str = std::string((const char *)data.get_data());
         ASSERT_TRUE(str == "test data");
         ASSERT_TRUE(c.hostname() == "localhost");
         ASSERT_TRUE(c.ip() == "127.0.0.1");
@@ -115,17 +116,18 @@ void test_udppeer() {
   DEBUG("Peer ready");
   rtpmidid::io_bytes_writer_static<1500> data;
   data.write_str0("test data");
-  peerA.sendto(data, peerB_address);
+  rtpmidid::packet_t packet(data.start, data.size());
+  peerA.sendto(packet, peerB_address);
 
   poller_wait_until([&]() { return read_at_b == 1; });
   ASSERT_EQUAL(read_at_b, 1);
 
-  peerB.sendto(data, peerA_address);
+  peerB.sendto(packet, peerA_address);
 
   poller_wait_until([&]() { return read_at_a == 1; });
   ASSERT_EQUAL(read_at_a, 1);
 
-  peerB.sendto(data, peerA_address);
+  peerB.sendto(packet, peerA_address);
 
   poller_wait_until([&]() { return read_at_a == 2; });
   ASSERT_EQUAL(read_at_a, 2);
@@ -148,28 +150,25 @@ void test_client_state_machine() {
   bool got_control_connection = false;
   bool got_midi_connection = false;
   auto peerA_on_read_connection_control = peerA_control.on_read.connect(
-      [&](rtpmidid::io_bytes_reader &data,
+      [&](const rtpmidid::packet_t &data,
           const rtpmidid::network_address_t &data_address) {
-        auto packet_type =
-            rtpmidid::packet_t::get_packet_type(data.position, data.size());
+        auto packet_type = data.get_packet_type();
+
         DEBUG("Received a CONTROL {} packet", packet_type);
         if (packet_type == rtpmidid::packet_type_e::COMMAND) {
-          rtpmidid::command_packet_t req(data.position, data.remaining());
+          rtpmidid::command_packet_t req(data);
           DEBUG("Packet: {}", req.to_string());
         }
 
         ASSERT_FALSE(got_control_connection);
         ASSERT_FALSE(got_midi_connection);
-        DEBUG("Got data on read {}, {} bytes", data_address.to_string(),
-              data.size());
+        DEBUG("Got data on read {}, {} bytes", data_address.to_string(), data);
         DEBUG("Control port is {}", client.control_address.port());
         ASSERT_TRUE(data_address.port() == client.local_base_port);
 
-        data.print_hex(true, true);
-
         ASSERT_TRUE(packet_type == rtpmidid::packet_type_e::COMMAND);
 
-        rtpmidid::command_packet_t req(data.position, data.remaining());
+        rtpmidid::command_packet_t req(data);
         got_control_connection = req.is_command_packet();
         DEBUG("Packet: {}", req.to_string());
 
@@ -187,23 +186,19 @@ void test_client_state_machine() {
       });
 
   auto peerA_on_read_connection_midi = peerA_midi.on_read.connect(
-      [&](rtpmidid::io_bytes_reader &data,
+      [&](const rtpmidid::packet_t &data,
           const rtpmidid::network_address_t &data_address) {
-        auto packet_type =
-            rtpmidid::packet_t::get_packet_type(data.position, data.size());
+        auto packet_type = data.get_packet_type();
         DEBUG("Received a MIDI {} packet", packet_type);
 
         ASSERT_FALSE(got_midi_connection);
-        DEBUG("Got data on read {}, {} bytes", data_address.to_string(),
-              data.size());
+        DEBUG("Got data on read {}, {} bytes", data_address.to_string(), data);
         DEBUG("MIDI port is {}", client.midi_address.port());
         ASSERT_TRUE(data_address.port() == client.local_base_port + 1);
 
-        data.print_hex(true, true);
-
         ASSERT_TRUE(packet_type == rtpmidid::packet_type_e::COMMAND);
 
-        rtpmidid::command_packet_t req(data.position, data.remaining());
+        rtpmidid::command_packet_t req(data);
         DEBUG("Packet: {}", req.to_string());
 
         std::array<uint8_t, 1500> buffer;
@@ -232,6 +227,12 @@ void test_client_state_machine() {
   poller_wait_until([&]() {
     return client.state == rtpmidid::rtpclient_t::states_e::AllConnected;
   });
+
+  client.send_ck0_with_timeout();
+
+  // Wait for some CK
+  bool received_ck_request = false;
+  poller_wait_until([&]() { return received_ck_request; });
 }
 
 int main(int argc, char **argv) {

@@ -17,6 +17,7 @@
  */
 
 #include "rtpmidid/udppeer.hpp"
+#include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/network.hpp"
 #include "rtpmidid/networkaddress.hpp"
 #include "rtpmidid/poller.hpp"
@@ -87,11 +88,11 @@ void udppeer_t::data_ready() {
     throw exception("Error reading at {}", network_address.to_string());
   }
 
-  auto buffer = io_bytes_reader(raw.data(), n);
+  packet_t packet(raw.data(), n);
 
   DEBUG("Got data from {}, {} bytes", network_address.to_string(), n);
 
-  on_read(buffer, network_address);
+  on_read(packet, network_address);
 }
 
 ssize_t udppeer_t::sendto(const packet_t &packet,
@@ -110,11 +111,6 @@ ssize_t udppeer_t::sendto(const packet_t &packet,
 
   DEBUG("Sent to {} bytes", packet);
   return res;
-}
-
-ssize_t udppeer_t::sendto(const io_bytes &buffer,
-                          const network_address_t &addr) {
-  return sendto(packet_t(buffer.start, buffer.size()), addr);
 }
 
 network_address_t udppeer_t::get_address() {

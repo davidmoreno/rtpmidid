@@ -38,6 +38,7 @@ protected:
   size_t size;
 
 public:
+  packet_t(const packet_t &packet) : data(packet.data), size(packet.size) {}
   packet_t(uint8_t *data, size_t size) : data(data), size(size) {}
 
   uint8_t *get_data() { return data; }
@@ -45,6 +46,7 @@ public:
   size_t get_size() const { return size; }
 
   static packet_type_e get_packet_type(const uint8_t *data, size_t size);
+  packet_type_e get_packet_type() const;
 };
 } // namespace rtpmidid
 
