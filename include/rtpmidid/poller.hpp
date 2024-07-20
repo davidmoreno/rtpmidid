@@ -115,6 +115,8 @@ public:
       poller.__remove_fd(fd);
     fd = -1;
   }
+
+  explicit operator bool() const { return fd >= 0; }
 };
 #undef DEBUG0
 } // namespace rtpmidid
