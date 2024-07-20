@@ -147,13 +147,11 @@ void rtppeer_t::parse_command_ok(io_bytes_reader &buffer, port_e port) {
         "Response to connect from an unknown initiator. Not connecting.");
   }
 
-  INFO("Got confirmation from {}, initiator_id: {} ({}) ssrc: {}, name: {}, "
+  INFO("Got confirmation from {}, initiator_id: {} ({}) ssrc: {}, "
        "port: {}",
-       remote_name, initiator_id, this->initiator_id == initiator_id,
-       remote_ssrc, remote_name,
-       port == CONTROL_PORT ? "Control"
-       : port == MIDI_PORT  ? "MIDI"
-                            : "Unknown");
+       remote_name, initiator_id,
+       this->initiator_id == initiator_id ? "ok" : "nok", remote_ssrc, port);
+
   if (port == MIDI_PORT) {
     status = status_e(int(status) | int(MIDI_CONNECTED));
   } else if (port == CONTROL_PORT) {
@@ -161,6 +159,7 @@ void rtppeer_t::parse_command_ok(io_bytes_reader &buffer, port_e port) {
   } else {
     ERROR("Got data on unknown PORT! {}", port);
   }
+  DEBUG("New status is {}", status);
   connected_event(remote_name, status);
 }
 

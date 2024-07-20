@@ -71,6 +71,7 @@ public:
   rtppeer_t::connected_event_t::connection_t peer_connected_event_connection;
 
   rtppeer_t::connected_event_t::connection_t control_connected_event_connection;
+  rtppeer_t::connected_event_t::connection_t midi_connected_event_connection;
 
   poller_t::listener_t midi_poller;
   poller_t::listener_t control_poller;
@@ -80,6 +81,8 @@ public:
   udppeer_t midi_peer;
   network_address_t control_address;
   network_address_t midi_address;
+  udppeer_t::on_read_t::connection_t control_on_read_connection;
+  udppeer_t::on_read_t::connection_t midi_on_read_connection;
 
   /// The states fot eh state machine. They correspond directly to functions
   /// with same name

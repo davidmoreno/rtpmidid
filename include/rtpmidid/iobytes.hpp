@@ -20,6 +20,8 @@
 #pragma once
 #include "./exceptions.hpp"
 #include "logger.hpp"
+#include <cassert>
+#include <cctype>
 #include <vector>
 
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-avoid-magic-numbers)
@@ -76,6 +78,7 @@ public:
     position = start + pos;
     assert_valid_position();
   }
+  size_t remaining() const { return end - position; }
   size_t size() const { return end - start; }
   size_t pos() const { return position - start; }
 
@@ -92,45 +95,51 @@ public:
   }
 
   void print_hex(bool to_end = true, bool ascii = false) const {
-    constexpr int LINE_SIZE = 16;
-    constexpr int LINE_SIZE_THIRD = LINE_SIZE / 3;
+    assert(start != nullptr);
+    assert(end >= start);
+    assert(position >= start);
+    assert(end >= position);
+    if (end == start)
+      WARNING("EMPTY");
 
-    auto data = start;
-    auto n = (to_end ? end : position) - data;
-    puts("\033[1;34m");
-    for (int i = 0; i < n; i++) {
-      if (data == position) {
-        puts("\033[0m");
+    auto pos = start;
+    int nchar_line = 0;
+    int nchar_block = 0;
+    std::string ret;
+    ret.resize(16 * 4 + 5); // more than enough
+    ret = "";
+
+    while (pos < end) {
+      if (pos == position) {
+        if (!to_end)
+          break;
+        ret += "\033[0m";
       }
-      // NOLINTNEXTLINE
-      printf("%02X ", (*data) & BYTE_MASK);
-      if (i % LINE_SIZE_THIRD == (LINE_SIZE_THIRD - 1))
-        puts(" ");
-      if (i % LINE_SIZE == (LINE_SIZE - 1))
-        puts("\n");
-      ++data;
-    }
-    puts("\n");
-    if (!ascii)
-      return;
-    puts("\033[1;34m");
-    data = start;
-    for (int i = 0; i < n; i++) {
-      if (data == position) {
-        puts("\033[0m");
-      }
-      if (isprint(*data)) {
-        putc(*data, ::stdout);
+
+      auto c = *pos;
+      pos++;
+
+      if (ascii) {
+        char ascii_char = isprint(c) ? c : '.';
+        ret += fmt::format("{:02X}{}  ", c, ascii_char);
       } else {
-        puts(".");
+        ret += fmt::format("{:02X} ", c);
       }
-      if (i % 4 == 3)
-        puts(" ");
-      if (i % LINE_SIZE == (LINE_SIZE - 1))
-        puts("\n");
-      ++data;
+      nchar_block++;
+      nchar_line++;
+      if (nchar_block == 4) {
+        ret += " ";
+        nchar_block = 0;
+      }
+      if (nchar_line >= 16) {
+        DEBUG(ret);
+        ret = "";
+        nchar_line = 0;
+      }
     }
-    puts("\n");
+    if (ret.size()) {
+      DEBUG(ret);
+    }
   }
 };
 class io_bytes_writer : public io_bytes {
