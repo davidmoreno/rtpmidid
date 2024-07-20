@@ -31,4 +31,8 @@ packet_type_e packet_t::get_packet_type(const uint8_t *data, size_t size) {
   return UNKNOWN;
 }
 
+packet_type_e packet_t::get_packet_type() const {
+  return packet_t::get_packet_type(data, size);
+}
+
 } // namespace rtpmidid

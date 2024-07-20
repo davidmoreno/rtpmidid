@@ -36,8 +36,8 @@ using namespace rtpmidid;
  */
 rtppeer_t::rtppeer_t(std::string _name)
     : local_ssrc(::rtpmidid::rand_u32() & 0x0FFFF),
-      local_name(std::move(_name)), seq_nr(::rtpmidid::rand_u32() & 0x0FFFF),
-      timestamp_start(get_timestamp()) {
+      local_name(std::move(_name)), seq_nr(::rtpmidid::rand_u32() & 0x0FFFF) {
+  timestamp_start = get_timestamp();
 
   seq_nr_ack = seq_nr;
 }
@@ -364,8 +364,6 @@ void rtppeer_t::send_ck0() {
   // DEBUG("Got packet CK");
   // buffer.print_hex(true);
   //
-  // DEBUG("Send packet CK");
-  // retbuffer.print_hex();
 
   send_event(response, MIDI_PORT);
 }
@@ -645,7 +643,7 @@ uint64_t rtppeer_t::get_timestamp() {
       uint64_t(spec.tv_sec * 10000) + uint64_t(double(spec.tv_nsec) / 1.0e5);
   // DEBUG("{}s {}ns", spec.tv_sec, spec.tv_nsec);
 
-  return uint32_t(now - timestamp_start);
+  return (now - timestamp_start);
 }
 
 void rtppeer_t::send_midi(const io_bytes_reader &events) {

@@ -135,6 +135,7 @@ enum command_e {
 
 class command_packet_t : public packet_t {
 public:
+  command_packet_t(const packet_t &packet) : packet_t(packet) {}
   command_packet_t(uint8_t *data, size_t size) : packet_t(data, size) {}
 
   static bool is_command_packet(const uint8_t *data, size_t size) {

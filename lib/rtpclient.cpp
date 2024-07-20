@@ -412,16 +412,18 @@ void rtpclient_t::send_ck0_with_timeout() {
 }
 
 void rtpclient_t::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
+  packet_t packet(pb.start, pb.size());
+
   ssize_t res;
   if (port == rtppeer_t::MIDI_PORT) {
-    res = midi_peer.sendto(pb, midi_address);
+    res = midi_peer.sendto(packet, midi_address);
     return;
 
   } else if (port == rtppeer_t::CONTROL_PORT) {
     // socket = control_socket;
     // peer_addr = &control_addr;
 
-    res = control_peer.sendto(pb, control_address);
+    res = control_peer.sendto(packet, control_address);
     return;
   } else {
     throw exception("Unknown port {}", port);
@@ -580,8 +582,9 @@ void rtpclient_t::connect_control() {
   // Any, but could force the initial control port here
   control_peer.open(network_address_list_t("::", "0"));
   control_on_read_connection = control_peer.on_read.connect(
-      [this](io_bytes_reader &data, const network_address_t &) {
+      [this](const packet_t &packet, const network_address_t &) {
         DEBUG("Data ready for control!");
+        io_bytes_reader data(packet.get_data(), packet.get_size());
         this->peer.data_ready(std::move(data), rtppeer_t::CONTROL_PORT);
       });
 
@@ -621,7 +624,8 @@ void rtpclient_t::connect_midi() {
   }
 
   midi_on_read_connection = midi_peer.on_read.connect(
-      [this](io_bytes_reader &data, const network_address_t &) {
+      [this](const packet_t &packet, const network_address_t &) {
+        io_bytes_reader data(packet.get_data(), packet.get_size());
         DEBUG("Data ready for midi!");
         this->peer.data_ready(std::move(data), rtppeer_t::MIDI_PORT);
       });
