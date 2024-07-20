@@ -21,6 +21,7 @@
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/network.hpp"
 #include "rtpmidid/networkaddress.hpp"
+#include "rtpmidid/packet.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/signal.hpp"
 #include "rtpmidid/utils.hpp"
@@ -70,8 +71,7 @@ public:
 
   int open(const network_address_t &addr);
   int open(const network_address_list_t &addr);
-  ssize_t sendto(const uint8_t *data, size_t len,
-                 const network_address_t &addr);
+  ssize_t sendto(const packet_t &packet, const network_address_t &addr);
   ssize_t sendto(const io_bytes &reader, const network_address_t &address);
   void close();
 

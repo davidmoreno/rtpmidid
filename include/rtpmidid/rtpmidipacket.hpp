@@ -19,37 +19,13 @@
 
 #pragma once
 
+#include "packet.hpp"
 #include <fmt/core.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string>
 
-// Its defined, dont worry, is to make syntax highlight happy
-#ifndef size_t
-#define size_t unsigned long
-#endif
-
 namespace rtpmidid {
-
-enum packet_type_e {
-  UNKNOWN = 255,
-  MIDI = 1,
-  COMMAND = 2,
-};
-
-class packet_t {
-protected:
-  uint8_t *data;
-  size_t size;
-
-public:
-  packet_t(uint8_t *data, size_t size) : data(data), size(size) {}
-
-  uint8_t *get_data() { return data; }
-  size_t get_size() { return size; }
-
-  static packet_type_e get_packet_type(const uint8_t *data, size_t size);
-};
 
 /**
  *      0                   1                   2                   3
@@ -263,32 +239,19 @@ public:
     auto command = get_command();
     bool is_more_than_16_bytes = command == IN || command == OK;
     if (is_more_than_16_bytes) {
-      return 16 + strlen((char *)&data[12]) + 1;
+      return 16 + strlen((char *)&data[16]) + 1;
+    } else {
+      return 12;
     }
-    return 12;
+  }
+
+  packet_t as_send_packet() const {
+    auto final_size = get_size_to_send();
+    return packet_t(data, final_size);
   }
 };
 
 } // namespace rtpmidid
-
-// allow fmt to format rtpmidid::packet_type_e
-template <> struct fmt::formatter<rtpmidid::packet_type_e> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const rtpmidid::packet_type_e &c, FormatContext &ctx) {
-    switch (c) {
-    case rtpmidid::packet_type_e::UNKNOWN:
-      return format_to(ctx.out(), "UNKNOWN");
-    case rtpmidid::packet_type_e::MIDI:
-      return format_to(ctx.out(), "MIDI");
-    case rtpmidid::packet_type_e::COMMAND:
-      return format_to(ctx.out(), "COMMAND");
-    default:
-      return format_to(ctx.out(), "Unknown Packet Type:{}", c);
-    }
-  }
-};
 
 // allow formating for command_e
 template <> struct fmt::formatter<rtpmidid::command_e> {

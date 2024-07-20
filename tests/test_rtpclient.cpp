@@ -183,8 +183,7 @@ void test_client_state_machine() {
         DEBUG("Response: {} {} bytes", response, response.get_size_to_send());
         ASSERT_GT(response.get_size_to_send(), 16);
 
-        peerA_control.sendto(response.get_data(), response.get_size_to_send(),
-                             data_address);
+        peerA_control.sendto(response.as_send_packet(), data_address);
       });
 
   auto peerA_on_read_connection_midi = peerA_midi.on_read.connect(
@@ -217,8 +216,7 @@ void test_client_state_machine() {
 
         DEBUG("Response: {} {} bytes", response, response.get_size_to_send());
         ASSERT_GT(response.get_size_to_send(), 16);
-        peerA_midi.sendto(response.get_data(), response.get_size_to_send(),
-                          data_address);
+        peerA_midi.sendto(response.as_send_packet(), data_address);
 
         got_midi_connection = true;
       });

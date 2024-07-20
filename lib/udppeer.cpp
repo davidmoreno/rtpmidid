@@ -94,11 +94,11 @@ void udppeer_t::data_ready() {
   on_read(buffer, network_address);
 }
 
-ssize_t udppeer_t::sendto(const uint8_t *data, size_t len,
+ssize_t udppeer_t::sendto(const packet_t &packet,
                           const network_address_t &addr) {
 
-  auto res =
-      ::sendto(fd, data, len, 0, addr.get_sockaddr(), addr.get_socklen());
+  auto res = ::sendto(fd, packet.get_data(), packet.get_size(), 0,
+                      addr.get_sockaddr(), addr.get_socklen());
 
   std::string addr_str = addr.to_string();
 
@@ -108,13 +108,13 @@ ssize_t udppeer_t::sendto(const uint8_t *data, size_t len,
                               strerror(errno));
   }
 
-  DEBUG("Sent to {} {} bytes", addr_str, len);
+  DEBUG("Sent to {} bytes", packet);
   return res;
 }
 
 ssize_t udppeer_t::sendto(const io_bytes &buffer,
                           const network_address_t &addr) {
-  return sendto(buffer.start, buffer.size(), addr);
+  return sendto(packet_t(buffer.start, buffer.size()), addr);
 }
 
 network_address_t udppeer_t::get_address() {
