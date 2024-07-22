@@ -39,12 +39,12 @@ namespace rtpmidid {
  *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  *
  */
-class midi_packet_t : public packet_t {
+class packet_midi_t : public packet_t {
 public:
-  midi_packet_t(uint8_t *data, size_t size) : packet_t(data, size) {}
+  packet_midi_t(uint8_t *data, size_t size) : packet_t(data, size) {}
 
   static bool is_midi_packet(const uint8_t *data, size_t size) {
-    return midi_packet_t(const_cast<uint8_t *>(data), size).is_midi_packet();
+    return packet_midi_t(const_cast<uint8_t *>(data), size).is_midi_packet();
   }
 
   bool is_midi_packet() const {
@@ -100,30 +100,6 @@ public:
  *
  */
 
-/** Timestamp
- *      0                   1                   2                   3
- *     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
- *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- *    | 0xFF           | 0xFF          | 'C'           'K'            |
- *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- *    |                             sender SSRC                       |
- *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- *    |  count         | unused                                       |
- *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- *    | timestamp 1, high 32 bits, in 0.1ms units                     |
- *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- *    | timestamp 1, low  32 bits, in 0.1ms units                     |
- *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- *    | timestamp 2, high 32 bits, in 0.1ms units                     |
- *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- *    | timestamp 2, low  32 bits, in 0.1ms units                     |
- *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- *    | timestamp 3, high 32 bits, in 0.1ms units                     |
- *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- *    | timestamp 3, low  32 bits, in 0.1ms units                     |
- *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- */
-
 enum command_e {
   IN = 0x494e,
   OK = 0x4f4b,
@@ -133,13 +109,13 @@ enum command_e {
   RS = 0x5253,
 };
 
-class command_packet_t : public packet_t {
+class packet_command_t : public packet_t {
 public:
-  command_packet_t(const packet_t &packet) : packet_t(packet) {}
-  command_packet_t(uint8_t *data, size_t size) : packet_t(data, size) {}
+  packet_command_t(const packet_t &packet) : packet_t(packet) {}
+  packet_command_t(uint8_t *data, size_t size) : packet_t(data, size) {}
 
   static bool is_command_packet(const uint8_t *data, size_t size) {
-    return command_packet_t(const_cast<uint8_t *>(data), size)
+    return packet_command_t(const_cast<uint8_t *>(data), size)
         .is_command_packet();
   }
 
@@ -149,23 +125,56 @@ public:
 
     return data[0] == 0xFF && data[1] == 0xFF;
   }
-  command_e get_command() const {
-    return (command_e)((data[2] << 8) | data[3]);
-  }
-  uint32_t get_protocol_version() const {
-    return (data[4] << 24) | (data[5] << 16) | (data[6] << 8) | data[7];
-  }
-  uint32_t get_initiator_token() const {
-    return (data[8] << 24) | (data[9] << 16) | (data[10] << 8) | data[11];
-  }
+  command_e get_command() const { return (command_e)(get_uint16(2)); }
+  uint32_t get_protocol_version() const { return get_uint32(4); }
   uint32_t get_sender_ssrc() const {
-    // for IN and BY its at 12, for others, at 8
+    // for IN and BY its at 12, for others, at 8. Should be at child class, but
+    // thiis allows some cases of inheritance and need for virtual functions
     auto type = get_command();
     if (type == IN || type == OK) {
-      return (data[12] << 24) | (data[13] << 16) | (data[14] << 8) | data[15];
+      return get_uint32(12);
     }
-    return (data[8] << 24) | (data[9] << 16) | (data[10] << 8) | data[11];
+    return get_uint32(8);
   }
+
+  packet_command_t &initialize() {
+    data[0] = 0xFF;
+    data[1] = 0xFF;
+    // protocol is 2
+    set_uint32(4, 2);
+
+    // rest set to 0
+    memset(&data[8], 0, size - 8);
+    return *this;
+  }
+
+  packet_command_t &set_command(command_e cmd) {
+    set_uint16(2, cmd);
+    return *this;
+  }
+
+  std::string to_string() const {
+    if (!is_command_packet()) {
+      std::string first_12_bytes_hex;
+      for (int i = 0; i < 12; i++) {
+        first_12_bytes_hex += fmt::format("{:02x} ", data[i]);
+      }
+      return fmt::format("RTP Command Packet: Invalid Command packet {}",
+                         first_12_bytes_hex);
+    }
+    return fmt::format("RTP Command Packet: Command:{} Protocol:{} SSRC:{}",
+                       get_command(), get_protocol_version(),
+                       get_sender_ssrc());
+  }
+};
+
+class packet_command_in_ok_t : public packet_command_t {
+public:
+  packet_command_in_ok_t(const packet_t &packet) : packet_command_t(packet) {}
+  packet_command_in_ok_t(uint8_t *data, size_t size)
+      : packet_command_t(data, size) {}
+
+  uint32_t get_initiator_token() const { return get_uint32(8); }
   std::string get_name() const {
     // only for IN
     auto command = get_command();
@@ -175,61 +184,21 @@ public:
     return std::string((char *)&data[16]);
   }
 
-  std::string to_string() const {
-    if (!is_command_packet()) {
-      std::string first_12_bytes_hex;
-      for (int i = 0; i < 16; i++) {
-        first_12_bytes_hex += fmt::format("{:02x} ", data[i]);
-      }
-      return fmt::format("RTP Command Packet: Invalid Command packet {}",
-                         first_12_bytes_hex);
-    }
-    return fmt::format("RTP Command Packet: Command:{} Protocol:{} Initiator: "
-                       "{} SSRC:{} Name:{}",
-                       get_command(), get_protocol_version(),
-                       get_initiator_token(), get_sender_ssrc(), get_name());
+  packet_command_in_ok_t &initialize(command_e cmd) {
+    packet_command_t::initialize();
+    packet_command_t::set_command(cmd);
+    return *this;
   }
 
-  command_packet_t &initialize() {
-    data[0] = 0xFF;
-    data[1] = 0xFF;
-    // protocol is 2
-    data[4] = 0;
-    data[5] = 0;
-    data[6] = 0;
-    data[7] = 2;
-
-    // rest set to 0
-    memset(&data[8], 0, size - 8);
+  packet_command_in_ok_t &set_initiator_token(uint32_t token) {
+    set_uint32(8, token);
     return *this;
   }
-  command_packet_t &set_command(command_e cmd) {
-    data[2] = (cmd >> 8) & 0xFF;
-    data[3] = cmd & 0xFF;
+  packet_command_in_ok_t &set_sender_ssrc(uint32_t ssrc) {
+    set_uint32(12, ssrc);
     return *this;
   }
-  command_packet_t &set_protocol_version(uint32_t version) {
-    data[4] = (version >> 24) & 0xFF;
-    data[5] = (version >> 16) & 0xFF;
-    data[6] = (version >> 8) & 0xFF;
-    data[7] = version & 0xFF;
-    return *this;
-  }
-  command_packet_t &set_initiator_token(uint32_t token) {
-    data[8] = (token >> 24) & 0xFF;
-    data[9] = (token >> 16) & 0xFF;
-    data[10] = (token >> 8) & 0xFF;
-    data[11] = token & 0xFF;
-    return *this;
-  }
-  command_packet_t &set_sender_ssrc(uint32_t ssrc) {
-    data[12] = (ssrc >> 24) & 0xFF;
-    data[13] = (ssrc >> 16) & 0xFF;
-    data[14] = (ssrc >> 8) & 0xFF;
-    data[15] = ssrc & 0xFF;
-    return *this;
-  }
-  command_packet_t &set_name(const std::string &name) {
+  packet_command_in_ok_t &set_name(const std::string &name) {
     auto name_size = std::min(name.size(), size - 17);
     memcpy(&data[16], name.c_str(), name_size);
     data[16 + name_size] = 0;
@@ -250,8 +219,105 @@ public:
     auto final_size = get_size_to_send();
     return packet_t(data, final_size);
   }
+
+  std::string to_string() const {
+    if (!is_command_packet()) {
+      std::string first_12_bytes_hex;
+      for (int i = 0; i < 16; i++) {
+        first_12_bytes_hex += fmt::format("{:02x} ", data[i]);
+      }
+      return fmt::format("RTP Command Packet: Invalid Command packet {}",
+                         first_12_bytes_hex);
+    }
+    return fmt::format("RTP Command Packet: Command:{} Protocol:{} Initiator: "
+                       "{} SSRC:{} Name:{}",
+                       get_command(), get_protocol_version(),
+                       get_initiator_token(), get_sender_ssrc(), get_name());
+  }
 };
 
+/** Timestamp
+ *     0                   1                   2                   3
+ *     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *  0 | 0xFF           | 0xFF          | 'C'           'K'            |
+ *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *  4 |                             sender SSRC                       |
+ *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *  8 |  count         | unused                                       |
+ *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * 12 | timestamp 1, high 32 bits, in 0.1ms units                     |
+ *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * 16 | timestamp 1, low  32 bits, in 0.1ms units                     |
+ *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * 20 | timestamp 2, high 32 bits, in 0.1ms units                     |
+ *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * 24 | timestamp 2, low  32 bits, in 0.1ms units                     |
+ *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * 28 | timestamp 3, high 32 bits, in 0.1ms units                     |
+ *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * 32 | timestamp 3, low  32 bits, in 0.1ms units                     |
+ *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ */
+
+class packet_command_ck_t : public packet_command_t {
+public:
+  packet_command_ck_t(const packet_t &packet) : packet_command_t(packet) {}
+  packet_command_ck_t(uint8_t *data, size_t size)
+      : packet_command_t(data, size) {}
+
+  uint8_t get_count() const { return data[8]; }
+  uint64_t get_ck0() const { return get_uint64(12); }
+  uint64_t get_ck1() const { return get_uint64(20); }
+  uint64_t get_ck2() const { return get_uint64(28); }
+
+  packet_command_ck_t &initialize() {
+    packet_command_t::initialize();
+    set_command(CK);
+    return *this;
+  }
+
+  packet_command_ck_t &set_sender_ssrc(uint32_t ssrc) {
+    set_uint32(4, ssrc);
+    return *this;
+  }
+
+  packet_command_ck_t &set_count(uint8_t count) {
+    set_uint8(8, count);
+    return *this;
+  }
+
+  packet_command_ck_t &set_ck0(uint64_t timestamp) {
+    set_uint64(12, timestamp);
+    return *this;
+  }
+  packet_command_ck_t &set_ck1(uint64_t timestamp) {
+    set_uint64(20, timestamp);
+    return *this;
+  }
+  packet_command_ck_t &set_ck2(uint64_t timestamp) {
+    set_uint64(28, timestamp);
+    return *this;
+  }
+
+  std::string to_string() const {
+    if (!is_command_packet()) {
+      std::string first_12_bytes_hex;
+      for (int i = 0; i < 12; i++) {
+        first_12_bytes_hex += fmt::format("{:02x} ", data[i]);
+      }
+      return fmt::format("RTP Command Packet: Invalid Command packet {}",
+                         first_12_bytes_hex);
+    }
+    return fmt::format(
+        "RTP Command Packet: Command:{} Protocol:{} SSRC:{} Count: {} "
+        "CK0:{} CK1:{} CK2:{}",
+        get_command(), get_protocol_version(), get_sender_ssrc(), get_count(),
+        get_ck0(), get_ck1(), get_ck2());
+  }
+
+  packet_t as_send_packet() const { return packet_t(data, 36); }
+};
 } // namespace rtpmidid
 
 // allow formating for command_e
@@ -279,22 +345,22 @@ template <> struct fmt::formatter<rtpmidid::command_e> {
   }
 };
 
-// allow fmt to format rtpmidid::midi_packet_t
-template <> struct fmt::formatter<rtpmidid::midi_packet_t> {
+// allow fmt to format rtpmidid::packet_midi_t
+template <> struct fmt::formatter<rtpmidid::packet_midi_t> {
   constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const rtpmidid::midi_packet_t &p, FormatContext &ctx) {
+  auto format(const rtpmidid::packet_midi_t &p, FormatContext &ctx) {
     return format_to(ctx.out(), "{}", p.to_string());
   }
 };
 
-// allow fmt to format rtpmidid::command_packet_t
-template <> struct fmt::formatter<rtpmidid::command_packet_t> {
+// allow fmt to format rtpmidid::packet_command_t
+template <> struct fmt::formatter<rtpmidid::packet_command_t> {
   constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const rtpmidid::command_packet_t &p, FormatContext &ctx) {
+  auto format(const rtpmidid::packet_command_t &p, FormatContext &ctx) {
     return format_to(ctx.out(), "{}", p.to_string());
   }
 };
