@@ -22,10 +22,10 @@
 namespace rtpmidid {
 
 packet_type_e packet_t::get_packet_type(const uint8_t *data, size_t size) {
-  if (command_packet_t::is_command_packet(data, size)) {
+  if (packet_command_t::is_command_packet(data, size)) {
     return COMMAND;
   }
-  if (midi_packet_t::is_midi_packet(data, size)) {
+  if (packet_midi_t::is_midi_packet(data, size)) {
     return MIDI;
   }
   return UNKNOWN;
