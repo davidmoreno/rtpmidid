@@ -53,28 +53,17 @@ public:
   int connect_count =
       3; // how many times we tried to connect, after 3, final fail.
 
-  int control_socket = -1;
-  int midi_socket = -1;
-  struct sockaddr_storage control_addr {};
-  struct sockaddr_storage midi_addr {};
-
   uint16_t local_base_port = 0;
-  uint16_t remote_base_port = -1;
   poller_t::timer_t timer_ck;
   /// A simple state machine. We need to send 6 CK one after another, and then
   /// every 10 secs.
   uint8_t timerstate = 0;
   rtppeer_t::send_event_t::connection_t send_connection;
   rtppeer_t::ck_event_t::connection_t ck_connection;
-  rtppeer_t::connected_event_t::connection_t connected_connection;
-  rtppeer_t::disconnect_event_t::connection_t peer_disconnect_event_connection;
-  rtppeer_t::connected_event_t::connection_t peer_connected_event_connection;
 
   rtppeer_t::connected_event_t::connection_t control_connected_event_connection;
   rtppeer_t::connected_event_t::connection_t midi_connected_event_connection;
 
-  poller_t::listener_t midi_poller;
-  poller_t::listener_t control_poller;
   signal_t<const std::string &, rtppeer_t::status_e> connected_event;
 
   udppeer_t control_peer;
@@ -139,7 +128,7 @@ public:
   void connect_control();
   void connect_midi();
   void disconnect_control();
-  void connected_();
+  void all_connected();
 
   void reset();
 
@@ -147,14 +136,7 @@ public:
   void add_server_address(const std::string &address, const std::string &port);
   void connect();
 
-  /// try to connect to the given addresses in order
-  bool connect_to(const std::vector<endpoint_t> &address_port);
-  bool connect_to_next();
-
-  // Try connect to one specific address and port
-  bool connect_to(const std::string &address, const std::string &port);
-
-  void connected();
+  void start_ck_timers();
   void send_ck0_with_timeout();
 
   void data_ready(rtppeer_t::port_e port);

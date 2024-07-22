@@ -90,7 +90,7 @@ void udppeer_t::data_ready() {
 
   packet_t packet(raw.data(), n);
 
-  DEBUG("Got data from {}, {} bytes", network_address.to_string(), n);
+  // DEBUG("Got data from {}, {} bytes", network_address.to_string(), n);
 
   on_read(packet, network_address);
 }
@@ -109,7 +109,7 @@ ssize_t udppeer_t::sendto(const packet_t &packet,
                               strerror(errno));
   }
 
-  DEBUG("Sent to {} bytes", packet);
+  // DEBUG("Sent to {} bytes", packet);
   return res;
 }
 
