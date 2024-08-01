@@ -160,6 +160,29 @@ void test_basic_packet() {
   ASSERT_EQUAL(package.get_uint64(8), 0x0B0C0D0E0F101112);
 }
 
+void test_midi_packet() {
+  auto midi_msg = hex_to_bin("80 61"
+                             "0001"          // seq nr
+                             "0000 1000"     // timestamp
+                             "00 BE EF 00"   // dest SSRC -- will be changed
+                             "03 90 60 7f"); // Lenght + data
+  auto midi_packet = rtpmidid::packet_midi_t(midi_msg.start, midi_msg.size());
+
+  DEBUG("MIDI PACKET: {}", midi_packet);
+
+  ASSERT_EQUAL(midi_packet.get_ssrc(), 0x00BEEF00);
+  ASSERT_EQUAL(midi_packet.get_timestamp(), 0x00001000);
+
+  auto event_list = midi_packet.get_midi_events();
+  DEBUG("Event list: {}", event_list.to_string());
+  int count = 0;
+  for (auto midi_event : event_list) {
+    DEBUG("MIDI EVENT: {}", midi_event.to_string());
+    count += 1;
+  }
+  ASSERT_EQUAL(count, 1);
+}
+
 void test_client_state_machine() {
   rtpmidid::rtpclient_t client("Test");
 
@@ -295,9 +318,8 @@ void test_client_state_machine() {
 
 int main(int argc, char **argv) {
   test_case_t testcase{
-      TEST(test_network_address_list),
-      TEST(test_udppeer),
-      TEST(test_basic_packet),
+      TEST(test_network_address_list), TEST(test_udppeer),
+      TEST(test_basic_packet),         TEST(test_midi_packet),
       TEST(test_client_state_machine),
   };
 
