@@ -453,7 +453,7 @@ void rtpserver_t::rearm_ck_timeout(int peerdata_id) {
 
   // If no signal in 60 secs, remove the peer
   peerdata->timer_connection =
-      poller.add_timer_event(std::chrono::seconds(6), [this, peerdata_id]() {
+      poller.add_timer_event(std::chrono::seconds(60), [this, peerdata_id]() {
         DEBUG("Timeout waiting for CK. Disconnecting.");
         auto peerdata = find_peer_data_by_id(peerdata_id);
         if (!peerdata)
