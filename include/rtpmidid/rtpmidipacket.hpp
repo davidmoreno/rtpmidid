@@ -27,6 +27,40 @@
 
 namespace rtpmidid {
 
+struct midi_event_t : public packet_t {
+public:
+  midi_event_t(uint8_t *start, size_t max_size) : packet_t(start, max_size) {
+    // First have max_size at size, later the proper size
+    size = get_event_size();
+  }
+
+  size_t get_event_size();
+};
+
+class midi_event_list_t : public packet_t {
+public:
+  class iterator_t : public packet_t {
+  public:
+    iterator_t(uint8_t *data, size_t size) : packet_t(data, size) {}
+    bool operator!=(const iterator_t &other) {
+      DEBUG("!= {} {}", (void *)data, (void *)other.data);
+      return data != other.data;
+    }
+    midi_event_t operator*() { return midi_event_t(data, size); }
+    iterator_t &operator++() {
+      auto gsize = midi_event_t{data, size}.get_size();
+      data += gsize;
+      size -= gsize;
+      return *this;
+    }
+  };
+
+  midi_event_list_t(uint8_t *data, size_t size) : packet_t(data, size) {}
+
+  iterator_t begin() { return iterator_t{data, size}; }
+  iterator_t end() { return iterator_t{data + size, 0}; }
+};
+
 /**
  *      0                   1                   2                   3
  *     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -68,6 +102,9 @@ public:
   int get_ssrc() const {
     return (data[8] << 24) | (data[9] << 16) | (data[10] << 8) | data[11];
   }
+
+  midi_event_list_t get_midi_events();
+
   std::string to_string() const {
     if (!is_midi_packet()) {
       std::string first_12_bytes_hex;
@@ -78,7 +115,7 @@ public:
                          first_12_bytes_hex);
     }
     return fmt::format("RTP Packet: V:{} P:{} X:{} CC:{} M:{} PT:{} "
-                       "Sequence:{} Timestamp:{} SSRC:{}",
+                       "Sequence:{} Timestamp:{} SSRC:0x{:08X}",
                        get_flag_v(), get_flag_p(), get_flag_x(), get_flag_cc(),
                        get_flag_m(), get_flag_pt(), get_sequence_number(),
                        get_timestamp(), get_ssrc());
@@ -364,3 +401,14 @@ template <> struct fmt::formatter<rtpmidid::packet_command_t> {
     return format_to(ctx.out(), "{}", p.to_string());
   }
 };
+
+namespace std {
+static inline rtpmidid::midi_event_list_t::iterator_t
+begin(rtpmidid::midi_event_list_t &lst) {
+  return lst.begin();
+};
+static inline rtpmidid::midi_event_list_t::iterator_t
+end(rtpmidid::midi_event_list_t &lst) {
+  return lst.end();
+}
+} // namespace std
