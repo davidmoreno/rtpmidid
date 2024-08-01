@@ -172,6 +172,7 @@ void test_midi_packet() {
 
   ASSERT_EQUAL(midi_packet.get_ssrc(), 0x00BEEF00);
   ASSERT_EQUAL(midi_packet.get_timestamp(), 0x00001000);
+  ASSERT_EQUAL(midi_packet.get_sequence_number(), 1);
 
   auto event_list = midi_packet.get_midi_events();
   DEBUG("Event list: {}", event_list.to_string());
