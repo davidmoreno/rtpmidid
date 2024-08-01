@@ -133,7 +133,6 @@ void test_send_receive_messages() {
 
   auto rtppeer_client_a = rtpmidid::rtpclient_t("RTPPEER A");
   rtppeer_client_a.add_server_address("localhost", std::to_string(port));
-  rtppeer_client_a.connect();
   poller_wait_until([&rtppeer_client_a]() {
     return rtppeer_client_a.peer.status ==
            rtpmidid::rtppeer_t::status_e::CONNECTED;
@@ -158,7 +157,6 @@ void test_send_receive_messages() {
 
   auto rtppeer_client_b = rtpmidid::rtpclient_t("RTPPEER B");
   rtppeer_client_b.add_server_address("localhost", "60004");
-  rtppeer_client_b.connect();
   poller_wait_until([&rtppeer_client_b]() {
     return rtppeer_client_b.peer.status ==
            rtpmidid::rtppeer_t::status_e::CONNECTED;

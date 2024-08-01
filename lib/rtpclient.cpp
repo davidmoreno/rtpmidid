@@ -326,6 +326,7 @@ void rtpclient_t::error_cant_connect() {
 void rtpclient_t::add_server_address(const std::string &address,
                                      const std::string &port) {
   address_port_pending.push_back({address, port});
+  connect();
 }
 
 void rtpclient_t::add_server_addresses(
@@ -333,6 +334,10 @@ void rtpclient_t::add_server_addresses(
   for (auto &endpoint : endpoints) {
     address_port_pending.push_back(endpoint);
   }
+  connect();
 }
 
-void rtpclient_t::connect() { state_machine(Started); }
+void rtpclient_t::connect() {
+  if (state == WaitToStart)
+    state_machine(Started);
+}
