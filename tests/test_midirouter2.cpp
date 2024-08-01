@@ -132,7 +132,8 @@ void test_send_receive_messages() {
   INFO("2. connect RTPPEER A and test");
 
   auto rtppeer_client_a = rtpmidid::rtpclient_t("RTPPEER A");
-  rtppeer_client_a.connect_to("localhost", std::to_string(port));
+  rtppeer_client_a.add_server_address("localhost", std::to_string(port));
+  rtppeer_client_a.connect();
   poller_wait_until([&rtppeer_client_a]() {
     return rtppeer_client_a.peer.status ==
            rtpmidid::rtppeer_t::status_e::CONNECTED;
@@ -156,7 +157,8 @@ void test_send_receive_messages() {
   uint8_t device_id = aseq->find_device(rtpmididns::settings.alsa_name);
 
   auto rtppeer_client_b = rtpmidid::rtpclient_t("RTPPEER B");
-  rtppeer_client_b.connect_to("localhost", "60004");
+  rtppeer_client_b.add_server_address("localhost", "60004");
+  rtppeer_client_b.connect();
   poller_wait_until([&rtppeer_client_b]() {
     return rtppeer_client_b.peer.status ==
            rtpmidid::rtppeer_t::status_e::CONNECTED;
@@ -251,6 +253,10 @@ void test_send_receive_messages() {
   });
   poller_wait_until([&]() { return midi_packets_alsa_a == 2; });
   ASSERT_EQUAL(midi_packets_alsa_a, 2);
+
+  DEBUG("Router: {}", router->status().dump(2));
+  router->clear();
+  DEBUG("Router: {}", router->status().dump(2));
 
   DEBUG("END");
 }
