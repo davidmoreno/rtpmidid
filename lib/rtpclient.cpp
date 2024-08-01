@@ -315,7 +315,10 @@ void rtpclient_t::disconnect_control() {
   state_machine(ConnectFailed);
 }
 
-void rtpclient_t::all_connected() { INFO("Connected"); }
+void rtpclient_t::all_connected() {
+  INFO("Connected");
+  start_ck_timers();
+}
 void rtpclient_t::error_cant_connect() {
   connected_event("", rtppeer_t::NOT_CONNECTED);
 }
@@ -323,6 +326,13 @@ void rtpclient_t::error_cant_connect() {
 void rtpclient_t::add_server_address(const std::string &address,
                                      const std::string &port) {
   address_port_pending.push_back({address, port});
+}
+
+void rtpclient_t::add_server_addresses(
+    const std::vector<rtpclient_t::endpoint_t> &endpoints) {
+  for (auto &endpoint : endpoints) {
+    address_port_pending.push_back(endpoint);
+  }
 }
 
 void rtpclient_t::connect() { state_machine(Started); }

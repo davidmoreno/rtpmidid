@@ -155,4 +155,12 @@ json_t midirouter_t::status() {
   }
   return routerdata;
 }
+
+void midirouter_t::clear() {
+  for (auto &peer : peers) {
+    peer.second.peer->router = nullptr;
+  }
+  peers.clear();
+}
+
 } // namespace rtpmididns

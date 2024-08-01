@@ -105,7 +105,7 @@ void local_alsa_listener_t::connect_to_remote_server(
   router->connect(rtpmidiclientworker_peer_id, peer_id);
   router->connect(peer_id, rtpmidiclientworker_peer_id);
 
-  rtpclient->connect_to(endpoints);
+  rtpclient->add_server_addresses(endpoints);
 }
 
 void local_alsa_listener_t::disconnect_from_remote_server() {

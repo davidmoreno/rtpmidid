@@ -32,11 +32,6 @@ struct addrinfo;
 }
 
 namespace rtpmidid {
-struct address_port_t {
-  std::string address;
-  std::string port;
-};
-
 /**
  * @short A RTP Client
  *
@@ -134,6 +129,8 @@ public:
 
   // Public interface
   void add_server_address(const std::string &address, const std::string &port);
+  void add_server_addresses(
+      const std::vector<rtpmidid::rtpclient_t::endpoint_t> &endpoints);
   void connect();
 
   void start_ck_timers();

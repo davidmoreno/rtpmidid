@@ -59,6 +59,10 @@ public:
   void send_midi(peer_id_t from, const mididata_t &data);
   void send_midi(peer_id_t from, peer_id_t to, const mididata_t &data);
 
+  // To force clear the peers and avoid the cyclic references of peers that keep
+  // the router.
+  void clear();
+
   json_t status();
 
   // For the given type of the for_each, by default midipeer_t.
