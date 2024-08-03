@@ -45,7 +45,7 @@ inline in6_addr *sockaddr_storage_get_addr_in6(sockaddr_storage *addr) {
 
 template <>
 struct fmt::formatter<sockaddr_storage> : formatter<fmt::string_view> {
-  auto format(const sockaddr_storage &addr, format_context &ctx) {
+  auto format(const sockaddr_storage &addr, format_context &ctx) const {
     // print ip address and port
     std::array<char, INET6_ADDRSTRLEN> name{};
     if (addr.ss_family == AF_INET) {

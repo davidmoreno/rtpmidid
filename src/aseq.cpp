@@ -603,13 +603,13 @@ void mididata_to_alsaevents_t::ev_to_mididata(snd_seq_event_t *ev,
 
 fmt::appender
 fmt::formatter<rtpmididns::aseq_t::port_t>::format(rtpmididns::aseq_t::port_t c,
-                                                   format_context &ctx) {
+                                                   format_context &ctx) const {
   auto name = fmt::format("port_t[{}, {}]", c.client, c.port);
   return formatter<fmt::string_view>::format(name, ctx);
 }
 
 fmt::appender fmt::formatter<rtpmididns::aseq_t::client_type_e>::format(
-    rtpmididns::aseq_t::client_type_e c, format_context &ctx) {
+    rtpmididns::aseq_t::client_type_e c, format_context &ctx) const {
   auto name = c == rtpmididns::aseq_t::client_type_e::TYPE_HARDWARE
                   ? "TYPE_HARDWARE"
                   : "TYPE_SOFTWARE";
@@ -617,7 +617,7 @@ fmt::appender fmt::formatter<rtpmididns::aseq_t::client_type_e>::format(
 }
 
 fmt::appender fmt::formatter<rtpmididns::aseq_t::connection_t>::format(
-    const rtpmididns::aseq_t::connection_t &c, format_context &ctx) {
+    const rtpmididns::aseq_t::connection_t &c, format_context &ctx) const {
   auto name =
       fmt::format("connection_t[{}, {} -> {}]", c.connected, c.from, c.to);
   return formatter<fmt::string_view>::format(name, ctx);

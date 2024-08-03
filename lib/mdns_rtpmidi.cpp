@@ -53,12 +53,12 @@ struct AvahiEntryGroup {
 rtpmidid::mdns_rtpmidi_t *current = nullptr;
 
 template <> struct fmt::formatter<AvahiWatchEvent> : fmt::formatter<int> {
-  auto format(AvahiWatchEvent ev, fmt::format_context &ctx) {
+  auto format(AvahiWatchEvent ev, fmt::format_context &ctx) const {
     return fmt::formatter<int>::format((int)ev, ctx);
   }
 };
 template <> struct fmt::formatter<AvahiBrowserEvent> : fmt::formatter<int> {
-  auto format(AvahiBrowserEvent ev, fmt::format_context &ctx) {
+  auto format(AvahiBrowserEvent ev, fmt::format_context &ctx) const {
     return fmt::formatter<int>::format((int)ev, ctx);
   }
 };

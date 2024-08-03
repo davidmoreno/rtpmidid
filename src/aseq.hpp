@@ -169,19 +169,19 @@ template <> struct hash<rtpmididns::aseq_t::port_t> {
 template <>
 struct fmt::formatter<rtpmididns::aseq_t::port_t>
     : formatter<fmt::string_view> {
-  fmt::appender format(rtpmididns::aseq_t::port_t c, format_context &ctx);
+  fmt::appender format(rtpmididns::aseq_t::port_t c, format_context &ctx) const;
 };
 
 template <>
 struct fmt::formatter<rtpmididns::aseq_t::client_type_e>
     : formatter<fmt::string_view> {
   fmt::appender format(rtpmididns::aseq_t::client_type_e c,
-                       format_context &ctx);
+                       format_context &ctx) const;
 };
 
 template <>
 struct fmt::formatter<rtpmididns::aseq_t::connection_t>
     : formatter<fmt::string_view> {
   fmt::appender format(const rtpmididns::aseq_t::connection_t &c,
-                       format_context &ctx);
+                       format_context &ctx) const;
 };
