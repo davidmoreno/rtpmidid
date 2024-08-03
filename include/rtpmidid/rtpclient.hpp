@@ -99,7 +99,7 @@ template <>
 struct fmt::formatter<rtpmidid::rtpclient_t::endpoint_t>
     : formatter<fmt::string_view> {
   auto format(const rtpmidid::rtpclient_t::endpoint_t &data,
-              format_context &ctx) {
+              format_context &ctx) const {
     return formatter<fmt::string_view>::format(
         fmt::format("[endpoint_t [{}]:{}]", data.hostname, data.port), ctx);
   }
@@ -109,7 +109,7 @@ template <>
 struct fmt::formatter<std::vector<rtpmidid::rtpclient_t::endpoint_t>>
     : formatter<fmt::string_view> {
   auto format(const std::vector<rtpmidid::rtpclient_t::endpoint_t> &data,
-              format_context &ctx) {
+              format_context &ctx) const {
     std::string result;
     for (auto &endpoint : data) {
       result +=
@@ -123,7 +123,7 @@ template <>
 struct fmt::formatter<std::list<rtpmidid::rtpclient_t::endpoint_t>>
     : formatter<fmt::string_view> {
   auto format(const std::list<rtpmidid::rtpclient_t::endpoint_t> &data,
-              format_context &ctx) {
+              format_context &ctx) const {
     std::string result = "[";
     for (auto &endpoint : data) {
       result += fmt::format("[endpoint_t [{}]:{}] ", endpoint.hostname,

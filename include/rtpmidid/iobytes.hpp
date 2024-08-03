@@ -355,7 +355,7 @@ public:
 
 template <>
 struct fmt::formatter<rtpmidid::io_bytes_reader> : formatter<fmt::string_view> {
-  auto format(const rtpmidid::io_bytes_reader &data, format_context &ctx) {
+  auto format(const rtpmidid::io_bytes_reader &data, format_context &ctx) const {
     return formatter<fmt::string_view>::format(
         fmt::format("[io_bytes_reader {} to {}, at {}, {}B left]",
                     (void *)data.start, (void *)data.end, (void *)data.position,
@@ -365,7 +365,7 @@ struct fmt::formatter<rtpmidid::io_bytes_reader> : formatter<fmt::string_view> {
 };
 template <>
 struct fmt::formatter<rtpmidid::io_bytes_writer> : formatter<fmt::string_view> {
-  auto format(const rtpmidid::io_bytes_reader &data, format_context &ctx) {
+  auto format(const rtpmidid::io_bytes_reader &data, format_context &ctx) const {
     return formatter<fmt::string_view>::format(
         fmt::format("[io_bytes_writer {} to {}, at {}, {}B left]",
                     (void *)data.start, (void *)data.end, (void *)data.position,
