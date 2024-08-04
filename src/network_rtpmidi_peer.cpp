@@ -36,8 +36,11 @@ network_rtpmidi_peer_t::network_rtpmidi_peer_t(
         router->send_midi(peer_id, mididata_t{data});
       });
 
-  disconnect_connection = peer->disconnect_event.connect(
-      [this](rtpmidid::rtppeer_t::disconnect_reason_e reason) {
+  status_change_event_connection = peer->status_change_event.connect(
+      [this](rtpmidid::rtppeer_t::status_e reason) {
+        if (reason < rtpmidid::rtppeer_t::status_e::DISCONNECTED) {
+          return;
+        }
         DEBUG("Peer disconnected: {}. Remove rtpmidi peer and alsa port too.",
               reason);
         rtpmidid::poller.call_later([this] {

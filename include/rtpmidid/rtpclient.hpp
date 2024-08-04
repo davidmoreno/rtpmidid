@@ -53,8 +53,10 @@ public:
   rtppeer_t::send_event_t::connection_t send_connection;
   rtppeer_t::ck_event_t::connection_t ck_connection;
 
-  rtppeer_t::connected_event_t::connection_t control_connected_event_connection;
-  rtppeer_t::connected_event_t::connection_t midi_connected_event_connection;
+  rtppeer_t::status_change_event_t::connection_t
+      control_connected_event_connection;
+  rtppeer_t::status_change_event_t::connection_t
+      midi_connected_event_connection;
 
   signal_t<const std::string &, rtppeer_t::status_e> connected_event;
 

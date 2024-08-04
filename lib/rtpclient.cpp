@@ -46,19 +46,19 @@ static const auto CONNECT_TIMEOUT = 2s;
  */
 rtpclient_t::rtpclient_t(const std::string name) : peer(std::move(name)) {
   peer.initiator_id = ::rtpmidid::rand_u32();
-  send_connection = peer.send_event.connect(
-      [this](const io_bytes_reader &data, rtppeer_t::port_e port) {
-        try {
-          this->sendto(data, port);
-        } catch (const network_exception &e) {
-          ERROR("Error sending data to {}. {}",
-                port == rtppeer_t::CONTROL_PORT
-                    ? control_peer.get_address().to_string()
-                    : midi_peer.get_address().to_string(),
-                e.what());
-          peer.disconnect_event(rtppeer_t::disconnect_reason_e::NETWORK_ERROR);
-        }
-      });
+  send_connection = peer.send_event.connect([this](const io_bytes_reader &data,
+                                                   rtppeer_t::port_e port) {
+    try {
+      this->sendto(data, port);
+    } catch (const network_exception &e) {
+      ERROR("Error sending data to {}. {}",
+            port == rtppeer_t::CONTROL_PORT
+                ? control_peer.get_address().to_string()
+                : midi_peer.get_address().to_string(),
+            e.what());
+      peer.status_change_event(rtppeer_t::status_e::DISCONNECTED_NETWORK_ERROR);
+    }
+  });
 }
 
 rtpclient_t::~rtpclient_t() {
@@ -99,7 +99,7 @@ void rtpclient_t::start_ck_timers() {
 void rtpclient_t::send_ck0_with_timeout() {
   peer.send_ck0();
   ck_timeout = poller.add_timer_event(CONNECT_TIMEOUT, [this] {
-    peer.disconnect_event(rtppeer_t::disconnect_reason_e::CK_TIMEOUT);
+    peer.status_change_event(rtppeer_t::status_e::DISCONNECTED_CK_TIMEOUT);
   });
 }
 
@@ -259,8 +259,8 @@ void rtpclient_t::connect_control() {
   }
   local_base_port = control_peer.get_address().port();
 
-  control_connected_event_connection = peer.connected_event.connect(
-      [this](const std::string &name, rtppeer_t::status_e status) {
+  control_connected_event_connection =
+      peer.status_change_event.connect([this](rtppeer_t::status_e status) {
         control_connected_event_connection.disconnect();
         if (status != rtppeer_t::CONTROL_CONNECTED) {
           state_machine(ConnectFailed);
@@ -301,8 +301,8 @@ void rtpclient_t::connect_midi() {
         this->peer.data_ready(std::move(data), rtppeer_t::MIDI_PORT);
       });
 
-  midi_connected_event_connection = peer.connected_event.connect(
-      [this](const std::string &name, rtppeer_t::status_e status) {
+  midi_connected_event_connection =
+      peer.status_change_event.connect([this](rtppeer_t::status_e status) {
         midi_connected_event_connection.disconnect();
         if (status != rtppeer_t::CONNECTED) {
           state_machine(ConnectFailed);

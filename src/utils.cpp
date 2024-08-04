@@ -20,22 +20,6 @@
 #include "json.hpp"
 #include "rtpmidid/rtppeer.hpp"
 
-namespace std {
-std::string to_string(const rtpmidid::rtppeer_t::status_e status) {
-  switch (status) {
-  case rtpmidid::rtppeer_t::status_e::NOT_CONNECTED:
-    return "NOT_CONNECTED";
-  case rtpmidid::rtppeer_t::status_e::CONTROL_CONNECTED:
-    return "CONTROL_CONNECTED";
-  case rtpmidid::rtppeer_t::status_e::MIDI_CONNECTED:
-    return "MIDI_CONNECTED";
-  case rtpmidid::rtppeer_t::status_e::CONNECTED:
-    return "CONNECTED";
-  }
-  return "UNKNOWN";
-}
-} // namespace std
-
 namespace rtpmididns {
 json_t peer_status(rtpmidid::rtppeer_t &peer) {
   auto stats = peer.stats.average_and_stddev();
@@ -64,7 +48,7 @@ json_t peer_status(rtpmidid::rtppeer_t &peer) {
               {"ssrc", peer.remote_ssrc},              //
               {"port", peer.remote_base_port},         //
               {"hostname", peer.remote_address},       //
-          }                                            //
+          } //
       }
       //
   };

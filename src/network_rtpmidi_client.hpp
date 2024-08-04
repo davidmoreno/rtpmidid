@@ -41,11 +41,9 @@ class network_rtpmidi_client_t : public midipeer_t {
 
 public:
   std::shared_ptr<rtpmidid::rtpclient_t> peer;
-  rtpmidid::connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
-  rtpmidid::connection_t<rtpmidid::rtppeer_t::disconnect_reason_e>
-      disconnect_connection;
-  rtpmidid::connection_t<const std::string &, rtpmidid::rtppeer_t::status_e>
-      connected_connection;
+  rtpmidid::rtppeer_t::midi_event_t::connection_t midi_connection;
+  rtpmidid::rtppeer_t::status_change_event_t::connection_t
+      status_change_event_connection;
 
   network_rtpmidi_client_t(std::shared_ptr<rtpmidid::rtpclient_t> peer);
   ~network_rtpmidi_client_t() override;

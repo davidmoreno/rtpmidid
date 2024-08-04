@@ -41,11 +41,10 @@ public:
     std::shared_ptr<rtppeer_t> peer;
 
     rtppeer_t::send_event_t::connection_t send_event_connection;
-    rtppeer_t::connected_event_t::connection_t connected_event_connection;
+    rtppeer_t::status_change_event_t::connection_t
+        status_change_event_connection;
 
-    connection_t<const io_bytes_reader &> midi_event_connection;
-    connection_t<rtpmidid::rtppeer_t::disconnect_reason_e>
-        disconnect_event_connection;
+    rtppeer_t::midi_event_t::connection_t midi_event_connection;
     poller_t::timer_t timer_connection;
 
     connection_t<float> timer_ck_connection;

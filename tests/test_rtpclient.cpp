@@ -348,6 +348,7 @@ void wait_for_in_and_answer_no(std::function<void()> wait_for_packet,
   wait_for_packet();
   {
     rtpmidid::packet_command_in_ok_t midi_pkt(packet);
+    DEBUG("Got {} from {}", midi_pkt.to_string(), remote_address.to_string());
     ASSERT_TRUE(midi_pkt.get_command() == rtpmidid::command_e::IN);
     rtpmidid::packet_managed_t<100> resM;
     rtpmidid::packet_command_in_ok_t res(resM);
@@ -356,6 +357,17 @@ void wait_for_in_and_answer_no(std::function<void()> wait_for_packet,
         .set_initiator_token(midi_pkt.get_initiator_token());
     DEBUG("Send: {} to: {}", res.to_string(), remote_address.to_string());
     udppeer.sendto(res.as_send_packet(), remote_address);
+  }
+}
+void wait_for_by(std::function<void()> wait_for_packet,
+                 rtpmidid::packet_managed_t<1500> &packet,
+                 rtpmidid::network_address_t &remote_address,
+                 rtpmidid::udppeer_t &udppeer) {
+  wait_for_packet();
+  {
+    rtpmidid::packet_command_t midi_pkt(packet);
+    DEBUG("Got {} from {}", midi_pkt.to_string(), remote_address.to_string());
+    ASSERT_TRUE(midi_pkt.get_command() == rtpmidid::command_e::BY);
   }
 }
 
@@ -422,17 +434,17 @@ void test_client_try_several_connections() {
   ASSERT_EQUAL(client.peer.status,
                rtpmidid::rtppeer_t::status_e::CONTROL_CONNECTED);
 
-  poller_wait_until(
-      [&] {
-        return (client.state ==
-                rtpmidid::rtpclient_t::states_e::ConnectControl);
-      },
-      100ms);
+  control_packet_received = false;
+  midi_packet_received = false;
+  wait_for_by(wait_for_control_packet, control_packet, control_remote_address,
+              peerA_control);
+
   ASSERT_EQUAL(client.state, rtpmidid::rtpclient_t::states_e::ConnectControl);
   ASSERT_EQUAL(client.peer.status,
                rtpmidid::rtppeer_t::status_e::NOT_CONNECTED);
   INFO("First try to proper port failed, try next oportunity");
-
+  control_packet_received = false;
+  midi_packet_received = false;
   // Accept this second oportunity
   wait_for_in_and_answer_ok(wait_for_control_packet, control_packet,
                             control_remote_address, peerA_control);

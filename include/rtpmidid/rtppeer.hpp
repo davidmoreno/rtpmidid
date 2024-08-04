@@ -56,20 +56,23 @@ public:
     NOT_CONNECTED = 0,
     CONTROL_CONNECTED = 1,
     MIDI_CONNECTED = 2,
-    CONNECTED = 3
+    CONNECTED = 3,
+
+    DISCONNECTED = 100,               // to disconnect checks all are >= 100
+    DISCONNECTED_CANT_CONNECT,        //
+    DISCONNECTED_PEER_DISCONNECTED,   // Peer disconnected, BY
+    DISCONNECTED_CONNECTION_REJECTED, // Connect not accepted, NO
+    DISCONNECTED_DISCONNECT,          // Disconnect requested, BY
+    DISCONNECTED_CONNECT_TIMEOUT,     // Timeout trying to connect
+    DISCONNECTED_CK_TIMEOUT,          // Sent CK0, but no answer
+    DISCONNECTED_NETWORK_ERROR,       // Network error, like no data received
+
+    // If disconnected can connect again just trying to connect the control and
+    // so on
   };
   enum port_e {
     MIDI_PORT,
     CONTROL_PORT,
-  };
-  enum disconnect_reason_e {
-    CANT_CONNECT = 1,
-    PEER_DISCONNECTED,
-    CONNECTION_REJECTED,
-    DISCONNECT,
-    CONNECT_TIMEOUT,
-    CK_TIMEOUT,
-    NETWORK_ERROR,
   };
 
   status_e status = NOT_CONNECTED;
@@ -94,13 +97,9 @@ public:
   std::string remote_address = "";
   int remote_base_port = 0;
 
-  typedef signal_t<const std::string &, status_e> connected_event_t;
+  typedef signal_t<status_e> status_change_event_t;
   /// Event for connected
-  connected_event_t connected_event;
-
-  typedef signal_t<disconnect_reason_e> disconnect_event_t;
-  /// Event for disconnect
-  disconnect_event_t disconnect_event;
+  status_change_event_t status_change_event;
 
   typedef signal_t<const io_bytes_reader &> midi_event_t;
   /// Event for send MIDI.
@@ -175,6 +174,30 @@ struct fmt::formatter<rtpmidid::rtppeer_t::status_e>
     case rtpmidid::rtppeer_t::status_e::CONNECTED:
       name = "CONNECTED";
       break;
+    case rtpmidid::rtppeer_t::status_e::DISCONNECTED:
+      name = "DISCONNECTED";
+      break;
+    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_CANT_CONNECT:
+      name = "DISCONNECTED_CANT_CONNECT";
+      break;
+    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_PEER_DISCONNECTED:
+      name = "DISCONNECTED_PEER_DISCONNECTED";
+      break;
+    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_CONNECTION_REJECTED:
+      name = "DISCONNECTED_CONNECTION_REJECTED";
+      break;
+    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_DISCONNECT:
+      name = "DISCONNECTED_DISCONNECT";
+      break;
+    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_CONNECT_TIMEOUT:
+      name = "DISCONNECTED_CONNECT_TIMEOUT";
+      break;
+    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_CK_TIMEOUT:
+      name = "DISCONNECTED_CK_TIMEOUT";
+      break;
+    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_NETWORK_ERROR:
+      name = "DISCONNECTED_NETWORK_ERROR";
+      break;
     }
     return formatter<fmt::string_view>::format(name, ctx); // NOLINT
   }
@@ -191,38 +214,6 @@ struct fmt::formatter<rtpmidid::rtppeer_t::port_e>
       break;
     case rtpmidid::rtppeer_t::port_e::CONTROL_PORT:
       name = "CONTROL_PORT";
-      break;
-    }
-    return formatter<fmt::string_view>::format(name, ctx); // NOLINT
-  }
-};
-
-template <>
-struct fmt::formatter<rtpmidid::rtppeer_t::disconnect_reason_e>
-    : formatter<fmt::string_view> {
-  auto format(rtpmidid::rtppeer_t::disconnect_reason_e c, format_context &ctx) {
-    const char *name = "UNKNOWN"; // NOLINT
-    switch (c) {
-    case rtpmidid::rtppeer_t::disconnect_reason_e::CANT_CONNECT:
-      name = "CANT_CONNECT";
-      break;
-    case rtpmidid::rtppeer_t::disconnect_reason_e::PEER_DISCONNECTED:
-      name = "PEER_DISCONNECTED";
-      break;
-    case rtpmidid::rtppeer_t::disconnect_reason_e::CONNECTION_REJECTED:
-      name = "CONNECTON_REJECTED";
-      break;
-    case rtpmidid::rtppeer_t::disconnect_reason_e::DISCONNECT:
-      name = "DISCONNECT";
-      break;
-    case rtpmidid::rtppeer_t::disconnect_reason_e::CONNECT_TIMEOUT:
-      name = "CONNECT_TIMEOUT";
-      break;
-    case rtpmidid::rtppeer_t::disconnect_reason_e::CK_TIMEOUT:
-      name = "CK_TIMEOUT";
-      break;
-    case rtpmidid::rtppeer_t::disconnect_reason_e::NETWORK_ERROR:
-      name = "NETWORK_ERROR";
       break;
     }
     return formatter<fmt::string_view>::format(name, ctx); // NOLINT
