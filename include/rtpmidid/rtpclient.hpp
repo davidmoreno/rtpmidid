@@ -42,11 +42,8 @@ class rtpclient_t {
   NON_COPYABLE_NOR_MOVABLE(rtpclient_t)
 public:
   rtppeer_t peer;
-  // signal_t<> connect_failed_event;
   poller_t::timer_t connect_timer;
   poller_t::timer_t ck_timeout;
-  int connect_count =
-      3; // how many times we tried to connect, after 3, final fail.
 
   uint16_t local_base_port = 0;
   poller_t::timer_t timer_ck;

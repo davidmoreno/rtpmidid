@@ -18,6 +18,7 @@
 
 #include "../tests/test_case.hpp"
 #include "../tests/test_utils.hpp"
+#include <chrono>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/packet.hpp>
@@ -27,6 +28,8 @@
 #include <rtpmidid/rtpserver.hpp>
 #include <rtpmidid/udppeer.hpp>
 #include <unistd.h>
+
+using namespace std::chrono_literals;
 
 static std::string get_hostname();
 
@@ -317,11 +320,142 @@ void test_client_state_machine() {
   poller_wait_until([&]() { return received_ck_request; });
 }
 
+void wait_for_in_and_answer_ok(std::function<void()> wait_for_packet,
+                               rtpmidid::packet_managed_t<1500> &packet,
+                               rtpmidid::network_address_t &remote_address,
+                               rtpmidid::udppeer_t &udppeer) {
+  wait_for_packet();
+  {
+    rtpmidid::packet_command_in_ok_t command_in_pkt(packet);
+    ASSERT_TRUE(command_in_pkt.get_command() == rtpmidid::command_e::IN);
+    DEBUG("Got {} from {}", command_in_pkt.to_string(),
+          remote_address.to_string());
+    rtpmidid::packet_managed_t<100> resM;
+    rtpmidid::packet_command_in_ok_t res(resM);
+    res.initialize(rtpmidid::command_e::OK)
+        .set_sender_ssrc(0xBEEF)
+        .set_initiator_token(command_in_pkt.get_initiator_token())
+        .set_name("Manual packets");
+    DEBUG("Send: {} to: {}", res.to_string(), remote_address.to_string());
+    udppeer.sendto(res.as_send_packet(), remote_address);
+  }
+}
+void wait_for_in_and_answer_no(std::function<void()> wait_for_packet,
+                               rtpmidid::packet_managed_t<1500> &packet,
+                               rtpmidid::network_address_t &remote_address,
+                               rtpmidid::udppeer_t &udppeer) {
+
+  wait_for_packet();
+  {
+    rtpmidid::packet_command_in_ok_t midi_pkt(packet);
+    ASSERT_TRUE(midi_pkt.get_command() == rtpmidid::command_e::IN);
+    rtpmidid::packet_managed_t<100> resM;
+    rtpmidid::packet_command_in_ok_t res(resM);
+    res.initialize(rtpmidid::command_e::NO) // reject!
+        .set_sender_ssrc(0xBEEF)
+        .set_initiator_token(midi_pkt.get_initiator_token());
+    DEBUG("Send: {} to: {}", res.to_string(), remote_address.to_string());
+    udppeer.sendto(res.as_send_packet(), remote_address);
+  }
+}
+
+void test_client_try_several_connections() {
+  rtpmidid::rtpclient_t client("Test");
+
+  rtpmidid::udppeer_t peerA_control("localhost", "13001");
+  rtpmidid::udppeer_t peerA_midi("localhost", "13002");
+
+  rtpmidid::packet_managed_t<1500> control_packet;
+  rtpmidid::network_address_t control_remote_address;
+  bool control_packet_received = false;
+  rtpmidid::packet_managed_t<1500> midi_packet;
+  rtpmidid::network_address_t midi_remote_address;
+  bool midi_packet_received = false;
+
+  auto wait_for_control_packet = [&]() {
+    poller_wait_until([&]() { return control_packet_received; }, 10s);
+    ASSERT_TRUE(control_packet_received);
+  };
+  auto wait_for_midi_packet = [&]() {
+    poller_wait_until([&]() { return midi_packet_received; }, 10s);
+    ASSERT_TRUE(midi_packet_received);
+  };
+
+  auto peerA_control_on_read_connection = peerA_control.on_read.connect(
+      [&](const rtpmidid::packet_t &packet,
+          const rtpmidid::network_address_t &from) {
+        DEBUG("Got control packet: {}", packet);
+        control_packet.copy_from(packet);
+        control_packet_received = true;
+        control_remote_address = std::move(from.dup());
+      });
+  auto peerA_midi_on_read_connection =
+      peerA_midi.on_read.connect([&](const rtpmidid::packet_t &packet,
+                                     const rtpmidid::network_address_t &from) {
+        midi_packet.copy_from(packet);
+        midi_packet_received = true;
+        midi_remote_address = std::move(from.dup());
+      });
+
+  // all in one list. Connects in reverse order (uses back() its more efficient.
+  client.add_server_addresses({
+      {"localhost", "13001"},
+      {"localhost", "13001"},
+      {"nonexixtentlocalhost", "13001"},
+      {"localhost", "13000"},
+  });
+
+  // client.connect(); implicit from before
+
+  wait_for_in_and_answer_ok(wait_for_control_packet, control_packet,
+                            control_remote_address, peerA_control);
+  INFO("SENT OK");
+  DEBUG("Client state: {}", client.state);
+  ASSERT_EQUAL(client.state, rtpmidid::rtpclient_t::states_e::ConnectControl);
+  ASSERT_EQUAL(client.peer.status,
+               rtpmidid::rtppeer_t::status_e::NOT_CONNECTED);
+
+  wait_for_in_and_answer_no(wait_for_midi_packet, midi_packet,
+                            midi_remote_address, peerA_midi);
+  INFO("SENT NO");
+  ASSERT_EQUAL(client.state, rtpmidid::rtpclient_t::states_e::ConnectMidi);
+  ASSERT_EQUAL(client.peer.status,
+               rtpmidid::rtppeer_t::status_e::CONTROL_CONNECTED);
+
+  poller_wait_until(
+      [&] {
+        return (client.state ==
+                rtpmidid::rtpclient_t::states_e::ConnectControl);
+      },
+      100ms);
+  ASSERT_EQUAL(client.state, rtpmidid::rtpclient_t::states_e::ConnectControl);
+  ASSERT_EQUAL(client.peer.status,
+               rtpmidid::rtppeer_t::status_e::NOT_CONNECTED);
+  INFO("First try to proper port failed, try next oportunity");
+
+  // Accept this second oportunity
+  wait_for_in_and_answer_ok(wait_for_control_packet, control_packet,
+                            control_remote_address, peerA_control);
+  INFO("Control OK, try MIDI");
+  wait_for_in_and_answer_ok(wait_for_midi_packet, midi_packet,
+                            midi_remote_address, peerA_midi);
+  INFO("Sent MIDI ok, status should get right");
+  poller_wait_until([&] {
+    return client.state == rtpmidid::rtpclient_t::states_e::AllConnected;
+  });
+
+  ASSERT_EQUAL(client.state, rtpmidid::rtpclient_t::states_e::AllConnected);
+  ASSERT_EQUAL(client.peer.status, rtpmidid::rtppeer_t::status_e::CONNECTED);
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
-      TEST(test_network_address_list), TEST(test_udppeer),
-      TEST(test_basic_packet),         TEST(test_midi_packet),
+      TEST(test_network_address_list),
+      TEST(test_udppeer),
+      TEST(test_basic_packet),
+      TEST(test_midi_packet),
       TEST(test_client_state_machine),
+      TEST(test_client_try_several_connections),
   };
 
   testcase.run(argc, argv);
