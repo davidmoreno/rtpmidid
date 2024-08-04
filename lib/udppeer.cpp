@@ -66,11 +66,15 @@ int udppeer_t::open(const network_address_t &address) {
 }
 
 int udppeer_t::open(const network_address_list_t &address_list) {
+  if (fd >= 0) {
+    close();
+  }
   for (auto &address : address_list) {
     if (open(address) >= 0) {
       return fd;
     }
   }
+  ERROR("Could not open any address from list");
   return -1;
 }
 

@@ -29,6 +29,8 @@
 using namespace std::chrono_literals;
 using namespace rtpmidid;
 
+static const auto CONNECT_TIMEOUT = 2s;
+
 /**
  * @short Create the rtp client
  *
@@ -80,8 +82,6 @@ rtpclient_t::~rtpclient_t() {
  * This just checks timeout and sends the ck.
  */
 void rtpclient_t::start_ck_timers() {
-  connect_timer.disable();
-
   ck_connection = peer.ck_event.connect([this](float ms) {
     ck_timeout.disable();
     if (timerstate < 6) {
@@ -98,7 +98,7 @@ void rtpclient_t::start_ck_timers() {
 
 void rtpclient_t::send_ck0_with_timeout() {
   peer.send_ck0();
-  ck_timeout = poller.add_timer_event(5s, [this] {
+  ck_timeout = poller.add_timer_event(CONNECT_TIMEOUT, [this] {
     peer.disconnect_event(rtppeer_t::disconnect_reason_e::CK_TIMEOUT);
   });
 }
@@ -272,10 +272,18 @@ void rtpclient_t::connect_control() {
              address.hostname(), address.port());
         state_machine(Connected);
       });
+
+  connect_timer = poller.add_timer_event(CONNECT_TIMEOUT, [this] {
+    ERROR("Timeout connecting to control port");
+    control_connected_event_connection.disconnect();
+    state_machine(ConnectFailed);
+  });
+
   peer.connect_to(rtppeer_t::CONTROL_PORT);
 }
 
 void rtpclient_t::connect_midi() {
+  connect_timer.disable();
   midi_peer.open(
       network_address_list_t("::", std::to_string(local_base_port + 1)));
 
@@ -305,18 +313,26 @@ void rtpclient_t::connect_midi() {
         //       address.hostname(), address.port());
         state_machine(Connected);
       });
+  connect_timer = poller.add_timer_event(5s, [this] {
+    ERROR("Timeout connecting to midi port");
+    control_connected_event_connection.disconnect();
+    state_machine(ConnectFailed);
+  });
+
   // event
   peer.connect_to(rtppeer_t::MIDI_PORT);
 }
 
 void rtpclient_t::disconnect_control() {
-  // TODO send goodbye to control
+  connect_timer.disable();
+  peer.send_goodbye(rtppeer_t::CONTROL_PORT);
   control_peer.close();
   state_machine(ConnectFailed);
 }
 
 void rtpclient_t::all_connected() {
   INFO("Connected");
+  connect_timer.disable();
   start_ck_timers();
 }
 void rtpclient_t::error_cant_connect() {

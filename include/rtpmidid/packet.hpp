@@ -112,6 +112,25 @@ public:
     return ret;
   }
 };
+
+template <size_t SIZE> class packet_managed_t : public packet_t {
+  std::array<uint8_t, SIZE> buffer;
+
+public:
+  packet_managed_t() : packet_t(nullptr, 0) {
+    data = buffer.data();
+    size = SIZE;
+  }
+
+  void copy_from(const packet_t &packet) {
+    if (packet.get_size() > SIZE) {
+      throw std::runtime_error("Packet too big");
+    }
+    memcpy(buffer.data(), packet.get_data(), packet.get_size());
+    size = packet.get_size();
+  };
+};
+
 } // namespace rtpmidid
 
 // allow fmt to format rtpmidid::packet_type_e

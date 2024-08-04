@@ -248,7 +248,7 @@ public:
     if (is_more_than_16_bytes) {
       return 16 + strlen((char *)&data[16]) + 1;
     } else {
-      return 12;
+      return 16;
     }
   }
 
@@ -267,7 +267,7 @@ public:
                          first_12_bytes_hex);
     }
     return fmt::format("RTP Command Packet: Command:{} Protocol:{} Initiator: "
-                       "{} SSRC:{} Name:{}",
+                       "{} SSRC:{:08X} Name:{}",
                        get_command(), get_protocol_version(),
                        get_initiator_token(), get_sender_ssrc(), get_name());
   }
