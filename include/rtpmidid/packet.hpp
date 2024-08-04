@@ -129,6 +129,7 @@ public:
     memcpy(buffer.data(), packet.get_data(), packet.get_size());
     size = packet.get_size();
   };
+  void clear() { size = 0; }
 };
 
 } // namespace rtpmidid

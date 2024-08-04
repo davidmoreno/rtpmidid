@@ -61,8 +61,7 @@ public:
 
   midipeer_id_t rtpmidiclientworker_peer_id;
   // std::shared_ptr<rtpmidid::rtpclient_t> rtpclient;
-  rtpmidid::connection_t<rtpmidid::rtppeer_t::disconnect_reason_e>
-      disconnect_connection;
+  rtpmidid::rtppeer_t::status_change_event_t status_change_event_connection;
 
   local_alsa_listener_t(const std::string &name, const std::string &hostname,
                         const std::string &port, std::shared_ptr<aseq_t> aseq);

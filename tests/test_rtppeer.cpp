@@ -39,15 +39,10 @@ void test_connect_disconnect() {
 
   rtpmidid::rtppeer_t::status_e connected =
       rtpmidid::rtppeer_t::status_e::NOT_CONNECTED;
-  auto connected_event_c1 = peer.connected_event.connect(
-      [&connected](const std::string &name, rtpmidid::rtppeer_t::status_e st) {
-        DEBUG("Connected from {}, status: {}", name, st);
+  auto connected_event_c1 = peer.status_change_event.connect(
+      [&connected](rtpmidid::rtppeer_t::status_e st) {
+        DEBUG("Status change: {}", st);
         connected = st;
-      });
-  auto connected_event_c2 =
-      peer.disconnect_event.connect([&connected](auto reason) {
-        DEBUG("Disconnected. Reason: {}", reason);
-        connected = rtpmidid::rtppeer_t::status_e::NOT_CONNECTED;
       });
   auto connected_event_c3 =
       peer.send_event.connect([](const rtpmidid::io_bytes_reader &data,
@@ -70,7 +65,7 @@ void test_connect_disconnect() {
   peer.data_ready(DISCONNECT_MSG, rtpmidid::rtppeer_t::CONTROL_PORT);
   peer.data_ready(DISCONNECT_MSG, rtpmidid::rtppeer_t::MIDI_PORT);
 
-  ASSERT_EQUAL(connected, false);
+  ASSERT_GT(connected, rtpmidid::rtppeer_t::DISCONNECTED);
   ASSERT_EQUAL(peer.is_connected(), false);
 }
 
@@ -80,15 +75,10 @@ void test_connect_disconnect_reverse_order() {
   ASSERT_EQUAL(peer.is_connected(), false);
 
   auto connected = rtpmidid::rtppeer_t::status_e::NOT_CONNECTED;
-  auto connected_event_c1 = peer.connected_event.connect(
-      [&connected](const std::string &_name, rtpmidid::rtppeer_t::status_e st) {
+  auto connected_event_c1 = peer.status_change_event.connect(
+      [&connected](rtpmidid::rtppeer_t::status_e st) {
         connected = st;
         INFO("Got status {}", st);
-      });
-  auto disconnected_event_c1 =
-      peer.disconnect_event.connect([&connected](auto reason) {
-        connected = rtpmidid::rtppeer_t::status_e::NOT_CONNECTED;
-        INFO("Disconnected {}", reason);
       });
   auto send_event_c1 =
       peer.send_event.connect([](const rtpmidid::io_bytes_reader &data,
@@ -117,7 +107,7 @@ void test_connect_disconnect_reverse_order() {
   peer.data_ready(DISCONNECT_MSG, rtpmidid::rtppeer_t::MIDI_PORT);
   ASSERT_EQUAL(peer.status, rtpmidid::rtppeer_t::status_e::NOT_CONNECTED);
 
-  ASSERT_EQUAL(connected, rtpmidid::rtppeer_t::status_e::NOT_CONNECTED);
+  ASSERT_GTE(connected, rtpmidid::rtppeer_t::status_e::DISCONNECTED);
   ASSERT_EQUAL(peer.is_connected(), false);
 }
 

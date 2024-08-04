@@ -160,7 +160,7 @@ void rtppeer_t::parse_command_ok(io_bytes_reader &buffer, port_e port) {
     ERROR("Got data on unknown PORT! {}", port);
   }
   DEBUG("New status is {}", status);
-  connected_event(remote_name, status);
+  status_change_event(status);
 }
 
 /**
@@ -209,7 +209,7 @@ void rtppeer_t::parse_command_in(io_bytes_reader &buffer, port_e port) {
   if (port == CONTROL_PORT)
     status = status_e(int(status) | int(CONTROL_CONNECTED));
 
-  connected_event(remote_name, status);
+  status_change_event(status);
 }
 
 void rtppeer_t::parse_command_by(io_bytes_reader &buffer, port_e port) {
@@ -246,7 +246,7 @@ void rtppeer_t::parse_command_by(io_bytes_reader &buffer, port_e port) {
 
   // One BY is enough, not even waiting for the midi one.
   if (status == NOT_CONNECTED)
-    disconnect_event(PEER_DISCONNECTED);
+    status_change_event(DISCONNECTED_PEER_DISCONNECTED);
 }
 
 void rtppeer_t::parse_command_no(io_bytes_reader &buffer, port_e port) {
@@ -268,7 +268,7 @@ void rtppeer_t::parse_command_no(io_bytes_reader &buffer, port_e port) {
   INFO("Disconnect from {}, {} port. Status {:X}", remote_name,
        port == MIDI_PORT ? "MIDI" : "Control", (int)status);
 
-  disconnect_event(CONNECTION_REJECTED);
+  status_change_event(DISCONNECTED_CONNECTION_REJECTED);
 }
 
 void rtppeer_t::parse_command_ck(io_bytes_reader &buffer, port_e port) {
@@ -714,7 +714,7 @@ void rtppeer_t::send_goodbye(port_e to_port) {
 
   if (status == NOT_CONNECTED) {
     DEBUG("Sent both goodbyes and is peer is disconected ({})", remote_name);
-    disconnect_event(DISCONNECT);
+    status_change_event(DISCONNECTED_DISCONNECT);
   }
 }
 

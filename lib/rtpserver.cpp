@@ -360,8 +360,8 @@ void rtpserver_t::create_peer_from(io_bytes_reader &&buffer,
   auto wpeer = std::weak_ptr(peer);
   auto peerdata_id = peerdata.id;
 
-  peerdata.connected_event_connection = peer->connected_event.connect(
-      [this, peerdata_id](const std::string &name, rtppeer_t::status_e st) {
+  peerdata.status_change_event_connection = peer->status_change_event.connect(
+      [this, peerdata_id](rtppeer_t::status_e st) {
         auto peerdata = find_peer_data_by_id(peerdata_id);
         if (!peerdata)
           return;
@@ -380,35 +380,25 @@ void rtpserver_t::create_peer_from(io_bytes_reader &&buffer,
 
         rearm_ck_timeout(peerdata_id);
 
-        if (st != rtppeer_t::CONNECTED)
-          return;
-        connected_event(peer);
+        if (st == rtppeer_t::CONNECTED) {
+          connected_event(peer);
+        } else if (st >= rtppeer_t::DISCONNECTED) {
+          DEBUG("Remove from server the peer {}, status: {}", peerdata_id, st);
+          peers.erase(        //
+              std::remove_if( //
+                  peers.begin(), peers.end(),
+                  [&peer](const peer_data_t &datapeer) {
+                    return datapeer.peer == peer;
+                  }),
+              peers.end());
+          DEBUG("Removed from server the peer {}", peerdata_id);
+        }
       });
 
   peerdata.midi_event_connection =
       peer->midi_event.connect([this](const io_bytes_reader &data) {
         // DEBUG("Got MIDI from the remote peer into this server.");
         midi_event(data);
-      });
-
-  peerdata.disconnect_event_connection = peer->disconnect_event.connect(
-      [this, peerdata_id](rtpmidid::rtppeer_t::disconnect_reason_e dr) {
-        auto peerdata = find_peer_data_by_id(peerdata_id);
-        if (!peerdata)
-          return;
-        auto peer = peerdata->peer;
-
-        DEBUG("Remove from server the peer {}", peerdata_id);
-        peers.erase(        //
-            std::remove_if( //
-                peers.begin(), peers.end(),
-                [&peer](const peer_data_t &datapeer) {
-                  return datapeer.peer == peer;
-                }),
-            peers.end());
-        DEBUG("Removed from server the peer {}", peerdata_id);
-        //                  this->initiator_to_peer.erase(peer->initiator_id);
-        // this->ssrc_to_peer.erase(peer->remote_ssrc);
       });
 
   // And a timeout to remove the peer if it does not connect the midi port soon
