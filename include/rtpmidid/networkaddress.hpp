@@ -37,11 +37,11 @@ private:
 
 public:
   network_address_t(const sockaddr *addr, socklen_t len)
-      : addr(addr), len(len) {};
+      : addr(addr), len(len){};
   network_address_t(sockaddr_storage *addr, socklen_t len)
-      : addr(sockaddr_storage_to_sockaddr(addr)), len(len) {};
+      : addr(sockaddr_storage_to_sockaddr(addr)), len(len){};
   network_address_t(int fd);
-  network_address_t() : addr(nullptr), len(0) {};
+  network_address_t() : addr(nullptr), len(0){};
   network_address_t(network_address_t &&other) {
     addr = other.addr;
     len = other.len;
@@ -96,26 +96,13 @@ class network_address_list_t {
   addrinfo *info = nullptr;
 
 public:
-  network_address_list_t() { info = nullptr; };
+  network_address_list_t();
   network_address_list_t(const std::string &name, const std::string &port);
   ~network_address_list_t();
 
-  network_address_list_t &operator=(network_address_list_t &&other) {
-    if (info) {
-      freeaddrinfo(info);
-    }
-    info = other.info;
-    other.info = nullptr;
-    return *this;
-  }
+  network_address_list_t &operator=(network_address_list_t &&other);
 
-  network_address_t get_first() const {
-    if (!is_valid()) {
-      return network_address_t();
-    }
-    return network_address_t(info->ai_addr, info->ai_addrlen)
-        .dup(); // dup ensure managed
-  }
+  network_address_t get_first() const;
 
   bool is_valid() const { return info != nullptr; }
 
@@ -123,10 +110,10 @@ public:
     addrinfo *info = nullptr;
 
   public:
-    iterator_t() {};
-    iterator_t(addrinfo *info) : info(info) {};
+    iterator_t(){};
+    iterator_t(addrinfo *info) : info(info){};
     // iterator_t(network_address_list_t other) : info(other.info){};
-    iterator_t(const network_address_list_t &other) : info(other.info) {};
+    iterator_t(const network_address_list_t &other) : info(other.info){};
     iterator_t &operator++() {
       info = info->ai_next;
       return *this;
@@ -148,6 +135,8 @@ public:
 
   iterator_t begin() const { return iterator_t(this->info); }
   iterator_t end() const { return iterator_t(nullptr); }
+
+  std::string to_string() const;
 };
 
 } // namespace rtpmidid

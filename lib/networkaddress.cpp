@@ -129,6 +129,8 @@ bool network_address_t::resolve_loop(const std::string &address,
   return false;
 }
 
+network_address_list_t::network_address_list_t() : info(nullptr) {}
+
 network_address_list_t::network_address_list_t(const std::string &name,
                                                const std::string &port) {
   addrinfo hints{};
@@ -142,6 +144,9 @@ network_address_list_t::network_address_list_t(const std::string &name,
 
   if (getaddrinfo(name.c_str(), port.c_str(), &hints, &info) != 0) {
     ERROR("Error getting address info for {}:{}", name, port);
+    if (info) {
+      freeaddrinfo(info);
+    }
     info = nullptr;
   }
 }
@@ -150,5 +155,34 @@ network_address_list_t::~network_address_list_t() {
   if (info) {
     freeaddrinfo(info);
   }
+}
+
+network_address_list_t &
+network_address_list_t::operator=(network_address_list_t &&other) {
+  if (info) {
+    freeaddrinfo(info);
+  }
+  info = other.info;
+  other.info = nullptr;
+  return *this;
+}
+
+network_address_t network_address_list_t::get_first() const {
+  if (info == nullptr) {
+    return network_address_t{};
+  }
+  return network_address_t{info->ai_addr, info->ai_addrlen};
+}
+
+std::string network_address_list_t::to_string() const {
+  if (info == nullptr) {
+    return "null";
+  }
+  std::string result = "{ ";
+  for (auto address : *this) {
+    result += address.to_string() + ", ";
+  }
+  result += "}";
+  return result;
 }
 } // namespace rtpmidid
