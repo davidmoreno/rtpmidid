@@ -73,36 +73,6 @@ rtpclient_t::~rtpclient_t() {
   }
 }
 
-/**
- * Send the periodic latency and connection checks
- *
- * At first six times as received confirmation from other end. Then Every 10
- * secs. Check connected() function for actuall recall code.
- *
- * This just checks timeout and sends the ck.
- */
-void rtpclient_t::start_ck_timers() {
-  ck_connection = peer.ck_event.connect([this](float ms) {
-    ck_timeout.disable();
-    if (timerstate < 6) {
-      timer_ck =
-          poller.add_timer_event(1500ms, [this] { send_ck0_with_timeout(); });
-      timerstate++;
-    } else {
-      timer_ck =
-          poller.add_timer_event(10s, [this] { send_ck0_with_timeout(); });
-    }
-  });
-  send_ck0_with_timeout();
-}
-
-void rtpclient_t::send_ck0_with_timeout() {
-  peer.send_ck0();
-  ck_timeout = poller.add_timer_event(CONNECT_TIMEOUT, [this] {
-    peer.status_change_event(rtppeer_t::status_e::DISCONNECTED_CK_TIMEOUT);
-  });
-}
-
 void rtpclient_t::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
   packet_t packet(pb.start, pb.size());
 
@@ -124,93 +94,43 @@ void rtpclient_t::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
 
 void rtpclient_t::reset() { peer.reset(); }
 
-// Make the order follow as written at statemachines.md, so can
-// filled with simple copy/paste and multicursors
-struct state_change_t {
-  rtpclient_t::states_e state;
-  rtpclient_t::states_e next_state;
-  rtpclient_t::event_e event;
-};
-
-state_change_t state_changes[] = {
-    {rtpclient_t::WaitToStart, rtpclient_t::PrepareNextDNS,
-     rtpclient_t::Started},
-    {rtpclient_t::PrepareNextDNS, rtpclient_t::ResolveNextIpPort,
-     rtpclient_t::NextReady},
-    {rtpclient_t::PrepareNextDNS, rtpclient_t::ErrorCantConnect,
-     rtpclient_t::ResolveListExhausted},
-    {rtpclient_t::ResolveNextIpPort, rtpclient_t::PrepareNextDNS,
-     rtpclient_t::ConnectListExhausted},
-    {rtpclient_t::ResolveNextIpPort, rtpclient_t::ResolveNextIpPort,
-     rtpclient_t::ResolveFailed},
-    {rtpclient_t::ResolveNextIpPort, rtpclient_t::ConnectControl,
-     rtpclient_t::Resolved},
-    {rtpclient_t::ConnectControl, rtpclient_t::ResolveNextIpPort,
-     rtpclient_t::ConnectFailed},
-    {rtpclient_t::ConnectControl, rtpclient_t::ConnectMidi,
-     rtpclient_t::Connected},
-    {rtpclient_t::ConnectMidi, rtpclient_t::AllConnected,
-     rtpclient_t::Connected},
-    {rtpclient_t::ConnectMidi, rtpclient_t::DisconnectControl,
-     rtpclient_t::ConnectFailed},
-    {rtpclient_t::DisconnectControl, rtpclient_t::ResolveNextIpPort,
-     rtpclient_t::ConnectFailed},
-};
-
-void rtpclient_t::state_machine(rtpclient_t::event_e event) {
-  // The state machine itself
-  rtpclient_t::states_e next_state =
-      ErrorCantConnect; // default state, if not changed
-  for (auto &change : state_changes) {
-    if (state == change.state && event == change.event) {
-      next_state = change.next_state;
-      break;
-    }
-  }
-  INFO("State machine: {} -[{}]-> {}", state, event, next_state);
-
-  state = next_state;
-
-  // Call the new state functions
-  switch (state) {
-  case WaitToStart:
-    break;
-  case PrepareNextDNS:
-    resolve_next_dns();
-    break;
-  case ResolveNextIpPort:
-    connect_next_ip_port();
-    break;
-  case ConnectControl:
-    connect_control();
-    break;
-  case ConnectMidi:
-    connect_midi();
-    break;
-  case AllConnected:
-    all_connected();
-    break;
-  case ErrorCantConnect:
-    error_cant_connect();
-    break;
-  case DisconnectControl:
-    disconnect_control();
-    break;
-  }
+void rtpclient_t::add_server_address(const std::string &address,
+                                     const std::string &port) {
+  address_port_pending.push_back({address, port});
+  connect();
 }
 
-void rtpclient_t::resolve_next_dns() {
+void rtpclient_t::add_server_addresses(
+    const std::vector<rtpclient_t::endpoint_t> &endpoints) {
+  for (auto &endpoint : endpoints) {
+    address_port_pending.push_back(endpoint);
+  }
+  connect();
+}
+
+void rtpclient_t::connect() {
+  if (state == WaitToStart)
+    handle_event(Started);
+}
+
+///
+/// State mahcine implementation
+///
+
+void rtpclient_t::state_wait_to_start() {}
+
+void rtpclient_t::state_prepare_next_dns() {
   if (address_port_pending.empty()) {
-    state_machine(ConnectListExhausted);
+    handle_event(ConnectListExhausted);
     return;
   }
   resolve_next_dns_endpoint = address_port_pending.back();
   address_port_pending.pop_back();
 
-  state_machine(NextReady);
+  handle_event(NextReady);
 }
 
-void rtpclient_t::connect_next_ip_port() {
+void rtpclient_t::state_resolve_next_ip_port() {
   // First time, get next address and resolve
   if (!resolve_next_dns_sockaddress_list.is_valid()) {
     resolve_next_dns_sockaddress_list = network_address_list_t(
@@ -234,14 +154,14 @@ void rtpclient_t::connect_next_ip_port() {
 
     DEBUG("Try to connect to address: {}", control_address.to_string());
 
-    state_machine(Resolved);
+    handle_event(Resolved);
   } else {
     resolve_next_dns_sockaddress_list = network_address_list_t();
-    state_machine(ConnectListExhausted);
+    handle_event(ConnectListExhausted);
   }
 }
 
-void rtpclient_t::connect_control() {
+void rtpclient_t::state_connect_control() {
   // Any, but could force the initial control port here
   control_peer.open(network_address_list_t("::", "0"));
   control_on_read_connection = control_peer.on_read.connect(
@@ -254,7 +174,7 @@ void rtpclient_t::connect_control() {
   if (!control_peer.is_open()) {
     ERROR("Could not connect {}:{} to control port",
           resolve_next_dns_endpoint.hostname, resolve_next_dns_endpoint.port);
-    state_machine(ConnectFailed);
+    handle_event(ConnectFailed);
     return;
   }
   local_base_port = control_peer.get_address().port();
@@ -263,34 +183,34 @@ void rtpclient_t::connect_control() {
       peer.status_change_event.connect([this](rtppeer_t::status_e status) {
         control_connected_event_connection.disconnect();
         if (status != rtppeer_t::CONTROL_CONNECTED) {
-          state_machine(ConnectFailed);
+          handle_event(ConnectFailed);
           return;
         }
 
         auto address = control_peer.get_address();
         INFO("Connected control port {} to {}:{}", address.port(),
              address.hostname(), address.port());
-        state_machine(Connected);
+        handle_event(Connected);
       });
 
-  connect_timer = poller.add_timer_event(CONNECT_TIMEOUT, [this] {
+  timer = poller.add_timer_event(CONNECT_TIMEOUT, [this] {
     ERROR("Timeout connecting to control port");
     control_connected_event_connection.disconnect();
-    state_machine(ConnectFailed);
+    handle_event(ConnectFailed);
   });
 
   peer.connect_to(rtppeer_t::CONTROL_PORT);
 }
 
-void rtpclient_t::connect_midi() {
-  connect_timer.disable();
+void rtpclient_t::state_connect_midi() {
+  timer.disable();
   midi_peer.open(
       network_address_list_t("::", std::to_string(local_base_port + 1)));
 
   if (!midi_peer.is_open()) {
     ERROR("Could not connect {}:{} to midi port", midi_address.ip(),
           midi_address.port() + 1);
-    state_machine(ConnectFailed);
+    handle_event(ConnectFailed);
     return;
   }
 
@@ -305,55 +225,80 @@ void rtpclient_t::connect_midi() {
       peer.status_change_event.connect([this](rtppeer_t::status_e status) {
         midi_connected_event_connection.disconnect();
         if (status != rtppeer_t::CONNECTED) {
-          state_machine(ConnectFailed);
+          handle_event(ConnectFailed);
           return;
         }
         auto address = midi_peer.get_address();
         // DEBUG("Connected midi port {} to {}:{}", address.port(),
         //       address.hostname(), address.port());
-        state_machine(Connected);
+        handle_event(Connected);
       });
-  connect_timer = poller.add_timer_event(5s, [this] {
+  timer = poller.add_timer_event(5s, [this] {
     ERROR("Timeout connecting to midi port");
     control_connected_event_connection.disconnect();
-    state_machine(ConnectFailed);
+    handle_event(ConnectFailed);
   });
 
   // event
   peer.connect_to(rtppeer_t::MIDI_PORT);
 }
 
-void rtpclient_t::disconnect_control() {
-  connect_timer.disable();
+void rtpclient_t::state_disconnect_control() {
+  timer.disable();
   peer.send_goodbye(rtppeer_t::CONTROL_PORT);
   control_peer.close();
-  state_machine(ConnectFailed);
+  handle_event(ConnectFailed);
 }
 
-void rtpclient_t::all_connected() {
+void rtpclient_t::state_all_connected() {
   INFO("Connected");
-  connect_timer.disable();
-  start_ck_timers();
-}
-void rtpclient_t::error_cant_connect() {
-  connected_event("", rtppeer_t::NOT_CONNECTED);
+  timer.disable();
+  ck_count = 0;
+  handle_event(SendCK);
 }
 
-void rtpclient_t::add_server_address(const std::string &address,
-                                     const std::string &port) {
-  address_port_pending.push_back({address, port});
-  connect();
+void rtpclient_t::state_send_ck_short() {
+  timer = poller.add_timer_event(CONNECT_TIMEOUT,
+                                 [this] { handle_event(Timeout); });
+  ck_connection = peer.ck_event.connect([this](float ms) {
+    timer.disable();
+    ck_count += 1;
+    if (ck_count < 6) {
+      handle_event(WaitSendCK);
+    } else {
+      handle_event(LatencyMeasured);
+    }
+  });
+  peer.send_ck0();
 }
 
-void rtpclient_t::add_server_addresses(
-    const std::vector<rtpclient_t::endpoint_t> &endpoints) {
-  for (auto &endpoint : endpoints) {
-    address_port_pending.push_back(endpoint);
-  }
-  connect();
+void rtpclient_t::state_wait_send_ck_short() {
+  timer = poller.add_timer_event(2s, [this] { handle_event(SendCK); });
 }
 
-void rtpclient_t::connect() {
-  if (state == WaitToStart)
-    state_machine(Started);
+void rtpclient_t::state_send_ck_long() {
+  peer.send_ck0();
+  timer = poller.add_timer_event(CONNECT_TIMEOUT,
+                                 [this] { handle_event(Timeout); });
+  ck_connection = peer.ck_event.connect([this](float ms) {
+    timer.disable();
+    handle_event(WaitSendCK);
+  });
 }
+
+void rtpclient_t::state_wait_send_ck_long() {
+  timer = poller.add_timer_event(60s, [this] { handle_event(SendCK); });
+}
+
+void rtpclient_t::state_disconnect_because_cktimeout() {
+  INFO("Disconnecting because of CK timeout");
+  handle_event(ConnectFailed);
+}
+
+void rtpclient_t::state_error() {
+  ERROR("Error at rtpclient_t. Can't connect or disconnected. Will try to "
+        "connect again in 30 seconds.");
+  timer = poller.add_timer_event(30s, [this] { handle_event(Connect); });
+}
+
+#include "rtpclient_statemachine.cpp"

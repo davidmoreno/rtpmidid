@@ -311,10 +311,8 @@ void test_client_state_machine() {
   ASSERT_TRUE(got_midi_connection)
 
   poller_wait_until([&]() {
-    return client.state == rtpmidid::rtpclient_t::states_e::AllConnected;
+    return client.state == rtpmidid::rtpclient_t::state_e::SendCkShort;
   });
-
-  client.send_ck0_with_timeout();
 
   // Wait for some CK
   poller_wait_until([&]() { return received_ck_request; });
@@ -423,14 +421,14 @@ void test_client_try_several_connections() {
                             control_remote_address, peerA_control);
   INFO("SENT OK");
   DEBUG("Client state: {}", client.state);
-  ASSERT_EQUAL(client.state, rtpmidid::rtpclient_t::states_e::ConnectControl);
+  ASSERT_EQUAL(client.state, rtpmidid::rtpclient_t::state_e::ConnectControl);
   ASSERT_EQUAL(client.peer.status,
                rtpmidid::rtppeer_t::status_e::NOT_CONNECTED);
 
   wait_for_in_and_answer_no(wait_for_midi_packet, midi_packet,
                             midi_remote_address, peerA_midi);
   INFO("SENT NO");
-  ASSERT_EQUAL(client.state, rtpmidid::rtpclient_t::states_e::ConnectMidi);
+  ASSERT_EQUAL(client.state, rtpmidid::rtpclient_t::state_e::ConnectMidi);
   ASSERT_EQUAL(client.peer.status,
                rtpmidid::rtppeer_t::status_e::CONTROL_CONNECTED);
 
@@ -439,7 +437,7 @@ void test_client_try_several_connections() {
   wait_for_by(wait_for_control_packet, control_packet, control_remote_address,
               peerA_control);
 
-  ASSERT_EQUAL(client.state, rtpmidid::rtpclient_t::states_e::ConnectControl);
+  ASSERT_EQUAL(client.state, rtpmidid::rtpclient_t::state_e::ConnectControl);
   ASSERT_EQUAL(client.peer.status,
                rtpmidid::rtppeer_t::status_e::NOT_CONNECTED);
   INFO("First try to proper port failed, try next oportunity");
@@ -453,10 +451,10 @@ void test_client_try_several_connections() {
                             midi_remote_address, peerA_midi);
   INFO("Sent MIDI ok, status should get right");
   poller_wait_until([&] {
-    return client.state == rtpmidid::rtpclient_t::states_e::AllConnected;
+    return client.state == rtpmidid::rtpclient_t::state_e::SendCkShort;
   });
 
-  ASSERT_EQUAL(client.state, rtpmidid::rtpclient_t::states_e::AllConnected);
+  ASSERT_EQUAL(client.state, rtpmidid::rtpclient_t::state_e::SendCkShort);
   ASSERT_EQUAL(client.peer.status, rtpmidid::rtppeer_t::status_e::CONNECTED);
 }
 

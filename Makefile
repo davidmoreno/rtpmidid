@@ -25,6 +25,7 @@ help:
 	@echo
 	@echo " gdb      -- Run inside gdb, to capture backtrace of failures (bt). Useful for bug reports."
 	@echo " capture  -- Capture packets with tcpdump. Add this to bug reports."
+	@echo " statemachines -- Generate the files for the state machines"
 	@echo
 	@echo "Variables:"
 	@echo 
@@ -106,6 +107,12 @@ test: build-test
 	cd build/tests && make -j
 	cd build/tests && CTEST_OUTPUT_ON_FAILURE=1 make test
 
+statemachines:
+	scripts/statemachine_to_cpp.py \
+		lib/STATEMACHINES.md \
+		--name rtpclient_t \
+		--header include/rtpmidid/rtpclient_statemachine.hpp \
+		--source lib/rtpclient_statemachine.cpp 
 
 .PHONY: deb
 deb:
