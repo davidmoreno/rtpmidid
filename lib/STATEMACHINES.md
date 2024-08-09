@@ -1,4 +1,4 @@
-# rtpmidid::rtpclient_t
+# rtpclient_t
 
 Can add `address:port` pairs and then try to connect to each of the resolved
 hosts and port for each pair (can be in name:portname mode, and that could be

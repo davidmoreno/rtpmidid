@@ -1,9 +1,9 @@
-# Port for test run 
+# Port for test run
 PORT:=10000
 # Number of jobs for make
 JOBS:=$(shell nproc)
 
-# To easy change to clang, set CXX. 
+# To easy change to clang, set CXX.
 # ENABLE_PCH sound like a good idea, but for massive parallelist (my comp has 32 CPU threads), it
 # stalls the parallelist waiting to compile the Pre Compiled Headers.
 CMAKE_EXTRA_ARGS := -DCMAKE_CXX_COMPILER=${CXX} -DENABLE_PCH=OFF
@@ -28,9 +28,9 @@ help:
 	@echo " statemachines -- Generate the files for the state machines"
 	@echo
 	@echo "Variables:"
-	@echo 
+	@echo
 	@echo " PORT=10000"
-	@echo 
+	@echo
 
 .PHONY: build
 build: build/bin/rtpmidid
@@ -40,7 +40,7 @@ build/bin/rtpmidid: src/* tests/* CMakeLists.txt
 	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -GNinja $(CMAKE_EXTRA_ARGS)
 	cd build && ninja
 
-build-dev: 
+build-dev:
 	mkdir -p build
 	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug $(CMAKE_EXTRA_ARGS)
 	cd build && make -j$(JOBS)
@@ -54,9 +54,9 @@ build-make:
 	mkdir -p build
 	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -GMakefile $(CMAKE_EXTRA_ARGS)
 	cd build && make -j$(JOBS)
-	
 
-man: 
+
+man:
 	mkdir -p build/man/
 	pandoc rtpmidid.1.md -s -t man -o build/man/rtpmidid.1
 	pandoc rtpmidid-cli.1.md -s -t man -o build/man/rtpmidid-cli.1
@@ -110,9 +110,8 @@ test: build-test
 statemachines:
 	scripts/statemachine_to_cpp.py \
 		lib/STATEMACHINES.md \
-		--name rtpclient_t \
-		--header include/rtpmidid/rtpclient_statemachine.hpp \
-		--source lib/rtpclient_statemachine.cpp 
+		--header include/rtpmidid/ \
+		--source lib/
 
 .PHONY: deb
 deb:
@@ -131,7 +130,7 @@ endif
 install: install-rtpmidid install-librtpmidid0 install-librtpmidid0-dev
 
 install-rtpmidid: build man
-	mkdir -p $(PREFIX)/usr/bin/ 
+	mkdir -p $(PREFIX)/usr/bin/
 	cp build/src/rtpmidid $(PREFIX)/usr/bin/
 	cd cli && make compile
 	cp build/rtpmidid-cli $(PREFIX)/usr/bin/rtpmidid-cli
@@ -147,7 +146,7 @@ install-rtpmidid: build man
 	cp build/man/rtpmidid-cli.1 $(PREFIX)/usr/share/man/man1/
 
 install-librtpmidid0: build
-	mkdir -p $(PREFIX)/usr/lib/ 
+	mkdir -p $(PREFIX)/usr/lib/
 	cp -a build/lib/lib*so* $(PREFIX)/usr/lib/
 	mkdir -p $(PREFIX)/usr/share/doc/librtpmidid0/
 	cp README.md $(PREFIX)/usr/share/doc/librtpmidid0/
@@ -162,5 +161,3 @@ install-librtpmidid0-dev: build
 	cp README.md $(PREFIX)/usr/share/doc/librtpmidid0-dev/
 	cp README.librtpmidid.md $(PREFIX)/usr/share/doc/librtpmidid0-dev/
 	cp LICENSE-lib.txt $(PREFIX)/usr/share/doc/librtpmidid0-dev/LICENSE.txt
-
-
