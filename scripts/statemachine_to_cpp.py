@@ -16,32 +16,48 @@ class StateMachine:
 
 def main():
     args = parse_args()
-    state_machine_txt = find_state_machine(args.input)
-    print(state_machine_txt)
-    stm = parse_state_machine(state_machine_txt, args.name[0])
-    cpp_code = generate_cpp_header(stm)
-    write_cpp_code(cpp_code, args.header)
-    cpp_code = generate_cpp_source(stm)
-    write_cpp_code(cpp_code, args.source)
+    for name, state_machine_txt in find_state_machines(args.input):
+        stm = parse_state_machine(state_machine_txt, name)
+        print(f"# {stm.name}")
+        print(state_machine_txt)
 
-    print("Generated files:")
-    print(f"    Header: {args.header}")
-    print(f"    Source: {args.source}")
+        stm_simple_name = stm.name
+        if stm_simple_name.endswith("_t"):
+            stm_simple_name = stm_simple_name[:-2]
+        headerfile = f"{args.header}/{stm_simple_name}_statemachine.hpp"
+        cpp_code = generate_cpp_header(stm)
+        write_cpp_code(cpp_code, headerfile)
+
+        sourcefile = f"{args.source}/{stm_simple_name}_statemachine.cpp"
+        cpp_code = generate_cpp_source(stm)
+        write_cpp_code(cpp_code, sourcefile)
+
+        print("Generated files:")
+        print(f"    Header: {headerfile}")
+        print(f"    Source: {sourcefile}")
 
 
-def find_state_machine(input_file):
+def find_state_machines(input_file):
     with open(input_file, "r") as f:
         lines = f.readlines()
     state_machine_txt = ""
+    name =""
     in_state_machine = False
     for line in lines:
+        if line.startswith("# "):
+            if name and state_machine_txt:
+                yield name, state_machine_txt
+            state_machine_txt=""
+            name = line[1:].strip()
         if in_state_machine:
             if line.startswith("```"):
                 break
             state_machine_txt += line
         if line.startswith("```mermaid"):
             in_state_machine = True
-    return state_machine_txt
+
+    if name and state_machine_txt:
+        yield name, state_machine_txt
 
 
 RE_TRANSITION = re.compile(r"(\w+) --> (\w+)(: (\w+)(\((\w+)\))?)?")
@@ -195,12 +211,6 @@ def parse_args():
         type=str,
         help="Path to the output cpp file (- for stdout)",
         default="-",
-    )
-    parser.add_argument(
-        "--name",
-        type=str,
-        help="Name of the state machine (class name)",
-        nargs=1,
     )
     return parser.parse_args()
 
