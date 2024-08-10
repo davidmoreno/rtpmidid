@@ -34,7 +34,7 @@ extern std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 network_rtpmidi_listener_t::network_rtpmidi_listener_t(const std::string &name)
     : name_(name), server(name, "") {
   if (mdns)
-    mdns->announce_rtpmidi(name, server.control_port);
+    mdns->announce_rtpmidi(name, server.port());
 
   midi_connection =
       server.midi_event.connect([this](const rtpmidid::io_bytes_reader &data) {
@@ -49,7 +49,7 @@ network_rtpmidi_listener_t::network_rtpmidi_listener_t(const std::string &name)
 }
 network_rtpmidi_listener_t::~network_rtpmidi_listener_t() {
   if (mdns)
-    mdns->unannounce_rtpmidi(name_, server.control_port);
+    mdns->unannounce_rtpmidi(name_, server.port());
 }
 
 void network_rtpmidi_listener_t::send_midi(midipeer_id_t from,
@@ -66,8 +66,8 @@ json_t network_rtpmidi_listener_t::status() {
   return json_t{
       {"name", name_},                      //
       {"type", "network:rtpmidi:listener"}, //
-      {"port", server.midi_port},
-      {"peers", //
+      {"port", server.port()},              //
+      {"peers",                             //
        peers}
       //
   };

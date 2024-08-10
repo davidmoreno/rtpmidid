@@ -31,17 +31,16 @@ class network_address_t {
   NON_COPYABLE(network_address_t);
 
 private:
-  const sockaddr *addr;
+  sockaddr *addr;
   socklen_t len;
   bool managed = false; // If managed, release memory on destruction
 
 public:
-  network_address_t(const sockaddr *addr, socklen_t len)
-      : addr(addr), len(len){};
+  network_address_t(sockaddr *addr, socklen_t len) : addr(addr), len(len) {};
   network_address_t(sockaddr_storage *addr, socklen_t len)
-      : addr(sockaddr_storage_to_sockaddr(addr)), len(len){};
+      : addr(sockaddr_storage_to_sockaddr(addr)), len(len) {};
   network_address_t(int fd);
-  network_address_t() : addr(nullptr), len(0){};
+  network_address_t() : addr(nullptr), len(0) {};
   network_address_t(network_address_t &&other) {
     addr = other.addr;
     len = other.len;
@@ -50,6 +49,14 @@ public:
     other.addr = nullptr;
     other.len = 0;
   }
+  static const network_address_t create_const(const sockaddr *addr,
+                                              socklen_t len) {
+    auto ret = network_address_t();
+    ret.addr = (sockaddr *)addr;
+    ret.len = len;
+    return ret;
+  }
+
   void operator=(network_address_t &&other) {
     if (addr && managed) {
       delete (sockaddr_storage *)addr;
@@ -70,6 +77,8 @@ public:
   std::string hostname() const;
   std::string to_string() const;
   sockaddr const *get_address() const { return addr; }
+
+  void set_port(int port);
   network_address_t dup() const {
     sockaddr_storage *addr = new sockaddr_storage();
     memcpy(addr, this->addr, this->len);
@@ -110,10 +119,10 @@ public:
     addrinfo *info = nullptr;
 
   public:
-    iterator_t(){};
-    iterator_t(addrinfo *info) : info(info){};
+    iterator_t() {};
+    iterator_t(addrinfo *info) : info(info) {};
     // iterator_t(network_address_list_t other) : info(other.info){};
-    iterator_t(const network_address_list_t &other) : info(other.info){};
+    iterator_t(const network_address_list_t &other) : info(other.info) {};
     iterator_t &operator++() {
       info = info->ai_next;
       return *this;

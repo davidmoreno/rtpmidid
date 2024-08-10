@@ -32,7 +32,7 @@ network_rtpmidi_multi_listener_t::network_rtpmidi_multi_listener_t(
     std::shared_ptr<aseq_t> aseq_)
     : aseq(aseq_), server(name, port) {
   if (mdns)
-    mdns->announce_rtpmidi(name, server.control_port);
+    mdns->announce_rtpmidi(name, server.port());
 
   connected_connection = server.connected_event.connect(
       [this](std::shared_ptr<rtpmidid::rtppeer_t> peer) {
@@ -63,10 +63,10 @@ json_t network_rtpmidi_multi_listener_t::status() {
       {"listening",
        {
            //
-           {"name", server.name},                 //
-           {"control_port", server.control_port}, //
-           {"midi_port", server.midi_port}        //
-       }}                                         //
+           {"name", server.name},           //
+           {"control_port", server.port()}, //
+           {"midi_port", server.port() + 1} //
+       }} //
   };
 }
 

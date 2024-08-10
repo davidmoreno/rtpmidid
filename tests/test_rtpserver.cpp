@@ -55,10 +55,10 @@ void test_several_connect_to_server() {
   // random port
   rtpmidid::rtpserver_t server("test", "0");
 
-  DEBUG("Server port is {}", server.control_port);
+  DEBUG("Server port is {}", server.port());
 
-  test_client_t control_client(0, server.control_port);
-  test_client_t midi_client(control_client.local_port + 1, server.midi_port);
+  test_client_t control_client(0, server.port());
+  test_client_t midi_client(control_client.local_port + 1, server.port() + 1);
 
   control_client.send(connect_msg);
   midi_client.send(connect_msg);
@@ -67,8 +67,8 @@ void test_several_connect_to_server() {
   ASSERT_EQUAL(server.peers.size(), 1);
 
   // And reverse order, first arrives the midi event
-  test_client_t control_client2(0, server.control_port);
-  test_client_t midi_client2(control_client2.local_port + 1, server.midi_port);
+  test_client_t control_client2(0, server.port());
+  test_client_t midi_client2(control_client2.local_port + 1, server.port() + 1);
 
   midi_client2.send(connect_msg2);
   control_client2.send(connect_msg2);
@@ -119,8 +119,8 @@ void test_several_connect_to_server() {
 void test_connect_disconnect_send() {
   rtpmidid::rtpserver_t server("test", "0");
 
-  test_client_t control_client(0, server.control_port);
-  test_client_t midi_client(control_client.local_port + 1, server.midi_port);
+  test_client_t control_client(0, server.port());
+  test_client_t midi_client(control_client.local_port + 1, server.port() + 1);
 
   auto nmidievents = std::make_shared<int>(0);
   auto midi_event_c1 = server.midi_event.connect(
