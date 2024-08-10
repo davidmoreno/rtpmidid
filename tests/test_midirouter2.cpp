@@ -124,7 +124,7 @@ void test_send_receive_messages() {
   int port = 0;
 
   router->for_each_peer<rtpmididns::network_rtpmidi_listener_t>(
-      [&port](auto *peer) { port = peer->server.control_port; });
+      [&port](auto *peer) { port = peer->server.port(); });
 
   DEBUG("At port {}", port);
 

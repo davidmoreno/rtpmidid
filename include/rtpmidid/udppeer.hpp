@@ -54,7 +54,7 @@ public:
   udppeer_t(const network_address_t &addr);
   udppeer_t(const network_address_list_t &addrlist) { open(addrlist); };
   udppeer_t(const sockaddr *addr, socklen_t socklen)
-      : udppeer_t(network_address_t(addr, socklen)){};
+      : udppeer_t(network_address_t::create_const(addr, socklen)) {};
   udppeer_t(udppeer_t &&other) {
     fd = other.fd;
     listener = std::move(other.listener);
@@ -70,6 +70,12 @@ public:
 
   int open(const network_address_t &addr);
   int open(const network_address_list_t &addr);
+  int open(const std::string &address, const std::string &port) {
+    return open(network_address_list_t(address, port));
+  }
+  int open(const std::string &address, int port) {
+    return open(network_address_list_t(address, std::to_string(port)));
+  }
   ssize_t sendto(const packet_t &packet, const network_address_t &addr);
   void close();
 

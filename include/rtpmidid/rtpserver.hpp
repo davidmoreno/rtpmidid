@@ -19,13 +19,12 @@
 
 #pragma once
 
-#include "./poller.hpp"
-#include "./rtppeer.hpp"
-#include "rtpmidid/signal.hpp"
 #include <cstdint>
 #include <memory>
-
-struct sockaddr_storage;
+#include <rtpmidid/poller.hpp>
+#include <rtpmidid/rtppeer.hpp>
+#include <rtpmidid/signal.hpp>
+#include <rtpmidid/udppeer.hpp>
 
 namespace rtpmidid {
 class rtpserver_t {
@@ -49,22 +48,21 @@ public:
 
     connection_t<float> timer_ck_connection;
     poller_t::timer_t timer_ck;
+    network_address_t addr;
   };
   std::vector<peer_data_t> peers;
 
   std::string name;
-  int midi_socket = -1;
-  int control_socket = -1;
-
-  uint16_t midi_port = 0;
-  uint16_t control_port = 0;
-
-  poller_t::listener_t midi_poller;
-  poller_t::listener_t control_poller;
+  udppeer_t control;
+  udppeer_t midi;
+  udppeer_t::on_read_t::connection_t on_read_control;
+  udppeer_t::on_read_t::connection_t on_read_midi;
 
   rtpserver_t(std::string name, const std::string &port);
   // NOLINTNEXTLINE(bugprone-exception-escape)
   ~rtpserver_t();
+
+  int port() { return control.get_address().port(); }
 
   // Returns the peer for that packet, or nullptr
   std::shared_ptr<rtppeer_t> get_peer_by_packet(io_bytes_reader &b,
@@ -72,8 +70,7 @@ public:
   std::shared_ptr<rtppeer_t> get_peer_by_initiator_id(uint32_t initiator_id);
   std::shared_ptr<rtppeer_t> get_peer_by_ssrc(uint32_t ssrc);
 
-  void create_peer_from(io_bytes_reader &&buffer,
-                        struct sockaddr_storage *cliaddr,
+  void create_peer_from(io_bytes_reader &&buffer, const network_address_t &addr,
                         rtppeer_t::port_e port);
 
   void send_midi_to_all_peers(const io_bytes_reader &bufer);
@@ -81,9 +78,10 @@ public:
   // avoid disconnection. Normally on cks.
   void rearm_ck_timeout(int peerdata_id);
 
-  void data_ready(rtppeer_t::port_e port);
+  void data_ready(const io_bytes_reader &data, const network_address_t &addr,
+                  rtppeer_t::port_e port);
   void sendto(const io_bytes_reader &b, rtppeer_t::port_e port,
-              struct sockaddr_storage *, int remote_base_port);
+              network_address_t &address, int remote_base_port);
 
   peer_data_t *find_peer_data_by_id(int id);
 };

@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <cassert>
 #include <functional>
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/logger.hpp>
@@ -129,6 +130,18 @@ bool network_address_t::resolve_loop(const std::string &address,
   return false;
 }
 
+void network_address_t::set_port(int port) {
+  assert(managed); // Only managed addresses can be modified.
+
+  sockaddr *addr = const_cast<sockaddr *>(this->addr);
+
+  if (addr->sa_family == AF_INET) {
+    reinterpret_cast<sockaddr_in *>(addr)->sin_port = htons(port);
+  } else {
+    reinterpret_cast<sockaddr_in6 *>(addr)->sin6_port = htons(port);
+  }
+}
+
 network_address_list_t::network_address_list_t() : info(nullptr) {}
 
 network_address_list_t::network_address_list_t(const std::string &name,
@@ -185,4 +198,5 @@ std::string network_address_list_t::to_string() const {
   result += "}";
   return result;
 }
+
 } // namespace rtpmidid
