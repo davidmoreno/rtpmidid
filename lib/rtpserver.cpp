@@ -65,6 +65,7 @@ rtpserver_t::~rtpserver_t() {
   // goodbyes, so better copy peers to be safe.
   std::vector<std::shared_ptr<rtppeer_t>> peers_copy(peers.size());
   for (auto &peerinfo : peers) {
+    DEBUG("Peer still in the server list: {}", peerinfo.id);
     peers_copy.push_back(peerinfo.peer);
   }
 
@@ -72,15 +73,16 @@ rtpserver_t::~rtpserver_t() {
   // maybe delete the peers.
   for (auto &peer : peers_copy) {
     if (peer) {
-      peer->send_goodbye(rtppeer_t::CONTROL_PORT);
-      peer->send_goodbye(rtppeer_t::MIDI_PORT);
+      if (peer->status & rtppeer_t::CONTROL_CONNECTED)
+        peer->send_goodbye(rtppeer_t::CONTROL_PORT);
+      if (peer->status & rtppeer_t::MIDI_CONNECTED)
+        peer->send_goodbye(rtppeer_t::MIDI_PORT);
     }
   }
 }
 
-std::shared_ptr<rtppeer_t>
-rtpserver_t::get_peer_by_packet(io_bytes_reader &buffer,
-                                rtppeer_t::port_e port) {
+rtpserverpeer_t *rtpserver_t::find_peer_by_packet(io_bytes_reader &buffer,
+                                                  rtppeer_t::port_e port) {
   // Commands may be by SSRC or initiator_id
   auto command =
       rtppeer_t::commands_e((uint16_t(buffer.start[2]) << 8) + buffer.start[3]);
@@ -93,21 +95,21 @@ rtpserver_t::get_peer_by_packet(io_bytes_reader &buffer,
     auto initiator_id = buffer.read_uint32();
     buffer.position = buffer.start;
 
-    return get_peer_by_initiator_id(initiator_id);
+    return find_peer_by_initiator_id(initiator_id);
   }
   case rtppeer_t::BY: {
     buffer.position = buffer.start + 12;
     auto ssrc_id = buffer.read_uint32();
     buffer.position = buffer.start;
 
-    return get_peer_by_ssrc(ssrc_id);
+    return find_peer_by_ssrc(ssrc_id);
   }
   case rtppeer_t::CK:
   case rtppeer_t::RS: {
     buffer.position = buffer.start + 4;
     auto ssrc = buffer.read_uint32();
     buffer.position = buffer.start;
-    return get_peer_by_ssrc(ssrc);
+    return find_peer_by_ssrc(ssrc);
   }
   default:
     if (port == rtppeer_t::MIDI_PORT && (buffer.start[1] & 0x7F) == 0x61) {
@@ -116,27 +118,26 @@ rtpserver_t::get_peer_by_packet(io_bytes_reader &buffer,
       auto ssrc = buffer.read_uint32();
       buffer.position = buffer.start;
 
-      return get_peer_by_ssrc(ssrc);
+      return find_peer_by_ssrc(ssrc);
     }
     DEBUG("Unknown COMMAND id {:X} / {:X}", int(command), buffer.start[1]);
     return nullptr;
   }
 }
 
-std::shared_ptr<rtppeer_t> rtpserver_t::get_peer_by_ssrc(uint32_t ssrc) {
+rtpserverpeer_t *rtpserver_t::find_peer_by_ssrc(uint32_t ssrc) {
   for (auto &peerdata : peers) {
     if (peerdata.peer->remote_ssrc == ssrc) {
-      return peerdata.peer;
+      return &peerdata;
     }
   }
   return nullptr;
 }
 
-std::shared_ptr<rtppeer_t>
-rtpserver_t::get_peer_by_initiator_id(uint32_t initiator_id) {
+rtpserverpeer_t *rtpserver_t::find_peer_by_initiator_id(uint32_t initiator_id) {
   for (auto &peerdata : peers) {
     if (peerdata.peer->initiator_id == initiator_id) {
-      return peerdata.peer;
+      return &peerdata;
     }
   }
   return nullptr;
@@ -146,9 +147,9 @@ void rtpserver_t::data_ready(const io_bytes_reader &data,
                              const network_address_t &addr,
                              rtppeer_t::port_e port) {
   io_bytes_reader buffer(data);
-  auto peer = get_peer_by_packet(buffer, port);
+  auto peer = find_peer_by_packet(buffer, port);
   if (peer) {
-    peer->data_ready(std::move(buffer), port);
+    peer->peer->data_ready(std::move(buffer), port);
   } else {
     if (rtppeer_t::is_command(buffer) && buffer.start[2] == 'I' &&
         buffer.start[3] == 'N') {
@@ -175,96 +176,13 @@ void rtpserver_t::sendto(const io_bytes_reader &pb, rtppeer_t::port_e port,
 void rtpserver_t::create_peer_from(io_bytes_reader &&buffer,
                                    const network_address_t &addr,
                                    rtppeer_t::port_e port) {
-
-  auto peer = std::make_shared<rtppeer_t>(name);
-
-  DEBUG("Connected from {}", addr.to_string());
-  peer->remote_address = addr.hostname();
-  peer->remote_base_port = addr.port();
-
-  auto &peerdata = peers.emplace_back();
-  peerdata.id = max_peer_data_id++;
-  peerdata.peer = peer;
-  peer->remote_address = addr.hostname();
-  peer->remote_base_port = addr.port();
-  peerdata.addr = addr.dup();
-
-  // peer_data_t peerdata;
-  auto peerdata_id = peerdata.id;
-
-  // Setup some callbacks
-  peerdata.send_event_connection = peer->send_event.connect(
-      [this, peerdata_id](const io_bytes_reader &buff, rtppeer_t::port_e port) {
-        auto peerdata = find_peer_data_by_id(peerdata_id);
-        if (!peerdata)
-          return;
-        this->sendto(buff, port, peerdata->addr,
-                     peerdata->peer->remote_base_port);
-      });
-
-  peerdata.status_change_event_connection = peer->status_change_event.connect(
-      [this, peerdata_id](rtppeer_t::status_e st) {
-        auto peerdata = find_peer_data_by_id(peerdata_id);
-        if (!peerdata)
-          return;
-        auto peer = peerdata->peer;
-
-        peerdata->timer_connection.disable();
-        peerdata->timer_ck_connection =
-            peer->ck_event.connect([this, peerdata_id](float) {
-              auto peerdata = find_peer_data_by_id(peerdata_id);
-              if (!peerdata)
-                return;
-              auto peer = peerdata->peer;
-
-              rearm_ck_timeout(peerdata_id);
-            });
-
-        rearm_ck_timeout(peerdata_id);
-
-        if (st == rtppeer_t::CONNECTED) {
-          connected_event(peer);
-        } else if (st >= rtppeer_t::DISCONNECTED) {
-          DEBUG("Remove from server the peer {}, status: {}", peerdata_id, st);
-          peers.erase(        //
-              std::remove_if( //
-                  peers.begin(), peers.end(),
-                  [&peer](const peer_data_t &datapeer) {
-                    return datapeer.peer == peer;
-                  }),
-              peers.end());
-          DEBUG("Removed from server the peer {}", peerdata_id);
-        }
-      });
-
-  peerdata.midi_event_connection =
-      peer->midi_event.connect([this](const io_bytes_reader &data) {
-        // DEBUG("Got MIDI from the remote peer into this server.");
-        midi_event(data);
-      });
-
-  // And a timeout to remove the peer if it does not connect the midi port soon
-  peerdata.timer_connection =
-      poller.add_timer_event(std::chrono::seconds(5), [this, peerdata_id]() {
-        auto peerdata = find_peer_data_by_id(peerdata_id);
-        if (!peerdata)
-          return;
-        auto peer = peerdata->peer;
-
-        if (peer->status == rtppeer_t::status_e::CONTROL_CONNECTED) {
-          DEBUG("Timeout waiting for MIDI connection. Disconnecting.");
-          peer->disconnect();
-        }
-      });
-
-  // Finally pass the data to the peer
-  peer->data_ready(std::move(buffer), port);
+  peers.emplace_back(std::move(buffer), addr, port, name, this);
 }
 
-rtpserver_t::peer_data_t *rtpserver_t::find_peer_data_by_id(int id) {
+rtpserverpeer_t *rtpserver_t::find_peer_data_by_id(int id) {
   auto peerdata = std::find_if(
       peers.begin(), peers.end(),
-      [id](const peer_data_t &datapeer) { return datapeer.id == id; });
+      [id](const rtpserverpeer_t &datapeer) { return datapeer.id == id; });
   if (peerdata == peers.end())
     return nullptr;
   return &(*peerdata);
@@ -276,23 +194,13 @@ void rtpserver_t::send_midi_to_all_peers(const io_bytes_reader &buffer) {
   }
 }
 
-void rtpserver_t::rearm_ck_timeout(int peerdata_id) {
-  auto peerdata = find_peer_data_by_id(peerdata_id);
-
+void rtpserver_t::remove_peer(int peer_id) {
+  auto peerdata = find_peer_data_by_id(peer_id);
   if (!peerdata)
     return;
-  peerdata->timer_connection.disable();
 
-  // If no signal in 60 secs, remove the peer
-  peerdata->timer_connection =
-      poller.add_timer_event(std::chrono::seconds(60), [this, peerdata_id]() {
-        DEBUG("Timeout waiting for CK. Disconnecting.");
-        auto peerdata = find_peer_data_by_id(peerdata_id);
-        if (!peerdata)
-          return;
-        auto peer = peerdata->peer;
-        if (!peer)
-          return;
-        peer->disconnect();
-      });
+  peers.erase(std::remove_if(peers.begin(), peers.end(),
+                             [peer_id](const rtpserverpeer_t &datapeer) {
+                               return datapeer.id == peer_id;
+                             }));
 }

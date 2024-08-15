@@ -9,7 +9,7 @@ pkg_check_modules(AVAHI REQUIRED avahi-client)
 add_library(
   rtpmidid-static
   STATIC
-  rtpmidipacket.cpp rtppeer.cpp rtpclient.cpp rtpserver.cpp
+  rtpmidipacket.cpp rtppeer.cpp rtpclient.cpp rtpserver.cpp rtpserverpeer.cpp
   mdns_rtpmidi.cpp logger.cpp poller.cpp
   utils.cpp stats.cpp networkaddress.cpp udppeer.cpp
 )
@@ -33,7 +33,7 @@ endif(ENABLE_PCH)
 add_library(
   rtpmidid-shared
   SHARED
-  rtpmidipacket.cpp rtppeer.cpp rtpclient.cpp rtpserver.cpp
+  rtpmidipacket.cpp rtppeer.cpp rtpclient.cpp rtpserver.cpp rtpserverpeer.cpp
   mdns_rtpmidi.cpp logger.cpp poller.cpp
   utils.cpp stats.cpp networkaddress.cpp udppeer.cpp
 )

@@ -58,7 +58,8 @@ public:
     MIDI_CONNECTED = 2,
     CONNECTED = 3,
 
-    DISCONNECTED = 100,               // to disconnect checks all are >= 100
+    DISCONNECTED =
+        128, // to disconnect checks all are >= 128, so & 0x80 is true
     DISCONNECTED_CANT_CONNECT,        //
     DISCONNECTED_PEER_DISCONNECTED,   // Peer disconnected, BY
     DISCONNECTED_CONNECTION_REJECTED, // Connect not accepted, NO
@@ -66,10 +67,8 @@ public:
     DISCONNECTED_CONNECT_TIMEOUT,     // Timeout trying to connect
     DISCONNECTED_CK_TIMEOUT,          // Sent CK0, but no answer
     DISCONNECTED_NETWORK_ERROR,       // Network error, like no data received
-
-    // If disconnected can connect again just trying to connect the control and
-    // so on
   };
+
   enum port_e {
     MIDI_PORT,
     CONTROL_PORT,
@@ -126,6 +125,8 @@ public:
   ~rtppeer_t(); // NOLINT(bugprone-exception-escape)
 
   bool is_connected() { return status == CONNECTED; }
+  bool is_disconnected() { return status & DISCONNECTED; }
+  static bool is_disconnected(status_e st) { return st & DISCONNECTED; }
   void reset();
   void data_ready(io_bytes_reader &&, port_e port);
   void disconnect();
