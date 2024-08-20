@@ -45,7 +45,7 @@ public:
 
   network_rtpmidi_listener_t(const std::string &name);
   ~network_rtpmidi_listener_t() override;
-
+  const char *get_type() const override { return "network_rtpmidi_listener_t"; }
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;
 };

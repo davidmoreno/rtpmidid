@@ -21,13 +21,13 @@ Exports an ALSA `Network` port. Any ALSA connection there creates a new
 It does an impersonated send of data to the `network_rtpmidi_listener_t` and from
 it to the right ALSA port.
 
-## `local:alsa:waiter`
+## `local:alsa:listener`
 
 Created manually or via mDNS/Avahi/Bounjour it creates a local ALSA port
 which, when a connection is kept, connects to a remote rtpmidi server.
 Connects to a `network_rtpmidi_client_t`.
 
-## `local:alsa:listener`
+## `local:alsa:peer`
 
 Just redirects MIDI to/from an ALSA port. Used by `network_rtpmidi_multi_listener_t`
 

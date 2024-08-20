@@ -24,10 +24,11 @@
 #include "../src/network_rtpmidi_listener.hpp"
 #include "../src/settings.hpp"
 #include "../tests/test_case.hpp"
+#include "local_alsa_listener.hpp"
 #include "rtpmidid/rtppeer.hpp"
-#include "rtpmidid/rtpserver.hpp"
+#include "rtpmidid/udppeer.hpp"
 #include "test_utils.hpp"
-#include <chrono>
+#include <memory>
 #include <rtpmidid/mdns_rtpmidi.hpp>
 #include <rtpmidid/rtpclient.hpp>
 
@@ -259,10 +260,105 @@ void test_send_receive_messages() {
   DEBUG("END");
 }
 
+/**
+ ** Test the lifecycle of the ALSA router
+ *
+ * Will connect ALSA to a detected remote rtpmidi port, should try to connect,
+ * then we disconnect it, should be unexported.
+ *
+ * Then will connect again twice and first should not disconnect, and
+ * second should disconnect.
+ */
+void test_midirouter_alsa_listener_lifecycle() {
+  auto router = std::make_shared<rtpmididns::midirouter_t>();
+
+  std::shared_ptr<rtpmididns::aseq_t> aseq;
+  std::shared_ptr<rtpmididns::aseq_t> aseq_external;
+  try {
+    aseq = std::make_shared<rtpmididns::aseq_t>("Internal");
+    aseq_external = std::make_shared<rtpmididns::aseq_t>("External");
+  } catch (rtpmididns::alsa_connect_exception &exc) {
+    ERROR("ALSA CONNECT EXCEPTION: {}", exc.what());
+    INFO("Skipping test as ALSA is not available.");
+    return;
+  }
+  ASSERT_EQUAL(router->peers.size(), 0);
+
+  rtpmidid::udppeer_t test_control("localhost", 0);
+  rtpmidid::udppeer_t test_midi("localhost",
+                                test_control.get_address().port() + 1);
+
+  auto alsanetwork = std::make_shared<rtpmididns::local_alsa_listener_t>(
+      "test", "localhost", std::to_string(test_control.get_address().port()),
+      aseq);
+  router->add_peer(alsanetwork);
+  auto internal_port = alsanetwork->alsaport;
+
+  ASSERT_EQUAL(router->peers.size(), 1);
+
+  auto external_port1 = aseq_external->create_port("ext1");
+  auto external_port2 = aseq_external->create_port("ext2");
+
+  DEBUG("Devices and ports");
+  aseq->for_devices([&](uint8_t device_id, const std::string &device_name,
+                        const rtpmididns::aseq_t::client_type_e &client_type) {
+    DEBUG("Device: {}. {}", device_id, device_name);
+    aseq->for_ports(device_id,
+                    [&](uint8_t port_id, const std::string &port_name) {
+                      DEBUG("    Port {}. {}", port_id, port_name);
+                    });
+  });
+
+  INFO("Connect 1");
+  // The original bug to find and fix was two connections from the same port,
+  // for example first in, then out.
+  aseq_external->connect({aseq->client_id, internal_port},
+                         {aseq_external->client_id, external_port1});
+  poller_wait_until([&]() { return router->peers.size() == 2; });
+  ASSERT_EQUAL(router->peers.size(), 2);
+  INFO("Ok, connected, now disconnect 1");
+
+  aseq_external->disconnect({aseq->client_id, internal_port},
+                            {aseq_external->client_id, external_port1});
+  poller_wait_until([&]() { return router->peers.size() == 1; });
+  ASSERT_EQUAL(router->peers.size(), 1);
+  INFO("Ok, disconnected, connect 2 ports");
+
+  aseq_external->connect({aseq->client_id, internal_port},
+                         {aseq_external->client_id, external_port1});
+  poller_wait_until([&]() { return router->peers.size() == 2; });
+  ASSERT_EQUAL(router->peers.size(), 2);
+  INFO("Ok, connected 2 (1/2) to one listener, reuse the rtpclient, disconnect "
+       "1");
+
+  aseq_external->connect({aseq->client_id, internal_port},
+                         {aseq_external->client_id, external_port2});
+  poller_wait_for(10ms); // to force it to do something
+  poller_wait_until([&]() { return router->peers.size() == 2; });
+  ASSERT_EQUAL(router->peers.size(), 2);
+
+  INFO("Ok, connected 2 (2/2) to one listener, reuse the rtpclient, disconnect "
+       "1");
+
+  aseq_external->disconnect({aseq->client_id, internal_port},
+                            {aseq_external->client_id, external_port1});
+  poller_wait_for(10ms); // to force it to do something
+  poller_wait_until([&]() { return router->peers.size() == 2; });
+  ASSERT_EQUAL(router->peers.size(), 2);
+  INFO("Ok, disconnected 1, still peer exists");
+
+  aseq_external->disconnect({aseq->client_id, internal_port},
+                            {aseq_external->client_id, external_port2});
+  poller_wait_until([&]() { return router->peers.size() == 1; });
+  ASSERT_EQUAL(router->peers.size(), 1);
+  INFO("Ok, disconnected 2, peer not exists");
+}
+
 // NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_send_receive_messages),
+      TEST(test_midirouter_alsa_listener_lifecycle),
   };
 
   testcase.run(argc, argv);

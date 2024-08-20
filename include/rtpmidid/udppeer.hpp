@@ -48,13 +48,16 @@ public:
   on_read_t on_read;
 
   udppeer_t() { fd = -1; };
+  udppeer_t(const std::string &address, uint16_t port) {
+    open(network_address_list_t(address, std::to_string(port)));
+  }
   udppeer_t(const std::string &address, const std::string &port) {
     open(network_address_list_t(address, port));
   }
   udppeer_t(const network_address_t &addr);
   udppeer_t(const network_address_list_t &addrlist) { open(addrlist); };
   udppeer_t(const sockaddr *addr, socklen_t socklen)
-      : udppeer_t(network_address_t::create_const(addr, socklen)) {};
+      : udppeer_t(network_address_t::create_const(addr, socklen)){};
   udppeer_t(udppeer_t &&other) {
     fd = other.fd;
     listener = std::move(other.listener);

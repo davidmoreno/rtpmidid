@@ -230,17 +230,17 @@ void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
   std::array<struct epoll_event, MAX_EVENTS> events{};
   auto wait_ms = 10'000'000; // not forever, but a lot (10'000s)
 
-  // Maybe some default value, set as max wait
-  if (max_wait_ms.has_value()) {
-    auto max_wait_in_ms = chrono_ms_to_int(max_wait_ms.value());
-    wait_ms = max_wait_in_ms;
-  }
-
-  // How long should I wait at max
+  // Get first timer (always sorted) timeout
   if (!private_data->timer_events.empty()) {
     wait_ms = ms_to_now(private_data->timer_events[0].when);
     wait_ms = std::max(wait_ms, 0); // min wait 0ms.
   }
+  // Maybe some default value, if so, maybe use it if less than previous value
+  if (max_wait_ms.has_value()) {
+    auto max_wait_in_ms = chrono_ms_to_int(max_wait_ms.value());
+    wait_ms = std::min(wait_ms, max_wait_in_ms);
+  }
+
   // DEBUG("Wait {} ms", wait_ms);
   run_call_later_events(private_data.get());
 
