@@ -47,7 +47,7 @@ public:
 
   network_rtpmidi_client_t(std::shared_ptr<rtpmidid::rtpclient_t> peer);
   ~network_rtpmidi_client_t() override;
-
+  const char *get_type() const override { return "network_rtpmidi_client_t"; }
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;
 };

@@ -68,6 +68,7 @@ public:
   ~local_alsa_listener_t() override;
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
+  const char *get_type() const override { return "local_alsa_listener_t"; }
   json_t status() override;
 
   void add_endpoint(const std::string &hostname, const std::string &port);

@@ -62,6 +62,9 @@ public:
   local_alsa_multi_listener_t(const std::string &name,
                               std::shared_ptr<aseq_t> aseq);
   ~local_alsa_multi_listener_t() override;
+  const char *get_type() const override {
+    return "local_alsa_multi_listener_t";
+  }
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   json_t status() override;

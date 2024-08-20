@@ -16,6 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "./aseq.hpp"
+#include <alsa/seq.h>
+#include <alsa/seq_event.h>
 #include <rtpmidid/logger.hpp>
 
 namespace rtpmididns {
@@ -299,7 +301,7 @@ std::string aseq_t::get_client_name(snd_seq_addr_t *addr) {
 aseq_t::client_type_e get_type_by_seq_type(int type) {
   // Known types so far.. may be increased later? Dont know how to make it more
   // future proof. If change here, quite probably will be incompatible changes
-  DEBUG("Type: {:b}", type);
+  // DEBUG("Type: {:b}", type);
   if (type & 0b01'00000000'00000000) {
     return aseq_t::client_type_e::TYPE_HARDWARE;
   } else if (type == 0x02) {
@@ -418,8 +420,8 @@ aseq_t::connection_t aseq_t::connect(const port_t &from, const port_t &to) {
 }
 
 void aseq_t::disconnect(const port_t &from, const port_t &to) {
-  DEBUG("Disconnect alsa ports {} -> {}", from.to_string(), to.to_string());
-
+  DEBUG("Disconnect alsa ports {} <> {}", from.to_string(), to.to_string());
+  bool done = false;
   if (from.client == client_id) {
     int res = snd_seq_disconnect_to(seq, from.port, to.client, to.port);
     if (res < 0) {
@@ -429,16 +431,22 @@ void aseq_t::disconnect(const port_t &from, const port_t &to) {
       //                           from.to_string(), to.to_string(),
       //                           snd_strerror(res), res);
     }
-  } else if (to.client == client_id) {
+    DEBUG("Disconnected {} -> {}", from.to_string(), to.to_string());
+    done = true;
+  }
+  if (to.client == client_id) {
     int res = snd_seq_disconnect_from(seq, to.port, from.client, from.port);
     if (res < 0) {
-      ERROR("Failed disconnection: {} -> {}: {} ({})", from.to_string(),
-            to.to_string(), snd_strerror(res), res);
+      ERROR("Failed disconnection: {} -> {}: {} ({})", to.to_string(),
+            from.to_string(), snd_strerror(res), res);
       // throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
       //                           from.to_string(), to.to_string(),
       //                           snd_strerror(res), res);
     }
-  } else {
+    DEBUG("Disconnected {} -> {}", to.to_string(), from.to_string());
+    done = true;
+  }
+  if (!done) {
     ERROR("Can not disconnect ports I'm not part of.");
     throw rtpmidid::exception("Can not disconnect ports I'm not part of.");
   }
@@ -553,6 +561,46 @@ void aseq_t::for_ports(uint8_t device_id,
   }
 
   snd_seq_port_info_free(pinfo);
+}
+
+void aseq_t::for_connections(const port_t &port,
+                             std::function<void(const port_t &)> func) {
+  snd_seq_query_subscribe_t *subs;
+  snd_seq_query_subscribe_malloc(&subs);
+
+  snd_seq_addr_t addr;
+  addr.client = port.client;
+  addr.port = port.port;
+  snd_seq_query_subscribe_set_root(subs, &addr);
+
+  // First do for read
+  snd_seq_query_subscribe_set_type(subs, SND_SEQ_QUERY_SUBS_READ);
+  snd_seq_query_subscribe_set_index(subs, 0);
+  while (snd_seq_query_port_subscribers(seq, subs) >= 0) {
+    const snd_seq_addr_t *sender = snd_seq_query_subscribe_get_addr(subs);
+    port_t p{sender->client, sender->port};
+    // bool is_input = snd_seq_query_subscribe_get_type(subs) &
+    // SND_SEQ_QUERY_SUBS_READ; bool is_output =
+    // snd_seq_query_subscribe_get_type(subs) & SND_SEQ_QUERY_SUBS_WRITE;
+    func(p);
+    snd_seq_query_subscribe_set_index(
+        subs, snd_seq_query_subscribe_get_index(subs) + 1);
+  }
+  // Now do for write
+  snd_seq_query_subscribe_set_type(subs, SND_SEQ_QUERY_SUBS_WRITE);
+  snd_seq_query_subscribe_set_index(subs, 0);
+  while (snd_seq_query_port_subscribers(seq, subs) >= 0) {
+    const snd_seq_addr_t *sender = snd_seq_query_subscribe_get_addr(subs);
+    port_t p{sender->client, sender->port};
+    // bool is_input = snd_seq_query_subscribe_get_type(subs) &
+    // SND_SEQ_QUERY_SUBS_READ; bool is_output =
+    // snd_seq_query_subscribe_get_type(subs) & SND_SEQ_QUERY_SUBS_WRITE;
+    func(p);
+    snd_seq_query_subscribe_set_index(
+        subs, snd_seq_query_subscribe_get_index(subs) + 1);
+  }
+
+  snd_seq_query_subscribe_free(subs);
 }
 
 mididata_to_alsaevents_t::mididata_to_alsaevents_t() : buffer(nullptr) {

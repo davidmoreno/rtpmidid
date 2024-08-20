@@ -128,6 +128,7 @@ public:
       std::function<void(uint8_t, const std::string &, client_type_e)>);
   void for_ports(uint8_t device_id,
                  std::function<void(uint8_t, const std::string &)>);
+  void for_connections(const port_t &port, std::function<void(const port_t &)>);
 };
 
 std::vector<std::string> get_ports(aseq_t *);

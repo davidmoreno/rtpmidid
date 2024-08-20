@@ -44,5 +44,6 @@ public:
   ~local_alsa_peer_t() override;
   json_t status() override;
   void send_midi(midipeer_id_t from, const mididata_t &) override;
+  const char *get_type() const override { return "local_alsa_peer_t"; }
 };
 } // namespace rtpmididns

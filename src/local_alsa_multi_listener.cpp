@@ -100,11 +100,12 @@ void local_alsa_multi_listener_t::remove_alsa_connection(
   network_rtpmidi_listener_t *rtppeer =
       dynamic_cast<network_rtpmidi_listener_t *>(midipeer);
   if (!rtppeer) {
-    ERROR("Invalid router id is not a rtpmidiserverlistener!");
+    ERROR("Invalid router id {} is not a rtpmidiserverlistener!",
+          networkpeerI->second);
     if (midipeer == nullptr) {
       ERROR("It is a nullptr");
     } else {
-      INFO("It is a {}", std::string(midipeer->status()["type"]));
+      INFO("It is a {}", midipeer->get_type());
     }
     return;
   }

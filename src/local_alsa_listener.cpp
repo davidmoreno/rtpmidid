@@ -41,15 +41,29 @@ local_alsa_listener_t::local_alsa_listener_t(const std::string &name_,
   subscribe_connection = aseq->subscribe_event[alsaport].connect(
       [this](aseq_t::port_t from, const std::string &name) {
         connection_count++;
+        DEBUG("ALSA subscribed event from {} to {}. count {}", from, name,
+              connection_count);
         if (connection_count == 1)
           connect_to_remote_server(name);
       });
   unsubscribe_connection =
       aseq->unsubscribe_event[alsaport].connect([this](aseq_t::port_t from) {
-        connection_count--;
-        DEBUG("rtpmidi remote {}: Unsubscribed from ALSA port: {}, connection "
-              "count: {}",
-              from, this->remote_name, from, connection_count);
+        // The connection count is giving me problems as the connection is
+        // sending two events, but disconnect only one. I could check  for
+        // duplicates but I decided to count again here
+        //
+        // connection_count--;
+        //
+
+        connection_count = 0;
+        auto myport = aseq_t::port_t{aseq->client_id, alsaport};
+        aseq->for_connections(myport, [&](const aseq_t::port_t &port) {
+          DEBUG("Still connected from {} <> {}", myport, port);
+          connection_count++;
+        });
+
+        DEBUG("ALSA unsubscribed from {} to {}, connection count: {}", from,
+              this->remote_name, connection_count);
         if (connection_count <= 0)
           disconnect_from_remote_server();
       });
