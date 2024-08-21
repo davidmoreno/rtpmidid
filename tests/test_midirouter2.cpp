@@ -348,6 +348,7 @@ void test_midirouter_alsa_listener_lifecycle() {
   // The original bug to find and fix was two connections from the same port,
   // for example first in, then out.
   aseq_external->connect(internal_device_port, external_device_port_1);
+  aseq_external->connect(internal_device_port, external_device_port_1);
   poller_wait_until([&]() { return router->peers.size() == 2; });
   ASSERT_EQUAL(router->peers.size(), 2);
   INFO("Ok, connected, now disconnect 1");

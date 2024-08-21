@@ -108,9 +108,9 @@ ssize_t udppeer_t::sendto(const packet_t &packet,
   std::string addr_str = addr.to_string();
 
   if (res < 0) {
-    ERROR("Error sending to {}", addr_str);
-    throw rtpmidid::exception("Can not send to address {}. {}", addr_str,
-                              strerror(errno));
+    ERROR("Error sending to {}. This is UDP... so just lost!", addr_str);
+    // throw rtpmidid::exception("Can not send to address {}. {}", addr_str,
+    //                           strerror(errno));
   }
 
   // DEBUG("Sent to {} bytes", packet);

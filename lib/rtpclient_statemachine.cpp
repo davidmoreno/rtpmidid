@@ -29,7 +29,8 @@
  * 
  *     DisconnectBecauseCKTimeout --> ConnectControl: ConnectFailed
  * 
- *     Error --> PrepareNextDNS: Connect
+ *     Error --> TryConnectToAllKnownDNS: Connect
+ *     TryConnectToAllKnownDNS --> PrepareNextDNS: Connect
  * 
  * ```
  */
@@ -40,7 +41,7 @@ void rtpclient_t::handle_event(event_e event){
         case state_e::Error:
             switch(event){
                 case event_e::Connect:
-                    state = state_e::PrepareNextDNS;
+                    state = state_e::TryConnectToAllKnownDNS;
                     break;
             default:;
             }
@@ -165,9 +166,18 @@ void rtpclient_t::handle_event(event_e event){
             default:;
             }
             break;
+        case state_e::TryConnectToAllKnownDNS:
+            switch(event){
+                case event_e::Connect:
+                    state = state_e::PrepareNextDNS;
+                    break;
+            default:;
+            }
+            break;
     }
     switch(state){
         case state_e::Error:
+            DEBUG("Error, previous state: {}", oldstate);
             state_error();
             break;
         case state_e::WaitToStart:
@@ -205,6 +215,9 @@ void rtpclient_t::handle_event(event_e event){
             break;
         case state_e::SendCkLong:
             state_send_ck_long();
+            break;
+        case state_e::TryConnectToAllKnownDNS:
+            state_try_connect_to_all_known_dns();
             break;
     }
 }
@@ -272,6 +285,8 @@ const char *rtpclient_t::to_string(rtpclient_t::state_e value) {
         return  "DisconnectBecauseCKTimeout";
     case rtpclient_t::state_e::SendCkLong:
         return  "SendCkLong";
+    case rtpclient_t::state_e::TryConnectToAllKnownDNS:
+        return  "TryConnectToAllKnownDNS";
     default:        return  "unknown";
     }
 }

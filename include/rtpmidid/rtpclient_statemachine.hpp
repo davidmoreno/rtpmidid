@@ -16,6 +16,7 @@ enum state_e{
     WaitSendCkLong,
     DisconnectBecauseCKTimeout,
     SendCkLong,
+    TryConnectToAllKnownDNS,
 };
 
 static const char *to_string(state_e state);
@@ -57,3 +58,4 @@ void state_wait_send_ck_short();
 void state_wait_send_ck_long();
 void state_disconnect_because_cktimeout();
 void state_send_ck_long();
+void state_try_connect_to_all_known_dns();

@@ -30,6 +30,7 @@ using namespace std::chrono_literals;
 using namespace rtpmidid;
 
 static const auto CONNECT_TIMEOUT = 2s;
+static const auto RECONNECT_TIMEOUT = 10s;
 
 /**
  * @short Create the rtp client
@@ -96,6 +97,7 @@ void rtpclient_t::reset() { peer.reset(); }
 
 void rtpclient_t::add_server_address(const std::string &address,
                                      const std::string &port) {
+  address_port_known.push_back({address, port});
   address_port_pending.push_back({address, port});
   connect();
 }
@@ -103,6 +105,7 @@ void rtpclient_t::add_server_address(const std::string &address,
 void rtpclient_t::add_server_addresses(
     const std::vector<rtpclient_t::endpoint_t> &endpoints) {
   for (auto &endpoint : endpoints) {
+    address_port_known.push_back(endpoint);
     address_port_pending.push_back(endpoint);
   }
   connect();
@@ -292,13 +295,21 @@ void rtpclient_t::state_wait_send_ck_long() {
 
 void rtpclient_t::state_disconnect_because_cktimeout() {
   INFO("Disconnecting because of CK timeout");
+  peer.disconnect();
   handle_event(ConnectFailed);
 }
 
 void rtpclient_t::state_error() {
   ERROR("Error at rtpclient_t. Can't connect or disconnected. Will try to "
-        "connect again in 30 seconds.");
-  timer = poller.add_timer_event(30s, [this] { handle_event(Connect); });
+        "connect again in {}s",
+        RECONNECT_TIMEOUT.count());
+  timer = poller.add_timer_event(RECONNECT_TIMEOUT,
+                                 [this] { handle_event(Connect); });
+}
+
+void rtpclient_t::state_try_connect_to_all_known_dns() {
+  address_port_pending = address_port_known;
+  handle_event(Connect);
 }
 
 #include "rtpclient_statemachine.cpp"

@@ -161,6 +161,8 @@ def generate_cpp_source(stm):
     for state in stm.states:
         snake_name = re.sub(r"([a-z])([A-Z])", r"\1_\2", state).lower()
         code += f"        case state_e::{state}:\n"
+        if state == "Error":
+            code += '            DEBUG("Error, previous state: {}", oldstate);\n'
         code += f"            state_{snake_name}();\n"
         code += "            break;\n"
     code += "    }\n"

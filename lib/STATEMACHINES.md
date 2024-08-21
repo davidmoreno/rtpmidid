@@ -57,5 +57,6 @@ stateDiagram
 
     DisconnectBecauseCKTimeout --> ConnectControl: ConnectFailed
 
-    Error --> PrepareNextDNS: Connect
+    Error --> TryConnectToAllKnownDNS: Connect
+    TryConnectToAllKnownDNS --> PrepareNextDNS: Connect
 ```

@@ -73,7 +73,8 @@ public:
   udppeer_t::on_read_t::connection_t control_on_read_connection;
   udppeer_t::on_read_t::connection_t midi_on_read_connection;
 
-  std::list<endpoint_t> address_port_pending;
+  std::list<endpoint_t> address_port_known;   // All known address and ports
+  std::list<endpoint_t> address_port_pending; // Pending to try to connect to
 
   // Currently conneting / connected endpoint
   endpoint_t resolve_next_dns_endpoint;
