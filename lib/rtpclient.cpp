@@ -300,6 +300,7 @@ void rtpclient_t::state_disconnect_because_cktimeout() {
 }
 
 void rtpclient_t::state_error() {
+  peer.disconnect();
   ERROR("Error at rtpclient_t. Can't connect or disconnected. Will try to "
         "connect again in {}s",
         RECONNECT_TIMEOUT.count());
