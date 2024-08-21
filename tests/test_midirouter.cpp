@@ -41,7 +41,7 @@ public:
                  const rtpmididns::mididata_t &data) override {
     DEBUG("Data at {} to {}", (void *)data.start, (void *)data.end);
     DEBUG("{} got some data: {}", (void *)this, data.size());
-    ASSERT_LT(data.start, data.end);
+    ASSERT_LT((void *)data.start, (void *)data.end);
     writer.copy_from(data);
   }
   const char *get_type() const override { return "test_midiio_t"; }
@@ -175,7 +175,7 @@ void test_midirouter_for_each_peer() {
   count = 0;
   router->for_each_peer<test_midiio_t>([&count, &midiio](auto peer) {
     count++;
-    ASSERT_EQUAL(peer, midiio.get());
+    ASSERT_EQUAL((void *)peer, (void *)midiio.get());
   });
   ASSERT_EQUAL(count, 1);
 
@@ -184,7 +184,7 @@ void test_midirouter_for_each_peer() {
       [&count, &alsanetwork](auto peer) {
         count++;
 
-        ASSERT_EQUAL(peer, alsanetwork.get());
+        ASSERT_EQUAL((void *)peer, (void *)alsanetwork.get());
       });
   ASSERT_EQUAL(count, 1);
 }
