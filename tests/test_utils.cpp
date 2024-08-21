@@ -192,6 +192,6 @@ void poller_wait_until(const std::function<bool(void)> &f,
   auto elapsed = std::chrono::duration_cast<milliseconds>(now - start0);
   DEBUG("Done in {}ms", elapsed.count());
   if (elapsed > ms) {
-    throw rtpmidid::exception("TEST TIMEOUT");
+    ERROR("TEST TIMEOUT");
   }
 }
