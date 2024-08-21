@@ -144,36 +144,42 @@ public:
 // NOLINTNEXTLINE
 #define ASSERT_EQUAL(A, B)                                                     \
   if ((A) != (B)) {                                                            \
+    ERROR("{} != {}", A, B);                                                   \
     throw test_exception(__FILE__, __LINE__,                                   \
                          "Assert [" #A " == " #B "] failed");                  \
   }
 // NOLINTNEXTLINE
 #define ASSERT_NOT_EQUAL(A, B)                                                 \
   if ((A) == (B)) {                                                            \
+    ERROR("{} == {}", A, B);                                                   \
     throw test_exception(__FILE__, __LINE__,                                   \
                          "Assert [" #A " != " #B "] failed");                  \
   }
 // NOLINTNEXTLINE
 #define ASSERT_GT(A, B)                                                        \
   if ((A) <= (B)) {                                                            \
+    ERROR("{} <= {}", A, B);                                                   \
     throw test_exception(__FILE__, __LINE__,                                   \
                          "Assert [" #A " > " #B "] failed");                   \
   }
 // NOLINTNEXTLINE
 #define ASSERT_GTE(A, B)                                                       \
   if ((A) < (B)) {                                                             \
+    ERROR("{} < {}", A, B);                                                    \
     throw test_exception(__FILE__, __LINE__,                                   \
                          "Assert [" #A " >= " #B "] failed");                  \
   }
 // NOLINTNEXTLINE
 #define ASSERT_LT(A, B)                                                        \
   if ((A) >= (B)) {                                                            \
+    ERROR("{} < {}", A, B);                                                    \
     throw test_exception(__FILE__, __LINE__,                                   \
                          "Assert [" #A " < " #B "] failed");                   \
   }
 // NOLINTNEXTLINE
 #define ASSERT_LTE(A, B)                                                       \
   if ((A) > (B)) {                                                             \
+    ERROR("{} > {}", A, B);                                                    \
     throw test_exception(__FILE__, __LINE__,                                   \
                          "Assert [" #A " <= " #B "] failed");                  \
   }
