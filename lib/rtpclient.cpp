@@ -31,6 +31,8 @@ using namespace rtpmidid;
 
 static const auto CONNECT_TIMEOUT = 2s;
 static const auto RECONNECT_TIMEOUT = 10s;
+static const auto CK_SHORT_PERIOD = 2s;
+static const auto CK_LONG_PERIOD = 25s;
 
 /**
  * @short Create the rtp client
@@ -276,7 +278,8 @@ void rtpclient_t::state_send_ck_short() {
 }
 
 void rtpclient_t::state_wait_send_ck_short() {
-  timer = poller.add_timer_event(2s, [this] { handle_event(SendCK); });
+  timer =
+      poller.add_timer_event(CK_SHORT_PERIOD, [this] { handle_event(SendCK); });
 }
 
 void rtpclient_t::state_send_ck_long() {
@@ -290,7 +293,8 @@ void rtpclient_t::state_send_ck_long() {
 }
 
 void rtpclient_t::state_wait_send_ck_long() {
-  timer = poller.add_timer_event(60s, [this] { handle_event(SendCK); });
+  timer =
+      poller.add_timer_event(CK_LONG_PERIOD, [this] { handle_event(SendCK); });
 }
 
 void rtpclient_t::state_disconnect_because_cktimeout() {
