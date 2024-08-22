@@ -32,8 +32,9 @@ namespace rtpmididns {
 local_alsa_listener_t::local_alsa_listener_t(const std::string &name_,
                                              const std::string &hostname_,
                                              const std::string &port_,
-                                             std::shared_ptr<aseq_t> aseq_)
-    : remote_name(name_), aseq(aseq_) {
+                                             std::shared_ptr<aseq_t> aseq_,
+                                             const std::string &local_udp_port)
+    : local_udp_port(local_udp_port), remote_name(name_), aseq(aseq_) {
 
   add_endpoint(hostname_, port_);
 
@@ -119,6 +120,7 @@ void local_alsa_listener_t::connect_to_remote_server(
   router->connect(rtpmidiclientworker_peer_id, peer_id);
   router->connect(peer_id, rtpmidiclientworker_peer_id);
 
+  rtpclient->local_base_port_str = local_udp_port;
   rtpclient->add_server_addresses(endpoints);
 }
 

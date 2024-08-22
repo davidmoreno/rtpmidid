@@ -257,7 +257,7 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
                        "hostname, port}"};
 
        control.router->add_peer(make_local_alsa_listener(
-           control.router, name, hostname, port, control.aseq));
+           control.router, name, hostname, port, control.aseq, "0"));
        return json_t{"ok"};
      }},
     {"mdns.remove", "Delete a mdns announcement",

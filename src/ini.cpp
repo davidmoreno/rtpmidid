@@ -41,7 +41,9 @@ void load_ini(const std::string &filename) {
   settings_t::alsa_announce_t *alsa_announce = nullptr;
   settings_t::connect_to_t *connect_to = nullptr;
 
+  int lineno = 0;
   while (std::getline(fd, line)) {
+    lineno++;
     // Remove comments
     auto comment_pos = line.find('#');
     if (comment_pos != std::string::npos) {
@@ -94,6 +96,8 @@ void load_ini(const std::string &filename) {
     }
     key = line.substr(0, eq_pos);
     value = line.substr(eq_pos + 1);
+    trim(value);
+    trim(key);
 
     // If value has {{hostname}} replace it with the result of the function
     // hostname(null), beware of the double {{ }}
@@ -118,7 +122,7 @@ void load_ini(const std::string &filename) {
       } else if (key == "control") {
         settings.control_filename = value;
       } else {
-        throw rtpmidid::exception("Invalid key: {}", key);
+        throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
       }
     } else if (section == "rtpmidi_announce") {
       if (key == "name") {
@@ -126,13 +130,13 @@ void load_ini(const std::string &filename) {
       } else if (key == "port") {
         rtpmidi_announce->port = value;
       } else {
-        throw rtpmidid::exception("Invalid key: {}", key);
+        throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
       }
     } else if (section == "alsa_announce") {
       if (key == "name") {
         alsa_announce->name = value;
       } else {
-        throw rtpmidid::exception("Invalid key: {}", key);
+        throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
       }
     } else if (section == "connect_to") {
       if (key == "hostname") {
@@ -141,8 +145,10 @@ void load_ini(const std::string &filename) {
         connect_to->port = value;
       } else if (key == "name") {
         connect_to->name = value;
+      } else if (key == "local_udp_port") {
+        connect_to->local_udp_port = value;
       } else {
-        throw rtpmidid::exception("Invalid key: {}", key);
+        throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
       }
     } else if (section == "alsa_hw_auto_export") {
       if (key == "type") {
@@ -162,7 +168,8 @@ void load_ini(const std::string &filename) {
           settings.alsa_hw_auto_export.type =
               settings_t::alsa_hw_auto_export_type_e::ALL;
         } else {
-          throw rtpmidid::exception("Invalid value: {}", value);
+          throw rtpmidid::ini_exception(filename, lineno, "Invalid value: {}",
+                                        value);
         }
       } else if (key == "name_positive_regex") {
         settings.alsa_hw_auto_export.name_positive = value;
@@ -171,10 +178,11 @@ void load_ini(const std::string &filename) {
         settings.alsa_hw_auto_export.name_negative = value;
         settings.alsa_hw_auto_export.name_negative_regex.emplace(value);
       } else {
-        throw rtpmidid::exception("Invalid key: {}", key);
+        throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
       }
     } else {
-      throw rtpmidid::exception("Invalid section: {}", section);
+      throw rtpmidid::ini_exception(filename, lineno, "Invalid section: {}",
+                                    section);
     }
   }
 }

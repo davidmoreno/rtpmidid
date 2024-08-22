@@ -53,8 +53,9 @@ public:
   poller_t::timer_t timer;
 
   uint16_t local_base_port = 0;
-  /// A simple state machine. We need to send 6 CK one after another, and then
-  /// every 10 secs.
+  std::string local_base_port_str =
+      "0"; // This can be changed before connec tto force a port
+
   uint8_t ck_count = 0;
   rtppeer_t::send_event_t::connection_t send_connection;
   rtppeer_t::ck_event_t::connection_t ck_connection;
