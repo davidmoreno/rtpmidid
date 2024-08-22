@@ -19,6 +19,7 @@
 
 #pragma once
 #include "exceptions.hpp"
+#include "networkaddress.hpp"
 #include "signal.hpp"
 #include "stats.hpp"
 #include <arpa/inet.h>
@@ -93,8 +94,8 @@ public:
 
   // This is to be filled at connection by whoever makes it
   // It is not used by the rtppeer_t, just nice info to have
-  std::string remote_address = "";
-  int remote_base_port = 0;
+  network_address_t remote_address;
+  network_address_t local_address;
 
   typedef signal_t<status_e> status_change_event_t;
   /// Event for connected

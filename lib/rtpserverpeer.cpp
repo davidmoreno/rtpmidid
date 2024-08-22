@@ -32,8 +32,8 @@ rtpserverpeer_t::rtpserverpeer_t(io_bytes_reader &&buffer,
   peer = std::make_shared<rtppeer_t>(name);
 
   DEBUG("Connected from {}", addr.to_string());
-  peer->remote_address = addr.hostname();
-  peer->remote_base_port = addr.port();
+  peer->remote_address = addr.dup();
+  peer->local_address = srv->control.get_address().dup();
 
   address = addr.dup();
 
@@ -113,7 +113,7 @@ rtpserverpeer_t &rtpserverpeer_t::operator=(rtpserverpeer_t &&other) {
 
 void rtpserverpeer_t::sendto(const io_bytes_reader &buff,
                              rtppeer_t::port_e port) {
-  server->sendto(buff, port, address, peer->remote_base_port);
+  server->sendto(buff, port, address, peer->remote_address.port());
 }
 
 void rtpserverpeer_t::status_change(rtppeer_t::status_e st) {

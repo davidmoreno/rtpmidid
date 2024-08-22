@@ -257,6 +257,9 @@ void rtpclient_t::state_disconnect_control() {
 
 void rtpclient_t::state_all_connected() {
   INFO("Connected");
+  peer.remote_address = control_address.dup();
+  peer.local_address = control_peer.get_address().dup();
+
   timer.disable();
   ck_count = 0;
   handle_event(SendCK);
