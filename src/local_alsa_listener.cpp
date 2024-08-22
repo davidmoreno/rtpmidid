@@ -157,7 +157,6 @@ json_t local_alsa_listener_t::status() {
       {"name",
        fmt::format("{} <-> {}", local_name == "" ? "[WATING]" : local_name,
                    remote_name)},
-      {"type", "local:alsa:listener"},
       {"endpoints", jendpoints},
       {"connection_count", connection_count},
       {"status", status}
