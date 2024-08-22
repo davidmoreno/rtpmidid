@@ -173,8 +173,7 @@ json_t local_alsa_multi_listener_t::status() {
   }
 
   return json_t{
-      {"type", "local:alsa:multi:listener"}, //
-      {"name", name},                        //
+      {"name", name}, //
       {"connections", connections}
       //
   };

@@ -147,6 +147,7 @@ json_t midirouter_t::status() {
           {"recv", peer.second.peer->packets_recv},
           {"sent", peer.second.peer->packets_sent} //
       };
+      status["type"] = peer.second.peer->get_type();
 
       routerdata.push_back(status);
     } catch (const std::exception &exc) {

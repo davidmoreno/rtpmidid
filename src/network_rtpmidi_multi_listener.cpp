@@ -57,9 +57,8 @@ json_t network_rtpmidi_multi_listener_t::status() {
 
   return json_t{
       //
-      {"type", "network:rtpmidi:multi:listener"}, //
-      {"peers", peers},                           //
-      {"name", server.name},                      //
+      {"peers", peers},      //
+      {"name", server.name}, //
       {"listening",
        {
            //

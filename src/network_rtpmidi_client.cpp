@@ -53,8 +53,7 @@ void network_rtpmidi_client_t::send_midi(midipeer_id_t from,
 
 json_t network_rtpmidi_client_t::status() {
   return json_t{
-      {"name", peer->peer.remote_name},   //
-      {"type", "network:rtpmidi:client"}, //
+      {"name", peer->peer.remote_name}, //
       {"peer", peer_status(peer->peer)},
   };
 };

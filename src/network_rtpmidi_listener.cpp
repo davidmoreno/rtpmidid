@@ -64,10 +64,9 @@ json_t network_rtpmidi_listener_t::status() {
     peers.push_back(peer_status(*peerpeer));
   }
   return json_t{
-      {"name", name_},                      //
-      {"type", "network:rtpmidi:listener"}, //
-      {"port", server.port()},              //
-      {"peers",                             //
+      {"name", name_},         //
+      {"port", server.port()}, //
+      {"peers",                //
        peers}
       //
   };

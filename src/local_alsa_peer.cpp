@@ -56,9 +56,7 @@ void local_alsa_peer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
 
 json_t local_alsa_peer_t::status() {
   return json_t{
-      {"type", "local:alsa:peer"}, //
-      {"name", name},
-      {"port", port},
+      {"name", name}, {"port", port},
       //
   };
 }
