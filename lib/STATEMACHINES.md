@@ -51,7 +51,7 @@ stateDiagram
 
     WaitSendCkShort --> SendCkShort: SendCK
 
-    SendCkLong --> WaitSendCkLong: WaitSendCK1
+    SendCkLong --> WaitSendCkLong: WaitSendCK
     SendCkLong --> DisconnectBecauseCKTimeout: Timeout
     WaitSendCkLong --> SendCkLong: SendCK
 

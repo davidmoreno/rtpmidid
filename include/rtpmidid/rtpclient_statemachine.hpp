@@ -34,7 +34,6 @@ enum event_e{
     WaitSendCK,
     LatencyMeasured,
     Timeout,
-    WaitSendCK1,
     Connect,
 };
 

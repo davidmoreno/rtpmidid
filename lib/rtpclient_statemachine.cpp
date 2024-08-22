@@ -23,7 +23,7 @@
  * 
  *     WaitSendCkShort --> SendCkShort: SendCK
  * 
- *     SendCkLong --> WaitSendCkLong: WaitSendCK1
+ *     SendCkLong --> WaitSendCkLong: WaitSendCK
  *     SendCkLong --> DisconnectBecauseCKTimeout: Timeout
  *     WaitSendCkLong --> SendCkLong: SendCK
  * 
@@ -157,7 +157,7 @@ void rtpclient_t::handle_event(event_e event){
             break;
         case state_e::SendCkLong:
             switch(event){
-                case event_e::WaitSendCK1:
+                case event_e::WaitSendCK:
                     state = state_e::WaitSendCkLong;
                     break;
                 case event_e::Timeout:
@@ -248,8 +248,6 @@ const char *rtpclient_t::to_string(rtpclient_t::event_e value) {
         return "LatencyMeasured";
     case rtpclient_t::event_e::Timeout:
         return "Timeout";
-    case rtpclient_t::event_e::WaitSendCK1:
-        return "WaitSendCK1";
     case rtpclient_t::event_e::Connect:
         return "Connect";
     default:
