@@ -38,8 +38,8 @@ make_local_alsa_multi_listener(const std::string &name,
 std::shared_ptr<midipeer_t>
 make_local_alsa_listener(std::shared_ptr<midirouter_t> &router,
                          const std::string &name, const std::string &hostname,
-                         const std::string &port,
-                         std::shared_ptr<aseq_t> aseq) {
+                         const std::string &port, std::shared_ptr<aseq_t> aseq,
+                         const std::string &udp_port) {
   std::shared_ptr<midipeer_t> added;
   router->for_each_peer<local_alsa_listener_t>(
       [&](local_alsa_listener_t *peer) {
@@ -52,7 +52,9 @@ make_local_alsa_listener(std::shared_ptr<midirouter_t> &router,
   if (added)
     return added;
 
-  return std::make_shared<local_alsa_listener_t>(name, hostname, port, aseq);
+  auto ret = std::make_shared<local_alsa_listener_t>(name, hostname, port, aseq,
+                                                     udp_port);
+  return ret;
 }
 
 std::shared_ptr<midipeer_t> make_local_alsa_peer(const std::string &name,

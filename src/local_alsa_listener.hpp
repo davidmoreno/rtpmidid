@@ -40,10 +40,10 @@ class local_alsa_listener_t : public midipeer_t {
   NON_COPYABLE_NOR_MOVABLE(local_alsa_listener_t);
 
 public:
+  std::string local_udp_port = "0";
   std::string remote_name;
-  std::string local_name; // This si the name of the port that connected to us
+  std::string local_name;
   std::vector<rtpmidid::rtpclient_t::endpoint_t> endpoints;
-  // Currently connected, if any
   std::string hostname;
   std::string port;
 
@@ -64,7 +64,8 @@ public:
   rtpmidid::rtppeer_t::status_change_event_t status_change_event_connection;
 
   local_alsa_listener_t(const std::string &name, const std::string &hostname,
-                        const std::string &port, std::shared_ptr<aseq_t> aseq);
+                        const std::string &port, std::shared_ptr<aseq_t> aseq,
+                        const std::string &local_udp_port = "0");
   ~local_alsa_listener_t() override;
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;

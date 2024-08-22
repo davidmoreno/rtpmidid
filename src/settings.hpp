@@ -43,6 +43,7 @@ struct settings_t {
     std::string hostname;
     std::string port;
     std::string name;
+    std::string local_udp_port;
   };
 
   std::vector<rtpmidi_announce_t> rtpmidi_announces;
@@ -118,7 +119,8 @@ struct fmt::formatter<std::vector<rtpmididns::settings_t::connect_to_t>>
 
 template <>
 struct fmt::formatter<rtpmididns::settings_t> : formatter<fmt::string_view> {
-  fmt::appender format(const rtpmididns::settings_t &data, format_context &ctx) const;
+  fmt::appender format(const rtpmididns::settings_t &data,
+                       format_context &ctx) const;
 };
 
 template <>
@@ -132,7 +134,6 @@ struct fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_t>
 template <>
 struct fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_type_e>
     : formatter<fmt::string_view> {
-  auto
-  format(const rtpmididns::settings_t::alsa_hw_auto_export_type_e &data,
-         format_context &ctx) const;
+  auto format(const rtpmididns::settings_t::alsa_hw_auto_export_type_e &data,
+              format_context &ctx) const;
 };

@@ -168,7 +168,7 @@ void rtpclient_t::state_resolve_next_ip_port() {
 
 void rtpclient_t::state_connect_control() {
   // Any, but could force the initial control port here
-  control_peer.open(network_address_list_t("::", "0"));
+  control_peer.open(network_address_list_t("::", local_base_port_str));
   control_on_read_connection = control_peer.on_read.connect(
       [this](const packet_t &packet, const network_address_t &) {
         DEBUG("Data ready for control!");

@@ -46,4 +46,12 @@ public:
   }
   const char *what() const noexcept override { return str.c_str(); }
 };
+
+class ini_exception : public exception {
+public:
+  template <typename... Args>
+  ini_exception(const std::string &filename, int lineno, Args... args)
+      : exception("Error parsing INI configuration at {}:{}: {}", filename,
+                  lineno, fmt::format(args...)) {}
+};
 } // namespace rtpmidid
