@@ -648,13 +648,13 @@ class Top:
         )
         self.terminal_goto(0, len(data) + 5)
         self.print(self.ANSI_RESET + self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE)
-        self.print_padding(f"Current Row {self.height}: ")
+        self.print_padding(f"Current Row {self.selected_row_index}: ")
         self.print_json_row(
             0,
             6 + len(data),
             self.width,
             self.height - len(data) - 5,
-            data[self.selected_row_index],
+            self.current_row,
         )
 
     def print_mdns_tab(self):
