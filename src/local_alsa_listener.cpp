@@ -20,13 +20,10 @@
 #include "aseq.hpp"
 #include "factory.hpp"
 #include "json.hpp"
+#include "local_alsa_peer.hpp"
 #include "mididata.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/rtpclient.hpp"
-#include "rtpmidid/rtppeer.hpp"
-#include "settings.hpp"
-#include "utils.hpp"
-#include <cstddef>
 
 namespace rtpmididns {
 local_alsa_listener_t::local_alsa_listener_t(const std::string &name_,
@@ -78,7 +75,14 @@ local_alsa_listener_t::local_alsa_listener_t(const std::string &name_,
       });
 }
 
-local_alsa_listener_t::~local_alsa_listener_t() { aseq->remove_port(alsaport); }
+local_alsa_listener_t::~local_alsa_listener_t() {
+  aseq->remove_port(alsaport);
+  INFO("Remove ALSA port: {}, peer_id: {}. I remove also all connected "
+       "local_alsa_peers_t",
+       alsaport, peer_id);
+  router->for_each_peer<local_alsa_peer_t>(
+      [&](local_alsa_peer_t *peer) { router->remove_peer(peer->peer_id); });
+}
 
 void local_alsa_listener_t::add_endpoint(const std::string &hostname,
                                          const std::string &port) {
@@ -103,8 +107,8 @@ void local_alsa_listener_t::add_endpoint(const std::string &hostname,
 void local_alsa_listener_t::connect_to_remote_server(
     const std::string &portname) {
   if (endpoints.size() == 0) {
-    WARNING(
-        "Unknown endpoints for this alsa waiter. Dont know where to connect.");
+    WARNING("Unknown endpoints for this alsa waiter. Dont know where to "
+            "connect.");
     connection_count = 0;
     aseq->disconnect_port(alsaport);
     return;
