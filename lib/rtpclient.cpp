@@ -270,13 +270,16 @@ void rtpclient_t::state_send_ck_short() {
                                  [this] { handle_event(Timeout); });
   ck_connection = peer.ck_event.connect([this](float ms) {
     timer.disable();
-    ck_count += 1;
     if (ck_count < 6) {
       handle_event(WaitSendCK);
     } else {
       handle_event(LatencyMeasured);
     }
+    ck_connection = peer.ck_event.connect([this](float ms) {
+      WARNING("OUT OF ORDER CK0 received, latency: {} ms", ms);
+    });
   });
+  ck_count++;
   peer.send_ck0();
 }
 
@@ -286,16 +289,21 @@ void rtpclient_t::state_wait_send_ck_short() {
 }
 
 void rtpclient_t::state_send_ck_long() {
+  ck_count++;
   peer.send_ck0();
   timer = poller.add_timer_event(CONNECT_TIMEOUT,
                                  [this] { handle_event(Timeout); });
   ck_connection = peer.ck_event.connect([this](float ms) {
     timer.disable();
     handle_event(WaitSendCK);
+    ck_connection = peer.ck_event.connect([this](float ms) {
+      WARNING("OUT OF ORDER CK0 received, latency: {} ms", ms);
+    });
   });
 }
 
 void rtpclient_t::state_wait_send_ck_long() {
+  ck_connection.disconnect();
   timer =
       poller.add_timer_event(CK_LONG_PERIOD, [this] { handle_event(SendCK); });
 }
