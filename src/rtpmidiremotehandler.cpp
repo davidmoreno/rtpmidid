@@ -71,6 +71,7 @@ void rtpmidi_remote_handler_t::remove_peer(const std::string &name,
            I->alsawaiter->peer_id);
       router->remove_peer(I->alsawaiter->peer_id);
       peers.erase(I);
+      return;
     }
   }
 }
