@@ -41,17 +41,18 @@ rtpmidi_remote_handler_t::rtpmidi_remote_handler_t(
 void rtpmidi_remote_handler_t::discover_peer(const std::string &name,
                                              const std::string &hostname,
                                              const std::string &port) {
-  DEBUG("Discover peer: {} {} {}", name, hostname, port);
   for (auto &peer : peers) {
     if (peer.name == name) {
       local_alsa_listener_t *alsawaiter =
           dynamic_cast<local_alsa_listener_t *>(peer.alsawaiter.get());
       if (alsawaiter)
         alsawaiter->add_endpoint(hostname, port);
+      DEBUG("Reuse peer: name={} address={}:{}", name, hostname, port);
       return;
     }
   }
 
+  DEBUG("New peer: name={} address={}:{}", name, hostname, port);
   auto peer = rtpmididns::make_local_alsa_listener(router, name, hostname, port,
                                                    aseq, "0");
   peers.push_back(known_remote_peer_t{name, peer});
@@ -62,7 +63,7 @@ void rtpmidi_remote_handler_t::discover_peer(const std::string &name,
 void rtpmidi_remote_handler_t::remove_peer(const std::string &name,
                                            const std::string &hostname,
                                            const std::string &port) {
-  DEBUG("Remove peer: {} {} {}", name, hostname, port);
+  DEBUG("Remove peer: name=\"{}\" address={}:{}", name, hostname, port);
   std::vector<known_remote_peer_t>::iterator I = peers.begin(),
                                              endI = peers.end();
   for (; I != endI; ++I) {
