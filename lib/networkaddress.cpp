@@ -45,6 +45,10 @@ network_address_t::~network_address_t() {
 }
 
 int network_address_t::port() const {
+  if (!addr) {
+    ERROR("This network address do not point to any address.");
+    return 0;
+  }
   if (addr->sa_family == AF_INET) {
     return ntohs(reinterpret_cast<const sockaddr_in *>(addr)->sin_port);
   }
