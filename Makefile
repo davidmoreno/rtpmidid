@@ -71,15 +71,16 @@ clean:
 VALGRINDFLAGS := --leak-check=full --error-exitcode=1
 RTPMIDID_ARGS := --ini default.ini --port ${PORT} --name devel --control /tmp/rtpmidid.sock
 
-.PHONY: run run-valgrind gdb
+.PHONY: run run-valgrind run-gdb
 run: build-dev
 	build/src/rtpmidid $(RTPMIDID_ARGS)
 
-gdb: build-dev
+run-gdb: build-dev
 	gdb build/src/rtpmidid -ex=r --args build/src/rtpmidid  $(RTPMIDID_ARGS)
 
-run-valgrind: build
-	valgrind --leak-check=full --show-leak-kinds=all build/src/rtpmidid $(RTPMIDID_ARGS)
+run-valgrind: build-dev
+	valgrind --leak-check=full --show-leak-kinds=all --log-file=/tmp/rtpmidid.valgrind.log -- build/src/rtpmidid $(RTPMIDID_ARGS) || true
+	@echo "Logs at /tmp/rtpmidid.valgrind.log"
 
 PORT1 = $(shell echo | awk '{print ${PORT} + 1}')
 
