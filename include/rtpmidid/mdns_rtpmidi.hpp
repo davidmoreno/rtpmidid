@@ -33,6 +33,10 @@ typedef struct AvahiClient AvahiClient;
 typedef struct AvahiPoll AvahiPoll;
 typedef struct AvahiEntryGroup AvahiEntryGroup;
 typedef struct AvahiServiceBrowser AvahiServiceBrowser;
+struct resolve_callback_s;
+struct browse_callback_s;
+typedef int avahi_client_state_e;
+typedef int entry_group_state_e;
 
 namespace rtpmidid {
 struct announcement_t {
@@ -61,16 +65,31 @@ public:
       remove_event;
   poller_t::listener_t watch_in_poller;
   poller_t::listener_t watch_out_poller;
+  poller_t::timer_t reconnect_timer;
+  int announce_suffix = 0;
 
   mdns_rtpmidi_t();
   ~mdns_rtpmidi_t();
 
-  void setup_mdns_browser();
+  void connect_to_avahi();
+  void close_avahi();
+
+  void setup_service_browser();
+  void setup_entry_group();
+
+  void client_callback(avahi_client_state_e state);
+  void resolve_callback(const resolve_callback_s &data);
+  void browse_callback(const browse_callback_s &data);
+  void entry_group_callback(entry_group_state_e state_);
+
   void announce_all();
   void announce_rtpmidi(const std::string &name, const int32_t port);
   void unannounce_rtpmidi(const std::string &name, const int32_t port);
-  void discover_remote(const remote_announcement_t &remote);
-  void remove_remote(const std::string &name);
+
+  void discovered_remote(const remote_announcement_t &remote);
+  void removed_remote(const std::string &name);
+
+  // Can be a local or remote (address="" for local)
   void remove_announcement(const std::string &name, const std::string &address,
                            int port);
 };
