@@ -131,12 +131,13 @@ poller_t::timer_t poller_t::add_timer_event(std::chrono::milliseconds ms,
 
   // We can not call directly as it might need to be called out of this call
   // stack
-  if (ms.count() <= 0) {
-    // DEBUG("Not added to timer list, but to call later list. {}ms",
-    // ms.count());
-    call_later(f);
-    return poller_t::timer_t(0);
-  }
+  // this is a optimization, but makes the cancellation impossible.. so disabled
+  // if (ms.count() <= 0) {
+  //   // DEBUG("Not added to timer list, but to call later list. {}ms",
+  //   // ms.count());
+  //   call_later(f);
+  //   return poller_t::timer_t(0);
+  // }
 
   // This 1ms is because of the precission mismatch later. now() is in
   // microseconds, and later we need also ms. This way we ensure ms precission.
