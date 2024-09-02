@@ -27,6 +27,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#define DEBUG0(...) // do nothing
+
 namespace rtpmidid {
 
 udppeer_t::udppeer_t(const network_address_t &addr) { open(addr); }
@@ -35,7 +37,7 @@ int udppeer_t::open(const network_address_t &address) {
   auto addr = address.get_sockaddr();
   auto addrlen = address.get_socklen();
 
-  DEBUG("Opening UDP port at {}", address.to_string());
+  DEBUG0("Opening UDP port at {}", address.to_string());
 
   fd = socket(address.get_aifamily(), SOCK_DGRAM | SOCK_CLOEXEC, 0);
 
@@ -53,7 +55,7 @@ int udppeer_t::open(const network_address_t &address) {
 
   network_address_t myaddress{fd};
 
-  DEBUG("UDP port listen ready, at {}, fd {}", myaddress.to_string(), fd);
+  DEBUG0("UDP port listen ready, at {}, fd {}", myaddress.to_string(), fd);
 
   if (!listener) {
     listener = poller.add_fd_in(fd, [this](int fd) {
@@ -84,7 +86,7 @@ void udppeer_t::data_ready() {
   unsigned int len = sizeof(cliaddr);
   auto n = recvfrom(fd, raw.data(), 1500, MSG_DONTWAIT,
                     sockaddr_storage_to_sockaddr(&cliaddr), &len);
-  // DEBUG("Got some data from control: {}", n);
+  // DEBUG0("Got some data from control: {}", n);
 
   network_address_t network_address{&cliaddr, len};
 
@@ -94,7 +96,7 @@ void udppeer_t::data_ready() {
 
   packet_t packet(raw.data(), n);
 
-  // DEBUG("Got data from {}, {} bytes", network_address.to_string(), n);
+  // DEBUG0("Got data from {}, {} bytes", network_address.to_string(), n);
 
   on_read(packet, network_address);
 }
@@ -113,7 +115,7 @@ ssize_t udppeer_t::sendto(const packet_t &packet,
     //                           strerror(errno));
   }
 
-  // DEBUG("Sent to {} bytes", packet);
+  // DEBUG0("Sent to {} bytes", packet);
   return res;
 }
 
