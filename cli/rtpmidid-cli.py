@@ -700,7 +700,7 @@ class Top:
             [
                 {
                     "name": "Type",
-                    "width": 4,
+                    "width": 6,
                     "get": get_type,
                     "style": style,
                 },
