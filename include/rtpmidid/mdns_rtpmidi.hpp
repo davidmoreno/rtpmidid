@@ -21,7 +21,6 @@
 
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/utils.hpp"
-#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -33,12 +32,13 @@ typedef struct AvahiClient AvahiClient;
 typedef struct AvahiPoll AvahiPoll;
 typedef struct AvahiEntryGroup AvahiEntryGroup;
 typedef struct AvahiServiceBrowser AvahiServiceBrowser;
+
+namespace rtpmidid {
 struct resolve_callback_s;
 struct browse_callback_s;
 typedef int avahi_client_state_e;
 typedef int entry_group_state_e;
 
-namespace rtpmidid {
 struct announcement_t {
   std::string name;
   int port;
