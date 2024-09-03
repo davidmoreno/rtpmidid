@@ -542,7 +542,7 @@ void rtpmidid::mdns_rtpmidi_t::announce_all() {
     break;
   case AVAHI_ENTRY_GROUP_REGISTERING:
     DEBUG("AVAHI_ENTRY_GROUP_REGISTERING.");
-    return;
+    break;
   case AVAHI_ENTRY_GROUP_COLLISION:
     DEBUG("AVAHI_ENTRY_GROUP_COLLISION.");
     announce_suffix++;
