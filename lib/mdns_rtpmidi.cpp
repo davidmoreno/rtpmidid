@@ -433,11 +433,11 @@ void rtpmidid::mdns_rtpmidi_t::resolve_callback(
   } break;
   case AVAHI_RESOLVER_FOUND: {
     if (!!(data.flags & AVAHI_LOOKUP_RESULT_OUR_OWN)) {
-      DEBUG("Received own announcement. Ignore.");
+      DEBUG("Received own announcement of service={}. Ignore.", data.name);
       return;
     }
     std::array<char, AVAHI_ADDRESS_STR_MAX> avahi_address_str{};
-    avahi_address_snprint(avahi_address_str.data(), sizeof(avahi_address_str),
+    avahi_address_snprint(avahi_address_str.data(), avahi_address_str.size(),
                           data.address);
     DEBUG("Discovered service=\"{}\" in host={}:{} ip={} flags={:04X}",
           data.name, data.host_name, data.port, avahi_address_str.data(),
@@ -616,11 +616,11 @@ void rtpmidid::mdns_rtpmidi_t::discovered_remote(
 }
 
 void rtpmidid::mdns_rtpmidi_t::removed_remote(const std::string &name) {
-  remove_event(name, "", "");
   // We copy as remove modifies the original
   auto remote_annoucements_copy{this->remote_announcements};
   for (auto remote : remote_annoucements_copy) {
     if (remote.name == name) {
+      remove_event(name, remote.address, std::to_string(remote.port));
       remove_announcement(name, remote.address, remote.port);
     }
   }
