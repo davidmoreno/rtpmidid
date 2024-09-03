@@ -56,6 +56,10 @@ int network_address_t::port() const {
 }
 
 std::string network_address_t::ip() const {
+  if (!addr) {
+    ERROR("This network address do not point to any address.");
+    return "null";
+  }
   std::array<char, INET6_ADDRSTRLEN> name{};
   if (addr->sa_family == AF_INET) {
     inet_ntop(AF_INET, &reinterpret_cast<const sockaddr_in *>(addr)->sin_addr,
@@ -68,6 +72,9 @@ std::string network_address_t::ip() const {
 }
 
 std::string network_address_t::hostname() const {
+  if (!addr) {
+    return "null";
+  }
   std::array<char, NI_MAXHOST> name{};
   if (getnameinfo(addr, len, name.data(), NI_MAXHOST, nullptr, 0, 0) != 0) {
     return ip();
@@ -135,6 +142,10 @@ bool network_address_t::resolve_loop(const std::string &address,
 }
 
 void network_address_t::set_port(int port) {
+  if (!addr) {
+    ERROR("This network address do not point to any address.");
+    return;
+  }
   assert(managed); // Only managed addresses can be modified.
 
   sockaddr *addr = const_cast<sockaddr *>(this->addr);
