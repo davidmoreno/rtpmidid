@@ -567,13 +567,13 @@ class Top:
 
         def get_local_name(data):
             type_ = safe_get(data, "type")
-            if type_.startswith("local:"):
+            if type_.startswith("local_"):
                 return safe_get(data, "name")
             return ""
 
         def get_remote_name(data):
             type_ = safe_get(data, "type")
-            if type_.startswith("network:"):
+            if type_.startswith("network_"):
                 return safe_get(data, "name")
             return ""
 
