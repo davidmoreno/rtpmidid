@@ -173,15 +173,15 @@ AvahiTimeout *poller_adapter_timeout_new(const AvahiPoll *api,
   if (tv) {
     auto chrono_tv =
         std::chrono::milliseconds(tv->tv_sec * 1000 + tv->tv_usec / 1000);
-    if (chrono_tv.count() <= 0) {
+    // if (chrono_tv.count() <= 0) {
+    //   to->callback(to, to->userdata);
+    //   to->timer_id = 0;
+    // } else {
+    to->timer_id = rtpmidid::poller.add_timer_event(chrono_tv, [to] {
+      DEBUG("Timeout for to {} {}", (void *)to, to->timer_id.id);
       to->callback(to, to->userdata);
-      to->timer_id = 0;
-    } else {
-      to->timer_id = rtpmidid::poller.add_timer_event(chrono_tv, [to] {
-        DEBUG("Timeout for to {} {}", (void *)to, to->timer_id.id);
-        to->callback(to, to->userdata);
-      });
-    }
+    });
+    // }
   }
   return to;
 }
@@ -218,12 +218,12 @@ static void client_callback(AvahiClient *c, AvahiClientState state,
   if (mr->client == nullptr) {
     mr->client = c;
   }
-  mr->client_callback((avahi_client_state_e)state);
+  mr->client_callback((rtpmidid::avahi_client_state_e)state);
 }
 
 // Just to give it proper names.. please come'on avahi, use a struct if that
 // many parameters
-struct resolve_callback_s {
+struct rtpmidid::resolve_callback_s {
   AvahiServiceResolver *resolver;
   AvahiIfIndex interface;
   AvahiProtocol protocol;
@@ -248,8 +248,9 @@ static void resolve_callback(AvahiServiceResolver *r, AvahiIfIndex interface,
                              AvahiLookupResultFlags flags,
                              AVAHI_GCC_UNUSED void *userdata) {
   // NOLINTEND(bugprone-easily-swappable-parameters)
-  resolve_callback_s data = {r,      interface, protocol, event, name, type,
-                             domain, host_name, address,  port,  txt,  flags};
+  rtpmidid::resolve_callback_s data = {r,       interface, protocol, event,
+                                       name,    type,      domain,   host_name,
+                                       address, port,      txt,      flags};
   // NOLINTNEXTLINE
   rtpmidid::mdns_rtpmidi_t *mr = (rtpmidid::mdns_rtpmidi_t *)userdata;
 
@@ -257,7 +258,7 @@ static void resolve_callback(AvahiServiceResolver *r, AvahiIfIndex interface,
   avahi_service_resolver_free(r);
 }
 
-struct browse_callback_s {
+struct rtpmidid::browse_callback_s {
   AvahiIfIndex interface;
   AvahiProtocol protocol;
   AvahiBrowserEvent event;
@@ -273,8 +274,8 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface,
                             const char *domain,
                             AVAHI_GCC_UNUSED AvahiLookupResultFlags flags,
                             void *userdata) {
-  browse_callback_s data = {interface, protocol, event, name,
-                            type,      domain,   flags};
+  rtpmidid::browse_callback_s data = {interface, protocol, event, name,
+                                      type,      domain,   flags};
 
   // NOLINTNEXTLINE
   rtpmidid::mdns_rtpmidi_t *mr = (rtpmidid::mdns_rtpmidi_t *)userdata;
@@ -504,17 +505,6 @@ void rtpmidid::mdns_rtpmidi_t::entry_group_callback(
     break;
   case AVAHI_ENTRY_GROUP_COLLISION: {
     DEBUG("AVAHI_ENTRY_GROUP_COLLISION. Will try another name?");
-    // char *n = nullptr;
-    // /* A service name collision with a remote service
-    //  * happened. Let's pick a new name */
-    // n = avahi_alternative_service_name(g->name);
-    // ERROR("Service name '{}' collision, renaming service to '{}", g->name,
-    // n); avahi_free(g->name); g->name = n;
-    // /* And recreate the services, per documentation just set name and
-    // reannounce
-    //  */
-    // mr->announce_all();
-
     announce_all();
     break;
   }

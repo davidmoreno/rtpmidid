@@ -23,7 +23,8 @@ help:
 	@echo " install   -- Installs to PREFIX or DESTDIR (default /usr/local/)"
 	@echo " man       -- Generate man pages"
 	@echo
-	@echo " gdb      -- Run inside gdb, to capture backtrace of failures (bt). Useful for bug reports."
+	@echo " run-gdb  -- Run inside gdb, to capture backtrace of failures (bt). Useful for bug reports."
+	@echo " run-valgrin -- Run inside valgrind, to capture backtrace of failures (bt). Useful for bug reports."
 	@echo " capture  -- Capture packets with tcpdump. Add this to bug reports."
 	@echo " statemachines -- Generate the files for the state machines"
 	@echo
