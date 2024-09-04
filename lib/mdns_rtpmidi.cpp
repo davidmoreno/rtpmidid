@@ -63,6 +63,21 @@ template <> struct fmt::formatter<AvahiBrowserEvent> : fmt::formatter<int> {
     return fmt::formatter<int>::format((int)ev, ctx);
   }
 };
+template <> struct fmt::formatter<AvahiEntryGroupState> : fmt::formatter<int> {
+  auto format(AvahiEntryGroupState state, fmt::format_context &ctx) {
+    return fmt::formatter<int>::format((int)state, ctx);
+  }
+};
+template <> struct fmt::formatter<AvahiClientState> : fmt::formatter<int> {
+  auto format(AvahiClientState state, fmt::format_context &ctx) {
+    return fmt::formatter<int>::format((int)state, ctx);
+  }
+};
+template <> struct fmt::formatter<AvahiLookupResultFlags> : fmt::formatter<int> {
+  auto format(AvahiLookupResultFlags flag, fmt::format_context &ctx) {
+    return fmt::formatter<int>::format((int)flag, ctx);
+  }
+};
 
 static void entry_group_callback(AvahiEntryGroup *g, AvahiEntryGroupState state,
                                  AVAHI_GCC_UNUSED void *userdata) {

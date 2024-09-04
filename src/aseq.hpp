@@ -186,3 +186,15 @@ struct fmt::formatter<rtpmididns::aseq_t::connection_t>
   fmt::appender format(const rtpmididns::aseq_t::connection_t &c,
                        format_context &ctx);
 };
+
+// template <>
+// struct fmt::formatter<snd_seq_event_type>
+//     : formatter<fmt::string_view> {
+//   fmt::appender format(const snd_seq_event_type &c,
+//                        format_context &ctx);
+// };
+template <> struct fmt::formatter<snd_seq_event_type> : fmt::formatter<int> {
+  auto format(snd_seq_event_type type, fmt::format_context &ctx) {
+    return fmt::formatter<int>::format((int)type, ctx);
+  }
+};
