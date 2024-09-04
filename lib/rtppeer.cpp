@@ -173,9 +173,8 @@ void rtppeer_t::parse_command_ok(io_bytes_reader &buffer, port_e port) {
  */
 void rtppeer_t::parse_command_in(io_bytes_reader &buffer, port_e port) {
   if (status == CONNECTED) {
-    WARNING(
-        "This peer is already connected. Need to disconnect to connect again.");
-    return;
+    WARNING("This peer is already connected. But OK, I will accept it anew. "
+            "Might happen on some split brain situations.");
   }
   auto protocol = buffer.read_uint32();
   initiator_id = buffer.read_uint32();
