@@ -139,7 +139,7 @@ template <> struct fmt::formatter<rtpmidid::packet_type_e> {
   constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const rtpmidid::packet_type_e &c, FormatContext &ctx) {
+  auto format(const rtpmidid::packet_type_e &c, FormatContext &ctx) const {
     switch (c) {
     case rtpmidid::packet_type_e::UNKNOWN:
       return format_to(ctx.out(), "UNKNOWN");
@@ -158,7 +158,7 @@ template <> struct fmt::formatter<rtpmidid::packet_t> {
   constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const rtpmidid::packet_t &c, FormatContext &ctx) {
+  auto format(const rtpmidid::packet_t &c, FormatContext &ctx) const {
     return format_to(ctx.out(), "Packet: {} bytes", c.get_size());
   }
 };

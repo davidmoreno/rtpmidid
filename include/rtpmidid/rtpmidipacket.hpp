@@ -362,7 +362,7 @@ template <> struct fmt::formatter<rtpmidid::command_e> {
   constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const rtpmidid::command_e &c, FormatContext &ctx) {
+  auto format(const rtpmidid::command_e &c, FormatContext &ctx) const {
     switch (c) {
     case rtpmidid::IN:
       return format_to(ctx.out(), "IN");
@@ -387,7 +387,7 @@ template <> struct fmt::formatter<rtpmidid::packet_midi_t> {
   constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const rtpmidid::packet_midi_t &p, FormatContext &ctx) {
+  auto format(const rtpmidid::packet_midi_t &p, FormatContext &ctx) const {
     return format_to(ctx.out(), "{}", p.to_string());
   }
 };
@@ -397,7 +397,7 @@ template <> struct fmt::formatter<rtpmidid::packet_command_t> {
   constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const rtpmidid::packet_command_t &p, FormatContext &ctx) {
+  auto format(const rtpmidid::packet_command_t &p, FormatContext &ctx) const {
     return format_to(ctx.out(), "{}", p.to_string());
   }
 };
