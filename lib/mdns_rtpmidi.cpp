@@ -53,32 +53,6 @@ struct AvahiWatch {
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 rtpmidid::mdns_rtpmidi_t *current = nullptr;
 
-template <> struct fmt::formatter<AvahiWatchEvent> : fmt::formatter<int> {
-  auto format(AvahiWatchEvent ev, fmt::format_context &ctx) const {
-    return fmt::formatter<int>::format((int)ev, ctx);
-  }
-};
-template <> struct fmt::formatter<AvahiBrowserEvent> : fmt::formatter<int> {
-  auto format(AvahiBrowserEvent ev, fmt::format_context &ctx) const {
-    return fmt::formatter<int>::format((int)ev, ctx);
-  }
-};
-template <> struct fmt::formatter<AvahiEntryGroupState> : fmt::formatter<int> {
-  auto format(AvahiEntryGroupState state, fmt::format_context &ctx) {
-    return fmt::formatter<int>::format((int)state, ctx);
-  }
-};
-template <> struct fmt::formatter<AvahiClientState> : fmt::formatter<int> {
-  auto format(AvahiClientState state, fmt::format_context &ctx) {
-    return fmt::formatter<int>::format((int)state, ctx);
-  }
-};
-template <> struct fmt::formatter<AvahiLookupResultFlags> : fmt::formatter<int> {
-  auto format(AvahiLookupResultFlags flag, fmt::format_context &ctx) {
-    return fmt::formatter<int>::format((int)flag, ctx);
-  }
-};
-
 static void entry_group_callback(AvahiEntryGroup *g, AvahiEntryGroupState state,
                                  AVAHI_GCC_UNUSED void *userdata) {
   // NOLINTNEXTLINE
@@ -501,7 +475,7 @@ void rtpmidid::mdns_rtpmidi_t::browse_callback(const browse_callback_s &data) {
                              : "ALL_FOR_NOW");
     break;
   default:
-    WARNING("AVAHI unknown event: %s", data.event);
+    WARNING("AVAHI unknown event: {}", data.event);
   }
 }
 
@@ -653,5 +627,85 @@ void rtpmidid::mdns_rtpmidi_t::remove_announcement(const std::string &name,
             [name](const remote_announcement_t &t) { return name == t.name; }),
         remote_announcements.end());
     remove_event(name, address, std::to_string(port));
+  }
+}
+
+auto format_as(const AvahiWatchEvent ev) {
+  switch (ev) {
+  case AVAHI_WATCH_IN:
+    return "AVAHI_WATCH_IN";
+  case AVAHI_WATCH_OUT:
+    return "AVAHI_WATCH_OUT";
+  case AVAHI_WATCH_ERR:
+    return "AVAHI_WATCH_ERR";
+  case AVAHI_WATCH_HUP:
+    return "AVAHI_WATCH_HUP";
+  default:
+    return "AVAHI_WATCH_UNKNOWN";
+  }
+}
+
+auto format_as(const AvahiBrowserEvent ev) {
+  switch (ev) {
+  case AVAHI_BROWSER_NEW:
+    return "AVAHI_BROWSER_NEW";
+  case AVAHI_BROWSER_REMOVE:
+    return "AVAHI_BROWSER_REMOVE";
+  case AVAHI_BROWSER_ALL_FOR_NOW:
+    return "AVAHI_BROWSER_ALL_FOR_NOW";
+  case AVAHI_BROWSER_CACHE_EXHAUSTED:
+    return "AVAHI_BROWSER_CACHE_EXHAUSTED";
+  case AVAHI_BROWSER_FAILURE:
+    return "AVAHI_BROWSER_FAILURE";
+  default:
+    return "AVAHI_BROWSER_UNKNOWN";
+  }
+}
+
+auto format_as(const AvahiEntryGroupState state) {
+  switch (state) {
+  case AVAHI_ENTRY_GROUP_UNCOMMITED:
+    return "AVAHI_ENTRY_GROUP_UNCOMMITED";
+  case AVAHI_ENTRY_GROUP_REGISTERING:
+    return "AVAHI_ENTRY_GROUP_REGISTERING";
+  case AVAHI_ENTRY_GROUP_ESTABLISHED:
+    return "AVAHI_ENTRY_GROUP_ESTABLISHED";
+  case AVAHI_ENTRY_GROUP_COLLISION:
+    return "AVAHI_ENTRY_GROUP_COLLISION";
+  case AVAHI_ENTRY_GROUP_FAILURE:
+    return "AVAHI_ENTRY_GROUP_FAILURE";
+  default:
+    return "AVAHI_ENTRY_GROUP_UNKNOWN";
+  }
+}
+auto format_as(const AvahiClientState state) {
+  switch (state) {
+  case AVAHI_CLIENT_S_RUNNING:
+    return "AVAHI_CLIENT_S_RUNNING";
+  case AVAHI_CLIENT_S_REGISTERING:
+    return "AVAHI_CLIENT_S_REGISTERING";
+  case AVAHI_CLIENT_S_COLLISION:
+    return "AVAHI_CLIENT_S_COLLISION";
+  case AVAHI_CLIENT_FAILURE:
+    return "AVAHI_CLIENT_FAILURE";
+  default:
+    return "AVAHI_CLIENT_UNKNOWN";
+  }
+}
+
+auto format_as(const AvahiLookupResultFlags flag) {
+  switch (flag) {
+  case AVAHI_LOOKUP_RESULT_CACHED:
+    return "AVAHI_LOOKUP_RESULT_CACHED";
+  case AVAHI_LOOKUP_RESULT_WIDE_AREA:
+    return "AVAHI_LOOKUP_RESULT_WIDE_AREA";
+  case AVAHI_LOOKUP_RESULT_MULTICAST:
+    return "AVAHI_LOOKUP_RESULT_MULTICAST";
+  case AVAHI_LOOKUP_RESULT_LOCAL:
+    return "AVAHI_LOOKUP_RESULT_LOCAL";
+  case AVAHI_LOOKUP_RESULT_OUR_OWN:
+    return "AVAHI_LOOKUP_RESULT_OUR_OWN";
+  default:
+    return "AVAHI_LOOKUP_RESULT_UNKNOWN";
   }
 }

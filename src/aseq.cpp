@@ -670,3 +670,57 @@ fmt::appender fmt::formatter<rtpmididns::aseq_t::connection_t>::format(
       fmt::format("connection_t[{}, {} -> {}]", c.connected, c.from, c.to);
   return formatter<fmt::string_view>::format(name, ctx);
 }
+
+const char *format_as(const snd_seq_event_type type) {
+  switch (type) {
+#define CASE(x)                                                                \
+  case x:                                                                      \
+    return #x
+    CASE(SND_SEQ_EVENT_SYSTEM);
+    CASE(SND_SEQ_EVENT_RESULT);
+    CASE(SND_SEQ_EVENT_NOTE);
+    CASE(SND_SEQ_EVENT_NOTEON);
+    CASE(SND_SEQ_EVENT_NOTEOFF);
+    CASE(SND_SEQ_EVENT_KEYPRESS);
+    CASE(SND_SEQ_EVENT_CONTROLLER);
+    CASE(SND_SEQ_EVENT_PGMCHANGE);
+    CASE(SND_SEQ_EVENT_CHANPRESS);
+    CASE(SND_SEQ_EVENT_PITCHBEND);
+    CASE(SND_SEQ_EVENT_CONTROL14);
+    CASE(SND_SEQ_EVENT_NONREGPARAM);
+    CASE(SND_SEQ_EVENT_REGPARAM);
+    CASE(SND_SEQ_EVENT_SONGPOS);
+    CASE(SND_SEQ_EVENT_SONGSEL);
+    CASE(SND_SEQ_EVENT_QFRAME);
+    CASE(SND_SEQ_EVENT_TIMESIGN);
+    CASE(SND_SEQ_EVENT_KEYSIGN);
+    CASE(SND_SEQ_EVENT_START);
+    CASE(SND_SEQ_EVENT_CONTINUE);
+    CASE(SND_SEQ_EVENT_STOP);
+    CASE(SND_SEQ_EVENT_CLOCK);
+    CASE(SND_SEQ_EVENT_SENSING);
+    CASE(SND_SEQ_EVENT_PORT_SUBSCRIBED);
+    CASE(SND_SEQ_EVENT_PORT_UNSUBSCRIBED);
+    CASE(SND_SEQ_EVENT_USR0);
+    CASE(SND_SEQ_EVENT_USR1);
+    CASE(SND_SEQ_EVENT_USR2);
+    CASE(SND_SEQ_EVENT_USR3);
+    CASE(SND_SEQ_EVENT_USR4);
+    CASE(SND_SEQ_EVENT_USR5);
+    CASE(SND_SEQ_EVENT_USR6);
+    CASE(SND_SEQ_EVENT_USR7);
+    CASE(SND_SEQ_EVENT_USR8);
+    CASE(SND_SEQ_EVENT_USR9);
+    CASE(SND_SEQ_EVENT_SYSEX);
+    CASE(SND_SEQ_EVENT_BOUNCE);
+    CASE(SND_SEQ_EVENT_USR_VAR0);
+    CASE(SND_SEQ_EVENT_USR_VAR1);
+    CASE(SND_SEQ_EVENT_USR_VAR2);
+    CASE(SND_SEQ_EVENT_USR_VAR3);
+    CASE(SND_SEQ_EVENT_USR_VAR4);
+    CASE(SND_SEQ_EVENT_NONE);
+#undef CASE
+  default:
+    return "Unknown";
+  }
+}

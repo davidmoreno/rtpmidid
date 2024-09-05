@@ -58,7 +58,7 @@ public:
     // NOLINTNEXTLINE
     connection_t(const std::shared_ptr<aseq_t> &aseq_, const port_t &from_,
                  const port_t &to_)
-        : aseq(aseq_), from(from_), to(to_){};
+        : aseq(aseq_), from(from_), to(to_) {};
     connection_t(const connection_t &other) = delete;
     connection_t(connection_t &&other) noexcept
         : aseq(other.aseq), from(other.from), to(other.to) {
@@ -187,14 +187,4 @@ struct fmt::formatter<rtpmididns::aseq_t::connection_t>
                        format_context &ctx) const;
 };
 
-// template <>
-// struct fmt::formatter<snd_seq_event_type>
-//     : formatter<fmt::string_view> {
-//   fmt::appender format(const snd_seq_event_type &c,
-//                        format_context &ctx);
-// };
-template <> struct fmt::formatter<snd_seq_event_type> : fmt::formatter<int> {
-  auto format(snd_seq_event_type type, fmt::format_context &ctx) {
-    return fmt::formatter<int>::format((int)type, ctx);
-  }
-};
+const char *format_as(const snd_seq_event_type type);
