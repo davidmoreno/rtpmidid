@@ -161,7 +161,7 @@ public:
 template <>
 struct fmt::formatter<rtpmidid::rtppeer_t::status_e>
     : formatter<fmt::string_view> {
-  auto format(rtpmidid::rtppeer_t::status_e c, format_context &ctx) {
+  auto format(rtpmidid::rtppeer_t::status_e c, format_context &ctx) const {
     fmt::string_view name = "UNKNOWN";
     switch (c) {
     case rtpmidid::rtppeer_t::status_e::NOT_CONNECTED:
@@ -208,7 +208,7 @@ struct fmt::formatter<rtpmidid::rtppeer_t::status_e>
 template <>
 struct fmt::formatter<rtpmidid::rtppeer_t::port_e>
     : formatter<fmt::string_view> {
-  auto format(rtpmidid::rtppeer_t::port_e c, format_context &ctx) {
+  auto format(rtpmidid::rtppeer_t::port_e c, format_context &ctx) const {
     const char *name = "UNKNOWN"; // NOLINT
     switch (c) {
     case rtpmidid::rtppeer_t::port_e::MIDI_PORT:

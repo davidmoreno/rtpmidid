@@ -20,7 +20,7 @@
 #include <fmt/format.h>
 
 fmt::appender fmt::formatter<rtpmididns::settings_t::alsa_announce_t>::format(
-    const rtpmididns::settings_t::alsa_announce_t &data, format_context &ctx) {
+    const rtpmididns::settings_t::alsa_announce_t &data, format_context &ctx) const {
 
   return fmt::format_to(ctx.out(), "[alsa_announce_t {}]", data.name);
 }
@@ -28,7 +28,7 @@ fmt::appender fmt::formatter<rtpmididns::settings_t::alsa_announce_t>::format(
 fmt::appender
 fmt::formatter<std::vector<rtpmididns::settings_t::alsa_announce_t>>::format(
     const std::vector<rtpmididns::settings_t::alsa_announce_t> &data,
-    format_context &ctx) {
+    format_context &ctx) const {
   std::string result = "[";
   for (auto &item : data) {
     result += fmt::format("[{}] ", item.name);
@@ -40,7 +40,7 @@ fmt::formatter<std::vector<rtpmididns::settings_t::alsa_announce_t>>::format(
 fmt::appender
 fmt::formatter<rtpmididns::settings_t::rtpmidi_announce_t>::format(
     const rtpmididns::settings_t::rtpmidi_announce_t &data,
-    format_context &ctx) {
+    format_context &ctx) const {
 
   return fmt::format_to(ctx.out(), "[rtpmidi_announce_t {} {}]", data.name,
                         data.port);
@@ -49,7 +49,7 @@ fmt::formatter<rtpmididns::settings_t::rtpmidi_announce_t>::format(
 fmt::appender
 fmt::formatter<std::vector<rtpmididns::settings_t::rtpmidi_announce_t>>::format(
     const std::vector<rtpmididns::settings_t::rtpmidi_announce_t> &data,
-    format_context &ctx) {
+    format_context &ctx) const {
   std::string result = "[";
   for (auto &item : data) {
     result += fmt::format("[rtpmidi_announce_t {} {}] ", item.name, item.port);
@@ -59,7 +59,7 @@ fmt::formatter<std::vector<rtpmididns::settings_t::rtpmidi_announce_t>>::format(
 }
 
 fmt::appender fmt::formatter<rtpmididns::settings_t::connect_to_t>::format(
-    const rtpmididns::settings_t::connect_to_t &data, format_context &ctx) {
+    const rtpmididns::settings_t::connect_to_t &data, format_context &ctx) const {
 
   return fmt::format_to(ctx.out(), "[connect_to_t {} {} {}]", data.hostname,
                         data.port, data.name);
@@ -68,7 +68,7 @@ fmt::appender fmt::formatter<rtpmididns::settings_t::connect_to_t>::format(
 fmt::appender
 fmt::formatter<std::vector<rtpmididns::settings_t::connect_to_t>>::format(
     const std::vector<rtpmididns::settings_t::connect_to_t> &data,
-    format_context &ctx) {
+    format_context &ctx) const {
   std::string result = "[";
   for (auto &item : data) {
     result += fmt::format("[connect_to_t {} {} {}] ", item.hostname, item.port,
@@ -79,7 +79,7 @@ fmt::formatter<std::vector<rtpmididns::settings_t::connect_to_t>>::format(
 }
 
 fmt::appender fmt::formatter<rtpmididns::settings_t>::format(
-    const rtpmididns::settings_t &data, format_context &ctx) {
+    const rtpmididns::settings_t &data, format_context &ctx) const {
 #if FMT_VERSION > 90000
   return fmt::format_to(ctx.out(),
                         "[settings_t: alsa_name: {}, alsa_network: {}, "
@@ -98,7 +98,7 @@ fmt::appender fmt::formatter<rtpmididns::settings_t>::format(
 fmt::appender
 fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_t>::format(
     const rtpmididns::settings_t::alsa_hw_auto_export_t &data,
-    format_context &ctx) {
+    format_context &ctx) const {
   std::string result = "[";
   if (data.name_positive_regex.has_value()) {
     result += fmt::format("name_positive_regex: {} ", data.name_positive);
@@ -114,7 +114,7 @@ fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_t>::format(
 auto
 fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_type_e>::format(
     const rtpmididns::settings_t::alsa_hw_auto_export_type_e &data,
-    format_context &ctx) {
+    format_context &ctx) const {
   std::string result = "[";
   if (data == rtpmididns::settings_t::alsa_hw_auto_export_type_e::NONE) {
     result += "NONE";
