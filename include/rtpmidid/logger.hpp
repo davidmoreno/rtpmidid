@@ -116,9 +116,19 @@ inline void log(const char *fullpath, int lineno, LogLevel loglevel,
     --filename; // NOLINT
   ++filename;   // NOLINT
 
-  auto n = fmt::format_to_n(buffer.data(), buffer.size(), args...);
-  *n.out = '\0';
+  try {
+    auto n = fmt::format_to_n(buffer.data(), buffer.size(), args...);
+    *n.out = '\0';
 
+  } catch (const std::exception &e) {
+    auto message =
+        std::get<0>(std::forward_as_tuple(std::forward<Args>(args)...));
+    auto n = fmt::format_to_n(buffer.data(), buffer.size(),
+                              "Error formatting \"{}\" log message: {}",
+                              message, e.what());
+    *n.out = '\0';
+    loglevel = ERROR;
+  }
   __logger.log(filename, lineno, loglevel, buffer.data());
 }
 
