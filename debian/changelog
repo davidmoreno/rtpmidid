@@ -1,8 +1,8 @@
-rtpmidid (23.12~55~gd667d) unstable; urgency=medium
+rtpmidid (23.12~166~gaf4de) unstable; urgency=medium
 
   * Development version. Check `git log`.
 
- -- David Moreno <dmoreno@coralbits.com>  Sat, 06 Jul 2024 23:56:01 +0200
+ -- David Moreno <dmoreno@coralbits.com>  Fri, 06 Sep 2024 23:27:56 +0200
 
 rtpmidid (23.12b2) unstable; urgency=medium
 
