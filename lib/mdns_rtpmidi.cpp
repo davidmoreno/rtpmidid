@@ -459,9 +459,9 @@ void rtpmidid::mdns_rtpmidi_t::browse_callback(const browse_callback_s &data) {
     }
     break;
   case AVAHI_BROWSER_REMOVE:
-    INFO("(Browser) REMOVE: service=\"{}\" of type=\"{}\" in domain={} "
+    INFO("{} REMOVE: service=\"{}\" of type=\"{}\" in domain={} "
          "flags={:08X} ",
-         data.name, data.type, data.domain, data.flags);
+         data.event, data.name, data.type, data.domain, data.flags);
     if (data.flags & AVAHI_LOOKUP_RESULT_OUR_OWN) {
       DEBUG("Received own announcement removal. Ignore.");
       return;
@@ -470,9 +470,7 @@ void rtpmidid::mdns_rtpmidi_t::browse_callback(const browse_callback_s &data) {
     break;
   case AVAHI_BROWSER_ALL_FOR_NOW:
   case AVAHI_BROWSER_CACHE_EXHAUSTED:
-    INFO("(Browser) {}", data.event == AVAHI_BROWSER_CACHE_EXHAUSTED
-                             ? "CACHE_EXHAUSTED"
-                             : "ALL_FOR_NOW");
+    INFO("{}", data.event);
     break;
   default:
     WARNING("AVAHI unknown event: {}", data.event);
