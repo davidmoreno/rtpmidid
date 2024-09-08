@@ -188,10 +188,9 @@ void rtppeer_t::parse_command_in(io_bytes_reader &buffer, port_e port) {
         protocol);
   }
 
-  INFO("Got connection request from {}, initiator_id: {:X} ({}) ssrc: {:X}, "
-       "name: {}, at port {}",
-       remote_name, initiator_id, this->initiator_id == initiator_id,
-       remote_ssrc, remote_name, port);
+  INFO("Got connection request from remote_name=\"{}\", initiator_id={:X}  "
+       "ssrc={:X}, local_name=\"{}\", at port={}",
+       remote_name, initiator_id, remote_ssrc, remote_name, port);
 
   io_bytes_writer_static<128> response;
   response.write_uint16(0xFFFF);
