@@ -23,8 +23,7 @@
 #include <string>
 
 // NOLINTNEXTLINE
-#define TEST(fn)                                                               \
-  { #fn, fn }
+#define TEST(fn) {#fn, fn}
 
 class test_exception : public std::exception {
 public:
@@ -147,6 +146,17 @@ public:
     ERROR("{} != {}", A, B);                                                   \
     throw test_exception(__FILE__, __LINE__,                                   \
                          "Assert [" #A " == " #B "] failed");                  \
+  }
+// NOLINTNEXTLINE
+#define ASSERT_IN(A, ...)                                                      \
+  {                                                                            \
+    auto set = {__VA_ARGS__};                                                  \
+    auto value = A;                                                            \
+    if (std::find(set.begin(), set.end(), A) == set.end()) {                   \
+      ERROR("{} not in {}", value, "{" #__VA_ARGS__ "}");                      \
+      throw test_exception(__FILE__, __LINE__,                                 \
+                           "Assert [" #A " in " #__VA_ARGS__ "] failed");      \
+    }                                                                          \
   }
 // NOLINTNEXTLINE
 #define ASSERT_NOT_EQUAL(A, B)                                                 \

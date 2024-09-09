@@ -61,7 +61,7 @@ void test_network_address_list() {
   // Just get first
   auto first = localhost_resolutions.get_first();
   ASSERT_EQUAL(first.hostname(), "localhost");
-  ASSERT_EQUAL(first.ip(), "127.0.0.1");
+  ASSERT_IN(first.ip(), "127.0.0.1", "::1");
 
   // Move first
   localhost_resolutions =
