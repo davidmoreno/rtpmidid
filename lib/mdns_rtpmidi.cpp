@@ -430,7 +430,7 @@ void rtpmidid::mdns_rtpmidi_t::resolve_callback(
                           data.address);
     DEBUG("Discovered service=\"{}\" in host={}:{} ip={} flags={:04X}",
           data.name, data.host_name, data.port, avahi_address_str.data(),
-          data.flags);
+          (int)data.flags);
 
     // FIXME: address is not correct for interface (!), so is not unique, how to
     // make unique? or filter on interface?
@@ -461,7 +461,7 @@ void rtpmidid::mdns_rtpmidi_t::browse_callback(const browse_callback_s &data) {
   case AVAHI_BROWSER_REMOVE:
     INFO("{} REMOVE: service=\"{}\" of type=\"{}\" in domain={} "
          "flags={:08X} ",
-         data.event, data.name, data.type, data.domain, data.flags);
+         data.event, data.name, data.type, data.domain, (int)data.flags);
     if (data.flags & AVAHI_LOOKUP_RESULT_OUR_OWN) {
       DEBUG("Received own announcement removal. Ignore.");
       return;
