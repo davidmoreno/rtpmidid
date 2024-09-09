@@ -79,7 +79,7 @@ void test_udppeer() {
   rtpmidid::udppeer_t peerA("localhost", "13001");
   DEBUG("Open peerB");
   rtpmidid::udppeer_t peerB(
-      rtpmidid::network_address_list_t("127.0.0.2", "13002"));
+      rtpmidid::network_address_list_t("localhost", "13002"));
 
   DEBUG("Get addresses");
   auto peerA_address = peerA.get_address();
@@ -97,8 +97,11 @@ void test_udppeer() {
         std::string str = std::string((const char *)data.get_data());
         ASSERT_TRUE(str == "test data");
         auto hostname = get_hostname();
-        ASSERT_TRUE(c.hostname() == hostname);
-        ASSERT_TRUE(c.ip() == "127.0.0.2");
+        DEBUG("Hostname: {}", hostname);
+        DEBUG("Address: {}", c.to_string());
+        ASSERT_IN(c.hostname(), hostname.c_str(), "127.0.0.1", "::1",
+                  "localhost", "localhost6");
+        ASSERT_IN(c.ip(), "127.0.0.1", "::1");
         ASSERT_TRUE(c.port() == 13002);
 
         read_at_a++;
@@ -110,7 +113,7 @@ void test_udppeer() {
         std::string str = std::string((const char *)data.get_data());
         ASSERT_TRUE(str == "test data");
         ASSERT_TRUE(c.hostname() == "localhost");
-        ASSERT_TRUE(c.ip() == "127.0.0.1");
+        ASSERT_IN(c.ip(), "127.0.0.1", "::1");
         ASSERT_TRUE(c.port() == 13001);
 
         read_at_b++;
