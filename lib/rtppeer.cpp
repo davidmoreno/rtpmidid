@@ -668,14 +668,23 @@ void rtppeer_t::send_midi(const io_bytes_reader &events) {
   buffer.write_uint32(timestamp);
   buffer.write_uint32(local_ssrc);
 
+  auto events_size = events.size();
   // Now midi
-  if (events.size() < 16) {
+  if (events_size < 16) {
     // Short header, 1 octet
-    buffer.write_uint8(events.size());
+    buffer.write_uint8(events_size);
   } else {
     // Long header, 2 octets
-    buffer.write_uint8((events.size() & 0x0f00) >> 8 | 0x80);
-    buffer.write_uint8(events.size() & 0xff);
+    DEBUG("Send long message: message_size={} bytes", events_size);
+    if (events_size > 1400) {
+      WARNING("MIDI message too long, may fail on UDP. message_size={} . If "
+              "find any problem report an issue to "
+              "http://github.com/davidmoreno/rtpmidid/ .",
+              events_size);
+    }
+
+    buffer.write_uint8((events_size & 0x0f00) >> 8 | 0x80);
+    buffer.write_uint8(events_size & 0xff);
   }
 
   buffer.copy_from(events);
