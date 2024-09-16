@@ -67,6 +67,14 @@ struct settings_t {
   };
 
   alsa_hw_auto_export_t alsa_hw_auto_export;
+
+  struct devmidi_t {
+    std::string device;
+    std::string name;
+    connect_to_t connect_to;
+  };
+
+  std::vector<devmidi_t> devmidi;
 };
 
 extern settings_t settings; // NOLINT
@@ -135,5 +143,12 @@ template <>
 struct fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_type_e>
     : formatter<fmt::string_view> {
   auto format(const rtpmididns::settings_t::alsa_hw_auto_export_type_e &data,
+              format_context &ctx) const;
+};
+
+template <>
+struct fmt::formatter<std::vector<rtpmididns::settings_t::devmidi_t>>
+    : formatter<fmt::string_view> {
+  auto format(const std::vector<rtpmididns::settings_t::devmidi_t> &data,
               format_context &ctx) const;
 };

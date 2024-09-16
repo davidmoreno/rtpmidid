@@ -20,6 +20,7 @@
 #include "control_socket.hpp"
 #include "factory.hpp"
 #include "hwautoannounce.hpp"
+#include "midipeer.hpp"
 #include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "rtpmidid/poller.hpp"
@@ -96,6 +97,20 @@ int main(int argc, char **argv) {
       router->add_peer(rtpmididns::make_local_alsa_listener(
           router, connect_to.name, connect_to.hostname, connect_to.port, aseq,
           connect_to.local_udp_port));
+    }
+    for (const auto &devmidi : rtpmididns::settings.devmidi) {
+      auto devmidi_peer =
+          rtpmididns::make_mididev_peer(devmidi.name, devmidi.device);
+      router->add_peer(devmidi_peer);
+      auto rtpclient_peer = rtpmididns::make_network_rtpmidi_client(
+          devmidi.connect_to.name, devmidi.connect_to.hostname,
+          devmidi.connect_to.port);
+      router->add_peer(rtpclient_peer);
+
+      if (!devmidi.connect_to.hostname.empty()) {
+        router->connect(devmidi_peer->peer_id, rtpclient_peer->peer_id);
+        router->connect(rtpclient_peer->peer_id, devmidi_peer->peer_id);
+      }
     }
 
     hwautoannounce.emplace(aseq, router);
