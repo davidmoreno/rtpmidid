@@ -43,7 +43,8 @@ public:
 
   rtpmidid::connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
 
-  network_rtpmidi_listener_t(const std::string &name);
+  network_rtpmidi_listener_t(const std::string &name,
+                             const std::string &udp_port);
   ~network_rtpmidi_listener_t() override;
   const char *get_type() const override { return "network_rtpmidi_listener_t"; }
   void send_midi(midipeer_id_t from, const mididata_t &) override;

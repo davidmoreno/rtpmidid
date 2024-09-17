@@ -65,6 +65,8 @@ json_t local_rawmidi_peer_t::status() {
   json_t j{
       {"name", name},
       {"device", device},
+      {"status", fd >= 0 ? "open" : "closed"}
+      //
   };
   return j;
 }

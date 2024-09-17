@@ -87,8 +87,9 @@ make_network_rtpmidi_peer(std::shared_ptr<rtpmidid::rtppeer_t> peer) {
 }
 
 std::shared_ptr<midipeer_t>
-make_network_rtpmidi_listener(const std::string &name) {
-  return std::make_shared<network_rtpmidi_listener_t>(name);
+make_network_rtpmidi_listener(const std::string &name,
+                              const std::string &udp_port) {
+  return std::make_shared<network_rtpmidi_listener_t>(name, udp_port);
 }
 
 std::shared_ptr<midipeer_t> make_rawmidi_peer(const std::string &name,

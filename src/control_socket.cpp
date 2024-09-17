@@ -274,7 +274,8 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
          control.router->add_peer(peer);
          return peer->status();
        } else if (type == "network_rtpmidi_listener_t") {
-         auto peer = make_network_rtpmidi_listener(params["name"]);
+         auto peer =
+             make_network_rtpmidi_listener(params["name"], params["udp_port"]);
          control.router->add_peer(peer);
          return peer->status();
        } else if (type == "local_alsa_peer_t") {
@@ -283,23 +284,21 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
          return peer->status();
        } else if (type == "list") {
          return json_t{
-             {"list",
-              {
-                  {"local_rawmidi_t",
-                   {{"name", "Name of the peer"},
-                    {"device", "Name of the device"}}},
-                  //
-                  {"network_rtpmidi_client_t",
-                   {{"name", "Name of the peer"},
-                    {"hostname", "Hostname of the server"},
-                    {"port", "Port of the server"}}},
-                  //
-                  {"network_rtpmidi_listener_t",
-                   {{"name", "Name of the peer"}}},
-                  //
-                  {"local_alsa_peer_t", {{"name", "Name of the peer"}}}
-                  //
-              }}};
+             {"local_rawmidi_t",
+              {{"name", "Name of the peer"}, {"device", "Path to the device"}}},
+             //
+             {"network_rtpmidi_client_t",
+              {{"name", "Name of the peer"},
+               {"hostname", "Hostname of the server"},
+               {"port", "Port of the server"}}},
+             //
+             {"network_rtpmidi_listener_t",
+              {{"name", "Name of the peer"},
+               {"udp_port", "UDP port to listen [random]"}}},
+             //
+             {"local_alsa_peer_t", {{"name", "Name of the peer"}}}
+             //
+         };
 
        } else {
          ERROR("Unknown peer type or non construtible yet: {}", type);

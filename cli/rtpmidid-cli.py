@@ -219,6 +219,11 @@ class Top:
                 "command": self.command_expand_peers,
                 "help": "Toggle expand peers",
             },
+            {
+                "key": "n",
+                "command": self.command_new_peer,
+                "help": "Create new peer",
+            },
             {"key": "tab", "command": self.command_switch_tab, "help": "Switch tabs"},
         ]
 
@@ -314,6 +319,25 @@ class Top:
     def command_expand_peers(self):
         self.expand_peers = not self.expand_peers
 
+    def command_new_peer(self):
+        data = self.conn.command(
+            {"method": "router.create", "params": {"type": "list"}}
+        )
+
+        name = self.dialog_select("Type of peer", list(data["result"].keys()))
+        if not name:
+            return
+        params = {"type": name}
+        for key, description in data["result"][name].items():
+            value = self.dialog_ask(description)
+            if value is None:
+                return
+            params[key] = value
+
+        ret = self.conn.command({"method": "router.create", "params": params})
+        if "error" in ret:
+            self.dialog(ret["error"], background=self.ANSI_BG_RED)
+
     def command_switch_tab(self):
         if self.tab == self.Tabs.ROUTES:
             self.tab = self.Tabs.MDNS
@@ -376,13 +400,16 @@ class Top:
             self.print(" " * width)
         self.print(self.ANSI_RESET)
 
-    def dialog(self, text, bottom="Press any key", wait_for_key=True):
+    def dialog(self, text, bottom="Press any key", wait_for_key=True, background=None):
         width = max(len(x) for x in text.split("\n")) + 2
         width_2 = width // 2
         start_x = self.width // 2 - width_2
         start_y = self.height // 3
 
-        self.print(self.ANSI_BG_PURPLE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD)
+        if not background:
+            background = self.ANSI_BG_PURPLE
+
+        self.print(background + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD)
         self.terminal_goto(start_x, start_y)
         # self.print_padding("", width)
         # top border, width, using unicode table characters
@@ -455,6 +482,66 @@ class Top:
         self.print_all()
 
         return answer
+
+    def dialog_select(self, title: str, options: list[str]):
+        width = max(len(x) for x in options) + 2
+        if width < len(title) + 2:
+            width = len(title) + 2
+        if width < 20:
+            width = 20
+        width_2 = width // 2
+        start_x = self.width // 2 - width_2
+        start_y = self.height // 3
+
+        selected = 0
+
+        def print_select():
+            # borders and title, then the list with bakc background and selected on white
+            self.print(self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD)
+            self.terminal_goto(start_x, start_y)
+            self.print_padding("", width)
+            self.terminal_goto(start_x, start_y + 1)
+            self.print_padding(" " + title, width)
+            self.terminal_goto(start_x, start_y + 2)
+            self.print_padding("", width)
+            for idx, option in enumerate(options):
+                self.terminal_goto(start_x, start_y + 3 + idx)
+                if idx == selected:
+                    self.print(self.ANSI_BG_WHITE + self.ANSI_TEXT_BLUE)
+                else:
+                    self.print(self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE)
+                self.print_padding(f" {option}", width)
+
+            self.print(self.ANSI_BG_BLUE + self.ANSI_TEXT_WHITE)
+            self.terminal_goto(start_x, start_y + 3 + len(options))
+            self.print_padding("", width)
+            self.print(self.ANSI_RESET + self.ANSI_BG_WHITE + self.ANSI_TEXT_BLUE)
+            self.flush()
+
+        print_select()
+        while True:
+            key = self.wait_for_input(timeout=10000000)
+            if key is None:
+                return None
+            elif key == "escape":
+                return None
+            elif key == "q":
+                return None
+            elif key == "\n":
+                break
+            elif key == "up":
+                selected -= 1
+                if selected < 0:
+                    selected = 0
+            elif key == "down":
+                selected += 1
+                if selected >= len(options):
+                    selected = len(options) - 1
+            print_select()
+        self.print(self.ANSI_RESET)
+        self.print_all()
+
+        return options[selected]
 
     def print_padding(self, text, count=None):
         if count is None:
