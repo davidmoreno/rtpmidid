@@ -298,13 +298,11 @@ class Top:
         sys.exit(0)
 
     def command_kill(self):
-        data = self.status["router"]
-        current_id = data[self.selected_row_index]["id"]
+        current_id = self.current_row["id"]
         self.conn.command({"method": "router.remove", "params": [current_id]})
 
     def command_connect(self):
-        data = self.status["router"]
-        current_id = data[self.selected_row_index]["id"]
+        current_id = self.current_row["id"]
         peer_id = self.dialog_ask("Connect to which peer id?")
         if not peer_id:
             return
