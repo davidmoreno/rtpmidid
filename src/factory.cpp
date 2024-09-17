@@ -20,7 +20,7 @@
 #include "local_alsa_listener.hpp"
 #include "local_alsa_multi_listener.hpp"
 #include "local_alsa_peer.hpp"
-#include "local_devmidi_peer.hpp"
+#include "local_rawmidi_peer.hpp"
 #include "midipeer.hpp"
 #include "network_rtpmidi_client.hpp"
 #include "network_rtpmidi_listener.hpp"
@@ -91,9 +91,9 @@ make_network_rtpmidi_listener(const std::string &name) {
   return std::make_shared<network_rtpmidi_listener_t>(name);
 }
 
-std::shared_ptr<midipeer_t> make_mididev_peer(const std::string &name,
+std::shared_ptr<midipeer_t> make_rawmidi_peer(const std::string &name,
                                               const std::string &device) {
-  return std::make_shared<local_devmidi_peer_t>(name, device);
+  return std::make_shared<local_rawmidi_peer_t>(name, device);
 }
 
 } // namespace rtpmididns

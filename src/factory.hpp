@@ -65,7 +65,7 @@ make_local_alsa_listener(std::shared_ptr<midirouter_t> &router,
                          const std::string &udp_port);
 
 //
-std::shared_ptr<midipeer_t> make_mididev_peer(const std::string &name,
+std::shared_ptr<midipeer_t> make_rawmidi_peer(const std::string &name,
                                               const std::string &device);
 
 } // namespace rtpmididns

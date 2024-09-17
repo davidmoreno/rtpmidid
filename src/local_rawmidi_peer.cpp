@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "local_devmidi_peer.hpp"
+#include "local_rawmidi_peer.hpp"
 #include "json.hpp"
 #include "mididata.hpp"
 #include "midirouter.hpp"
@@ -29,7 +29,7 @@
 
 using namespace rtpmididns;
 
-local_devmidi_peer_t::local_devmidi_peer_t(const std::string &name_,
+local_rawmidi_peer_t::local_rawmidi_peer_t(const std::string &name_,
                                            const std::string &device_)
     : device(device_), name(name_) {
   INFO("Creating devmidi peer=\"{}\", device={}", name, device);
@@ -55,13 +55,13 @@ local_devmidi_peer_t::local_devmidi_peer_t(const std::string &name_,
   }
 }
 
-local_devmidi_peer_t::~local_devmidi_peer_t() {
+local_rawmidi_peer_t::~local_rawmidi_peer_t() {
   if (fd >= 0) {
     close(fd);
   }
 }
 
-json_t local_devmidi_peer_t::status() {
+json_t local_rawmidi_peer_t::status() {
   json_t j{
       {"name", name},
       {"device", device},
@@ -69,7 +69,7 @@ json_t local_devmidi_peer_t::status() {
   return j;
 }
 
-void local_devmidi_peer_t::send_midi(midipeer_id_t from,
+void local_rawmidi_peer_t::send_midi(midipeer_id_t from,
                                      const mididata_t &data) {
   if (fd < 0) {
     return;
@@ -81,7 +81,7 @@ void local_devmidi_peer_t::send_midi(midipeer_id_t from,
   }
 }
 
-void local_devmidi_peer_t::read_midi() {
+void local_rawmidi_peer_t::read_midi() {
   if (fd < 0) {
     return;
   }

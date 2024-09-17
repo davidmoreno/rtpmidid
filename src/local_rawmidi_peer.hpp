@@ -27,8 +27,8 @@ namespace rtpmididns {
 /**
  * @short ALSA port that just receives data and send to another midipeer_t
  */
-class local_devmidi_peer_t : public midipeer_t {
-  NON_COPYABLE_NOR_MOVABLE(local_devmidi_peer_t);
+class local_rawmidi_peer_t : public midipeer_t {
+  NON_COPYABLE_NOR_MOVABLE(local_rawmidi_peer_t);
 
 public:
   std::string device;
@@ -36,12 +36,12 @@ public:
   int fd = -1;
   rtpmidid::poller_t::listener_t fd_listener;
 
-  local_devmidi_peer_t(const std::string &name, const std::string &device);
-  ~local_devmidi_peer_t() override;
+  local_rawmidi_peer_t(const std::string &name, const std::string &device);
+  ~local_rawmidi_peer_t() override;
 
   json_t status() override;
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   void read_midi();
-  const char *get_type() const override { return "local_devmidi_peer_t"; }
+  const char *get_type() const override { return "local_rawmidi_peer_t"; }
 };
 } // namespace rtpmididns

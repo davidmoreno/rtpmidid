@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
     }
     for (const auto &devmidi : rtpmididns::settings.devmidi) {
       auto devmidi_peer =
-          rtpmididns::make_mididev_peer(devmidi.name, devmidi.device);
+          rtpmididns::make_rawmidi_peer(devmidi.name, devmidi.device);
       router->add_peer(devmidi_peer);
       auto rtpclient_peer = rtpmididns::make_network_rtpmidi_client(
           devmidi.connect_to.name, devmidi.connect_to.hostname,
