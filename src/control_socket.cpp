@@ -204,7 +204,7 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
        return "ok";
      }},
     {"router.connect",
-     "Connects two peers at the router. Unidirectional conneciton.",
+     "Connects two peers at the router. Unidirectional connection.",
      [](control_socket_t &control, const json_t &params) {
        DEBUG("Params {}", params.dump());
        peer_id_t from_peer_id = params["from"];
@@ -259,6 +259,52 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
        control.router->add_peer(make_local_alsa_listener(
            control.router, name, hostname, port, control.aseq, "0"));
        return json_t{"ok"};
+     }},
+    {"router.create", "Create a new peer of the specific type and params",
+     [](control_socket_t &control, const json_t &params) {
+       DEBUG("Create peer: {}", params.dump());
+       std::string type = params["type"];
+       if (type == "local_rawmidi_t") {
+         auto peer = make_rawmidi_peer(params["name"], params["device"]);
+         control.router->add_peer(peer);
+         return peer->status();
+       } else if (type == "network_rtpmidi_client_t") {
+         auto peer = make_network_rtpmidi_client(
+             params["name"], params["hostname"], to_string(params["port"]));
+         control.router->add_peer(peer);
+         return peer->status();
+       } else if (type == "network_rtpmidi_listener_t") {
+         auto peer = make_network_rtpmidi_listener(params["name"]);
+         control.router->add_peer(peer);
+         return peer->status();
+       } else if (type == "local_alsa_peer_t") {
+         auto peer = make_local_alsa_peer(params["name"], control.aseq);
+         control.router->add_peer(peer);
+         return peer->status();
+       } else if (type == "list") {
+         return json_t{
+             {"list",
+              {
+                  {"local_rawmidi_t",
+                   {{"name", "Name of the peer"},
+                    {"device", "Name of the device"}}},
+                  //
+                  {"network_rtpmidi_client_t",
+                   {{"name", "Name of the peer"},
+                    {"hostname", "Hostname of the server"},
+                    {"port", "Port of the server"}}},
+                  //
+                  {"network_rtpmidi_listener_t",
+                   {{"name", "Name of the peer"}}},
+                  //
+                  {"local_alsa_peer_t", {{"name", "Name of the peer"}}}
+                  //
+              }}};
+
+       } else {
+         ERROR("Unknown peer type or non construtible yet: {}", type);
+         return json_t{{"error", "Unknown peer type"}};
+       }
      }},
     {"mdns.remove", "Delete a mdns announcement",
      [](control_socket_t &control, const json_t &params) {
