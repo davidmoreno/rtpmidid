@@ -40,7 +40,7 @@ void load_ini(const std::string &filename) {
   settings_t::rtpmidi_announce_t *rtpmidi_announce = nullptr;
   settings_t::alsa_announce_t *alsa_announce = nullptr;
   settings_t::connect_to_t *connect_to = nullptr;
-  settings_t::devmidi_t *devmidi = nullptr;
+  settings_t::rawmidi_t *rawmidi = nullptr;
 
   int lineno = 0;
   while (std::getline(fd, line)) {
@@ -83,9 +83,9 @@ void load_ini(const std::string &filename) {
           settings.connect_to.emplace_back();
           connect_to =
               settings.connect_to.data() + settings.connect_to.size() - 1;
-        } else if (section == "devmidi") {
-          settings.devmidi.emplace_back();
-          devmidi = settings.devmidi.data() + settings.devmidi.size() - 1;
+        } else if (section == "rawmidi") {
+          settings.rawmidi.emplace_back();
+          rawmidi = settings.rawmidi.data() + settings.rawmidi.size() - 1;
         } else {
           throw rtpmidid::exception("Invalid section: {}", section);
         }
@@ -184,17 +184,17 @@ void load_ini(const std::string &filename) {
       } else {
         throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
       }
-    } else if (section == "devmidi") {
+    } else if (section == "rawmidi") {
       if (key == "device") {
-        devmidi->device = value;
+        rawmidi->device = value;
       } else if (key == "name") {
-        devmidi->name = value;
+        rawmidi->name = value;
       } else if (key == "hostname") {
-        devmidi->connect_to.hostname = value;
+        rawmidi->connect_to.hostname = value;
       } else if (key == "port") {
-        devmidi->connect_to.port = value;
+        rawmidi->connect_to.port = value;
       } else if (key == "local_udp_port") {
-        devmidi->connect_to.local_udp_port = value;
+        rawmidi->connect_to.local_udp_port = value;
       } else {
         throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
       }

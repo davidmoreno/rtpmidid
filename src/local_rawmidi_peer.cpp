@@ -32,7 +32,7 @@ using namespace rtpmididns;
 local_rawmidi_peer_t::local_rawmidi_peer_t(const std::string &name_,
                                            const std::string &device_)
     : device(device_), name(name_) {
-  INFO("Creating devmidi peer=\"{}\", device={}", name, device);
+  INFO("Creating rawmidi peer=\"{}\", device={}", name, device);
   fd = open(device.c_str(), O_RDWR | O_NONBLOCK);
   if (fd < 0) {
     if (fd == ENOENT) {
@@ -42,7 +42,7 @@ local_rawmidi_peer_t::local_rawmidi_peer_t(const std::string &name_,
       }
     }
     if (fd < 0) {
-      ERROR("Error opening devmidi {}: {}", device, strerror(errno));
+      ERROR("Error opening rawmidi {}: {}", device, strerror(errno));
       return;
     }
   }
@@ -50,7 +50,7 @@ local_rawmidi_peer_t::local_rawmidi_peer_t(const std::string &name_,
     fd_listener =
         rtpmidid::poller.add_fd_in(fd, [this](int fd) { read_midi(); });
   } catch (const std::exception &e) {
-    ERROR("Error adding devmidi {}: {}. Will allow writing, no reading.",
+    ERROR("Error adding rawmidi {}: {}. Will allow writing, no reading.",
           device, e.what());
   }
 }
@@ -78,7 +78,7 @@ void local_rawmidi_peer_t::send_midi(midipeer_id_t from,
   }
   int ret = write(fd, data.start, data.size());
   if (ret < 0) {
-    ERROR("Error writing to devmidi {}: {}", device, strerror(errno));
+    ERROR("Error writing to rawmidi {}: {}", device, strerror(errno));
     WARNING("Will not try again.");
   }
 }
@@ -91,7 +91,7 @@ void local_rawmidi_peer_t::read_midi() {
   mididata_t data(adata.data(), adata.size());
   ssize_t r = read(fd, adata.data(), adata.size());
 
-  DEBUG("Reading from devmidi device={} size={}", device, r);
+  DEBUG("Reading from rawmidi device={} size={}", device, r);
   data.end = data.start + r;
   if (r <= 0) {
     return;

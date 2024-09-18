@@ -80,12 +80,12 @@ fmt::formatter<std::vector<rtpmididns::settings_t::connect_to_t>>::format(
   return fmt::format_to(ctx.out(), "{}", result);
 }
 
-auto fmt::formatter<std::vector<rtpmididns::settings_t::devmidi_t>>::format(
-    const std::vector<rtpmididns::settings_t::devmidi_t> &data,
+auto fmt::formatter<std::vector<rtpmididns::settings_t::rawmidi_t>>::format(
+    const std::vector<rtpmididns::settings_t::rawmidi_t> &data,
     format_context &ctx) const {
   std::string result = "[";
   for (auto &item : data) {
-    result += fmt::format("[devmidi device={} name={} {}] ", item.device,
+    result += fmt::format("[rawmidi device={} name={} {}] ", item.device,
                           item.name, item.connect_to);
   }
   result += "]";
@@ -99,11 +99,11 @@ fmt::appender fmt::formatter<rtpmididns::settings_t>::format(
                         "[settings_t: alsa_name: {}, alsa_network: {}, "
                         "control_filename: {}, rtpmidi_announces: {}, "
                         "alsa_announces: {}, connect_to: {}, "
-                        "alsa_hw_auto_export: {}, devmidi: {}]",
+                        "alsa_hw_auto_export: {}, rawmidi: {}]",
                         data.alsa_name, data.alsa_network,
                         data.control_filename, data.rtpmidi_announces,
                         data.alsa_announces, data.connect_to,
-                        data.alsa_hw_auto_export, data.devmidi);
+                        data.alsa_hw_auto_export, data.rawmidi);
 #else
   return fmt::format_to(ctx.out(), "[settings_t]");
 #endif
