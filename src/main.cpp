@@ -70,7 +70,7 @@ public:
   void setup() {
     aseq = std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
     if (rtpmididns::mdns.get() == nullptr)
-    rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>();
+      rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>();
     router = std::make_shared<rtpmididns::midirouter_t>();
     rtpmididns::control_socket_t control;
     control.router = router;
@@ -119,15 +119,19 @@ protected:
       auto rawmidi_peer =
           rtpmididns::make_rawmidi_peer(rawmidi.name, rawmidi.device);
       router->add_peer(rawmidi_peer);
-      auto rtpclient_peer = rtpmididns::make_network_rtpmidi_client(
-          rawmidi.connect_to.name, rawmidi.connect_to.hostname,
-          rawmidi.connect_to.port);
-      router->add_peer(rtpclient_peer);
+      std::shared_ptr<rtpmididns::midipeer_t> rtppeer;
 
-      if (!rawmidi.connect_to.hostname.empty()) {
-        router->connect(rawmidi_peer->peer_id, rtpclient_peer->peer_id);
-        router->connect(rtpclient_peer->peer_id, rawmidi_peer->peer_id);
+      if (rawmidi.hostname.empty()) {
+        rtppeer = rtpmididns::make_network_rtpmidi_listener(
+            rawmidi.name, rawmidi.remote_udp_port);
+      } else {
+        rtppeer = rtpmididns::make_network_rtpmidi_client(
+            rawmidi.name, rawmidi.hostname, rawmidi.remote_udp_port);
       }
+      router->add_peer(rtppeer);
+
+      router->connect(rawmidi_peer->peer_id, rtppeer->peer_id);
+      router->connect(rtppeer->peer_id, rawmidi_peer->peer_id);
     }
   }
 };

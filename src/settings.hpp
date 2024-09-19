@@ -71,7 +71,9 @@ struct settings_t {
   struct rawmidi_t {
     std::string device;
     std::string name;
-    connect_to_t connect_to;
+    std::string local_udp_port;
+    std::string remote_udp_port;
+    std::string hostname;
   };
 
   std::vector<rawmidi_t> rawmidi;

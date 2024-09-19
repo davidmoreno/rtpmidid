@@ -190,11 +190,11 @@ void load_ini(const std::string &filename) {
       } else if (key == "name") {
         rawmidi->name = value;
       } else if (key == "hostname") {
-        rawmidi->connect_to.hostname = value;
-      } else if (key == "port") {
-        rawmidi->connect_to.port = value;
+        rawmidi->hostname = value;
+      } else if (key == "remote_udp_port") {
+        rawmidi->remote_udp_port = value;
       } else if (key == "local_udp_port") {
-        rawmidi->connect_to.local_udp_port = value;
+        rawmidi->local_udp_port = value;
       } else {
         throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
       }

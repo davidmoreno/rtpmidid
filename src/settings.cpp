@@ -85,8 +85,10 @@ auto fmt::formatter<std::vector<rtpmididns::settings_t::rawmidi_t>>::format(
     format_context &ctx) const {
   std::string result = "[";
   for (auto &item : data) {
-    result += fmt::format("[rawmidi device={} name={} {}] ", item.device,
-                          item.name, item.connect_to);
+    result += fmt::format("[rawmidi device={} name={} hostname={} "
+                          "local_udp_port={} remote_udp_port={}] ",
+                          item.device, item.name, item.hostname,
+                          item.local_udp_port, item.remote_udp_port);
   }
   result += "]";
   return fmt::format_to(ctx.out(), "{}", result);
