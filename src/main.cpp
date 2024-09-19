@@ -123,9 +123,13 @@ protected:
       std::shared_ptr<rtpmididns::midipeer_t> rtppeer;
 
       if (rawmidi.hostname.empty()) {
+        INFO("Creating rawmidi peer={} as listener at udp_port={}",
+             rawmidi.name, rawmidi.local_udp_port);
         rtppeer = rtpmididns::make_network_rtpmidi_listener(
-            rawmidi.name, rawmidi.remote_udp_port);
+            rawmidi.name, rawmidi.local_udp_port);
       } else {
+        INFO("Creating rawmidi peer={} as client to hostname={} udp_port={}",
+             rawmidi.name, rawmidi.hostname, rawmidi.remote_udp_port);
         rtppeer = rtpmididns::make_network_rtpmidi_client(
             rawmidi.name, rawmidi.hostname, rawmidi.remote_udp_port);
       }
