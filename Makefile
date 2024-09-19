@@ -77,7 +77,7 @@ run: build-dev
 	build/src/rtpmidid $(RTPMIDID_ARGS)
 
 run-gdb: build-dev
-	gdb build/src/rtpmidid -ex=r --args build/src/rtpmidid  $(RTPMIDID_ARGS)
+	gdb build/src/rtpmidid -ex=r --command=scripts/malloc.gdb --args build/src/rtpmidid  $(RTPMIDID_ARGS)
 
 run-valgrind: build-dev
 	valgrind --leak-check=full --show-leak-kinds=all --log-file=/tmp/rtpmidid.valgrind.log -- build/src/rtpmidid $(RTPMIDID_ARGS) || true
