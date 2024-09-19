@@ -628,7 +628,7 @@ void rtpmidid::mdns_rtpmidi_t::remove_announcement(const std::string &name,
   }
 }
 
-auto format_as(const AvahiWatchEvent ev) {
+const char *format_as(const AvahiWatchEvent ev) {
   switch (ev) {
   case AVAHI_WATCH_IN:
     return "AVAHI_WATCH_IN";
@@ -643,7 +643,7 @@ auto format_as(const AvahiWatchEvent ev) {
   }
 }
 
-auto format_as(const AvahiBrowserEvent ev) {
+const char *format_as(const AvahiBrowserEvent ev) {
   switch (ev) {
   case AVAHI_BROWSER_NEW:
     return "AVAHI_BROWSER_NEW";
@@ -660,7 +660,7 @@ auto format_as(const AvahiBrowserEvent ev) {
   }
 }
 
-auto format_as(const AvahiEntryGroupState state) {
+const char *format_as(const AvahiEntryGroupState state) {
   switch (state) {
   case AVAHI_ENTRY_GROUP_UNCOMMITED:
     return "AVAHI_ENTRY_GROUP_UNCOMMITED";
@@ -676,7 +676,7 @@ auto format_as(const AvahiEntryGroupState state) {
     return "AVAHI_ENTRY_GROUP_UNKNOWN";
   }
 }
-auto format_as(const AvahiClientState state) {
+const char *format_as(const AvahiClientState state) {
   switch (state) {
   case AVAHI_CLIENT_S_RUNNING:
     return "AVAHI_CLIENT_S_RUNNING";
@@ -691,7 +691,7 @@ auto format_as(const AvahiClientState state) {
   }
 }
 
-auto format_as(const AvahiLookupResultFlags flag) {
+const char *format_as(const AvahiLookupResultFlags flag) {
   switch (flag) {
   case AVAHI_LOOKUP_RESULT_CACHED:
     return "AVAHI_LOOKUP_RESULT_CACHED";
