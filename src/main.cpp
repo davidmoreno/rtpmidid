@@ -65,10 +65,11 @@ protected:
   std::optional<rtpmididns::HwAutoAnnounce> hwautoannounce;
 
 public:
-  main_t() { setup(); }
-
+  // I want setup inside a try catch (and survive it), so I need a setup method
   void setup() {
-    aseq = std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
+    if (aseq.get() == nullptr)
+      aseq =
+          std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
     if (rtpmididns::mdns.get() == nullptr)
       rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>();
     router = std::make_shared<rtpmididns::midirouter_t>();
