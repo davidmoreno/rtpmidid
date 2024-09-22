@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include "midi_normalizer.hpp"
 #include "midipeer.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/utils.hpp"
@@ -35,6 +36,7 @@ public:
   std::string name;
   int fd = -1;
   rtpmidid::poller_t::listener_t fd_listener;
+  midi_normalizer_t midi_normalizer;
 
   local_rawmidi_peer_t(const std::string &name, const std::string &device);
   ~local_rawmidi_peer_t() override;

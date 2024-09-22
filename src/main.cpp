@@ -63,6 +63,7 @@ protected:
   std::shared_ptr<rtpmididns::midirouter_t> router;
   std::shared_ptr<rtpmididns::aseq_t> aseq;
   std::optional<rtpmididns::HwAutoAnnounce> hwautoannounce;
+  rtpmididns::control_socket_t control;
 
 public:
   // I want setup inside a try catch (and survive it), so I need a setup method
@@ -73,7 +74,6 @@ public:
     if (rtpmididns::mdns.get() == nullptr)
       rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>();
     router = std::make_shared<rtpmididns::midirouter_t>();
-    rtpmididns::control_socket_t control;
     control.router = router;
     control.aseq = aseq;
     control.mdns = rtpmididns::mdns;

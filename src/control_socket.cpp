@@ -93,6 +93,7 @@ rtpmididns::control_socket_t::~control_socket_t() noexcept {
   }
   connection_listener.stop();
   close(socket);
+  DEBUG("Closed control socket");
 }
 
 void rtpmididns::control_socket_t::connection_ready() {

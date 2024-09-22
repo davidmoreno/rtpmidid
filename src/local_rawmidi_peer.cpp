@@ -23,6 +23,7 @@
 
 #include <fcntl.h>
 #include <rtpmidid/logger.hpp>
+#include <rtpmidid/packet.hpp>
 #include <rtpmidid/poller.hpp>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -88,30 +89,19 @@ void local_rawmidi_peer_t::read_midi() {
     return;
   }
   std::array<uint8_t, 1024> adata;
-  mididata_t data(adata.data(), adata.size());
-  ssize_t r = read(fd, adata.data(), adata.size());
+  ssize_t count = read(fd, adata.data(), adata.size());
 
-  DEBUG("Reading from rawmidi device={} size={}", device, r);
-  data.end = data.start + r;
-  if (r <= 0) {
+  if (count <= 0) {
     return;
   }
+  rtpmidid::packet_t packet(adata.begin(), (uint32_t)count);
 
-  std::array<uint8_t, 1024> odata;
-  auto *p = odata.data();
-  // The midi stream has no time markers, we need to add them. And do the MIDI
-  // stream very compliant. We will add the time markers to the MIDI stream.
-  if (r == 6) {
-    *p++ = adata[0];
-    *p++ = adata[1];
-    *p++ = adata[2];
-    *p++ = 0;
-    *p++ = adata[3];
-    *p++ = adata[4];
-    *p++ = adata[5];
-
-    router->send_midi(peer_id, mididata_t{odata.data(), 7});
-  } else {
-    router->send_midi(peer_id, mididata_t{adata.data(), uint32_t(r)});
-  }
+  // FIXME: Even if received several message in the stream, send one by one.
+  // Maybe would be better send full packets, but would need some stack space or
+  // something...
+  midi_normalizer.normalize_stream(
+      packet, [&](const rtpmidid::packet_t &packet) {
+        router->send_midi(peer_id, mididata_t{packet.get_data(),
+                                              (uint32_t)packet.get_size()});
+      });
 }
