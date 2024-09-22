@@ -91,6 +91,13 @@ public:
   static packet_type_e get_packet_type(const uint8_t *data, size_t size);
   packet_type_e get_packet_type() const;
 
+  packet_t slice(size_t offset, size_t length) const {
+    if (offset + length > size) {
+      throw std::runtime_error("Slice out of bounds");
+    }
+    return packet_t(data + offset, length);
+  }
+
   std::string to_string() const {
     std::string ret = "";
     int block_chars = 4;
