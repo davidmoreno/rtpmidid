@@ -29,8 +29,8 @@
 using namespace std::chrono_literals;
 using namespace rtpmidid;
 
-static const auto CONNECT_TIMEOUT = 2s;
-static const auto RECONNECT_TIMEOUT = 10s;
+static const auto CONNECT_TIMEOUT = 10s;
+static const auto RECONNECT_TIMEOUT = 30s;
 static const auto CK_SHORT_PERIOD = 2s;
 static const auto CK_LONG_PERIOD = 25s;
 
