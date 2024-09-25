@@ -134,10 +134,10 @@ void local_alsa_multi_listener_t::alsaseq_event(snd_seq_event_t *event) {
     return;
   }
   rtpmidid::io_bytes_writer_static<1024> writer;
-  alsatrans_decoder.ev_to_mididata(event, writer);
-  auto midi = mididata_t(writer);
-
-  router->send_midi(peer_id, peerI->second, midi);
+  alsatrans_decoder.ev_to_mididata_f(event, writer,
+                                     [this](const mididata_t &mididata) {
+                                       router->send_midi(peer_id, mididata);
+                                     });
 }
 
 void local_alsa_multi_listener_t::send_midi(midipeer_id_t from,
@@ -155,7 +155,18 @@ void local_alsa_multi_listener_t::send_midi(midipeer_id_t from,
             snd_seq_ev_set_source(ev, this->port);
             snd_seq_ev_set_dest(ev, port.client, port.port);
             snd_seq_ev_set_direct(ev);
-            snd_seq_event_output_direct(seq->seq, ev);
+            auto result = snd_seq_event_output(seq->seq, ev);
+            if (result < 0) {
+              ERROR("Error: {}", snd_strerror(result));
+              snd_seq_drop_input(seq->seq);
+              snd_seq_drop_output(seq->seq);
+            }
+            result = snd_seq_drain_output(seq->seq);
+            if (result < 0) {
+              ERROR("Error: {}", snd_strerror(result));
+              snd_seq_drop_input(seq->seq);
+              snd_seq_drop_output(seq->seq);
+            }
           });
     }
   }

@@ -69,9 +69,10 @@ local_alsa_listener_t::local_alsa_listener_t(const std::string &name_,
       aseq->midi_event[alsaport].connect([this](snd_seq_event_t *ev) {
         rtpmidid::io_bytes_static<1024> data;
         auto datawriter = rtpmidid::io_bytes_writer(data);
-        mididata_decoder.ev_to_mididata(ev, datawriter);
-        auto mididata = mididata_t(datawriter);
-        router->send_midi(peer_id, mididata);
+        mididata_decoder.ev_to_mididata_f(
+            ev, datawriter, [this](const mididata_t &mididata) {
+              router->send_midi(peer_id, mididata);
+            });
       });
 }
 
@@ -142,7 +143,18 @@ void local_alsa_listener_t::send_midi(midipeer_id_t from,
     snd_seq_ev_set_source(ev, alsaport);
     snd_seq_ev_set_subs(ev); // to all subscribers
     snd_seq_ev_set_direct(ev);
-    snd_seq_event_output_direct(aseq->seq, ev);
+    auto result = snd_seq_event_output(aseq->seq, ev);
+    if (result < 0) {
+      ERROR("Error: {}", snd_strerror(result));
+      snd_seq_drop_input(aseq->seq);
+      snd_seq_drop_output(aseq->seq);
+    }
+    result = snd_seq_drain_output(aseq->seq);
+    if (result < 0) {
+      ERROR("Error: {}", snd_strerror(result));
+      snd_seq_drop_input(aseq->seq);
+      snd_seq_drop_output(aseq->seq);
+    }
   });
 }
 

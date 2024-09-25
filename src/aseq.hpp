@@ -24,6 +24,7 @@
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/signal.hpp>
+#include <mididata.hpp>
 
 namespace rtpmididns {
 class aseq_t : public std::enable_shared_from_this<aseq_t> {
@@ -95,6 +96,7 @@ public:
 
   std::string name;
   snd_seq_t *seq;
+  snd_seq_client_pool_t *pool;
   // std::vector<int> fds; // Normally 1?
   std::map<int, rtpmidid::signal_t<port_t, const std::string &>>
       subscribe_event;
@@ -149,7 +151,13 @@ public:
   // Gets a data bunch of bytes, and calls a callback with all found events.
   void mididata_to_evs_f(rtpmidid::io_bytes_reader &data,
                          std::function<void(snd_seq_event_t *)>);
-  void ev_to_mididata(snd_seq_event_t *, rtpmidid::io_bytes_writer &data);
+
+  void ev_to_mididata_f(snd_seq_event_t *ev, rtpmidid::io_bytes_writer &data,
+    std::function<void(const mididata_t &)> func);
+
+private:
+  std::vector<uint8_t> decode_buffer_data;
+  rtpmidid::io_bytes decode_buffer;
 };
 
 class alsa_connect_exception : public rtpmidid::exception {
