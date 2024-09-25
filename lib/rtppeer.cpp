@@ -500,7 +500,7 @@ void rtppeer_t::parse_midi(io_bytes_reader &buffer) {
   if ((header & 0x80) != 0) {
     length <<= 8;
     length += buffer.read_uint8();
-    DEBUG("Long header, {} bytes long", length);
+    // DEBUG("Long header, {} bytes long", length);
   }
   buffer.check_enough(length);
   auto remaining = length;
@@ -675,7 +675,7 @@ void rtppeer_t::send_midi(const io_bytes_reader &events) {
     buffer.write_uint8(events_size);
   } else {
     // Long header, 2 octets
-    DEBUG("Send long message: message_size={} bytes", events_size);
+    // DEBUG("Send long message: message_size={} bytes", events_size);
     if (events_size > 1400) {
       WARNING("MIDI message too long, may fail on UDP. message_size={} . If "
               "find any problem report an issue to "

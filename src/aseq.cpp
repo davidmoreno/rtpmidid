@@ -71,12 +71,33 @@ snd_seq_addr_t *get_my_ev_client_port(snd_seq_event_t *ev, uint8_t client_id) {
 }
 aseq_t::aseq_t(std::string _name) : name(std::move(_name)), seq(nullptr) {
   snd_lib_error_set_handler(error_handler);
-  if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0) {
+  if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_DUPLEX, SND_SEQ_NONBLOCK) <
+      0) {
     throw alsa_connect_exception(
         "Can't open sequencer. Maybe user has no permissions.");
   }
   snd_seq_set_client_name(seq, name.c_str());
-  snd_seq_nonblock(seq, 1);
+
+  // Increase seq client pool sizes to 2000, which is the maximum allowed by the
+  // kernel
+  // TODO: make this configurable?
+  snd_seq_client_pool_alloca(&pool);
+  int result;
+  if ((result = snd_seq_get_client_pool(seq, pool)) < 0) {
+    ERROR("Failed to get pool: {}", snd_strerror(result));
+  } else {
+    snd_seq_client_pool_set_input_pool(pool, 2000);
+    snd_seq_client_pool_set_output_pool(pool, 2000);
+
+    if ((result = snd_seq_set_client_pool(seq, pool)) < 0) {
+      ERROR("Failed to set pool: {}", snd_strerror(result));
+    }
+  }
+
+  // TODO: these buffer sizes should probably be configurable or pinned to pool
+  // size in bytes
+  snd_seq_set_input_buffer_size(seq, 65536);
+  snd_seq_set_output_buffer_size(seq, 65536);
 
   snd_seq_client_info_t *info = nullptr;
   snd_seq_client_info_malloc(&info);
@@ -603,8 +624,12 @@ void aseq_t::for_connections(const port_t &port,
   snd_seq_query_subscribe_free(subs);
 }
 
-mididata_to_alsaevents_t::mididata_to_alsaevents_t() : buffer(nullptr) {
-  snd_midi_event_new(1024, &buffer);
+// TODO: these buffer sizes should probably be configurable or pinned to pool
+// size in bytes
+mididata_to_alsaevents_t::mididata_to_alsaevents_t()
+    : buffer(nullptr), decode_buffer_data(65536, 0),
+      decode_buffer(&decode_buffer_data[0], 65536) {
+  snd_midi_event_new(65536, &buffer);
 }
 mididata_to_alsaevents_t::~mididata_to_alsaevents_t() {
   if (buffer)
@@ -620,7 +645,6 @@ void mididata_to_alsaevents_t::mididata_to_evs_f(
 
   while (data.position < data.end) {
     // DEBUG("mididata to snd_ev, left {}", data);
-    snd_seq_ev_clear(&ev);
     auto used = snd_midi_event_encode(buffer, data.position,
                                       data.end - data.position, &ev);
     if (used <= 0) {
@@ -633,18 +657,58 @@ void mididata_to_alsaevents_t::mididata_to_evs_f(
   }
 }
 
-void mididata_to_alsaevents_t::ev_to_mididata(snd_seq_event_t *ev,
-                                              rtpmidid::io_bytes_writer &data) {
-  snd_midi_event_reset_decode(buffer);
-  auto ret = snd_midi_event_decode(buffer, data.position,
-                                   data.end - data.position, ev);
-  if (ret < 0) {
-    ERROR("Could not translate alsa seq event. Do nothing.");
-    return;
-  }
+void mididata_to_alsaevents_t::ev_to_mididata_f(
+    snd_seq_event_t *ev, rtpmidid::io_bytes_writer &data,
+    std::function<void(const mididata_t &)> func) {
+  if (ev->type != SND_SEQ_EVENT_SYSEX) {
+    snd_midi_event_reset_decode(buffer);
+    auto ret = snd_midi_event_decode(buffer, data.position,
+                                     data.end - data.position, ev);
+    if (ret < 0) {
+      ERROR("Could not translate alsa seq event. Do nothing.");
+      return;
+    }
 
-  data.position += ret;
-  // DEBUG("ev to mididata, left: {}, {}", ret, data);
+    data.position += ret;
+    const auto mididata = mididata_t(data);
+    func(mididata);
+  } else {
+    snd_midi_event_reset_decode(buffer);
+    auto total_bytes = snd_midi_event_decode(buffer, &decode_buffer_data[0],
+                                             ev->data.ext.len, ev);
+    if (total_bytes < 0) {
+      ERROR("Could not translate alsa seq event. Do nothing.");
+      return;
+    }
+    bool start = true;
+
+    while (true) {
+      rtpmidid::io_bytes_writer_static<258> out_buffer;
+      if (start) {
+        decode_buffer.position += 1;
+        out_buffer.write_uint8(0xF0);
+        start = false;
+      } else {
+        out_buffer.write_uint8(0xF7);
+      }
+      auto bytes_left =
+          total_bytes - (decode_buffer.position - decode_buffer.start) - 1;
+      if (bytes_left <= 256) {
+        out_buffer.copy_from(decode_buffer, bytes_left);
+        out_buffer.write_uint8(0xF7);
+        const auto mididata = mididata_t(out_buffer);
+        func(mididata);
+        decode_buffer.position = decode_buffer.start;
+        return;
+      } else {
+        out_buffer.copy_from(decode_buffer, 256); // Don't copy 0xF7
+        out_buffer.write_uint8(0xF0);
+        const auto mididata = mididata_t(out_buffer);
+        func(mididata);
+        decode_buffer.position += 256;
+      }
+    }
+  }
 }
 
 } // namespace rtpmididns
