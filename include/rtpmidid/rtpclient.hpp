@@ -143,7 +143,7 @@ struct fmt::formatter<std::list<rtpmidid::rtpclient_t::endpoint_t>>
 template <>
 struct fmt::formatter<rtpmidid::rtpclient_t::state_e>
     : formatter<fmt::string_view> {
-  auto format(const rtpmidid::rtpclient_t::state_e &data, format_context &ctx) {
+  auto format(rtpmidid::rtpclient_t::state_e &data, format_context &ctx) const {
     const char *ret = rtpmidid::rtpclient_t::to_string(data);
     return formatter<fmt::string_view>::format(ret, ctx);
   }
@@ -153,7 +153,7 @@ struct fmt::formatter<rtpmidid::rtpclient_t::state_e>
 template <>
 struct fmt::formatter<rtpmidid::rtpclient_t::event_e>
     : formatter<fmt::string_view> {
-  auto format(const rtpmidid::rtpclient_t::event_e &data, format_context &ctx) {
+  auto format(rtpmidid::rtpclient_t::event_e &data, format_context &ctx) const {
     const char *ret = rtpmidid::rtpclient_t::to_string(data);
     return formatter<fmt::string_view>::format(ret, ctx);
   }

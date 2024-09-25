@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 
 // #define DEBUG0 DEBUG
 #define DEBUG0(...)

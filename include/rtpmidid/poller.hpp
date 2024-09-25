@@ -23,6 +23,7 @@
 #include <chrono>
 #include <functional>
 #include <optional>
+#include <memory>
 
 // #define DEBUG0 DEBUG
 #define DEBUG0(...)
