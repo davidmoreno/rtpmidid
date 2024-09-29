@@ -29,7 +29,7 @@
 #define DEBUG0(...)
 
 namespace rtpmidid {
-class poller_private_data_t;
+struct poller_private_data_t;
 /**
  * Simplified fd poller
  *

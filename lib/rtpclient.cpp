@@ -275,7 +275,7 @@ void rtpclient_t::state_send_ck_short() {
     } else {
       handle_event(LatencyMeasured);
     }
-    ck_connection = peer.ck_event.connect([this](float ms) {
+    ck_connection = peer.ck_event.connect([](float ms) {
       WARNING("OUT OF ORDER CK0 received, latency: {} ms", ms);
     });
   });
@@ -296,7 +296,7 @@ void rtpclient_t::state_send_ck_long() {
   ck_connection = peer.ck_event.connect([this](float ms) {
     timer.disable();
     handle_event(WaitSendCK);
-    ck_connection = peer.ck_event.connect([this](float ms) {
+    ck_connection = peer.ck_event.connect([](float ms) {
       WARNING("OUT OF ORDER CK0 received, latency: {} ms", ms);
     });
   });

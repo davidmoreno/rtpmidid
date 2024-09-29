@@ -65,7 +65,7 @@ void test_network_address_list() {
 
   // Move first
   localhost_resolutions =
-      std::move(rtpmidid::network_address_list_t("::", "13001"));
+      rtpmidid::network_address_list_t("::", "13001");
   first = localhost_resolutions.get_first();
   DEBUG("First: {}", first.to_string());
   ASSERT_EQUAL(first.hostname(), "::");
@@ -400,14 +400,14 @@ void test_client_try_several_connections() {
         DEBUG("Got control packet: {}", packet);
         control_packet.copy_from(packet);
         control_packet_received = true;
-        control_remote_address = std::move(from.dup());
+        control_remote_address = from.dup();
       });
   auto peerA_midi_on_read_connection =
       peerA_midi.on_read.connect([&](const rtpmidid::packet_t &packet,
                                      const rtpmidid::network_address_t &from) {
         midi_packet.copy_from(packet);
         midi_packet_received = true;
-        midi_remote_address = std::move(from.dup());
+        midi_remote_address = from.dup();
       });
 
   // all in one list. Connects in reverse order (uses back() its more efficient.
