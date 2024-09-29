@@ -134,10 +134,10 @@ void local_alsa_multi_listener_t::alsaseq_event(snd_seq_event_t *event) {
     return;
   }
   rtpmidid::io_bytes_writer_static<1024> writer;
-  alsatrans_decoder.ev_to_mididata_f(event, writer,
-                                     [this](const mididata_t &mididata) {
-                                       router->send_midi(peer_id, mididata);
-                                     });
+  alsatrans_decoder.ev_to_mididata_f(
+      event, writer, [&](const mididata_t &mididata) {
+        router->send_midi(peer_id, peerI->second, mididata);
+      });
 }
 
 void local_alsa_multi_listener_t::send_midi(midipeer_id_t from,

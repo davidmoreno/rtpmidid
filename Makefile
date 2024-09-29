@@ -1,12 +1,12 @@
 # Port for test run
 PORT:=10000
 # Number of jobs for make
-JOBS:=$(shell nproc)
+JOBS:=30
 
 # To easy change to clang, set CXX.
 # ENABLE_PCH sound like a good idea, but for massive parallelist (my comp has 32 CPU threads), it
 # stalls the parallelist waiting to compile the Pre Compiled Headers.
-CMAKE_EXTRA_ARGS := -DCMAKE_CXX_COMPILER=${CXX} -DENABLE_PCH=OFF
+CMAKE_EXTRA_ARGS := -DENABLE_PCH=OFF
 
 
 .PHONY: help
