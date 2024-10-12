@@ -190,11 +190,62 @@ void test_midirouter_for_each_peer() {
   ASSERT_EQUAL(count, 1);
 }
 
+class test_signal_t : public rtpmididns::midipeer_t {
+public:
+  int connections = 0;
+  void send_midi(rtpmididns::midipeer_id_t from,
+                 const rtpmididns::mididata_t &) override {}
+  const char *get_type() const override { return "test_signal_t"; }
+  rtpmididns::json_t status() override { return rtpmididns::json_t{}; }
+  void connected(rtpmididns::midipeer_id_t to) override {
+    connections++;
+    rtpmididns::midipeer_t::connected(to);
+  }
+  void disconnected(rtpmididns::midipeer_id_t from) override {
+    connections--;
+    rtpmididns::midipeer_t::disconnected(from);
+  }
+};
+
+void test_connect_disconnect_signals() {
+  auto router = std::make_shared<rtpmididns::midirouter_t>();
+  auto peera = std::make_shared<test_signal_t>();
+  auto peerb = std::make_shared<test_signal_t>();
+
+  router->add_peer(peera);
+  router->add_peer(peerb);
+
+  DEBUG("One connection");
+  router->connect(peera->peer_id, peerb->peer_id);
+  ASSERT_EQUAL(peera->connections, 1);
+  ASSERT_EQUAL(peerb->connections, 1);
+  ASSERT_EQUAL(router->peers[peera->peer_id].send_to.size(), 1);
+  ASSERT_EQUAL(router->peers[peera->peer_id].send_to[0], peerb->peer_id);
+  ASSERT_EQUAL(router->peers[peerb->peer_id].send_to.size(), 0);
+
+  DEBUG("Remove one connection");
+  router->disconnect(peera->peer_id, peerb->peer_id);
+  ASSERT_EQUAL(peera->connections, 0);
+  ASSERT_EQUAL(peerb->connections, 0);
+
+  DEBUG("Bi-directional connections");
+  router->connect(peera->peer_id, peerb->peer_id);
+  router->connect(peerb->peer_id, peera->peer_id);
+  ASSERT_EQUAL(peera->connections, 2);
+  ASSERT_EQUAL(peerb->connections, 2);
+
+  DEBUG("Remove the peer, removes all connections");
+  router->remove_peer(peera->peer_id);
+  ASSERT_EQUAL(peera->connections, 0);
+  ASSERT_EQUAL(peerb->connections, 0);
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_basic_midirouter),
       TEST(test_midirouter_from_alsa),
       TEST(test_midirouter_for_each_peer),
+      TEST(test_connect_disconnect_signals),
   };
 
   testcase.run(argc, argv);

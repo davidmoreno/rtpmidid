@@ -49,7 +49,7 @@ uint32_t midirouter_t::add_peer(std::shared_ptr<midipeer_t> peer) {
       peer,
       {},
   };
-  INFO("Added peer {}", peer_id);
+  INFO("Added peer type={} peer_id={}", peer->get_type(), peer_id);
 
   return peer_id;
 }
@@ -86,13 +86,22 @@ void midirouter_t::peer_connection_loop(
 }
 
 void midirouter_t::remove_peer(peer_id_t peer_id) {
-  auto removed = peers.erase(peer_id);
+  INFO("Remove peer_id={}", peer_id);
+  auto toremove = get_peer_by_id(peer_id);
+
+  // Find all the peers that are connected to this peer and disconnect them
   for (auto &peer : peers) {
-    auto &send_to = peer.second.send_to;
-    auto I = std::find(send_to.begin(), send_to.end(), peer_id);
-    if (I != send_to.end())
-      send_to.erase(I);
+    // need to copy the send_to vector to avoid iterator invalidation
+    auto send_to_copy = peer.second.send_to;
+    for (auto send_to_id : send_to_copy) {
+      if (send_to_id == peer_id) {
+        disconnect(peer.first, peer_id);
+      }
+      disconnect(peer_id, peer.first);
+    }
   }
+
+  auto removed = peers.erase(peer_id);
   if (removed)
     INFO("Removed peer {}", peer_id);
 }
@@ -125,14 +134,40 @@ void midirouter_t::send_midi(peer_id_t from, peer_id_t to,
 }
 
 void midirouter_t::connect(peer_id_t from, peer_id_t to) {
-  auto send_peer = get_peerdata_by_id(from);
-  auto recv_peer = get_peerdata_by_id(to);
-  if (!send_peer || !recv_peer) {
+  auto from_peer = get_peerdata_by_id(from);
+  auto to_peer = get_peerdata_by_id(to);
+  if (!from_peer || !to_peer) {
     WARNING("Sending to unkown peer {} -> {}", from, to);
     return;
   }
 
-  send_peer->send_to.push_back(to);
+  from_peer->send_to.push_back(to);
+
+  from_peer->peer->connected(to);
+  to_peer->peer->connected(from);
+
+  INFO("Connect {} -> {}", from, to);
+}
+
+void midirouter_t::disconnect(peer_id_t from, peer_id_t to) {
+  auto from_peer = get_peerdata_by_id(from);
+  auto to_peer = get_peerdata_by_id(to);
+  if (!from_peer || !to_peer) {
+    WARNING("Sending to unkown peer {} -> {}", from, to);
+    return;
+  }
+
+  for (auto send_to_id : from_peer->send_to) {
+    if (send_to_id == to) {
+      from_peer->send_to.erase(
+          std::remove(from_peer->send_to.begin(), from_peer->send_to.end(), to),
+          from_peer->send_to.end());
+      from_peer->peer->disconnected(to);
+      to_peer->peer->disconnected(from);
+    }
+  }
+
+  INFO("Disconnect {} -> {}", from, to);
 }
 
 json_t midirouter_t::status() {

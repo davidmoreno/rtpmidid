@@ -19,6 +19,7 @@
 #pragma once
 
 #include "json_fwd.hpp"
+#include "rtpmidid/logger.hpp"
 #include "rtpmidid/utils.hpp"
 #include <limits>
 
@@ -41,15 +42,58 @@ class midipeer_t : public std::enable_shared_from_this<midipeer_t> {
 public:
   std::shared_ptr<midirouter_t> router;
   midipeer_id_t peer_id = 0;
+  /// @brief statistics
   int packets_sent = 0;
+  /// @brief statistics
   int packets_recv = 0;
 
   midipeer_t() = default;
   virtual ~midipeer_t();
 
+  /**
+   *  @brief Returns the status of the
+   *
+   * Basic data can be get with utils::peer_status
+   *
+   * @return  json_t
+   */
   virtual json_t status() = 0;
+  /**
+   * @brief Send a midi message to the peer
+   *
+   * @param from The peer that sends the message
+   * @param data The midi message
+   */
   virtual void send_midi(midipeer_id_t from, const mididata_t &) = 0;
+  /**
+   * @brief Called when the peer is connected
+   *
+   * Normally do nothing, but might need to open a file and close
+   * when all disconnect signas are received
+   */
+  virtual void connected(midipeer_id_t to) {
+    DEBUG("Peer connected peer_id={} to={}", peer_id, to);
+  };
+  /**
+   * @brief Called when the peer is disconnected
+   *
+   * Normally do nothing, but might need to open a file and close
+   * when all disconnect signas are received
+   */
+  virtual void disconnected(midipeer_id_t from) {
+    DEBUG("Peer disconnected peer_id={} from={}", peer_id, from);
+  };
+  /**
+   * @brief Command as sent by the control interface
+   *
+   * @param cmd The command
+   * @param data The data
+   * @return json_t The response
+   */
   virtual json_t command(const std::string &cmd, const json_t &data);
+  /**
+   * @brief Get the type of the peer
+   */
   virtual const char *get_type() const = 0;
 };
 } // namespace rtpmididns

@@ -53,6 +53,7 @@ public:
 
   void remove_peer(peer_id_t);
   void connect(peer_id_t from, peer_id_t to);
+  void disconnect(peer_id_t from, peer_id_t to);
   void peer_connection_loop(peer_id_t peer_id,
                             std::function<void(std::shared_ptr<midipeer_t>)>);
 
