@@ -67,6 +67,16 @@ struct settings_t {
   };
 
   alsa_hw_auto_export_t alsa_hw_auto_export;
+
+  struct rawmidi_t {
+    std::string device;
+    std::string name;
+    std::string local_udp_port;
+    std::string remote_udp_port;
+    std::string hostname;
+  };
+
+  std::vector<rawmidi_t> rawmidi;
 };
 
 extern settings_t settings; // NOLINT
@@ -135,5 +145,12 @@ template <>
 struct fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_type_e>
     : formatter<fmt::string_view> {
   auto format(const rtpmididns::settings_t::alsa_hw_auto_export_type_e &data,
+              format_context &ctx) const;
+};
+
+template <>
+struct fmt::formatter<std::vector<rtpmididns::settings_t::rawmidi_t>>
+    : formatter<fmt::string_view> {
+  auto format(const std::vector<rtpmididns::settings_t::rawmidi_t> &data,
               format_context &ctx) const;
 };

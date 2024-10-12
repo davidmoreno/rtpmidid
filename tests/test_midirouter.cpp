@@ -50,7 +50,7 @@ public:
 };
 
 rtpmididns::network_rtpmidi_listener_t::network_rtpmidi_listener_t(
-    const std::string &name)
+    const std::string &name, const std::string &udp_port)
     : server(name, "15005") {}
 rtpmididns::network_rtpmidi_listener_t::~network_rtpmidi_listener_t() {}
 
@@ -75,7 +75,8 @@ rtpmididns::json_t rtpmididns::network_rtpmidi_listener_t::status() {
 //                                             const mididata_t &) {}
 
 std::shared_ptr<rtpmididns::midipeer_t>
-rtpmididns::make_network_rtpmidi_listener(const std::string &name) {
+rtpmididns::make_network_rtpmidi_listener(const std::string &name,
+                                          const std::string &udp_port) {
   return std::make_shared<test_midiio_t>();
 }
 // std::shared_ptr<rtpmididns::midipeer_t>

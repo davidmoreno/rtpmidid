@@ -16,10 +16,12 @@ add_library(
   midipeer.cpp
   rtpmidiremotehandler.cpp
   utils.cpp
+  midi_normalizer.cpp
 
   local_alsa_listener.cpp
   local_alsa_multi_listener.cpp
   local_alsa_peer.cpp
+  local_rawmidi_peer.cpp
   network_rtpmidi_client.cpp
   network_rtpmidi_listener.cpp
   network_rtpmidi_multi_listener.cpp

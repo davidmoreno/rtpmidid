@@ -44,6 +44,13 @@ network_rtpmidi_client_t::network_rtpmidi_client_t(
       });
 }
 
+network_rtpmidi_client_t::network_rtpmidi_client_t(const std::string &name,
+                                                   const std::string &hostname,
+                                                   const std::string &port)
+    : network_rtpmidi_client_t(std::make_shared<rtpmidid::rtpclient_t>(name)) {
+  peer->add_server_address(hostname, port);
+}
+
 network_rtpmidi_client_t::~network_rtpmidi_client_t() {}
 
 void network_rtpmidi_client_t::send_midi(midipeer_id_t from,

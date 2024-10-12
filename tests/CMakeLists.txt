@@ -88,3 +88,15 @@ if (NOT LIBS_ONLY)
     target_include_directories(test_rtpclient PUBLIC ${ALSA_INCLUDE_DIRS})
     target_compile_options(test_rtpclient PUBLIC ${ALSA_CFLAGS_OTHER})
 endif (NOT LIBS_ONLY)
+
+
+if (NOT LIBS_ONLY)
+    add_executable(test_midinormalizer
+        test_midinormalizer.cpp test_utils.cpp
+    )
+    target_link_libraries(test_midinormalizer -lfmt -pthread rtpmidid-shared rtpmidid2-static)
+    add_test(NAME test_midinormalizer COMMAND test_midinormalizer)
+    target_link_libraries(test_midinormalizer ${ALSA_LIBRARIES})
+    target_include_directories(test_midinormalizer PUBLIC ${ALSA_INCLUDE_DIRS})
+    target_compile_options(test_midinormalizer PUBLIC ${ALSA_CFLAGS_OTHER})
+endif (NOT LIBS_ONLY)

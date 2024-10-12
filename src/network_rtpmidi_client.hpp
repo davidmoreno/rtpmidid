@@ -46,6 +46,8 @@ public:
       status_change_event_connection;
 
   network_rtpmidi_client_t(std::shared_ptr<rtpmidid::rtpclient_t> peer);
+  network_rtpmidi_client_t(const std::string &name, const std::string &hostname,
+                           const std::string &port);
   ~network_rtpmidi_client_t() override;
   const char *get_type() const override { return "network_rtpmidi_client_t"; }
   void send_midi(midipeer_id_t from, const mididata_t &) override;

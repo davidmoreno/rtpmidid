@@ -20,6 +20,7 @@
 #include "local_alsa_listener.hpp"
 #include "local_alsa_multi_listener.hpp"
 #include "local_alsa_peer.hpp"
+#include "local_rawmidi_peer.hpp"
 #include "midipeer.hpp"
 #include "network_rtpmidi_client.hpp"
 #include "network_rtpmidi_listener.hpp"
@@ -66,6 +67,12 @@ std::shared_ptr<midipeer_t>
 make_network_rtpmidi_client(std::shared_ptr<rtpmidid::rtpclient_t> peer) {
   return std::make_shared<network_rtpmidi_client_t>(peer);
 }
+std::shared_ptr<midipeer_t>
+make_network_rtpmidi_client(const std::string &name,
+                            const std::string &hostname,
+                            const std::string &port) {
+  return std::make_shared<network_rtpmidi_client_t>(name, hostname, port);
+}
 
 std::shared_ptr<midipeer_t>
 make_network_rtpmidi_multi_listener(const std::string &name,
@@ -80,8 +87,14 @@ make_network_rtpmidi_peer(std::shared_ptr<rtpmidid::rtppeer_t> peer) {
 }
 
 std::shared_ptr<midipeer_t>
-make_network_rtpmidi_listener(const std::string &name) {
-  return std::make_shared<network_rtpmidi_listener_t>(name);
+make_network_rtpmidi_listener(const std::string &name,
+                              const std::string &udp_port) {
+  return std::make_shared<network_rtpmidi_listener_t>(name, udp_port);
+}
+
+std::shared_ptr<midipeer_t> make_rawmidi_peer(const std::string &name,
+                                              const std::string &device) {
+  return std::make_shared<local_rawmidi_peer_t>(name, device);
 }
 
 } // namespace rtpmididns

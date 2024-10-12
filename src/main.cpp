@@ -20,6 +20,7 @@
 #include "control_socket.hpp"
 #include "factory.hpp"
 #include "hwautoannounce.hpp"
+#include "midipeer.hpp"
 #include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "rtpmidid/poller.hpp"
@@ -57,6 +58,89 @@ void sigint_f(int) {
   rtpmidid::poller.close();
 }
 
+class main_t {
+protected:
+  std::shared_ptr<rtpmididns::midirouter_t> router;
+  std::shared_ptr<rtpmididns::aseq_t> aseq;
+  std::optional<rtpmididns::HwAutoAnnounce> hwautoannounce;
+  rtpmididns::control_socket_t control;
+
+public:
+  // I want setup inside a try catch (and survive it), so I need a setup method
+  void setup() {
+    if (aseq.get() == nullptr)
+      aseq =
+          std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
+    if (rtpmididns::mdns.get() == nullptr)
+      rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>();
+    router = std::make_shared<rtpmididns::midirouter_t>();
+    control.router = router;
+    control.aseq = aseq;
+    control.mdns = rtpmididns::mdns;
+    rtpmididns::rtpmidi_remote_handler_t rtpmidi_remote_handler(router, aseq);
+
+    setup_local_alsa_multilistener();
+    setup_network_rtpmidi_multilistener();
+    setup_network_rtpmidi_listener();
+    setup_rawmidi_peers();
+
+    hwautoannounce.emplace(aseq, router);
+  }
+
+  void close() { rtpmididns::mdns = nullptr; }
+
+protected:
+  void setup_local_alsa_multilistener() {
+    // Create all the alsa network midipeers
+    for (const auto &announce : rtpmididns::settings.alsa_announces) {
+      router->add_peer(
+          rtpmididns::make_local_alsa_multi_listener(announce.name, aseq));
+    }
+  }
+
+  void setup_network_rtpmidi_multilistener() {
+    // Create all the rtpmidi network midipeers
+    for (const auto &announce : rtpmididns::settings.rtpmidi_announces) {
+      router->add_peer(rtpmididns::make_network_rtpmidi_multi_listener(
+          announce.name, announce.port, aseq));
+    }
+  }
+
+  void setup_network_rtpmidi_listener() {
+    // Connect to all static endpoints
+    for (const auto &connect_to : rtpmididns::settings.connect_to) {
+      router->add_peer(rtpmididns::make_local_alsa_listener(
+          router, connect_to.name, connect_to.hostname, connect_to.port, aseq,
+          connect_to.local_udp_port));
+    }
+  }
+
+  void setup_rawmidi_peers() {
+    for (const auto &rawmidi : rtpmididns::settings.rawmidi) {
+      auto rawmidi_peer =
+          rtpmididns::make_rawmidi_peer(rawmidi.name, rawmidi.device);
+      router->add_peer(rawmidi_peer);
+      std::shared_ptr<rtpmididns::midipeer_t> rtppeer;
+
+      if (rawmidi.hostname.empty()) {
+        INFO("Creating rawmidi peer={} as listener at udp_port={}",
+             rawmidi.name, rawmidi.local_udp_port);
+        rtppeer = rtpmididns::make_network_rtpmidi_listener(
+            rawmidi.name, rawmidi.local_udp_port);
+      } else {
+        INFO("Creating rawmidi peer={} as client to hostname={} udp_port={}",
+             rawmidi.name, rawmidi.hostname, rawmidi.remote_udp_port);
+        rtppeer = rtpmididns::make_network_rtpmidi_client(
+            rawmidi.name, rawmidi.hostname, rawmidi.remote_udp_port);
+      }
+      router->add_peer(rtppeer);
+
+      router->connect(rawmidi_peer->peer_id, rtppeer->peer_id);
+      router->connect(rtppeer->peer_id, rawmidi_peer->peer_id);
+    }
+  }
+};
+
 // NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char **argv) {
   std::vector<std::string> args;
@@ -70,36 +154,21 @@ int main(int argc, char **argv) {
   signal(SIGINT, sigint_f);
   signal(SIGTERM, sigterm_f);
 
+  main_t maindata;
+
+  // SETUP
   try {
-    auto aseq =
-        std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
-    rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>();
-    auto router = std::make_shared<rtpmididns::midirouter_t>();
-    rtpmididns::control_socket_t control;
-    control.router = router;
-    control.aseq = aseq;
-    control.mdns = rtpmididns::mdns;
-    rtpmididns::rtpmidi_remote_handler_t rtpmidi_remote_handler(router, aseq);
+    maindata.setup();
+  } catch (const std::exception &exc) {
+    ERROR("Error on setup: {}", exc.what());
+    return 1;
+  } catch (...) {
+    ERROR("Unhandled exception in setup!");
+    return 1;
+  }
 
-    // Create all the alsa network midipeers
-    for (const auto &announce : rtpmididns::settings.alsa_announces) {
-      router->add_peer(
-          rtpmididns::make_local_alsa_multi_listener(announce.name, aseq));
-    }
-    // Create all the rtpmidi network midipeers
-    for (const auto &announce : rtpmididns::settings.rtpmidi_announces) {
-      router->add_peer(rtpmididns::make_network_rtpmidi_multi_listener(
-          announce.name, announce.port, aseq));
-    }
-    // Connect to all static endpoints
-    for (const auto &connect_to : rtpmididns::settings.connect_to) {
-      router->add_peer(rtpmididns::make_local_alsa_listener(
-          router, connect_to.name, connect_to.hostname, connect_to.port, aseq,
-          connect_to.local_udp_port));
-    }
-
-    hwautoannounce.emplace(aseq, router);
-
+  // MAIN RUN
+  try {
     INFO("Waiting for connections.");
     while (rtpmidid::poller.is_open()) {
       rtpmidid::poller.wait();
@@ -109,7 +178,8 @@ int main(int argc, char **argv) {
   } catch (...) {
     ERROR("Unhandled exception!");
   }
-  rtpmididns::mdns = nullptr;
+
+  maindata.close();
 
   INFO("FIN");
   return 0;

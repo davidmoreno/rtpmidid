@@ -104,6 +104,7 @@ void midirouter_t::send_midi(uint32_t from, const mididata_t &data) {
     return;
   }
 
+  peerdata->peer->packets_sent++;
   // DEBUG("Send data to {} peers", peer->second.send_to.size());
   for (auto to : peerdata->send_to) {
     // DEBUG("Send data {} to {}", from, to);
@@ -119,7 +120,6 @@ void midirouter_t::send_midi(peer_id_t from, peer_id_t to,
     WARNING("Sending to unkown peer {} -> {}", from, to);
     return;
   }
-  send_peer->packets_sent++;
   recv_peer->packets_recv++;
   recv_peer->send_midi(from, data);
 }

@@ -31,8 +31,9 @@ extern std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 /**
  * @short A rtpmidi server that just sends data to another peer
  */
-network_rtpmidi_listener_t::network_rtpmidi_listener_t(const std::string &name)
-    : name_(name), server(name, "") {
+network_rtpmidi_listener_t::network_rtpmidi_listener_t(
+    const std::string &name, const std::string &udp_port)
+    : name_(name), server(name, udp_port) {
   if (mdns)
     mdns->announce_rtpmidi(name, server.port());
 

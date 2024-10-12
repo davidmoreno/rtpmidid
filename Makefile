@@ -82,7 +82,7 @@ clean:
 	rm -rf debian/librtpmidid0
 	rm -rf debian/librtpmidid0-dev
 
-VALGRINDFLAGS := --leak-check=full --error-exitcode=1
+VALGRINDFLAGS := --leak-check=full --error-exitcode=1 --num-callers=30 --track-origins=yes
 RTPMIDID_ARGS := --ini default.ini --port ${PORT} --name devel --control /tmp/rtpmidid.sock
 
 .PHONY: run run-valgrind run-gdb
@@ -90,7 +90,7 @@ run: build-dev
 	build/src/rtpmidid $(RTPMIDID_ARGS)
 
 run-gdb: build-dev
-	gdb build/src/rtpmidid -ex=r --args build/src/rtpmidid  $(RTPMIDID_ARGS)
+	gdb build/src/rtpmidid -ex=r --command=scripts/malloc.gdb --args build/src/rtpmidid  $(RTPMIDID_ARGS)
 
 run-valgrind: build-dev
 	valgrind --leak-check=full --show-leak-kinds=all --log-file=/tmp/rtpmidid.valgrind.log -- build/src/rtpmidid $(RTPMIDID_ARGS) || true
