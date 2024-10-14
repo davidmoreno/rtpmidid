@@ -31,6 +31,15 @@ constexpr midipeer_id_t MIDIPEER_ID_INVALID =
 
 class mididata_t;
 class midirouter_t;
+
+
+enum midipeer_event_e{
+    CONNECTED_ROUTER,
+    DISCONNECTED_ROUTER,
+    CONNECTED_PEER,
+    DISCONNECTED_PEER,
+};
+
 /**
  * @short Any peer that can read and write midi
  *
@@ -71,17 +80,8 @@ public:
    * Normally do nothing, but might need to open a file and close
    * when all disconnect signas are received
    */
-  virtual void connected(midipeer_id_t to) {
-    DEBUG("Peer connected peer_id={} to={}", peer_id, to);
-  };
-  /**
-   * @brief Called when the peer is disconnected
-   *
-   * Normally do nothing, but might need to open a file and close
-   * when all disconnect signas are received
-   */
-  virtual void disconnected(midipeer_id_t from) {
-    DEBUG("Peer disconnected peer_id={} from={}", peer_id, from);
+  virtual void event(midipeer_event_e event, midipeer_id_t from){
+    DEBUG("Peer event={} from={}", event, from);
   };
   /**
    * @brief Command as sent by the control interface

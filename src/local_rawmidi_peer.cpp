@@ -19,6 +19,7 @@
 #include "local_rawmidi_peer.hpp"
 #include "json.hpp"
 #include "mididata.hpp"
+#include "midipeer.hpp"
 #include "midirouter.hpp"
 
 #include <fcntl.h>
@@ -32,14 +33,17 @@ using namespace rtpmididns;
 
 local_rawmidi_peer_t::local_rawmidi_peer_t(const std::string &name_,
                                            const std::string &device_)
-    : device(device_), name(name_) {
+    : device(device_), name(name_) {}
+
+void local_rawmidi_peer_t::open() {
+  assert(fd < 0);
   INFO("Creating rawmidi peer=\"{}\", device={}", name, device);
-  fd = open(device.c_str(), O_RDWR | O_NONBLOCK);
+  fd = ::open(device.c_str(), O_RDWR | O_NONBLOCK);
   if (fd < 0) {
     if (fd == ENOENT) {
       WARNING("Device {} does not exist. Try to create as pipe.", device);
       if (mkfifo(device.c_str(), 0666) == 0) {
-        fd = open(device.c_str(), O_RDWR | O_NONBLOCK);
+        fd = ::open(device.c_str(), O_RDWR | O_NONBLOCK);
       }
     }
     if (fd < 0) {
@@ -56,18 +60,21 @@ local_rawmidi_peer_t::local_rawmidi_peer_t(const std::string &name_,
   }
 }
 
-local_rawmidi_peer_t::~local_rawmidi_peer_t() {
+void local_rawmidi_peer_t::close() {
   if (fd >= 0) {
-    close(fd);
+    fd_listener.stop();
+    ::close(fd);
+    fd = -1;
   }
 }
+
+local_rawmidi_peer_t::~local_rawmidi_peer_t() { close(); }
 
 json_t local_rawmidi_peer_t::status() {
   json_t j{
       {"name", name},
       {"device", device},
-      {"status", fd >= 0 ? "open" : "closed"}
-      //
+      {"status", fd >= 0 ? "open" : "closed"} //
   };
   return j;
 }
@@ -104,4 +111,37 @@ void local_rawmidi_peer_t::read_midi() {
         router->send_midi(peer_id, mididata_t{packet.get_data(),
                                               (uint32_t)packet.get_size()});
       });
+}
+
+void local_rawmidi_peer_t::event(midipeer_event_e event,
+                                 midipeer_id_t peer_id) {
+  switch (event) {
+  case midipeer_event_e::CONNECTED_PEER:
+    connected(peer_id);
+    break;
+  case midipeer_event_e::DISCONNECTED_PEER:
+    disconnected(peer_id);
+    break;
+  default:
+    DEBUG("Ignore event={} from={}", event, peer_id);
+  }
+  // default behaviour, logging
+  midipeer_t::event(event, peer_id);
+}
+void local_rawmidi_peer_t::connected(midipeer_id_t peer_id) {
+  connection_count++;
+  if (connection_count == 1) {
+    INFO("Open rawmidi {}", device);
+    open();
+  }
+  DEBUG("Connected to rawmidi device={} count={}", device, connection_count);
+}
+
+void local_rawmidi_peer_t::disconnected(midipeer_id_t peer_id) {
+  connection_count--;
+  if (connection_count == 0) {
+    INFO("Close rawmidi {}", device);
+    close();
+  }
+  DEBUG("Disconnected to rawmidi device={} count={}", device, connection_count);
 }

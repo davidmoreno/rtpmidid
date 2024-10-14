@@ -19,6 +19,7 @@
 #include "network_rtpmidi_client.hpp"
 #include "json.hpp"
 #include "mididata.hpp"
+#include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/poller.hpp"
@@ -41,6 +42,11 @@ network_rtpmidi_client_t::network_rtpmidi_client_t(
         DEBUG(
             "Status changed: {}. peer: {}. Add rtpmidi peer and alsa port too.",
             status, peer->peer.remote_name);
+        if (status == rtpmidid::rtppeer_t::status_e::CONNECTED) {
+          router->event(peer_id, midipeer_event_e::CONNECTED_PEER);
+        } else if (status >= rtpmidid::rtppeer_t::status_e::DISCONNECTED) {
+          router->event(peer_id, midipeer_event_e::DISCONNECTED_PEER);
+        }
       });
 }
 
