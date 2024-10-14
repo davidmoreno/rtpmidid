@@ -48,15 +48,9 @@ struct AvahiWatch {
   AvahiWatchEvent event = AVAHI_WATCH_IN;
 };
 
-// FIXME! Hack needed as at poller_adapter_watch_new I'm getting the wrong
-// userdata pointer :(
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-rtpmidid::mdns_rtpmidi_t *current = nullptr;
-
 static void entry_group_callback(AvahiEntryGroup *g, AvahiEntryGroupState state,
-                                 AVAHI_GCC_UNUSED void *userdata) {
-  // NOLINTNEXTLINE
-  rtpmidid::mdns_rtpmidi_t *mr = (rtpmidid::mdns_rtpmidi_t *)userdata;
+                                 void *userdata) {
+  auto *mr = static_cast<rtpmidid::mdns_rtpmidi_t *>(userdata);
   // not set yet, we assume (test by running, that its the rtpmidi group)
   if (mr->group == nullptr) {
     mr->group = g;
@@ -80,12 +74,9 @@ AvahiWatch *poller_adapter_watch_new(const AvahiPoll *api, int fd,
   // NOLINTNEXTLINE
   AvahiWatch *wd = new AvahiWatch;
   wd->fd = fd;
-  wd->userdata = userdata;
+  wd->userdata = api->userdata;
   wd->callback = callback;
-  rtpmidid::mdns_rtpmidi_t *mdns_rtpmidid = current;
-  // static_cast<rtpmidid::mdns_rtpmidi_t *>(userdata);
-  // DEBUG("mdns {}", (void *)userdata);
-  // DEBUG("mdns {}", (void *)mdns_rtpmidid);
+  auto *mdns_rtpmidid = static_cast<rtpmidid::mdns_rtpmidi_t *>(api->userdata);
 
   wd->event = event;
   if (event == AVAHI_WATCH_IN) {
@@ -107,14 +98,11 @@ AvahiWatch *poller_adapter_watch_new(const AvahiPoll *api, int fd,
 
 /// Update the events to wait for. More...
 void poller_adapter_watch_update(AvahiWatch *wd, AvahiWatchEvent event) {
-  if (!current) {
-    WARNING("Got a watch_update without a current mdns_rtpmidi_t");
+  auto *mdns_rtpmidid = static_cast<rtpmidid::mdns_rtpmidi_t *>(wd->userdata);
+  if (mdns_rtpmidid == nullptr) {
+    WARNING("Got a watch_update without a mdns_rtpmidi_t");
     return;
   }
-  rtpmidid::mdns_rtpmidi_t *mdns_rtpmidid = current;
-  // rtpmidid::mdns_rtpmidi_t *mdns_rtpmidid =
-  //     static_cast<rtpmidid::mdns_rtpmidi_t *>(wd->userdata);
-  //
 
   wd->event = event;
   if (event == AVAHI_WATCH_IN) {
@@ -141,9 +129,11 @@ AvahiWatchEvent poller_adapter_watch_get_events(AvahiWatch *w) {
 void poller_adapter_watch_free(AvahiWatch *w) {
   // rtpmidid::poller.remove_fd(w->fd);
   // WARNING("TODO! If its only at program end, no problem.");
-  if (current) {
-    current->watch_in_poller.stop();
-    current->watch_out_poller.stop();
+  auto *mdns_rtpmidid = static_cast<rtpmidid::mdns_rtpmidi_t *>(w->userdata);
+
+  if (mdns_rtpmidid != nullptr) {
+    mdns_rtpmidid->watch_in_poller.stop();
+    mdns_rtpmidid->watch_out_poller.stop();
   }
   // NOLINTNEXTLINE
   delete w;
@@ -202,8 +192,7 @@ void poller_adapter_timeout_free(AvahiTimeout *to) {
 
 static void client_callback(AvahiClient *c, AvahiClientState state,
                             void *userdata) {
-  // NOLINTNEXTLINE
-  rtpmidid::mdns_rtpmidi_t *mr = (rtpmidid::mdns_rtpmidi_t *)userdata;
+  auto *mr = static_cast<rtpmidid::mdns_rtpmidi_t *>(userdata);
   if (mr->client == nullptr) {
     mr->client = c;
   }
@@ -240,8 +229,7 @@ static void resolve_callback(AvahiServiceResolver *r, AvahiIfIndex interface,
   rtpmidid::resolve_callback_s data = {r,       interface, protocol, event,
                                        name,    type,      domain,   host_name,
                                        address, port,      txt,      flags};
-  // NOLINTNEXTLINE
-  rtpmidid::mdns_rtpmidi_t *mr = (rtpmidid::mdns_rtpmidi_t *)userdata;
+  auto *mr = static_cast<rtpmidid::mdns_rtpmidi_t *>(userdata);
 
   mr->resolve_callback(data);
   avahi_service_resolver_free(r);
@@ -272,8 +260,6 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface,
 }
 
 rtpmidid::mdns_rtpmidi_t::mdns_rtpmidi_t() {
-  current = this;
-
   service_browser = nullptr;
   group = nullptr;
 
@@ -324,6 +310,7 @@ void rtpmidid::mdns_rtpmidi_t::connect_to_avahi() {
   poller_adapter->timeout_new = poller_adapter_timeout_new;
   poller_adapter->timeout_update = poller_adapter_timeout_update;
   poller_adapter->timeout_free = poller_adapter_timeout_free;
+  poller_adapter->userdata = this;
 
   client = avahi_client_new(poller_adapter.get(),
                             (AvahiClientFlags)AVAHI_CLIENT_NO_FAIL,
@@ -352,10 +339,7 @@ void rtpmidid::mdns_rtpmidi_t::close_avahi() {
   }
 }
 
-rtpmidid::mdns_rtpmidi_t::~mdns_rtpmidi_t() {
-  close_avahi();
-  current = nullptr;
-}
+rtpmidid::mdns_rtpmidi_t::~mdns_rtpmidi_t() { close_avahi(); }
 
 void rtpmidid::mdns_rtpmidi_t::client_callback(avahi_client_state_e state_) {
   AvahiClientState state = (AvahiClientState)state_;
