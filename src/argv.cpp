@@ -154,6 +154,12 @@ static std::vector<argument_t> setup_arguments() {
       "Creates a control socket. Check CONTROL.md. Default "
       "`/var/run/rtpmidid/control.sock`",
       [](const std::string &value) { settings.control_filename = value; });
+  arguments.emplace_back(
+      "--create-client-ports",
+      "Creates alsa port for each announced client. Default true.",
+      [](const std::string &value) {
+        std::istringstream(value) >> std::boolalpha >> settings.create_ports_for_clients;
+        });
   arguments.emplace_back( //
       "--version",        //
       "Show version", [](const std::string &value) {

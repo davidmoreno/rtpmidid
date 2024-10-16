@@ -125,6 +125,8 @@ void load_ini(const std::string &filename) {
         settings.alsa_name = value;
       } else if (key == "control") {
         settings.control_filename = value;
+      } else if (key == "create_ports_for_clients") {
+        std::istringstream(value) >> std::boolalpha >> settings.create_ports_for_clients;
       } else {
         throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
       }

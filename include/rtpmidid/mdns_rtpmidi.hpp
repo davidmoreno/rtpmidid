@@ -67,8 +67,9 @@ public:
   poller_t::listener_t watch_out_poller;
   poller_t::timer_t reconnect_timer;
   int announce_suffix = 0;
+  bool enable_service_browser = true;
 
-  mdns_rtpmidi_t();
+  mdns_rtpmidi_t(bool enable_service_browser = false);
   ~mdns_rtpmidi_t();
 
   void connect_to_avahi();

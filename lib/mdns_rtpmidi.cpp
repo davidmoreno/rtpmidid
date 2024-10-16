@@ -271,7 +271,7 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface,
   mr->browse_callback(data);
 }
 
-rtpmidid::mdns_rtpmidi_t::mdns_rtpmidi_t() {
+rtpmidid::mdns_rtpmidi_t::mdns_rtpmidi_t(bool enable_service_browser) : enable_service_browser{false} {
   current = this;
 
   service_browser = nullptr;
@@ -367,7 +367,9 @@ void rtpmidid::mdns_rtpmidi_t::client_callback(avahi_client_state_e state_) {
     /* The server has startup successfully and registered its host
      * name on the network, so it's time to create our services */
     INFO("Client running");
-    setup_service_browser();
+    if (enable_service_browser) {
+      setup_service_browser();
+    }
     setup_entry_group();
     break;
   case AVAHI_CLIENT_FAILURE: {

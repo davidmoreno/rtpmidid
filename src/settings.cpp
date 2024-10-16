@@ -101,11 +101,11 @@ fmt::appender fmt::formatter<rtpmididns::settings_t>::format(
                         "[settings_t: alsa_name: {}, alsa_network: {}, "
                         "control_filename: {}, rtpmidi_announces: {}, "
                         "alsa_announces: {}, connect_to: {}, "
-                        "alsa_hw_auto_export: {}, rawmidi: {}]",
+                        "alsa_hw_auto_export: {}, rawmidi: {}, create_ports_for_clients: {}]",
                         data.alsa_name, data.alsa_network,
                         data.control_filename, data.rtpmidi_announces,
                         data.alsa_announces, data.connect_to,
-                        data.alsa_hw_auto_export, data.rawmidi);
+                        data.alsa_hw_auto_export, data.rawmidi, data.create_ports_for_clients);
 #else
   return fmt::format_to(ctx.out(), "[settings_t]");
 #endif
