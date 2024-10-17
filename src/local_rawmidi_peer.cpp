@@ -16,17 +16,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "local_rawmidi_peer.hpp"
-#include "json.hpp"
-#include "mididata.hpp"
-#include "midirouter.hpp"
-
 #include <fcntl.h>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/packet.hpp>
 #include <rtpmidid/poller.hpp>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
+
+#include "json.hpp"
+#include "local_rawmidi_peer.hpp"
+#include "mididata.hpp"
+#include "midirouter.hpp"
 
 using namespace rtpmididns;
 
