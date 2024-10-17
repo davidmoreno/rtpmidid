@@ -64,6 +64,7 @@ protected:
   std::shared_ptr<rtpmididns::aseq_t> aseq;
   std::optional<rtpmididns::HwAutoAnnounce> hwautoannounce;
   rtpmididns::control_socket_t control;
+  std::optional<rtpmididns::rtpmidi_remote_handler_t> rtpmidi_remote_handler;
 
 public:
   // I want setup inside a try catch (and survive it), so I need a setup method
@@ -77,7 +78,7 @@ public:
     control.router = router;
     control.aseq = aseq;
     control.mdns = rtpmididns::mdns;
-    rtpmididns::rtpmidi_remote_handler_t rtpmidi_remote_handler(router, aseq);
+    rtpmidi_remote_handler.emplace(router, aseq);
 
     setup_local_alsa_multilistener();
     setup_network_rtpmidi_multilistener();
