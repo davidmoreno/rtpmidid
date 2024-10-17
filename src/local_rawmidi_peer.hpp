@@ -37,6 +37,7 @@ public:
   int fd = -1;
   rtpmidid::poller_t::listener_t fd_listener;
   midi_normalizer_t midi_normalizer;
+  std::array<uint8_t, 1024> buffer;
 
   local_rawmidi_peer_t(const std::string &name, const std::string &device);
   ~local_rawmidi_peer_t() override;

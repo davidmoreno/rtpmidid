@@ -34,6 +34,7 @@ using namespace rtpmididns;
 local_rawmidi_peer_t::local_rawmidi_peer_t(const std::string &name_,
                                            const std::string &device_)
     : device(device_), name(name_) {
+  buffer.fill(0);
   INFO("Creating rawmidi peer=\"{}\", device={}", name, device);
   fd = open(device.c_str(), O_RDWR | O_NONBLOCK);
   if (fd < 0) {
@@ -89,13 +90,12 @@ void local_rawmidi_peer_t::read_midi() {
   if (fd < 0) {
     return;
   }
-  std::array<uint8_t, 1024> adata;
-  ssize_t count = read(fd, adata.data(), adata.size());
+  ssize_t count = read(fd, buffer.data(), buffer.size());
 
   if (count <= 0) {
     return;
   }
-  rtpmidid::packet_t packet(adata.begin(), (uint32_t)count);
+  rtpmidid::packet_t packet(buffer.begin(), (uint32_t)count);
 
   // FIXME: Even if received several message in the stream, send one by one.
   // Maybe would be better send full packets, but would need some stack space or
