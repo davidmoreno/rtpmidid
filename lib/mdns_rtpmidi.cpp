@@ -342,13 +342,13 @@ void rtpmidid::mdns_rtpmidi_t::close_avahi() {
     avahi_entry_group_free(group);
     group = nullptr;
   }
-  if (client) {
-    avahi_client_free(client);
-    client = nullptr;
-  }
   if (service_browser) {
     avahi_service_browser_free(service_browser);
     service_browser = nullptr;
+  }
+  if (client) {
+    avahi_client_free(client);
+    client = nullptr;
   }
 }
 
