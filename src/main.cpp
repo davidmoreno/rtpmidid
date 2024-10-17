@@ -72,12 +72,15 @@ public:
       aseq =
           std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
     if (rtpmididns::mdns.get() == nullptr)
-      rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>();
+      rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>(rtpmididns::settings.create_ports_for_clients);
     router = std::make_shared<rtpmididns::midirouter_t>();
     control.router = router;
     control.aseq = aseq;
     control.mdns = rtpmididns::mdns;
-    rtpmididns::rtpmidi_remote_handler_t rtpmidi_remote_handler(router, aseq);
+    if (rtpmididns::settings.create_ports_for_clients) {
+      // Question: Does this not get deleted once leaving scope?
+      rtpmididns::rtpmidi_remote_handler_t rtpmidi_remote_handler(router, aseq);
+    }
 
     setup_local_alsa_multilistener();
     setup_network_rtpmidi_multilistener();

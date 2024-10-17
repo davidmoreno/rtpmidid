@@ -28,6 +28,7 @@ struct settings_t {
   std::string alsa_name = "rtpmidid";
   bool alsa_network = true;
   std::string control_filename = "/var/run/rtpmidid/control.sock";
+  bool create_ports_for_clients = true;
 
   // Datas a read from the ini file
   struct rtpmidi_announce_t {
