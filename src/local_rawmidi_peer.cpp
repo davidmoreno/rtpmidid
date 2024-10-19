@@ -16,18 +16,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "local_rawmidi_peer.hpp"
-#include "json.hpp"
-#include "mididata.hpp"
-#include "midipeer.hpp"
-#include "midirouter.hpp"
-
 #include <fcntl.h>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/packet.hpp>
 #include <rtpmidid/poller.hpp>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
+
+#include "json.hpp"
+#include "local_rawmidi_peer.hpp"
+#include "mididata.hpp"
+#include "midirouter.hpp"
 
 using namespace rtpmididns;
 
@@ -37,6 +37,7 @@ local_rawmidi_peer_t::local_rawmidi_peer_t(const std::string &name_,
 
 void local_rawmidi_peer_t::open() {
   assert(fd < 0);
+  buffer.fill(0);
   INFO("Creating rawmidi peer=\"{}\", device={}", name, device);
   fd = ::open(device.c_str(), O_RDWR | O_NONBLOCK);
   if (fd < 0) {
@@ -95,13 +96,12 @@ void local_rawmidi_peer_t::read_midi() {
   if (fd < 0) {
     return;
   }
-  std::array<uint8_t, 1024> adata;
-  ssize_t count = read(fd, adata.data(), adata.size());
+  ssize_t count = read(fd, buffer.data(), buffer.size());
 
   if (count <= 0) {
     return;
   }
-  rtpmidid::packet_t packet(adata.begin(), (uint32_t)count);
+  rtpmidid::packet_t packet(buffer.begin(), (uint32_t)count);
 
   // FIXME: Even if received several message in the stream, send one by one.
   // Maybe would be better send full packets, but would need some stack space or

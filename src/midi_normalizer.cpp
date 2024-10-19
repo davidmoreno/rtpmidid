@@ -16,6 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <sys/types.h>
+
 #include "midi_normalizer.hpp"
 #include "rtpmidid/logger.hpp"
 #include "rtpmidid/packet.hpp"
