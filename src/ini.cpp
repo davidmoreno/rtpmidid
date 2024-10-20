@@ -69,6 +69,8 @@ void load_ini(const std::string &filename) {
         continue;
       } else if (section == "alsa_hw_auto_export") {
         continue;
+      } else if (section == "rtpmidi_discover") {
+        continue;
       } else {
         // Sections that can be repeated
         if (section == "rtpmidi_announce") {
@@ -133,6 +135,16 @@ void load_ini(const std::string &filename) {
         rtpmidi_announce->name = value;
       } else if (key == "port") {
         rtpmidi_announce->port = value;
+      } else {
+        throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
+      }
+    } else if (section == "rtpmidi_discover") {
+      if (key == "enabled") {
+        settings.rtpmidi_discover.enabled = value == "true";
+      } else if (key == "name_positive_regex") {
+        settings.rtpmidi_discover.name_positive_regex = std::regex(value);
+      } else if (key == "name_negative_regex") {
+        settings.rtpmidi_discover.name_negative_regex = std::regex(value);
       } else {
         throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
       }
