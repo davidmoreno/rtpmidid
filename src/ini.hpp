@@ -17,9 +17,31 @@
  */
 #pragma once
 
+#include "settings.hpp"
 #include <string>
 
 namespace rtpmididns {
 void load_ini(const std::string &filename);
 
-}
+class IniReader {
+  settings_t *settings;
+  std::string filename;
+  std::string section;
+  std::string key;
+  std::string value;
+  int lineno = 0;
+
+  // Currently open sections, as they can appear many times
+  settings_t::rtpmidi_announce_t *rtpmidi_announce = nullptr;
+  settings_t::alsa_announce_t *alsa_announce = nullptr;
+  settings_t::connect_to_t *connect_to = nullptr;
+  settings_t::rawmidi_t *rawmidi = nullptr;
+
+public:
+  IniReader(settings_t *settings) : settings(settings) {}
+
+  void set_filename(const std::string &filename);
+  void parse_line(const std::string &line);
+};
+
+} // namespace rtpmididns

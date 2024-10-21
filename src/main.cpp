@@ -34,7 +34,6 @@ namespace rtpmididns {
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-settings_t settings;
 void parse_argv(const std::vector<std::string> &argv);
 } // namespace rtpmididns
 
