@@ -45,13 +45,15 @@ rtpmidi_remote_handler_t::rtpmidi_remote_handler_t(
 void rtpmidi_remote_handler_t::discover_peer(const std::string &name,
                                              const std::string &hostname,
                                              const std::string &port) {
+  std::string fullname = fmt::format("{}:{}/{}", hostname, port, name);
+
   if (!check_if_add_peer(name, hostname, port)) {
-    INFO("Not adding peer name={} hostname={} port={}, as requested by "
-         "settings",
-         name, hostname, port);
+    INFO("Not adding peer=\"{}\", as "
+         "requested by settings",
+         fullname);
     return;
   }
-  INFO("Discover peer: name={} address={} port={}", name, hostname, port);
+  INFO("Discover peer=\"{}\"", fullname);
 
   for (auto &peer : peers) {
     if (peer.name == name) {
@@ -59,12 +61,12 @@ void rtpmidi_remote_handler_t::discover_peer(const std::string &name,
           dynamic_cast<local_alsa_listener_t *>(peer.alsawaiter.get());
       if (alsawaiter)
         alsawaiter->add_endpoint(hostname, port);
-      DEBUG("Reuse peer: name={} address={}:{}", name, hostname, port);
+      DEBUG("Reuse peer=\"{}\"", fullname);
       return;
     }
   }
 
-  DEBUG("New peer: name={} address={}:{}", name, hostname, port);
+  DEBUG("New peer=\"{}\"", fullname);
   auto peer = rtpmididns::make_local_alsa_listener(router, name, hostname, port,
                                                    aseq, "0");
   peers.push_back(known_remote_peer_t{name, peer});

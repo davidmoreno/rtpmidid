@@ -19,6 +19,7 @@
 #include "ini.hpp"
 #include "rtpmidid/logger.hpp"
 #include "settings.hpp"
+#include "stringpp.hpp"
 #include <algorithm>
 #include <array>
 #include <fmt/core.h>
@@ -154,6 +155,26 @@ static std::vector<argument_t> setup_arguments() {
       "Creates a control socket. Check CONTROL.md. Default "
       "`/var/run/rtpmidid/control.sock`",
       [](const std::string &value) { settings.control_filename = value; });
+  arguments.emplace_back( //
+      "--rtpmidi-discover",
+      "Enable or disable rtpmidi discover. true | false | [posregex] | "
+      "![negregex]",
+      [](const std::string &value) {
+        if (value == "true") {
+          DEBUG("rtpmidi_discover.enabled = true");
+          settings.rtpmidi_discover.enabled = true;
+        } else if (value == "false") {
+          DEBUG("rtpmidi_discover.enabled = false");
+          settings.rtpmidi_discover.enabled = false;
+        } else if (std::startswith(value, "!")) {
+          DEBUG("rtpmidi_discover.name_negative_regex = {}", value.substr(1));
+          settings.rtpmidi_discover.name_negative_regex =
+              std::regex(value.substr(1, std::string::npos));
+        } else {
+          DEBUG("rtpmidi_discover.name_positive_regex = {}", value);
+          settings.rtpmidi_discover.name_positive_regex = std::regex(value);
+        }
+      });
   arguments.emplace_back( //
       "--version",        //
       "Show version", [](const std::string &value) {
