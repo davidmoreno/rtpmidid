@@ -21,6 +21,10 @@
 #include "local_alsa_listener.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
+#include "settings.hpp"
+
+// Do nothing or redefine DEBUG0 to DEBUG
+#define DEBUG0(...)
 
 namespace rtpmididns {
 extern std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
@@ -41,18 +45,28 @@ rtpmidi_remote_handler_t::rtpmidi_remote_handler_t(
 void rtpmidi_remote_handler_t::discover_peer(const std::string &name,
                                              const std::string &hostname,
                                              const std::string &port) {
+  std::string fullname = fmt::format("{}:{}/{}", hostname, port, name);
+
+  if (!check_if_add_peer(name, hostname, port)) {
+    INFO("Not adding peer=\"{}\", as "
+         "requested by settings",
+         fullname);
+    return;
+  }
+  INFO("Discover peer=\"{}\"", fullname);
+
   for (auto &peer : peers) {
     if (peer.name == name) {
       local_alsa_listener_t *alsawaiter =
           dynamic_cast<local_alsa_listener_t *>(peer.alsawaiter.get());
       if (alsawaiter)
         alsawaiter->add_endpoint(hostname, port);
-      DEBUG("Reuse peer: name={} address={}:{}", name, hostname, port);
+      DEBUG("Reuse peer=\"{}\"", fullname);
       return;
     }
   }
 
-  DEBUG("New peer: name={} address={}:{}", name, hostname, port);
+  DEBUG("New peer=\"{}\"", fullname);
   auto peer = rtpmididns::make_local_alsa_listener(router, name, hostname, port,
                                                    aseq, "0");
   peers.push_back(known_remote_peer_t{name, peer});
@@ -76,4 +90,30 @@ void rtpmidi_remote_handler_t::remove_peer(const std::string &name,
     }
   }
 }
+
+bool rtpmidi_remote_handler_t::check_if_add_peer(const std::string &name,
+                                                 const std::string &hostname,
+                                                 const std::string &port) {
+  if (settings.rtpmidi_discover.enabled == false) {
+    return false;
+  }
+
+  std::string fullname = fmt::format("{}:{} - {}", hostname, port, name);
+  DEBUG0("Checking if we should add peer: fullname=\"{}\"", fullname);
+  bool match_negative = std::regex_search(
+      fullname, settings.rtpmidi_discover.name_negative_regex);
+  DEBUG0("Match negative: {}", match_negative);
+  if (match_negative) {
+    return false;
+  }
+
+  bool match_positive = std::regex_search(
+      fullname, settings.rtpmidi_discover.name_positive_regex);
+  DEBUG0("Match positive: {}", match_positive);
+  if (match_positive) {
+    return true;
+  }
+  return false;
+}
+
 } // namespace rtpmididns

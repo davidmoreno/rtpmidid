@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "argv.hpp"
 #include "aseq.hpp"
 #include "control_socket.hpp"
 #include "factory.hpp"
@@ -33,9 +34,6 @@
 namespace rtpmididns {
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-settings_t settings;
-void parse_argv(const std::vector<std::string> &argv);
 } // namespace rtpmididns
 
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
@@ -149,7 +147,7 @@ int main(int argc, char **argv) {
     args.push_back(argv[i]);
   }
 
-  rtpmididns::parse_argv(std::move(args));
+  rtpmididns::parse_argv(std::move(args), &rtpmididns::settings);
   std::optional<rtpmididns::HwAutoAnnounce> hwautoannounce;
 
   signal(SIGINT, sigint_f);

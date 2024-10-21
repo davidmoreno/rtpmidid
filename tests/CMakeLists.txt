@@ -100,3 +100,15 @@ if (NOT LIBS_ONLY)
     target_include_directories(test_midinormalizer PUBLIC ${ALSA_INCLUDE_DIRS})
     target_compile_options(test_midinormalizer PUBLIC ${ALSA_CFLAGS_OTHER})
 endif (NOT LIBS_ONLY)
+
+
+if (NOT LIBS_ONLY)
+    add_executable(test_settings
+        test_settings.cpp test_utils.cpp
+    )
+    target_link_libraries(test_settings -lfmt -pthread rtpmidid-shared rtpmidid2-static)
+    add_test(NAME test_settings COMMAND test_settings)
+    target_link_libraries(test_settings ${ALSA_LIBRARIES})
+    target_include_directories(test_settings PUBLIC ${ALSA_INCLUDE_DIRS})
+    target_compile_options(test_settings PUBLIC ${ALSA_CFLAGS_OTHER})
+endif (NOT LIBS_ONLY)

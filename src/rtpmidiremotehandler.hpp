@@ -55,5 +55,8 @@ public:
                      const std::string &port);
   void remove_peer(const std::string &name, const std::string &hostname,
                    const std::string &port);
+
+  bool check_if_add_peer(const std::string &name, const std::string &hostname,
+                         const std::string &port);
 };
 } // namespace rtpmididns
