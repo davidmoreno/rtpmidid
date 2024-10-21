@@ -19,6 +19,7 @@
 #include "ini.hpp"
 #include "settings.hpp"
 #include "test_case.hpp"
+#include <argv.hpp>
 
 void test_parse_ini(void) {
   rtpmididns::settings_t settings;
@@ -152,8 +153,31 @@ void test_parse_ini(void) {
   ASSERT_EQUAL(settings.rawmidi[1].hostname, "hostname2");
 }
 
+void test_argv(void) {
+  rtpmididns::settings_t settings;
+  rtpmididns::parse_argv(
+      {
+          "--control=test.ini",
+          "--rtpmidi-discover=false",
+          "--port",
+          "1234",
+      },
+      &settings);
+  INFO("settings={}", settings);
+  ASSERT_EQUAL(settings.control_filename, "test.ini");
+  ASSERT_EQUAL(settings.rtpmidi_discover.enabled, false);
+  ASSERT_EQUAL(settings.rtpmidi_announces.size(), 1);
+  ASSERT_EQUAL(settings.rtpmidi_announces[0].port, "1234");
+
+  rtpmididns::parse_argv(
+      {
+          "--version",
+      },
+      &settings);
+}
+
 int main(int argc, char **argv) {
-  test_case_t testcase{TEST(test_parse_ini)};
+  test_case_t testcase{TEST(test_parse_ini), TEST(test_argv)};
 
   testcase.run(argc, argv);
   return testcase.exit_code();

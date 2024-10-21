@@ -94,14 +94,13 @@ static std::string get_hostname() {
 
 void help(const std::vector<argument_t> &arguments) {
   fmt::print(CMDLINE_HELP, VERSION);
-  fmt::print("{} args", arguments.size());
   for (auto &argument : arguments) {
     fmt::print("  {:<30} {}\n", argument.arg, argument.comment);
   }
 }
 
 // Setup the argument options
-static std::vector<argument_t> setup_arguments() {
+static std::vector<argument_t> setup_arguments(settings_t *settings) {
   std::vector<argument_t> arguments;
 
   arguments.emplace_back( //
@@ -112,72 +111,73 @@ static std::vector<argument_t> setup_arguments() {
 
   arguments.emplace_back("--port", //
                          "Opens local port as server. Default 5004.",
-                         [](const std::string &value) {
-                           if (settings.rtpmidi_announces.size() == 0) {
-                             settings.rtpmidi_announces.emplace_back();
-                             settings.rtpmidi_announces.begin()->name =
+                         [settings](const std::string &value) {
+                           if (settings->rtpmidi_announces.size() == 0) {
+                             settings->rtpmidi_announces.emplace_back();
+                             settings->rtpmidi_announces.begin()->name =
                                  get_hostname();
                            }
-                           settings.rtpmidi_announces.begin()->port = value;
+                           settings->rtpmidi_announces.begin()->port = value;
                          });
   arguments.emplace_back( //
       "--name",           //
-      "Forces the alsa and rtpmidi name", [](const std::string &value) {
-        if (settings.rtpmidi_announces.size() == 0) {
-          settings.rtpmidi_announces.emplace_back();
+      "Forces the alsa and rtpmidi name", [settings](const std::string &value) {
+        if (settings->rtpmidi_announces.size() == 0) {
+          settings->rtpmidi_announces.emplace_back();
         }
-        if (settings.alsa_announces.size() == 0) {
-          settings.alsa_announces.emplace_back();
+        if (settings->alsa_announces.size() == 0) {
+          settings->alsa_announces.emplace_back();
         }
 
-        settings.rtpmidi_announces.begin()->name = value;
-        settings.alsa_announces.begin()->name = value;
-        settings.alsa_name = value;
+        settings->rtpmidi_announces.begin()->name = value;
+        settings->alsa_announces.begin()->name = value;
+        settings->alsa_name = value;
       });
   arguments.emplace_back( //
       "--alsa-name",      //
-      "Forces the alsa name", [](const std::string &value) {
-        if (settings.alsa_announces.size() == 0) {
-          settings.alsa_announces.emplace_back();
+      "Forces the alsa name", [settings](const std::string &value) {
+        if (settings->alsa_announces.size() == 0) {
+          settings->alsa_announces.emplace_back();
         }
-        settings.alsa_announces.begin()->name = value;
+        settings->alsa_announces.begin()->name = value;
       });
   arguments.emplace_back( //
       "--rtpmidid-name",  //
-      "Forces the rtpmidi name", [](const std::string &value) {
-        if (settings.rtpmidi_announces.size() == 0) {
-          settings.rtpmidi_announces.emplace_back();
+      "Forces the rtpmidi name", [settings](const std::string &value) {
+        if (settings->rtpmidi_announces.size() == 0) {
+          settings->rtpmidi_announces.emplace_back();
         }
-        settings.rtpmidi_announces.begin()->name = value;
+        settings->rtpmidi_announces.begin()->name = value;
       });
-  arguments.emplace_back(
-      "--control",
-      "Creates a control socket. Check CONTROL.md. Default "
-      "`/var/run/rtpmidid/control.sock`",
-      [](const std::string &value) { settings.control_filename = value; });
+  arguments.emplace_back("--control",
+                         "Creates a control socket. Check CONTROL.md. Default "
+                         "`/var/run/rtpmidid/control.sock`",
+                         [settings](const std::string &value) {
+                           settings->control_filename = value;
+                         });
   arguments.emplace_back( //
       "--rtpmidi-discover",
       "Enable or disable rtpmidi discover. true | false | [posregex] | "
       "![negregex]",
-      [](const std::string &value) {
+      [settings](const std::string &value) {
         if (value == "true") {
           DEBUG("rtpmidi_discover.enabled = true");
-          settings.rtpmidi_discover.enabled = true;
+          settings->rtpmidi_discover.enabled = true;
         } else if (value == "false") {
           DEBUG("rtpmidi_discover.enabled = false");
-          settings.rtpmidi_discover.enabled = false;
+          settings->rtpmidi_discover.enabled = false;
         } else if (std::startswith(value, "!")) {
           DEBUG("rtpmidi_discover.name_negative_regex = {}", value.substr(1));
-          settings.rtpmidi_discover.name_negative_regex =
+          settings->rtpmidi_discover.name_negative_regex =
               std::regex(value.substr(1, std::string::npos));
         } else {
           DEBUG("rtpmidi_discover.name_positive_regex = {}", value);
-          settings.rtpmidi_discover.name_positive_regex = std::regex(value);
+          settings->rtpmidi_discover.name_positive_regex = std::regex(value);
         }
       });
   arguments.emplace_back( //
       "--version",        //
-      "Show version", [](const std::string &value) {
+      "Show version", [settings](const std::string &value) {
         fmt::print("rtpmidid version {}/2\n", VERSION);
         exit(0);
       });
@@ -195,8 +195,8 @@ static std::vector<argument_t> setup_arguments() {
 // Parses the argv and sets up the settings_t struct
 // for parameters that affect a alsa and rtpmidi announcements, it changes the
 // first announced, and creates it if needed
-void parse_argv(const std::vector<std::string> &argv) {
-  std::vector<argument_t> arguments = setup_arguments();
+void parse_argv(const std::vector<std::string> &argv, settings_t *settings) {
+  std::vector<argument_t> arguments = setup_arguments(settings);
   // Necesary for two part arguments
   argument_t *current_argument = nullptr;
 
@@ -236,7 +236,7 @@ void parse_argv(const std::vector<std::string> &argv) {
     }
   }
 
-  DEBUG("settings after argument parsing: {}", settings);
+  DEBUG("settings after argument parsing: {}", *settings);
 }
 
 } // namespace rtpmididns
