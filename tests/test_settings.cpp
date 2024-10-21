@@ -174,6 +174,16 @@ void test_argv(void) {
           "--version",
       },
       &settings);
+
+  settings.rawmidi.clear();
+
+  // Bugfixes
+  rtpmididns::parse_argv(
+      {
+          "--rawmidi=",
+      },
+      &settings);
+  ASSERT_EQUAL(settings.rawmidi.size(), 0);
 }
 
 int main(int argc, char **argv) {

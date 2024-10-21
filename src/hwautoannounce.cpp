@@ -45,8 +45,14 @@ HwAutoAnnounce::HwAutoAnnounce(std::shared_ptr<aseq_t> aseq,
           // {}:{}
           // ",
           //       device_name, port_name, device_id, port_id);
-          added_port_announcement(device_name, type,
-                                  aseq_t::port_t{device_id, port_id});
+          try {
+            added_port_announcement(device_name, type,
+                                    aseq_t::port_t{device_id, port_id});
+
+          } catch (const std::exception &e) {
+            ERROR("Error adding port announcement {}:{} {}:{} exception={}",
+                  device_name, port_name, device_id, port_id, e.what());
+          }
         });
   });
 

@@ -176,6 +176,18 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
         }
       });
   arguments.emplace_back( //
+      "--rawmidi",
+      "Connects to a rawmidi device. For example `/dev/snd/midiC1D0`",
+      [settings](const std::string &value) {
+        if (value.size() == 0) {
+          ERROR("Empty rawmidi device. Doing nothing.");
+          return;
+        }
+        settings->rawmidi.emplace_back();
+        settings->rawmidi.back().device = value;
+        settings->rawmidi.back().name = rtpmididns::split(value, '/').back();
+      });
+  arguments.emplace_back( //
       "--version",        //
       "Show version", [settings](const std::string &value) {
         fmt::print("rtpmidid version {}/2\n", VERSION);
