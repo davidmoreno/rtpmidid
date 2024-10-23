@@ -86,6 +86,8 @@ struct settings_t {
   std::vector<rawmidi_t> rawmidi;
 };
 
+std::string format_as(rtpmididns::settings_t::alsa_hw_auto_export_type_e data);
+
 extern settings_t settings; // NOLINT
 } // namespace rtpmididns
 
@@ -147,9 +149,6 @@ struct fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_t>
   format(const rtpmididns::settings_t::alsa_hw_auto_export_t &data,
          format_context &ctx) const;
 };
-
-std::string
-format_as(const rtpmididns::settings_t::alsa_hw_auto_export_type_e data);
 
 template <>
 struct fmt::formatter<std::vector<rtpmididns::settings_t::rawmidi_t>>

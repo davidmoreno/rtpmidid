@@ -21,7 +21,28 @@
 
 namespace rtpmididns {
 settings_t settings;
+
+std::string format_as(rtpmididns::settings_t::alsa_hw_auto_export_type_e data) {
+  std::string result = "[";
+  if (data == rtpmididns::settings_t::alsa_hw_auto_export_type_e::NONE) {
+    result += "NONE";
+  } else if (data == rtpmididns::settings_t::alsa_hw_auto_export_type_e::ALL) {
+    result += "ALL";
+  } else {
+    if (data & rtpmididns::settings_t::alsa_hw_auto_export_type_e::HARDWARE) {
+      result += "HARDWARE ";
+    }
+    if (data & rtpmididns::settings_t::alsa_hw_auto_export_type_e::SOFTWARE) {
+      result += "SOFTWARE ";
+    }
+    if (data & rtpmididns::settings_t::alsa_hw_auto_export_type_e::SYSTEM) {
+      result += "SYSTEM ";
+    }
+  }
+  result += "]";
+  return result;
 }
+} // namespace rtpmididns
 
 fmt::appender fmt::formatter<rtpmididns::settings_t::alsa_announce_t>::format(
     const rtpmididns::settings_t::alsa_announce_t &data,
@@ -131,24 +152,3 @@ fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_t>::format(
   return fmt::format_to(ctx.out(), "{}", result);
 }
 
-std::string
-format_as(const rtpmididns::settings_t::alsa_hw_auto_export_type_e data) {
-  std::string result = "[";
-  if (data == rtpmididns::settings_t::alsa_hw_auto_export_type_e::NONE) {
-    result += "NONE";
-  } else if (data == rtpmididns::settings_t::alsa_hw_auto_export_type_e::ALL) {
-    result += "ALL";
-  } else {
-    if (data & rtpmididns::settings_t::alsa_hw_auto_export_type_e::HARDWARE) {
-      result += "HARDWARE ";
-    }
-    if (data & rtpmididns::settings_t::alsa_hw_auto_export_type_e::SOFTWARE) {
-      result += "SOFTWARE ";
-    }
-    if (data & rtpmididns::settings_t::alsa_hw_auto_export_type_e::SYSTEM) {
-      result += "SYSTEM ";
-    }
-  }
-  result += "]";
-  return result;
-}
