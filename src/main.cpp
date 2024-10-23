@@ -21,6 +21,7 @@
 #include "control_socket.hpp"
 #include "factory.hpp"
 #include "hwautoannounce.hpp"
+#include "local_rawmidi_peer.hpp"
 #include "midipeer.hpp"
 #include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
@@ -116,21 +117,27 @@ protected:
 
   void setup_rawmidi_peers() {
     for (const auto &rawmidi : rtpmididns::settings.rawmidi) {
+      std::string name = rawmidi.name;
       auto rawmidi_peer =
           rtpmididns::make_rawmidi_peer(rawmidi.name, rawmidi.device);
+      if (name == "") {
+        name =
+            dynamic_cast<rtpmididns::local_rawmidi_peer_t *>(rawmidi_peer.get())
+                ->name;
+      }
       router->add_peer(rawmidi_peer);
       std::shared_ptr<rtpmididns::midipeer_t> rtppeer;
 
       if (rawmidi.hostname.empty()) {
-        INFO("Creating rawmidi peer={} as listener at udp_port={}",
-             rawmidi.name, rawmidi.local_udp_port);
+        INFO("Creating rawmidi peer={} as listener at udp_port={}", name,
+             rawmidi.local_udp_port);
         rtppeer = rtpmididns::make_network_rtpmidi_listener(
-            rawmidi.name, rawmidi.local_udp_port);
+            name, rawmidi.local_udp_port);
       } else {
         INFO("Creating rawmidi peer={} as client to hostname={} udp_port={}",
-             rawmidi.name, rawmidi.hostname, rawmidi.remote_udp_port);
+             name, rawmidi.hostname, rawmidi.remote_udp_port);
         rtppeer = rtpmididns::make_network_rtpmidi_client(
-            rawmidi.name, rawmidi.hostname, rawmidi.remote_udp_port);
+            name, rawmidi.hostname, rawmidi.remote_udp_port);
       }
       router->add_peer(rtppeer);
 

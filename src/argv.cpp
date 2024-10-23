@@ -185,7 +185,7 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
         }
         settings->rawmidi.emplace_back();
         settings->rawmidi.back().device = value;
-        settings->rawmidi.back().name = rtpmididns::split(value, '/').back();
+        settings->rawmidi.back().name = "";
       });
   arguments.emplace_back( //
       "--version",        //
