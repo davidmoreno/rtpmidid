@@ -35,6 +35,12 @@ struct settings_t {
     std::string port;
   };
 
+  struct rtpmidi_discover_t {
+    bool enabled = true;
+    std::regex name_positive_regex = std::regex(".*");
+    std::regex name_negative_regex = std::regex("^$");
+  };
+
   struct alsa_announce_t {
     std::string name;
   };
@@ -47,6 +53,7 @@ struct settings_t {
   };
 
   std::vector<rtpmidi_announce_t> rtpmidi_announces;
+  rtpmidi_discover_t rtpmidi_discover;
   std::vector<alsa_announce_t> alsa_announces;
   std::vector<connect_to_t> connect_to;
 
@@ -141,12 +148,8 @@ struct fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_t>
          format_context &ctx) const;
 };
 
-template <>
-struct fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_type_e>
-    : formatter<fmt::string_view> {
-  auto format(const rtpmididns::settings_t::alsa_hw_auto_export_type_e &data,
-              format_context &ctx) const;
-};
+std::string
+format_as(const rtpmididns::settings_t::alsa_hw_auto_export_type_e data);
 
 template <>
 struct fmt::formatter<std::vector<rtpmididns::settings_t::rawmidi_t>>
