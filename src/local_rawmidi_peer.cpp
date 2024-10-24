@@ -126,6 +126,7 @@ void local_rawmidi_peer_t::read_midi() {
 
 void local_rawmidi_peer_t::event(midipeer_event_e event,
                                  midipeer_id_t peer_id) {
+  DEBUG("event={} from={}", event, peer_id);
   switch (event) {
   case midipeer_event_e::CONNECTED_PEER:
     connected(peer_id);

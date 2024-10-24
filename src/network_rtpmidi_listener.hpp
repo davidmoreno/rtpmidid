@@ -41,7 +41,9 @@ public:
   rtpmidid::rtpserver_t server;
   int use_count = 0;
 
-  rtpmidid::connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
+  rtpmidid::rtpserver_t::midi_event_t::connection_t midi_connection;
+  rtpmidid::rtpserver_t::status_change_event_t::connection_t
+      status_change_connection;
 
   network_rtpmidi_listener_t(const std::string &name,
                              const std::string &udp_port);

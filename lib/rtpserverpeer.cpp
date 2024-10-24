@@ -119,15 +119,12 @@ void rtpserverpeer_t::sendto(const io_bytes_reader &buff,
 void rtpserverpeer_t::status_change(rtppeer_t::status_e st) {
   DEBUG("rptserverpeer_t status change to {}", st);
 
+  server->status_change_event(peer, st);
   if (st == rtppeer_t::CONNECTED) {
-    server->connected_event(peer);
     rearm_ck_timeout();
-
   } else if (rtppeer_t::is_disconnected(st)) {
     DEBUG("Remove from server the peer {}, status: {}", id, st);
     server->remove_peer(id);
-  } else {
-    DEBUG("Status change to {}. Doing nothing at rtpserverpeer_t", st);
   }
 }
 } // namespace rtpmidid

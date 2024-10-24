@@ -34,8 +34,12 @@ network_rtpmidi_multi_listener_t::network_rtpmidi_multi_listener_t(
   if (mdns)
     mdns->announce_rtpmidi(name, server.port());
 
-  connected_connection = server.connected_event.connect(
-      [this](std::shared_ptr<rtpmidid::rtppeer_t> peer) {
+  status_change_connection = server.status_change_event.connect(
+      [this](std::shared_ptr<rtpmidid::rtppeer_t> peer,
+             rtpmidid::rtppeer_t::status_e status) {
+        if (status != rtpmidid::rtppeer_t::status_e::CONNECTED) {
+          return;
+        }
         DEBUG("Got connection from {}", peer->remote_name);
         auto alsa_id =
             router->add_peer(make_local_alsa_peer(peer->remote_name, aseq));

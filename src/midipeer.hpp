@@ -32,12 +32,11 @@ constexpr midipeer_id_t MIDIPEER_ID_INVALID =
 class mididata_t;
 class midirouter_t;
 
-
-enum midipeer_event_e{
-    CONNECTED_ROUTER,
-    DISCONNECTED_ROUTER,
-    CONNECTED_PEER,
-    DISCONNECTED_PEER,
+enum midipeer_event_e {
+  CONNECTED_ROUTER = 1,
+  DISCONNECTED_ROUTER,
+  CONNECTED_PEER,
+  DISCONNECTED_PEER,
 };
 
 /**
@@ -80,7 +79,7 @@ public:
    * Normally do nothing, but might need to open a file and close
    * when all disconnect signas are received
    */
-  virtual void event(midipeer_event_e event, midipeer_id_t from){
+  virtual void event(midipeer_event_e event, midipeer_id_t from) {
     DEBUG("Peer event={} from={}", event, from);
   };
   /**
@@ -97,3 +96,5 @@ public:
   virtual const char *get_type() const = 0;
 };
 } // namespace rtpmididns
+
+const char *format_as(rtpmididns::midipeer_event_e event);

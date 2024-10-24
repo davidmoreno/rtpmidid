@@ -36,9 +36,9 @@ class network_rtpmidi_multi_listener_t : public midipeer_t {
 public:
   std::shared_ptr<aseq_t> aseq;
   rtpmidid::rtpserver_t server;
-  rtpmidid::connection_t<const rtpmidid::io_bytes_reader &> midi_connection;
-  rtpmidid::connection_t<std::shared_ptr<rtpmidid::rtppeer_t>>
-      connected_connection;
+  rtpmidid::rtpserver_t::midi_event_t::connection_t midi_connection;
+  rtpmidid::rtpserver_t::status_change_event_t::connection_t
+      status_change_connection;
 
   network_rtpmidi_multi_listener_t(const std::string &name,
                                    const std::string &port,
