@@ -50,9 +50,10 @@ public:
                      std::format_string<Args...> message, Args... args) {
     auto it = log_preamble(level, filename, lineno);
 
-    it = std::format_to(it,
-                        // buffer.end() - it - 16, // remaining space
-                        message, std::forward<Args>(args)...);
+    size_t max_size = buffer.size() - (it - buffer.begin()) - 16;
+    auto res =
+        std::format_to_n(it, max_size, message, std::forward<Args>(args)...);
+    it = res.out;
 
     log_postamble(it);
   }
