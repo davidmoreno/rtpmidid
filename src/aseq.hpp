@@ -18,13 +18,12 @@
 
 #pragma once
 #include <alsa/asoundlib.h>
-#include <fmt/format.h>
 #include <memory>
+#include <mididata.hpp>
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/signal.hpp>
-#include <mididata.hpp>
 
 namespace rtpmididns {
 class aseq_t : public std::enable_shared_from_this<aseq_t> {
@@ -46,7 +45,7 @@ public:
     }
 
     std::string to_string() const {
-      return fmt::format("port_t[{}, {}]", client, port);
+      return std::format("port_t[{}, {}]", client, port);
     }
   };
 
@@ -153,7 +152,7 @@ public:
                          std::function<void(snd_seq_event_t *)>);
 
   void ev_to_mididata_f(snd_seq_event_t *ev, rtpmidid::io_bytes_writer &data,
-    std::function<void(const mididata_t &)> func);
+                        std::function<void(const mididata_t &)> func);
 
 private:
   std::vector<uint8_t> decode_buffer_data;
@@ -162,7 +161,8 @@ private:
 
 class alsa_connect_exception : public rtpmidid::exception {
 public:
-  alsa_connect_exception(const std::string &msg) : rtpmidid::exception(msg) {}
+  alsa_connect_exception(const std::string &msg)
+      : rtpmidid::exception("{}", msg) {}
 };
 
 } // namespace rtpmididns
@@ -175,24 +175,17 @@ template <> struct hash<rtpmididns::aseq_t::port_t> {
 };
 } // namespace std
 
-template <>
-struct fmt::formatter<rtpmididns::aseq_t::port_t>
-    : formatter<fmt::string_view> {
-  fmt::appender format(rtpmididns::aseq_t::port_t c, format_context &ctx) const;
-};
-
-template <>
-struct fmt::formatter<rtpmididns::aseq_t::client_type_e>
-    : formatter<fmt::string_view> {
-  fmt::appender format(rtpmididns::aseq_t::client_type_e c,
-                       format_context &ctx) const;
-};
-
-template <>
-struct fmt::formatter<rtpmididns::aseq_t::connection_t>
-    : formatter<fmt::string_view> {
-  fmt::appender format(const rtpmididns::aseq_t::connection_t &c,
-                       format_context &ctx) const;
-};
-
 const char *format_as(const snd_seq_event_type type);
+
+ENUM_FORMATTER_BEGIN(rtpmididns::aseq_t::client_type_e)
+ENUM_FORMATTER_ELEMENT(rtpmididns::aseq_t::client_type_e::TYPE_HARDWARE,
+                       "TYPE_HARDWARE")
+ENUM_FORMATTER_ELEMENT(rtpmididns::aseq_t::client_type_e::TYPE_SOFTWARE,
+                       "TYPE_SOFTWARE")
+ENUM_FORMATTER_ELEMENT(rtpmididns::aseq_t::client_type_e::TYPE_SYSTEM,
+                       "TYPE_SYSTEM")
+ENUM_FORMATTER_END();
+
+BASIC_FORMATTER(rtpmididns::aseq_t::port_t, "port_t[{}, {}]", v.client, v.port);
+
+BASIC_FORMATTER(snd_seq_event_type, "{}", format_as(v));

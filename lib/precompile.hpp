@@ -18,8 +18,7 @@
  */
 
 #pragma once
-#include <fmt/core.h>
-#include <fmt/format.h>
+#include <format>
 #include <iterator>
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/iobytes.hpp>

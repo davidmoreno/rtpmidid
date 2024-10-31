@@ -178,7 +178,7 @@ json_t local_alsa_multi_listener_t::status() {
     auto to = peer.second;
     connections.push_back({
         //
-        {"alsa", fmt::format("{}:{}", port.client, port.port)},
+        {"alsa", std::format("{}:{}", port.client, port.port)},
         {"local", to} //
     });
   }

@@ -535,7 +535,7 @@ void rtppeer_t::parse_midi(io_bytes_reader &buffer) {
     length = next_midi_packet_length(buffer);
     if (length == 0) {
       throw bad_midi_packet(
-          fmt::format("Unexpected MIDI data: {}", *buffer.position).c_str());
+          std::format("Unexpected MIDI data: {}", *buffer.position).c_str());
     }
     buffer.check_enough(length);
     // DEBUG("Remaining {}, length for this packet: {}", remaining, length);
@@ -609,7 +609,7 @@ void rtppeer_t::parse_sysex(io_bytes_reader &buffer, int16_t length) {
       // Continue, do nothing (data already copied before)
       break;
     default:
-      WARNING("Bad sysex end byte: {X}", last_byte);
+      WARNING("Bad sysex end byte: {}", last_byte);
       throw rtpmidid::bad_sysex_exception("Bad sysex end byte");
     }
   } else if (*buffer.position == 0xF0) {

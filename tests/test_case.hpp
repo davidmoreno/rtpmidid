@@ -18,6 +18,7 @@
 #pragma once
 
 #include "stringpp.hpp"
+#include <format>
 #include <functional>
 #include <rtpmidid/logger.hpp>
 #include <string>
@@ -34,7 +35,7 @@ public:
 
   test_exception(const char *file, int line, const std::string &error)
       : filename(file), line(line), error(error) {
-    msg = fmt::format("{}:{} Test Fail: {}{}{}", file, line, "\033[1;31m",
+    msg = std::format("{}:{} Test Fail: {}{}{}", file, line, "\033[1;31m",
                       error, "\033[0m");
   }
   const char *what() const noexcept override { return msg.c_str(); }
@@ -99,9 +100,10 @@ public:
       if (string_in_argv(args, tcase.name)) {
         try {
           tcase.fn();
-          SUCCESS("Test {} OK", tcase.name);
+          INFO("Test {} OK", tcase.name);
         } catch (const test_exception &e) {
-          logger::log(e.filename, e.line, logger::ERROR, e.error);
+          ::rtpmidid::logger2.log(::rtpmidid::logger_level_t::ERROR, e.filename,
+                                  e.line, "{}", e.error);
           ERROR("FAIL TEST {}: {}", tcase.name, e.what());
           errors += 1;
         } catch (const std::exception &e) {

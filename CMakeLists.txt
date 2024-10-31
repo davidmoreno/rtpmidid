@@ -16,7 +16,7 @@ if (USE_CLANG)
   message(STATUS "Using clang compiler")
 endif()
 
-add_definitions("-std=gnu++17 -Wall -Werror")
+add_definitions("-std=c++20 -Wall -Werror")
 
 set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer")
 message(STATUS "Build type ${CMAKE_BUILD_TYPE}")
@@ -77,7 +77,6 @@ endif(ENABLE_PCH)
 
 include(FindPkgConfig)
 pkg_check_modules(AVAHI REQUIRED avahi-client)
-pkg_check_modules(FMT REQUIRED fmt)
 if(NOT LIBS_ONLY)
   pkg_check_modules(ALSA REQUIRED alsa)
 endif(NOT LIBS_ONLY)

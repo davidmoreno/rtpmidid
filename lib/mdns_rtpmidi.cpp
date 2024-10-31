@@ -48,6 +48,53 @@ struct AvahiWatch {
   AvahiWatchEvent event = AVAHI_WATCH_IN;
 };
 
+ENUM_FORMATTER_BEGIN(AvahiEntryGroupState)
+ENUM_FORMATTER_ELEMENT(AvahiEntryGroupState::AVAHI_ENTRY_GROUP_UNCOMMITED,
+                       "AVAHI_ENTRY_GROUP_UNCOMMITED");
+ENUM_FORMATTER_ELEMENT(AvahiEntryGroupState::AVAHI_ENTRY_GROUP_REGISTERING,
+                       "AVAHI_ENTRY_GROUP_REGISTERING");
+ENUM_FORMATTER_ELEMENT(AvahiEntryGroupState::AVAHI_ENTRY_GROUP_ESTABLISHED,
+                       "AVAHI_ENTRY_GROUP_ESTABLISHED");
+ENUM_FORMATTER_ELEMENT(AvahiEntryGroupState::AVAHI_ENTRY_GROUP_COLLISION,
+                       "AVAHI_ENTRY_GROUP_COLLISION");
+ENUM_FORMATTER_ELEMENT(AvahiEntryGroupState::AVAHI_ENTRY_GROUP_FAILURE,
+                       "AVAHI_ENTRY_GROUP_FAILURE");
+ENUM_FORMATTER_END();
+
+ENUM_FORMATTER_BEGIN(AvahiWatchEvent)
+ENUM_FORMATTER_ELEMENT(AvahiWatchEvent::AVAHI_WATCH_IN, "AVAHI_WATCH_IN");
+ENUM_FORMATTER_ELEMENT(AvahiWatchEvent::AVAHI_WATCH_OUT, "AVAHI_WATCH_OUT");
+ENUM_FORMATTER_ELEMENT(AvahiWatchEvent::AVAHI_WATCH_HUP, "AVAHI_WATCH_HUP");
+ENUM_FORMATTER_ELEMENT(AvahiWatchEvent::AVAHI_WATCH_ERR, "AVAHI_WATCH_ERR");
+ENUM_FORMATTER_END();
+
+ENUM_FORMATTER_BEGIN(AvahiClientState)
+ENUM_FORMATTER_ELEMENT(AvahiClientState::AVAHI_CLIENT_S_RUNNING,
+                       "AVAHI_CLIENT_S_RUNNING");
+ENUM_FORMATTER_ELEMENT(AvahiClientState::AVAHI_CLIENT_S_REGISTERING,
+
+                       "AVAHI_CLIENT_S_REGISTERING");
+ENUM_FORMATTER_ELEMENT(AvahiClientState::AVAHI_CLIENT_S_COLLISION,
+                       "AVAHI_CLIENT_S_COLLISION");
+ENUM_FORMATTER_ELEMENT(AvahiClientState::AVAHI_CLIENT_CONNECTING,
+                       "AVAHI_CLIENT_CONNECTING");
+ENUM_FORMATTER_ELEMENT(AvahiClientState::AVAHI_CLIENT_FAILURE,
+                       "AVAHI_CLIENT_FAILURE");
+ENUM_FORMATTER_END();
+
+ENUM_FORMATTER_BEGIN(AvahiBrowserEvent);
+ENUM_FORMATTER_ELEMENT(AvahiBrowserEvent::AVAHI_BROWSER_NEW,
+                       "AVAHI_BROWSER_NEW");
+ENUM_FORMATTER_ELEMENT(AvahiBrowserEvent::AVAHI_BROWSER_REMOVE,
+                       "AVAHI_BROWSER_REMOVE");
+ENUM_FORMATTER_ELEMENT(AvahiBrowserEvent::AVAHI_BROWSER_ALL_FOR_NOW,
+                       "AVAHI_BROWSER_ALL_FOR_NOW");
+ENUM_FORMATTER_ELEMENT(AvahiBrowserEvent::AVAHI_BROWSER_CACHE_EXHAUSTED,
+                       "AVAHI_BROWSER_CACHE_EXHAUSTED");
+ENUM_FORMATTER_ELEMENT(AvahiBrowserEvent::AVAHI_BROWSER_FAILURE,
+                       "AVAHI_BROWSER_FAILURE");
+ENUM_FORMATTER_END();
+
 // FIXME! Hack needed as at poller_adapter_watch_new I'm getting the wrong
 // userdata pointer :(
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
@@ -546,7 +593,7 @@ void rtpmidid::mdns_rtpmidi_t::announce_all() {
 
   std::string announce_suffix_str = "";
   if (announce_suffix > 0) {
-    announce_suffix_str = fmt::format(" #{}", announce_suffix);
+    announce_suffix_str = std::format(" #{}", announce_suffix);
   }
 
   int ret = -1;

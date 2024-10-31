@@ -105,7 +105,7 @@ poller_t::listener_t poller_t::add_fd_in(int fd, std::function<void(int)> f) {
   auto r = epoll_ctl(private_data->epollfd, EPOLL_CTL_ADD, fd, &ev);
   if (r == -1) {
     throw exception("Can't add fd {} to poller: {} ({}, ep {})", fd,
-                    strerror(errno), errno);
+                    this->private_data->epollfd, strerror(errno), errno);
   }
   return poller_t::listener_t(fd);
 }

@@ -17,7 +17,6 @@
  */
 #pragma once
 #include "rtpmidid/iobytes.hpp"
-#include <fmt/core.h>
 #include <string_view>
 
 namespace rtpmididns {
@@ -34,12 +33,3 @@ public:
       : rtpmidid::io_bytes_reader(reader.position, reader.end - reader.start) {}
 };
 } // namespace rtpmididns
-
-template <>
-struct fmt::formatter<rtpmididns::mididata_t> : formatter<fmt::string_view> {
-  auto format(const rtpmididns::mididata_t &data, format_context &ctx) const {
-
-    return fmt::format_to(ctx.out(), "[mididata_t {} + {}, at {}]",
-                          (void *)data.start, data.size(), data.pos());
-  }
-};

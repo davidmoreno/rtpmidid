@@ -22,6 +22,7 @@
 #include "logger.hpp"
 #include <cassert>
 #include <cctype>
+#include <stdint.h>
 #include <vector>
 
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-avoid-magic-numbers)
@@ -121,9 +122,9 @@ public:
 
       if (ascii) {
         char ascii_char = isprint(c) ? c : '.';
-        ret += fmt::format("{:02X}{}  ", c, ascii_char);
+        ret += std::format("{:02X}{}  ", c, ascii_char);
       } else {
-        ret += fmt::format("{:02X} ", c);
+        ret += std::format("{:02X} ", c);
       }
       nchar_block++;
       nchar_line++;
@@ -132,13 +133,13 @@ public:
         nchar_block = 0;
       }
       if (nchar_line >= 16) {
-        DEBUG(ret);
+        DEBUG("{}", ret);
         ret = "";
         nchar_line = 0;
       }
     }
     if (ret.size()) {
-      DEBUG(ret);
+      DEBUG("{}", ret);
     }
   }
 };
@@ -362,23 +363,9 @@ public:
 
 } // namespace rtpmidid
 
-template <>
-struct fmt::formatter<rtpmidid::io_bytes_reader> : formatter<fmt::string_view> {
-  auto format(const rtpmidid::io_bytes_reader &data, format_context &ctx) const {
-    return formatter<fmt::string_view>::format(
-        fmt::format("[io_bytes_reader {} to {}, at {}, {}B left]",
-                    (void *)data.start, (void *)data.end, (void *)data.position,
-                    data.end - data.position),
-        ctx);
-  }
-};
-template <>
-struct fmt::formatter<rtpmidid::io_bytes_writer> : formatter<fmt::string_view> {
-  auto format(const rtpmidid::io_bytes_reader &data, format_context &ctx) const {
-    return formatter<fmt::string_view>::format(
-        fmt::format("[io_bytes_writer {} to {}, at {}, {}B left]",
-                    (void *)data.start, (void *)data.end, (void *)data.position,
-                    data.end - data.position),
-        ctx);
-  }
-};
+BASIC_FORMATTER(rtpmidid::io_bytes_reader,
+                "[io_bytes_reader {} to {}, at {}, {}B left]", (void *)v.start,
+                (void *)v.end, (void *)v.position, v.end - v.position);
+BASIC_FORMATTER(rtpmidid::io_bytes_writer,
+                "[io_bytes_writer {} to {}, at {}, {}B left]", (void *)v.start,
+                (void *)v.end, (void *)v.position, v.end - v.position);
