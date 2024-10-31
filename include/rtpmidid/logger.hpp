@@ -38,6 +38,7 @@ namespace rtpmidid {
 
 class logger_t {
   using buffer_t = std::array<char, 1024>;
+  // we use a preallocated array to avoid any allocation on debug
   buffer_t buffer;
 
 public:
