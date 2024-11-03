@@ -21,7 +21,7 @@
 
 namespace rtpmididns {
 
-class settings_t;
+struct settings_t;
 
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 void parse_argv(const std::vector<std::string> &argv, settings_t *settings);
