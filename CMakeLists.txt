@@ -17,9 +17,9 @@ set(USE_FMT "auto" CACHE STRING "Use fmt library (ON | OFF | auto)")
 # if CPP is "auto", check if C++20 is available and set it
 if (CPP_VERSION STREQUAL "auto" OR CPP_VERSION STREQUAL "auto")
   message(STATUS "Checking for C++20 support")
-  include(CheckCXXCompilerFlag)
-  check_cxx_compiler_flag("-std=c++20" COMPILER_SUPPORTS_CXX20)
-  if (COMPILER_SUPPORTS_CXX20)
+  include(CheckIncludeFileCXX)
+  CHECK_INCLUDE_FILE_CXX("format" HAVE_FORMAT)
+  if (HAVE_FORMAT)
     set(CPP_VERSION "20")
   else()
     set(CPP_VERSION "17")
@@ -89,11 +89,6 @@ elseif (LLD STREQUAL "lld")
     message(FATAL_ERROR "lld linker not found")
   endif()
 endif()
-
-
-
-
-
 
 
 if (ENABLE_PCH)
