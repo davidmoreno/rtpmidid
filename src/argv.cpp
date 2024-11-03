@@ -188,7 +188,7 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
       });
   arguments.emplace_back( //
       "--version",        //
-      "Show version", [settings](const std::string &value) {
+      "Show version", [](const std::string &value) {
         std::print("rtpmidid version {}/2\n", VERSION);
         exit(0);
       });
