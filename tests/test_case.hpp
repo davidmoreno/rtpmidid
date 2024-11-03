@@ -18,8 +18,8 @@
 #pragma once
 
 #include "stringpp.hpp"
-#include <format>
 #include <functional>
+#include <rtpmidid/formatterhelper.hpp>
 #include <rtpmidid/logger.hpp>
 #include <string>
 
