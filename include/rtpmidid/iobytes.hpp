@@ -19,6 +19,7 @@
 
 #pragma once
 #include "./exceptions.hpp"
+#include "formatterhelper.hpp"
 #include "logger.hpp"
 #include <cassert>
 #include <cctype>
@@ -122,9 +123,9 @@ public:
 
       if (ascii) {
         char ascii_char = isprint(c) ? c : '.';
-        ret += std::format("{:02X}{}  ", c, ascii_char);
+        ret += FMT::format("{:02X}{}  ", c, ascii_char);
       } else {
-        ret += std::format("{:02X} ", c);
+        ret += FMT::format("{:02X} ", c);
       }
       nchar_block++;
       nchar_line++;

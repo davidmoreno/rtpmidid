@@ -221,7 +221,7 @@ void parse_argv(const std::vector<std::string> &argv, settings_t *settings) {
       // Checks all arguments
       for (auto &argument : arguments) {
         if (argument.has_second_argument) {
-          auto keyeq = std::format("{}=", argument.arg);
+          auto keyeq = FMT::format("{}=", argument.arg);
           if (key.substr(0, keyeq.length()) == keyeq) {
             argument.fn(key.substr(keyeq.length()));
             parsed = true;

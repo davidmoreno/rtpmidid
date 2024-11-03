@@ -110,12 +110,12 @@ public:
     if (!is_midi_packet()) {
       std::string first_12_bytes_hex;
       for (int i = 0; i < 12; i++) {
-        first_12_bytes_hex += std::format("{:02x} ", data[i]);
+        first_12_bytes_hex += FMT::format("{:02x} ", data[i]);
       }
-      return std::format("RTP Packet: Invalid MIDI packet {}",
+      return FMT::format("RTP Packet: Invalid MIDI packet {}",
                          first_12_bytes_hex);
     }
-    return std::format("RTP Packet: V:{} P:{} X:{} CC:{} M:{} PT:{} "
+    return FMT::format("RTP Packet: V:{} P:{} X:{} CC:{} M:{} PT:{} "
                        "Sequence:{} Timestamp:{} SSRC:0x{:08X}",
                        get_flag_v(), get_flag_p(), get_flag_x(), get_flag_cc(),
                        get_flag_m(), get_flag_pt(), get_sequence_number(),
@@ -207,12 +207,12 @@ public:
     if (!is_command_packet()) {
       std::string first_12_bytes_hex;
       for (int i = 0; i < 12; i++) {
-        first_12_bytes_hex += std::format("{:02x} ", data[i]);
+        first_12_bytes_hex += FMT::format("{:02x} ", data[i]);
       }
-      return std::format("RTP Command Packet: Invalid Command packet {}",
+      return FMT::format("RTP Command Packet: Invalid Command packet {}",
                          first_12_bytes_hex);
     }
-    return std::format("RTP Command Packet: Command:{} Protocol:{} SSRC:{}",
+    return FMT::format("RTP Command Packet: Command:{} Protocol:{} SSRC:{}",
                        get_command(), get_protocol_version(),
                        get_sender_ssrc());
   }
@@ -274,12 +274,12 @@ public:
     if (!is_command_packet()) {
       std::string first_12_bytes_hex;
       for (int i = 0; i < 16; i++) {
-        first_12_bytes_hex += std::format("{:02x} ", data[i]);
+        first_12_bytes_hex += FMT::format("{:02x} ", data[i]);
       }
-      return std::format("RTP Command Packet: Invalid Command packet {}",
+      return FMT::format("RTP Command Packet: Invalid Command packet {}",
                          first_12_bytes_hex);
     }
-    return std::format("RTP Command Packet: Command:{} Protocol:{} Initiator: "
+    return FMT::format("RTP Command Packet: Command:{} Protocol:{} Initiator: "
                        "{} SSRC:{:08X} Name:{}",
                        get_command(), get_protocol_version(),
                        get_initiator_token(), get_sender_ssrc(), get_name());
@@ -354,12 +354,12 @@ public:
     if (!is_command_packet()) {
       std::string first_12_bytes_hex;
       for (int i = 0; i < 12; i++) {
-        first_12_bytes_hex += std::format("{:02x} ", data[i]);
+        first_12_bytes_hex += FMT::format("{:02x} ", data[i]);
       }
-      return std::format("RTP Command Packet: Invalid Command packet {}",
+      return FMT::format("RTP Command Packet: Invalid Command packet {}",
                          first_12_bytes_hex);
     }
-    return std::format(
+    return FMT::format(
         "RTP Command Packet: Command:{} Protocol:{} SSRC:{} Count: {} "
         "CK0:{} CK1:{} CK2:{}",
         get_command(), get_protocol_version(), get_sender_ssrc(), get_count(),

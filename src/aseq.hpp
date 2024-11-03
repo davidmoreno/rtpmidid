@@ -45,7 +45,7 @@ public:
     }
 
     std::string to_string() const {
-      return std::format("port_t[{}, {}]", client, port);
+      return FMT::format("port_t[{}, {}]", client, port);
     }
   };
 

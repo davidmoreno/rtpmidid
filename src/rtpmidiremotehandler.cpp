@@ -45,7 +45,7 @@ rtpmidi_remote_handler_t::rtpmidi_remote_handler_t(
 void rtpmidi_remote_handler_t::discover_peer(const std::string &name,
                                              const std::string &hostname,
                                              const std::string &port) {
-  std::string fullname = std::format("{}:{}/{}", hostname, port, name);
+  std::string fullname = FMT::format("{}:{}/{}", hostname, port, name);
 
   if (!check_if_add_peer(name, hostname, port)) {
     INFO("Not adding peer=\"{}\", as "
@@ -98,7 +98,7 @@ bool rtpmidi_remote_handler_t::check_if_add_peer(const std::string &name,
     return false;
   }
 
-  std::string fullname = std::format("{}:{} - {}", hostname, port, name);
+  std::string fullname = FMT::format("{}:{} - {}", hostname, port, name);
   DEBUG0("Checking if we should add peer: fullname=\"{}\"", fullname);
   bool match_negative = std::regex_search(
       fullname, settings.rtpmidi_discover.name_negative_regex);

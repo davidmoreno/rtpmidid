@@ -286,7 +286,7 @@ std::vector<std::string> get_ports(aseq_t *seq) {
       // snd_seq_port_info_get_name(pinfo));
       if (!(snd_seq_port_info_get_capability(pinfo) &
             SND_SEQ_PORT_CAP_NO_EXPORT)) {
-        auto name = std::format("{}:{}", snd_seq_client_info_get_name(cinfo),
+        auto name = FMT::format("{}:{}", snd_seq_client_info_get_name(cinfo),
                                 snd_seq_port_info_get_name(pinfo));
         ret.push_back(std::move(name));
         count++;
@@ -314,7 +314,7 @@ std::string aseq_t::get_client_name(snd_seq_addr_t *addr) {
   //  Many times the name is just a copy
   if (client_name == port_name)
     return client_name;
-  return std::format("{}-{}", client_name, port_name);
+  return FMT::format("{}-{}", client_name, port_name);
 }
 
 aseq_t::client_type_e get_type_by_seq_type(int type) {

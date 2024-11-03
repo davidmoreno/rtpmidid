@@ -20,7 +20,7 @@
 #pragma once
 #include <cstring>
 #include <exception>
-#include <format>
+#include "formatterhelper.hpp"
 #include <string>
 
 namespace rtpmidid {
@@ -29,8 +29,8 @@ class exception : public std::exception {
 
 public:
   template <typename... Args>
-  exception(std::format_string<Args...> msg, Args... args)
-      : msg(std::format(msg, std::forward<Args>(args)...)) {}
+  exception(FMT::format_string<Args...> msg, Args... args)
+      : msg(FMT::format(msg, std::forward<Args>(args)...)) {}
   const char *what() const noexcept override { return msg.c_str(); }
 };
 
@@ -44,7 +44,7 @@ class network_exception : public std::exception {
 
 public:
   network_exception(int _errno) : errno_(_errno) {
-    str = std::format("Network error {} ({})", strerror(errno_), errno_);
+    str = FMT::format("Network error {} ({})", strerror(errno_), errno_);
   }
   const char *what() const noexcept override { return str.c_str(); }
 };
@@ -53,8 +53,8 @@ class ini_exception : public exception {
 public:
   template <typename... Args>
   ini_exception(const std::string &filename, int lineno,
-                std::format_string<Args...> msg, Args... args)
+                FMT::format_string<Args...> msg, Args... args)
       : exception("Error parsing INI configuration at {}:{}: {}", filename,
-                  lineno, std::format(msg, std::forward<Args>(args)...)) {}
+                  lineno, FMT::format(msg, std::forward<Args>(args)...)) {}
 };
 } // namespace rtpmidid

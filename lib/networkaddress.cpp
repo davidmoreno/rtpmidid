@@ -91,13 +91,13 @@ std::string network_address_t::to_string() const {
   if (addr->sa_family == AF_INET) {
     inet_ntop(AF_INET, &reinterpret_cast<const sockaddr_in *>(addr)->sin_addr,
               name.data(), name.size());
-    return std::format(
+    return FMT::format(
         "{}:{}", name.data(),
         ntohs(reinterpret_cast<const sockaddr_in *>(addr)->sin_port));
   }
   inet_ntop(AF_INET6, &reinterpret_cast<const sockaddr_in6 *>(addr)->sin6_addr,
             name.data(), name.size());
-  return std::format(
+  return FMT::format(
       "{}:{}", name.data(),
       ntohs(reinterpret_cast<const sockaddr_in6 *>(addr)->sin6_port));
 }

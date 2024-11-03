@@ -35,7 +35,7 @@ public:
 
   test_exception(const char *file, int line, const std::string &error)
       : filename(file), line(line), error(error) {
-    msg = std::format("{}:{} Test Fail: {}{}{}", file, line, "\033[1;31m",
+    msg = FMT::format("{}:{} Test Fail: {}{}{}", file, line, "\033[1;31m",
                       error, "\033[0m");
   }
   const char *what() const noexcept override { return msg.c_str(); }

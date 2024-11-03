@@ -593,7 +593,7 @@ void rtpmidid::mdns_rtpmidi_t::announce_all() {
 
   std::string announce_suffix_str = "";
   if (announce_suffix > 0) {
-    announce_suffix_str = std::format(" #{}", announce_suffix);
+    announce_suffix_str = FMT::format(" #{}", announce_suffix);
   }
 
   int ret = -1;

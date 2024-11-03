@@ -67,18 +67,18 @@ logger_t::buffer_t::iterator
 logger_t::log_preamble(logger_level_t level, const char *filename, int lineno) {
   auto it = buffer.begin();
 
-  it = std::format_to(it, "{}[{}] {}:{}", ansi_color(level), level,
+  it = FMT::format_to(it, "{}[{}] {}:{}", ansi_color(level), level,
                       basename(filename), lineno);
   for (int i = it - buffer.begin() - ansi_color_length(level); i < 40; i++) {
     *it = ' ';
     it++;
   }
-  it = std::format_to(it, " | ");
+  it = FMT::format_to(it, " | ");
   return it;
 }
 
 void logger_t::log_postamble(buffer_t::iterator it) {
-  it = std::format_to(it, "{}", ansi_color_reset());
+  it = FMT::format_to(it, "{}", ansi_color_reset());
   *it = '\0';
   std::cout << buffer.data() << std::endl;
 }

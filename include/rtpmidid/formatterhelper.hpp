@@ -18,54 +18,67 @@
  */
 
 #pragma once
-#include <format>
 
-#define BASIC_FORMATTER(T, FMT, ...)                                           \
-  template <> struct std::formatter<T> {                                       \
-    constexpr auto parse(std::format_parse_context &ctx) {                     \
+#include <cstdint>
+#include <cstring>
+
+#ifdef USE_LIBFMT
+#define FMT fmt
+#include <fmt/core.h>
+#else
+#define FMT std
+#include <format>
+#endif
+
+#define BASIC_FORMATTER(T, FORMAT, ...)                                        \
+  template <> struct FMT::formatter<T> {                                       \
+    constexpr auto parse(FMT::format_parse_context &ctx) {                     \
       return ctx.begin();                                                      \
     }                                                                          \
-    auto format(const T &v, std::format_context &ctx) const {                  \
-      return std::format_to(ctx.out(), FMT, __VA_ARGS__);                      \
+    auto format(const T &v, FMT::format_context &ctx) const {                  \
+      return FMT::format_to(ctx.out(), FORMAT, __VA_ARGS__);                   \
     }                                                                          \
   }
 
 #define ENUM_FORMATTER_BEGIN(EnumType)                                         \
-  template <> struct std::formatter<EnumType> {                                \
-    constexpr auto parse(std::format_parse_context &ctx) {                     \
+  template <> struct FMT::formatter<EnumType> {                                \
+    constexpr auto parse(FMT::format_parse_context &ctx) {                     \
       return ctx.begin();                                                      \
     }                                                                          \
-    auto format(const EnumType &v, std::format_context &ctx) const {           \
+    auto format(const EnumType &v, FMT::format_context &ctx) const {           \
       switch (v) {
 
 #define ENUM_FORMATTER_ELEMENT(EnumValue, Str)                                 \
   case EnumValue:                                                              \
-    return std::format_to(ctx.out(), Str);
+    return FMT::format_to(ctx.out(), Str);
 
 #define ENUM_FORMATTER_DEFAULT()                                               \
   default:                                                                     \
-    return std::format_to(ctx.out(), "Unknown");
+    return FMT::format_to(ctx.out(), "Unknown");
 
 #define ENUM_FORMATTER_END()                                                   \
   }                                                                            \
-  return std::format_to(ctx.out(), "Unknown");                                 \
+  return FMT::format_to(ctx.out(), "Unknown");                                 \
   }                                                                            \
   }
 
 #define VECTOR_FORMATTER(T)                                                    \
-  template <> struct std::formatter<std::vector<T>> {                          \
-    constexpr auto parse(std::format_parse_context &ctx) {                     \
+  template <> struct FMT::formatter<std::vector<T>> {                          \
+    constexpr auto parse(FMT::format_parse_context &ctx) {                     \
       return ctx.begin();                                                      \
     }                                                                          \
-    auto format(const std::vector<T> &v, std::format_context &ctx) const {     \
-      auto it = format_to(ctx.out(), "[");                                     \
+    auto format(const std::vector<T> &v, FMT::format_context &ctx) const {     \
+      auto it = ::FMT::format_to(ctx.out(), "[");                              \
       for (auto &item : v) {                                                   \
-        format_to(it, "{}", item);                                             \
+        ::FMT::format_to(it, "{}", item);                                      \
         if (&item != &v.back()) {                                              \
-          format_to(it, ", ");                                                 \
+          ::FMT::format_to(it, ", ");                                          \
         }                                                                      \
       }                                                                        \
-      format_to(it, "]");                                                      \
+      ::FMT::format_to(it, "]");                                               \
       return it;                                                               \
     }                                                                          \
   }
+
+BASIC_FORMATTER(size_t, "{}", (uint32_t)v);
+BASIC_FORMATTER(ssize_t, "{}", (int32_t)v);

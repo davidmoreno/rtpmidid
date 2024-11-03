@@ -173,7 +173,7 @@ json_t local_alsa_listener_t::status() {
   return json_t{
       //
       {"name",
-       std::format("{} <-> {}", local_name == "" ? "[WATING]" : local_name,
+       FMT::format("{} <-> {}", local_name == "" ? "[WATING]" : local_name,
                    remote_name)},
       {"endpoints", jendpoints},
       {"connection_count", connection_count},

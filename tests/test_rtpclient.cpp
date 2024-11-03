@@ -299,7 +299,7 @@ void test_client_state_machine() {
         } break;
         default: {
           rtpmidid::packet_command_t req(data);
-          FAIL(std::format("Unexpected command: {}", req.get_command()));
+          FAIL(FMT::format("Unexpected command: {}", req.get_command()));
         }
         }
       });

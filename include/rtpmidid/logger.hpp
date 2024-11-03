@@ -20,7 +20,7 @@
 #pragma once
 #include "formatterhelper.hpp"
 #include <array>
-#include <format>
+#include <fmt/core.h>
 #include <iostream>
 
 namespace rtpmidid {
@@ -48,12 +48,12 @@ public:
 
   template <typename... Args>
   constexpr void log(logger_level_t level, const char *filename, int lineno,
-                     std::format_string<Args...> message, Args... args) {
+                     FMT::format_string<Args...> message, Args... args) {
     auto it = log_preamble(level, filename, lineno);
 
-    size_t max_size = buffer.size() - (it - buffer.begin()) - 16;
+    auto max_size = buffer.size() - (it - buffer.begin()) - 16;
     auto res =
-        std::format_to_n(it, max_size, message, std::forward<Args>(args)...);
+        FMT::format_to_n(it, max_size, message, std::forward<Args>(args)...);
     it = res.out;
 
     log_postamble(it);
@@ -69,13 +69,13 @@ extern rtpmidid::logger_t logger2;
 #if __cplusplus < 202302L
 namespace std {
 template <typename... Args>
-void print(std::format_string<Args...> fmt, Args... args) {
-  std::cout << std::format(fmt, std::forward<Args>(args)...);
+void print(FMT::format_string<Args...> format, Args... args) {
+  std::cout << FMT::format(format, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
-void println(std::format_string<Args...> fmt, Args... args) {
-  std::cout << std::format(fmt, std::forward<Args>(args)...) << std::endl;
+void println(FMT::format_string<Args...> format, Args... args) {
+  std::cout << FMT::format(format, std::forward<Args>(args)...) << std::endl;
 }
 #endif
 } // namespace std

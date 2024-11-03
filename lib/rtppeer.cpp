@@ -535,7 +535,7 @@ void rtppeer_t::parse_midi(io_bytes_reader &buffer) {
     length = next_midi_packet_length(buffer);
     if (length == 0) {
       throw bad_midi_packet(
-          std::format("Unexpected MIDI data: {}", *buffer.position).c_str());
+          FMT::format("Unexpected MIDI data: {}", *buffer.position).c_str());
     }
     buffer.check_enough(length);
     // DEBUG("Remaining {}, length for this packet: {}", remaining, length);
