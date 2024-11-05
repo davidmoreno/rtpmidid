@@ -20,7 +20,7 @@
 #pragma once
 
 #include <array>
-#include <fmt/core.h>
+#include <rtpmidid/logger.hpp>
 #include <stddef.h>
 #include <stdint.h>
 #include <string>
@@ -114,7 +114,7 @@ public:
       }
       block_chars--;
       line_chars--;
-      ret += fmt::format("{:02X} ", data[i]);
+      ret += FMT::format("{:02X} ", data[i]);
     }
     return ret;
   }
@@ -141,31 +141,10 @@ public:
 
 } // namespace rtpmidid
 
-// allow fmt to format rtpmidid::packet_type_e
-template <> struct fmt::formatter<rtpmidid::packet_type_e> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
+BASIC_FORMATTER(rtpmidid::packet_t, "Packet: {} bytes", v.get_size());
 
-  template <typename FormatContext>
-  auto format(const rtpmidid::packet_type_e &c, FormatContext &ctx) const {
-    switch (c) {
-    case rtpmidid::packet_type_e::UNKNOWN:
-      return format_to(ctx.out(), "UNKNOWN");
-    case rtpmidid::packet_type_e::MIDI:
-      return format_to(ctx.out(), "MIDI");
-    case rtpmidid::packet_type_e::COMMAND:
-      return format_to(ctx.out(), "COMMAND");
-    default:
-      return format_to(ctx.out(), "Unknown Packet Type:{}", c);
-    }
-  }
-};
-
-// allow fmt to format rtpmidid::packet_t
-template <> struct fmt::formatter<rtpmidid::packet_t> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const rtpmidid::packet_t &c, FormatContext &ctx) const {
-    return format_to(ctx.out(), "Packet: {} bytes", c.get_size());
-  }
-};
+ENUM_FORMATTER_BEGIN(rtpmidid::packet_type_e);
+ENUM_FORMATTER_ELEMENT(rtpmidid::packet_type_e::UNKNOWN, "UNKNOWN");
+ENUM_FORMATTER_ELEMENT(rtpmidid::packet_type_e::MIDI, "MIDI");
+ENUM_FORMATTER_ELEMENT(rtpmidid::packet_type_e::COMMAND, "COMMAND");
+ENUM_FORMATTER_END();

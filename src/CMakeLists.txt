@@ -36,6 +36,11 @@ add_executable(
 
 target_link_libraries(rtpmidid2-daemon rtpmidid2-static)
 
+target_link_libraries(rtpmidid2-daemon ${FMT_LIBRARIES})
+target_include_directories(rtpmidid2-daemon PUBLIC ${FMT_INCLUDE_DIRS})
+target_compile_options(rtpmidid2-daemon PUBLIC ${FMT_CFLAGS_OTHER})
+
+
 target_link_libraries(rtpmidid2-daemon ${AVAHI_LIBRARIES})
 target_include_directories(rtpmidid2-daemon PUBLIC ${AVAHI_INCLUDE_DIRS})
 target_compile_options(rtpmidid2-daemon PUBLIC ${AVAHI_CFLAGS_OTHER})

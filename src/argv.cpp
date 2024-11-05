@@ -22,7 +22,6 @@
 #include "stringpp.hpp"
 #include <algorithm>
 #include <array>
-#include <fmt/core.h>
 #include <functional>
 #include <iterator>
 #include <rtpmidid/exceptions.hpp>
@@ -41,7 +40,7 @@ namespace rtpmididns {
 const char *VERSION = RTPMIDID_VERSION;
 
 // NOLINTNEXTLINE (cppcoreguidelines-pro-bounds-pointer-arithmetic)
-const char *const CMDLINE_HELP = &R"(
+constexpr const char *const CMDLINE_HELP = &R"(
 Real Time Protocol Music Instrument Digital Interface Daemon v{}
 (C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
 Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.
@@ -93,9 +92,9 @@ static std::string get_hostname() {
 }
 
 void help(const std::vector<argument_t> &arguments) {
-  fmt::print(CMDLINE_HELP, VERSION);
+  std::print(CMDLINE_HELP, VERSION);
   for (auto &argument : arguments) {
-    fmt::print("  {:<30} {}\n", argument.arg, argument.comment);
+    std::print("  {:<30} {}\n", argument.arg, argument.comment);
   }
 }
 
@@ -189,8 +188,8 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
       });
   arguments.emplace_back( //
       "--version",        //
-      "Show version", [settings](const std::string &value) {
-        fmt::print("rtpmidid version {}/2\n", VERSION);
+      "Show version", [](const std::string &value) {
+        std::print("rtpmidid version {}/2\n", VERSION);
         exit(0);
       });
   arguments.emplace_back( //
@@ -222,7 +221,7 @@ void parse_argv(const std::vector<std::string> &argv, settings_t *settings) {
       // Checks all arguments
       for (auto &argument : arguments) {
         if (argument.has_second_argument) {
-          auto keyeq = fmt::format("{}=", argument.arg);
+          auto keyeq = FMT::format("{}=", argument.arg);
           if (key.substr(0, keyeq.length()) == keyeq) {
             argument.fn(key.substr(keyeq.length()));
             parsed = true;

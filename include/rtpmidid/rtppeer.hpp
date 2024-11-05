@@ -158,66 +158,39 @@ public:
 };
 } // namespace rtpmidid
 
-template <>
-struct fmt::formatter<rtpmidid::rtppeer_t::status_e>
-    : formatter<fmt::string_view> {
-  auto format(rtpmidid::rtppeer_t::status_e c, format_context &ctx) const {
-    fmt::string_view name = "UNKNOWN";
-    switch (c) {
-    case rtpmidid::rtppeer_t::status_e::NOT_CONNECTED:
-      name = "NOT_CONNECTED";
-      break;
-    case rtpmidid::rtppeer_t::status_e::CONTROL_CONNECTED:
-      name = "CONTROL_CONNECTED";
-      break;
-    case rtpmidid::rtppeer_t::status_e::MIDI_CONNECTED:
-      name = "MIDI_CONNECTED";
-      break;
-    case rtpmidid::rtppeer_t::status_e::CONNECTED:
-      name = "CONNECTED";
-      break;
-    case rtpmidid::rtppeer_t::status_e::DISCONNECTED:
-      name = "DISCONNECTED";
-      break;
-    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_CANT_CONNECT:
-      name = "DISCONNECTED_CANT_CONNECT";
-      break;
-    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_PEER_DISCONNECTED:
-      name = "DISCONNECTED_PEER_DISCONNECTED";
-      break;
-    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_CONNECTION_REJECTED:
-      name = "DISCONNECTED_CONNECTION_REJECTED";
-      break;
-    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_DISCONNECT:
-      name = "DISCONNECTED_DISCONNECT";
-      break;
-    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_CONNECT_TIMEOUT:
-      name = "DISCONNECTED_CONNECT_TIMEOUT";
-      break;
-    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_CK_TIMEOUT:
-      name = "DISCONNECTED_CK_TIMEOUT";
-      break;
-    case rtpmidid::rtppeer_t::status_e::DISCONNECTED_NETWORK_ERROR:
-      name = "DISCONNECTED_NETWORK_ERROR";
-      break;
-    }
-    return formatter<fmt::string_view>::format(name, ctx); // NOLINT
-  }
-};
+ENUM_FORMATTER_BEGIN(rtpmidid::rtppeer_t::status_e);
+ENUM_FORMATTER_ELEMENT(rtpmidid::rtppeer_t::status_e::NOT_CONNECTED,
+                       "NOT_CONNECTED");
+ENUM_FORMATTER_ELEMENT(rtpmidid::rtppeer_t::status_e::CONTROL_CONNECTED,
 
-template <>
-struct fmt::formatter<rtpmidid::rtppeer_t::port_e>
-    : formatter<fmt::string_view> {
-  auto format(rtpmidid::rtppeer_t::port_e c, format_context &ctx) const {
-    const char *name = "UNKNOWN"; // NOLINT
-    switch (c) {
-    case rtpmidid::rtppeer_t::port_e::MIDI_PORT:
-      name = "MIDI_PORT";
-      break;
-    case rtpmidid::rtppeer_t::port_e::CONTROL_PORT:
-      name = "CONTROL_PORT";
-      break;
-    }
-    return formatter<fmt::string_view>::format(name, ctx); // NOLINT
-  }
-};
+                       "CONTROL_CONNECTED");
+ENUM_FORMATTER_ELEMENT(rtpmidid::rtppeer_t::status_e::MIDI_CONNECTED,
+                       "MIDI_CONNECTED");
+ENUM_FORMATTER_ELEMENT(rtpmidid::rtppeer_t::status_e::CONNECTED, "CONNECTED");
+ENUM_FORMATTER_ELEMENT(rtpmidid::rtppeer_t::status_e::DISCONNECTED,
+                       "DISCONNECTED");
+ENUM_FORMATTER_ELEMENT(rtpmidid::rtppeer_t::status_e::DISCONNECTED_CANT_CONNECT,
+                       "DISCONNECTED_CANT_CONNECT");
+ENUM_FORMATTER_ELEMENT(
+    rtpmidid::rtppeer_t::status_e::DISCONNECTED_PEER_DISCONNECTED,
+    "DISCONNECTED_PEER_DISCONNECTED");
+ENUM_FORMATTER_ELEMENT(
+    rtpmidid::rtppeer_t::status_e::DISCONNECTED_CONNECTION_REJECTED,
+    "DISCONNECTED_CONNECTION_REJECTED");
+ENUM_FORMATTER_ELEMENT(rtpmidid::rtppeer_t::status_e::DISCONNECTED_DISCONNECT,
+                       "DISCONNECTED_DISCONNECT");
+ENUM_FORMATTER_ELEMENT(
+    rtpmidid::rtppeer_t::status_e::DISCONNECTED_CONNECT_TIMEOUT,
+    "DISCONNECTED_CONNECT_TIMEOUT");
+ENUM_FORMATTER_ELEMENT(rtpmidid::rtppeer_t::status_e::DISCONNECTED_CK_TIMEOUT,
+                       "DISCONNECTED_CK_TIMEOUT");
+ENUM_FORMATTER_ELEMENT(
+    rtpmidid::rtppeer_t::status_e::DISCONNECTED_NETWORK_ERROR,
+    "DISCONNECTED_NETWORK_ERROR");
+ENUM_FORMATTER_END();
+
+ENUM_FORMATTER_BEGIN(rtpmidid::rtppeer_t::port_e);
+ENUM_FORMATTER_ELEMENT(rtpmidid::rtppeer_t::port_e::MIDI_PORT, "MIDI_PORT");
+ENUM_FORMATTER_ELEMENT(rtpmidid::rtppeer_t::port_e::CONTROL_PORT,
+                       "CONTROL_PORT");
+ENUM_FORMATTER_END();

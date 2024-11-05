@@ -45,9 +45,7 @@ void error_handler(const char *file, int line, const char *function, int err,
   va_end(arg);
   std::string filename = "alsa/";
   filename += file;
-
-  logger::__logger.log(filename.c_str(), line, ::logger::LogLevel::ERROR,
-                       msg.c_str());
+  ERROR("{}", msg);
 }
 
 snd_seq_addr_t *get_other_ev_client_port(snd_seq_event_t *ev,
@@ -288,7 +286,7 @@ std::vector<std::string> get_ports(aseq_t *seq) {
       // snd_seq_port_info_get_name(pinfo));
       if (!(snd_seq_port_info_get_capability(pinfo) &
             SND_SEQ_PORT_CAP_NO_EXPORT)) {
-        auto name = fmt::format("{}:{}", snd_seq_client_info_get_name(cinfo),
+        auto name = FMT::format("{}:{}", snd_seq_client_info_get_name(cinfo),
                                 snd_seq_port_info_get_name(pinfo));
         ret.push_back(std::move(name));
         count++;
@@ -316,7 +314,7 @@ std::string aseq_t::get_client_name(snd_seq_addr_t *addr) {
   //  Many times the name is just a copy
   if (client_name == port_name)
     return client_name;
-  return fmt::format("{}-{}", client_name, port_name);
+  return FMT::format("{}-{}", client_name, port_name);
 }
 
 aseq_t::client_type_e get_type_by_seq_type(int type) {
@@ -712,28 +710,6 @@ void mididata_to_alsaevents_t::ev_to_mididata_f(
 }
 
 } // namespace rtpmididns
-
-fmt::appender
-fmt::formatter<rtpmididns::aseq_t::port_t>::format(rtpmididns::aseq_t::port_t c,
-                                                   format_context &ctx) const {
-  auto name = fmt::format("port_t[{}, {}]", c.client, c.port);
-  return formatter<fmt::string_view>::format(name, ctx);
-}
-
-fmt::appender fmt::formatter<rtpmididns::aseq_t::client_type_e>::format(
-    rtpmididns::aseq_t::client_type_e c, format_context &ctx) const {
-  auto name = c == rtpmididns::aseq_t::client_type_e::TYPE_HARDWARE
-                  ? "TYPE_HARDWARE"
-                  : "TYPE_SOFTWARE";
-  return formatter<fmt::string_view>::format(name, ctx);
-}
-
-fmt::appender fmt::formatter<rtpmididns::aseq_t::connection_t>::format(
-    const rtpmididns::aseq_t::connection_t &c, format_context &ctx) const {
-  auto name =
-      fmt::format("connection_t[{}, {} -> {}]", c.connected, c.from, c.to);
-  return formatter<fmt::string_view>::format(name, ctx);
-}
 
 const char *format_as(const snd_seq_event_type type) {
   switch (type) {

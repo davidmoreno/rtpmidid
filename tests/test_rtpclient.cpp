@@ -64,8 +64,7 @@ void test_network_address_list() {
   ASSERT_IN(first.ip(), "127.0.0.1", "::1");
 
   // Move first
-  localhost_resolutions =
-      rtpmidid::network_address_list_t("::", "13001");
+  localhost_resolutions = rtpmidid::network_address_list_t("::", "13001");
   first = localhost_resolutions.get_first();
   DEBUG("First: {}", first.to_string());
   ASSERT_EQUAL(first.hostname(), "::");
@@ -300,7 +299,7 @@ void test_client_state_machine() {
         } break;
         default: {
           rtpmidid::packet_command_t req(data);
-          FAIL(fmt::format("Unexpected command: {}", req.get_command()));
+          FAIL(FMT::format("Unexpected command: {}", req.get_command()));
         }
         }
       });

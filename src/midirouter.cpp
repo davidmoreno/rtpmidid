@@ -74,7 +74,7 @@ void midirouter_t::peer_connection_loop(
     peer_id_t peer_id, std::function<void(std::shared_ptr<midipeer_t>)> func) {
   auto peerdata = get_peerdata_by_id(peer_id);
   if (!peerdata) {
-    WARNING("Unkown peer {}!", peer_id);
+    WARNING("unknown peer {}!", peer_id);
     return;
   }
   for (auto to : peerdata->send_to) {
@@ -109,7 +109,7 @@ void midirouter_t::remove_peer(peer_id_t peer_id) {
 void midirouter_t::send_midi(uint32_t from, const mididata_t &data) {
   auto peerdata = get_peerdata_by_id(from);
   if (!peerdata) {
-    WARNING("Sending from an unkown peer {}!", from);
+    WARNING("Sending from an unknown peer {}!", from);
     return;
   }
 
@@ -126,7 +126,7 @@ void midirouter_t::send_midi(peer_id_t from, peer_id_t to,
   auto send_peer = get_peer_by_id(from);
   auto recv_peer = get_peer_by_id(to);
   if (!send_peer || !recv_peer) {
-    WARNING("Sending to unkown peer {} -> {}", from, to);
+    WARNING("Sending to unknown peer {} -> {}", from, to);
     return;
   }
   recv_peer->packets_recv++;
@@ -137,7 +137,7 @@ void midirouter_t::connect(peer_id_t from, peer_id_t to) {
   auto from_peer = get_peerdata_by_id(from);
   auto to_peer = get_peerdata_by_id(to);
   if (!from_peer || !to_peer) {
-    WARNING("Sending to unkown peer {} -> {}", from, to);
+    WARNING("Sending to unknown peer {} -> {}", from, to);
     return;
   }
 
@@ -153,7 +153,7 @@ void midirouter_t::disconnect(peer_id_t from, peer_id_t to) {
   auto from_peer = get_peerdata_by_id(from);
   auto to_peer = get_peerdata_by_id(to);
   if (!from_peer || !to_peer) {
-    WARNING("Sending to unkown peer {} -> {}", from, to);
+    WARNING("Sending to unknown peer {} -> {}", from, to);
     return;
   }
 

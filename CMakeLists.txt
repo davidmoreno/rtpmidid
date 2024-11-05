@@ -8,7 +8,36 @@ option(ENABLE_PCH "Enable precompiled headers" ON)
 # option to easy use clang compiler
 option(USE_CLANG "Use clang compiler" OFF)
 # option force the linker, default mold, if not found lld, if not found default
-option(LLD "Use lld linker (mold | lld | ld | auto)" "auto")
+set(LDD "auto" CACHE STRING "Use ldd linker (mold | lld | auto)")
+# option to use C++20 instead of C++17. With C++20 no need for FMT
+set(CPP_VERSION "auto" CACHE STRING "Use given C++  version. 17 and 20 supported")
+# option to force use fmt, depends on CPP20
+set(USE_FMT "auto" CACHE STRING "Use fmt library (ON | OFF | auto)")
+
+# if CPP is "auto", check if C++20 is available and set it
+if (CPP_VERSION STREQUAL "auto" OR CPP_VERSION STREQUAL "auto")
+  message(STATUS "Checking for C++20 support")
+  include(CheckIncludeFileCXX)
+  CHECK_INCLUDE_FILE_CXX("format" HAVE_FORMAT)
+  if (HAVE_FORMAT)
+    set(CPP_VERSION "20")
+  else()
+    set(CPP_VERSION "17")
+  endif()
+endif()
+
+if (CPP_VERSION STREQUAL "20" AND USE_FMT STREQUAL "auto")
+  set(USE_FMT "OFF")
+endif()
+if (USE_FMT STREQUAL "auto")
+  set(USE_FMT "ON")
+endif()
+
+if (USE_FMT STREQUAL "ON")
+  message(STATUS "Using fmt library")
+else()
+  message(STATUS "Not using fmt library")
+endif()
 
 if (USE_CLANG)
   set (CMAKE_CXX_COMPILER "clang++")
@@ -16,7 +45,7 @@ if (USE_CLANG)
   message(STATUS "Using clang compiler")
 endif()
 
-add_definitions("-std=gnu++17 -Wall -Werror")
+add_definitions("-std=c++${CPP_VERSION} -Wall -Werror")
 
 set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer")
 message(STATUS "Build type ${CMAKE_BUILD_TYPE}")
@@ -62,11 +91,6 @@ elseif (LLD STREQUAL "lld")
 endif()
 
 
-
-
-
-
-
 if (ENABLE_PCH)
   # show a log message
   message(STATUS "Precompiled headers enabled")
@@ -77,7 +101,15 @@ endif(ENABLE_PCH)
 
 include(FindPkgConfig)
 pkg_check_modules(AVAHI REQUIRED avahi-client)
-pkg_check_modules(FMT REQUIRED fmt)
+if (USE_FMT STREQUAL "ON")
+  pkg_check_modules(FMT REQUIRED fmt)
+  add_definitions(-DUSE_LIBFMT)
+else()
+  # create compatible definitions that are empty  
+  set(FMT_LIBRARIES "")
+  set(FMT_INCLUDE_DIRS "")
+  set(FMT_CFLAGS_OTHER "")
+endif()
 if(NOT LIBS_ONLY)
   pkg_check_modules(ALSA REQUIRED alsa)
 endif(NOT LIBS_ONLY)

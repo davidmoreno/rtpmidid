@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2024 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,94 +17,70 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#include <fmt/ostream.h>
 #include <rtpmidid/logger.hpp>
-#include <stdio.h>
-#include <string>
-#include <string_view>
-#include <unistd.h>
 
-namespace logger {
-// NOLINTNEXLINE: A lot of rules are broken here, but I need it like this
-logger __logger;
-
-enum Color {
-  RED = 31,
-  GREEN = 32,
-  YELLOW = 33,
-  BLUE = 34,
-  PURPLE = 35,
-  ORANGE = 36,
-  WHITE = 37,
-};
-
-// NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)
-
-const char *color(const char *str, Color color, bool highlight = false) {
-  int hl = highlight ? 1 : 0;
-  static char buffer[512];
-  auto n = fmt::format_to_n(buffer, sizeof(buffer), "\033[{};{}m{}\033[0m", hl,
-                            (int)color, str);
-  *n.out = '\0';
-  return buffer;
-}
-const char *color(const char *str, Color color, Color bgcolor,
-                  bool highlight = false) {
-  int hl = highlight ? 1 : 0;
-  static char buffer[256];
-  auto n = fmt::format_to_n(buffer, sizeof(buffer), "\033[{};{};{}m{}\033[0m",
-                            hl, (int)color, (int)bgcolor, str);
-  *n.out = '\0';
-  return buffer;
-}
-
-logger::logger() { is_a_terminal = isatty(fileno(stdout)); }
-
-logger::~logger() {}
-void logger::log(const char *filename, int lineno, LogLevel loglevel,
-                 const char *msg) {
-  static std::array<char, LOG_BUFFER_SIZE> buffer;
-  if (is_a_terminal) {
-    time_t now = time(nullptr);
-    char timestamp[sizeof "2011-10-08T07:07:09Z"];
-    strftime(timestamp, sizeof timestamp, "%FT%TZ", gmtime(&now));
-
-    auto my_color = WHITE;
-    switch (loglevel) {
-    case DEBUG:
-      my_color = BLUE;
-      break;
-    case WARNING:
-      my_color = YELLOW;
-      break;
-    case ERROR:
-      my_color = RED;
-      break;
-    case INFO:
-      my_color = WHITE;
-      break;
-    case SUCCESS:
-      my_color = GREEN;
-      break;
-    }
-
-    auto n = fmt::format_to_n(buffer.data(), buffer.size(), "[{}] [{}:{}]",
-                              timestamp, filename, lineno);
-    *n.out = '\0';
-    const char *colored_data = color(buffer.data(), my_color);
-    n = fmt::format_to_n(buffer.data(), buffer.size(), "{} {}\n", colored_data,
-                         msg);
-    *n.out = '\0';
-  } else {
-    auto n = fmt::format_to_n(buffer.data(), buffer.size(), " [{}:{}] {}\n",
-                              filename, lineno, msg);
-    *n.out = '\0';
+namespace rtpmidid {
+rtpmidid::logger_t logger2;
+static constexpr const char *ansi_color(logger_level_t level) {
+  switch (level) {
+  case DEBUG:
+    return "\033[1;34m";
+  case INFO:
+    return ""; // no color
+  case WARNING:
+    return "\033[1;33m";
+  case ERROR:
+    return "\033[1;31m";
+  default:
+    return "";
   }
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-  ::fprintf(stderr, "%s", buffer.data());
 }
-void logger::flush() { ::fflush(stderr); }
+static constexpr size_t ansi_color_length(logger_level_t level) {
+  switch (level) {
+  case DEBUG:
+    return 7;
+  case INFO:
+    return 0;
+  case WARNING:
+    return 7;
+  case ERROR:
+    return 7;
+  default:
+    return 0;
+  }
+}
 
-// NOLINTEND(cppcoreguidelines-avoid-c-arrays,cppcoreguidelines-pro-bounds-array-to-pointer-decay)
+static constexpr const char *ansi_color_reset() { return "\033[0m"; }
 
-} // namespace logger
+static constexpr const char *basename(const char *filename) {
+  const char *p = filename;
+  while (*filename) {
+    if (*filename == '/') {
+      p = filename + 1;
+    }
+    filename++;
+  }
+  return p;
+}
+
+logger_t::buffer_t::iterator
+logger_t::log_preamble(logger_level_t level, const char *filename, int lineno) {
+  auto it = buffer.begin();
+
+  it = FMT::format_to(it, "{}[{}] {}:{}", ansi_color(level), level,
+                      basename(filename), lineno);
+  for (int i = it - buffer.begin() - ansi_color_length(level); i < 40; i++) {
+    *it = ' ';
+    it++;
+  }
+  it = FMT::format_to(it, " | ");
+  return it;
+}
+
+void logger_t::log_postamble(buffer_t::iterator it) {
+  it = FMT::format_to(it, "{}", ansi_color_reset());
+  *it = '\0';
+  std::cout << buffer.data() << std::endl;
+}
+
+}; // namespace rtpmidid

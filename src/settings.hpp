@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include <fmt/core.h>
+#include "rtpmidid/logger.hpp"
 #include <optional>
 #include <regex>
 
@@ -89,71 +89,41 @@ struct settings_t {
 extern settings_t settings; // NOLINT
 } // namespace rtpmididns
 
-template <>
-struct fmt::formatter<rtpmididns::settings_t::alsa_announce_t>
-    : formatter<fmt::string_view> {
-  fmt::appender format(const rtpmididns::settings_t::alsa_announce_t &data,
-                       format_context &ctx) const;
-};
+ENUM_FORMATTER_BEGIN(rtpmididns::settings_t::alsa_hw_auto_export_type_e);
+ENUM_FORMATTER_ELEMENT(rtpmididns::settings_t::alsa_hw_auto_export_type_e::NONE,
+                       "NONE");
+ENUM_FORMATTER_ELEMENT(rtpmididns::settings_t::alsa_hw_auto_export_type_e::ALL,
+                       "ALL");
+ENUM_FORMATTER_ELEMENT(
+    rtpmididns::settings_t::alsa_hw_auto_export_type_e::HARDWARE, "HARDWARE");
+ENUM_FORMATTER_ELEMENT(
+    rtpmididns::settings_t::alsa_hw_auto_export_type_e::SOFTWARE, "SOFTWARE");
+ENUM_FORMATTER_ELEMENT(
+    rtpmididns::settings_t::alsa_hw_auto_export_type_e::SYSTEM, "SYSTEM");
+ENUM_FORMATTER_END();
 
-template <>
-struct fmt::formatter<std::vector<rtpmididns::settings_t::alsa_announce_t>>
-    : formatter<fmt::string_view> {
-  fmt::appender
-  format(const std::vector<rtpmididns::settings_t::alsa_announce_t> &data,
-         format_context &ctx) const;
-};
+BASIC_FORMATTER(rtpmididns::settings_t::rawmidi_t, "rawmidi_t[{}, {}]",
+                v.device, v.name);
+BASIC_FORMATTER(rtpmididns::settings_t::connect_to_t,
+                "connect_to_t[{}, {}, {}]", v.hostname, v.port, v.name);
+BASIC_FORMATTER(rtpmididns::settings_t::alsa_hw_auto_export_t,
+                "alsa_hw_auto_export_t[{}, {}, {}]", v.name_positive,
+                v.name_negative, v.type);
+BASIC_FORMATTER(rtpmididns::settings_t::rtpmidi_announce_t,
+                "rtpmidi_announce_t[{}, {}]", v.name, v.port);
+BASIC_FORMATTER(rtpmididns::settings_t::alsa_announce_t, "alsa_announce_t[{}]",
+                v.name);
+BASIC_FORMATTER(::std::regex, "regex[{}]", "??");
+BASIC_FORMATTER(rtpmididns::settings_t::rtpmidi_discover_t,
+                "rtpmidi_discover_t[{}, {}, {}]", v.enabled,
+                v.name_positive_regex, v.name_negative_regex);
 
-template <>
-struct fmt::formatter<rtpmididns::settings_t::rtpmidi_announce_t>
-    : formatter<fmt::string_view> {
-  fmt::appender format(const rtpmididns::settings_t::rtpmidi_announce_t &data,
-                       format_context &ctx) const;
-};
+VECTOR_FORMATTER(rtpmididns::settings_t::rtpmidi_announce_t);
+VECTOR_FORMATTER(rtpmididns::settings_t::alsa_announce_t);
+VECTOR_FORMATTER(rtpmididns::settings_t::connect_to_t);
 
-template <>
-struct fmt::formatter<std::vector<rtpmididns::settings_t::rtpmidi_announce_t>>
-    : formatter<fmt::string_view> {
-  fmt::appender
-  format(const std::vector<rtpmididns::settings_t::rtpmidi_announce_t> &data,
-         format_context &ctx) const;
-};
-
-template <>
-struct fmt::formatter<rtpmididns::settings_t::connect_to_t>
-    : formatter<fmt::string_view> {
-  fmt::appender format(const rtpmididns::settings_t::connect_to_t &data,
-                       format_context &ctx) const;
-};
-
-template <>
-struct fmt::formatter<std::vector<rtpmididns::settings_t::connect_to_t>>
-    : formatter<fmt::string_view> {
-  fmt::appender
-  format(const std::vector<rtpmididns::settings_t::connect_to_t> &data,
-         format_context &ctx) const;
-};
-
-template <>
-struct fmt::formatter<rtpmididns::settings_t> : formatter<fmt::string_view> {
-  fmt::appender format(const rtpmididns::settings_t &data,
-                       format_context &ctx) const;
-};
-
-template <>
-struct fmt::formatter<rtpmididns::settings_t::alsa_hw_auto_export_t>
-    : formatter<fmt::string_view> {
-  fmt::appender
-  format(const rtpmididns::settings_t::alsa_hw_auto_export_t &data,
-         format_context &ctx) const;
-};
-
-std::string
-format_as(const rtpmididns::settings_t::alsa_hw_auto_export_type_e data);
-
-template <>
-struct fmt::formatter<std::vector<rtpmididns::settings_t::rawmidi_t>>
-    : formatter<fmt::string_view> {
-  auto format(const std::vector<rtpmididns::settings_t::rawmidi_t> &data,
-              format_context &ctx) const;
-};
+BASIC_FORMATTER(rtpmididns::settings_t,
+                "settings_t[{}, {}, {}, {}, {}, {}, {}, {}]", v.alsa_name,
+                v.alsa_network, v.control_filename, v.rtpmidi_announces,
+                v.rtpmidi_discover, v.alsa_announces, v.connect_to,
+                v.alsa_hw_auto_export);

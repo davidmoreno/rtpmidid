@@ -23,6 +23,7 @@
 #include "hwautoannounce.hpp"
 #include "midipeer.hpp"
 #include "rtpmidid/exceptions.hpp"
+#include "rtpmidid/logger.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidiremotehandler.hpp"
