@@ -113,7 +113,7 @@ void wait_for_avahi_announcement(const std::string &name) {
                              std::chrono::steady_clock::now() - pre)
                              .count();
     if (wait_ms > AVAHI_ANNOUNCEMENT_TIMEOUT) {
-      FAIL(std::format("Waiting too long for avahi: {}ms", wait_ms));
+      FAIL(FMT::format("Waiting too long for avahi: {}ms", wait_ms));
     }
   }
 }
@@ -131,7 +131,7 @@ void wait_for_alsa_announcement(const std::string &gadget,
                              std::chrono::steady_clock::now() - pre)
                              .count();
     if (wait_ms > 10'000) {
-      FAIL(std::format("Waiting too long for avahi: {}ms", wait_ms));
+      FAIL(FMT::format("Waiting too long for avahi: {}ms", wait_ms));
     }
   }
 }
