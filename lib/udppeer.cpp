@@ -107,9 +107,8 @@ ssize_t udppeer_t::sendto(const packet_t &packet,
   auto res = ::sendto(fd, packet.get_data(), packet.get_size(), 0,
                       addr.get_sockaddr(), addr.get_socklen());
 
-  std::string addr_str = addr.to_string();
-
   if (res < 0) {
+    std::string addr_str = addr.to_string();
     ERROR("Error sending to {}. This is UDP... so just lost! ({})", addr_str,
           strerror(errno));
     // throw rtpmidid::exception("Can not send to address {}. {}", addr_str,

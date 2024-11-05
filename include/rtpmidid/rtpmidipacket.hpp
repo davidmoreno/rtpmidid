@@ -20,7 +20,8 @@
 #pragma once
 
 #include "packet.hpp"
-#include <fmt/core.h>
+#include <cstring>
+#include <rtpmidid/logger.hpp>
 #include <stddef.h>
 #include <stdint.h>
 #include <string>
@@ -109,12 +110,12 @@ public:
     if (!is_midi_packet()) {
       std::string first_12_bytes_hex;
       for (int i = 0; i < 12; i++) {
-        first_12_bytes_hex += fmt::format("{:02x} ", data[i]);
+        first_12_bytes_hex += FMT::format("{:02x} ", data[i]);
       }
-      return fmt::format("RTP Packet: Invalid MIDI packet {}",
+      return FMT::format("RTP Packet: Invalid MIDI packet {}",
                          first_12_bytes_hex);
     }
-    return fmt::format("RTP Packet: V:{} P:{} X:{} CC:{} M:{} PT:{} "
+    return FMT::format("RTP Packet: V:{} P:{} X:{} CC:{} M:{} PT:{} "
                        "Sequence:{} Timestamp:{} SSRC:0x{:08X}",
                        get_flag_v(), get_flag_p(), get_flag_x(), get_flag_cc(),
                        get_flag_m(), get_flag_pt(), get_sequence_number(),
@@ -146,6 +147,18 @@ enum command_e {
   RS = 0x5253,
 };
 
+} // namespace rtpmidid
+
+ENUM_FORMATTER_BEGIN(::rtpmidid::command_e);
+ENUM_FORMATTER_ELEMENT(::rtpmidid::IN, "IN");
+ENUM_FORMATTER_ELEMENT(::rtpmidid::OK, "OK");
+ENUM_FORMATTER_ELEMENT(::rtpmidid::NO, "NO");
+ENUM_FORMATTER_ELEMENT(::rtpmidid::BY, "BY");
+ENUM_FORMATTER_ELEMENT(::rtpmidid::CK, "CK");
+ENUM_FORMATTER_ELEMENT(::rtpmidid::RS, "RS");
+ENUM_FORMATTER_END();
+
+namespace rtpmidid {
 class packet_command_t : public packet_t {
 public:
   packet_command_t(const packet_t &packet) : packet_t(packet) {}
@@ -194,12 +207,12 @@ public:
     if (!is_command_packet()) {
       std::string first_12_bytes_hex;
       for (int i = 0; i < 12; i++) {
-        first_12_bytes_hex += fmt::format("{:02x} ", data[i]);
+        first_12_bytes_hex += FMT::format("{:02x} ", data[i]);
       }
-      return fmt::format("RTP Command Packet: Invalid Command packet {}",
+      return FMT::format("RTP Command Packet: Invalid Command packet {}",
                          first_12_bytes_hex);
     }
-    return fmt::format("RTP Command Packet: Command:{} Protocol:{} SSRC:{}",
+    return FMT::format("RTP Command Packet: Command:{} Protocol:{} SSRC:{}",
                        get_command(), get_protocol_version(),
                        get_sender_ssrc());
   }
@@ -261,12 +274,12 @@ public:
     if (!is_command_packet()) {
       std::string first_12_bytes_hex;
       for (int i = 0; i < 16; i++) {
-        first_12_bytes_hex += fmt::format("{:02x} ", data[i]);
+        first_12_bytes_hex += FMT::format("{:02x} ", data[i]);
       }
-      return fmt::format("RTP Command Packet: Invalid Command packet {}",
+      return FMT::format("RTP Command Packet: Invalid Command packet {}",
                          first_12_bytes_hex);
     }
-    return fmt::format("RTP Command Packet: Command:{} Protocol:{} Initiator: "
+    return FMT::format("RTP Command Packet: Command:{} Protocol:{} Initiator: "
                        "{} SSRC:{:08X} Name:{}",
                        get_command(), get_protocol_version(),
                        get_initiator_token(), get_sender_ssrc(), get_name());
@@ -341,12 +354,12 @@ public:
     if (!is_command_packet()) {
       std::string first_12_bytes_hex;
       for (int i = 0; i < 12; i++) {
-        first_12_bytes_hex += fmt::format("{:02x} ", data[i]);
+        first_12_bytes_hex += FMT::format("{:02x} ", data[i]);
       }
-      return fmt::format("RTP Command Packet: Invalid Command packet {}",
+      return FMT::format("RTP Command Packet: Invalid Command packet {}",
                          first_12_bytes_hex);
     }
-    return fmt::format(
+    return FMT::format(
         "RTP Command Packet: Command:{} Protocol:{} SSRC:{} Count: {} "
         "CK0:{} CK1:{} CK2:{}",
         get_command(), get_protocol_version(), get_sender_ssrc(), get_count(),
@@ -356,51 +369,6 @@ public:
   packet_t as_send_packet() const { return packet_t(data, 36); }
 };
 } // namespace rtpmidid
-
-// allow formating for command_e
-template <> struct fmt::formatter<rtpmidid::command_e> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const rtpmidid::command_e &c, FormatContext &ctx) const {
-    switch (c) {
-    case rtpmidid::IN:
-      return format_to(ctx.out(), "IN");
-    case rtpmidid::OK:
-      return format_to(ctx.out(), "OK");
-    case rtpmidid::NO:
-      return format_to(ctx.out(), "NO");
-    case rtpmidid::BY:
-      return format_to(ctx.out(), "BY");
-    case rtpmidid::CK:
-      return format_to(ctx.out(), "CK");
-    case rtpmidid::RS:
-      return format_to(ctx.out(), "RS");
-    default:
-      return format_to(ctx.out(), "Unknown Command:{}", c);
-    }
-  }
-};
-
-// allow fmt to format rtpmidid::packet_midi_t
-template <> struct fmt::formatter<rtpmidid::packet_midi_t> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const rtpmidid::packet_midi_t &p, FormatContext &ctx) const {
-    return format_to(ctx.out(), "{}", p.to_string());
-  }
-};
-
-// allow fmt to format rtpmidid::packet_command_t
-template <> struct fmt::formatter<rtpmidid::packet_command_t> {
-  constexpr auto parse(format_parse_context &ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const rtpmidid::packet_command_t &p, FormatContext &ctx) const {
-    return format_to(ctx.out(), "{}", p.to_string());
-  }
-};
 
 namespace std {
 static inline rtpmidid::midi_event_list_t::iterator_t
@@ -412,3 +380,6 @@ end(rtpmidid::midi_event_list_t &lst) {
   return lst.end();
 }
 } // namespace std
+
+BASIC_FORMATTER(rtpmidid::packet_midi_t, "{}", v.to_string());
+BASIC_FORMATTER(rtpmidid::packet_command_t, "{}", v.to_string());

@@ -20,6 +20,7 @@
 
 #include "rtpmidid/network.hpp"
 #include "rtpmidid/utils.hpp"
+#include <cstring>
 #include <functional>
 #include <stddef.h>
 #include <string>
@@ -35,11 +36,11 @@ private:
   bool managed = false; // If managed, release memory on destruction
 
 public:
-  network_address_t(sockaddr *addr, socklen_t len) : addr(addr), len(len){};
+  network_address_t(sockaddr *addr, socklen_t len) : addr(addr), len(len) {};
   network_address_t(sockaddr_storage *addr, socklen_t len)
-      : addr(sockaddr_storage_to_sockaddr(addr)), len(len){};
+      : addr(sockaddr_storage_to_sockaddr(addr)), len(len) {};
   network_address_t(int fd);
-  network_address_t() : addr(nullptr), len(0){};
+  network_address_t() : addr(nullptr), len(0) {};
   network_address_t(network_address_t &&other) {
     addr = other.addr;
     len = other.len;
@@ -118,10 +119,10 @@ public:
     addrinfo *info = nullptr;
 
   public:
-    iterator_t(){};
-    iterator_t(addrinfo *info) : info(info){};
+    iterator_t() {};
+    iterator_t(addrinfo *info) : info(info) {};
     // iterator_t(network_address_list_t other) : info(other.info){};
-    iterator_t(const network_address_list_t &other) : info(other.info){};
+    iterator_t(const network_address_list_t &other) : info(other.info) {};
     iterator_t &operator++() {
       info = info->ai_next;
       return *this;

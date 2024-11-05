@@ -371,12 +371,12 @@ std::string control_socket_t::parse_command(const std::string &command) {
           retdata["result"] = res;
         }
       } else {
-        retdata["error"] = fmt::format("Unknown peer '{}'", peer_id);
+        retdata["error"] = FMT::format("Unknown peer '{}'", peer_id);
       }
       return retdata.dump();
     }
 
-    retdata["error"] = fmt::format("Unknown method '{}'", method);
+    retdata["error"] = FMT::format("Unknown method '{}'", method);
     ERROR("Error running method: {}", std::string(retdata["error"]));
     return retdata.dump();
   } catch (const std::exception &e) {

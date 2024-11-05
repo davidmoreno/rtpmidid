@@ -190,7 +190,7 @@ dpkg -i rtpmidid.deb
 apt -f install
 ```
 
-Replace the rtpmidid.deb file with the name of the downloaded file. 
+Replace the rtpmidid.deb file with the name of the downloaded file.
 `apt -f install` ensure that all dependencies are installed.
 
 To easy build there is a simple makefile, which can be invoked to compile with
@@ -198,7 +198,7 @@ To easy build there is a simple makefile, which can be invoked to compile with
 
 Its possible to create a debian / ubuntu package with `make deb`
 
-Requires C++17 (Ubuntu 18.04+), and libfmt-dev, libasound2-dev, libavahi-client-dev.
+Requires C++20 (Ubuntu 22.04+), libasound2-dev, libavahi-client-dev.
 
 ## Testing and bug reporting
 
