@@ -20,7 +20,6 @@
 #pragma once
 #include "formatterhelper.hpp"
 #include <array>
-#include <fmt/core.h>
 #include <iostream>
 
 namespace rtpmidid {

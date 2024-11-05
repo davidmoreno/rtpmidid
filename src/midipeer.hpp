@@ -19,6 +19,7 @@
 #pragma once
 
 #include "json_fwd.hpp"
+#include "rtpmidid/formatterhelper.hpp"
 #include "rtpmidid/logger.hpp"
 #include "rtpmidid/utils.hpp"
 #include <limits>
@@ -39,6 +40,22 @@ enum midipeer_event_e {
   DISCONNECTED_PEER,
 };
 
+} // namespace rtpmididns
+
+ENUM_FORMATTER_BEGIN(rtpmididns::midipeer_event_e);
+ENUM_FORMATTER_ELEMENT(rtpmididns::midipeer_event_e::CONNECTED_ROUTER,
+                       "CONNECTED_ROUTER");
+ENUM_FORMATTER_ELEMENT(rtpmididns::midipeer_event_e::DISCONNECTED_ROUTER,
+
+                       "DISCONNECTED_ROUTER");
+ENUM_FORMATTER_ELEMENT(rtpmididns::midipeer_event_e::CONNECTED_PEER,
+                       "CONNECTED_PEER");
+ENUM_FORMATTER_ELEMENT(rtpmididns::midipeer_event_e::DISCONNECTED_PEER,
+                       "DISCONNECTED_PEER");
+ENUM_FORMATTER_DEFAULT();
+ENUM_FORMATTER_END();
+
+namespace rtpmididns {
 /**
  * @short Any peer that can read and write midi
  *

@@ -216,7 +216,7 @@ static std::string get_name_from_devname(const std::string &device) {
   std::string name;
   auto dev = rtpmididns::split(device, '/').back();
 
-  std::string sysfs = fmt::format("/sys/class/sound/{}/device/id", dev);
+  std::string sysfs = FMT::format("/sys/class/sound/{}/device/id", dev);
   DEBUG("Checking for MIDI device={} in sysfs={}", device, sysfs);
   std::ifstream file(sysfs);
   if (file.is_open()) {
