@@ -29,11 +29,6 @@
 using namespace std::chrono_literals;
 using namespace rtpmidid;
 
-static const auto CONNECT_TIMEOUT = 10s;
-static const auto RECONNECT_TIMEOUT = 30s;
-static const auto CK_SHORT_PERIOD = 2s;
-static const auto CK_LONG_PERIOD = 25s;
-
 /**
  * @short Create the rtp client
  *
@@ -198,7 +193,7 @@ void rtpclient_t::state_connect_control() {
         handle_event(Connected);
       });
 
-  timer = poller.add_timer_event(CONNECT_TIMEOUT, [this] {
+  timer = poller.add_timer_event(connect_timeout, [this] {
     ERROR("Timeout connecting to control port");
     control_connected_event_connection.disconnect();
     handle_event(ConnectFailed);
@@ -266,7 +261,7 @@ void rtpclient_t::state_all_connected() {
 }
 
 void rtpclient_t::state_send_ck_short() {
-  timer = poller.add_timer_event(CONNECT_TIMEOUT,
+  timer = poller.add_timer_event(connect_timeout,
                                  [this] { handle_event(Timeout); });
   ck_connection = peer.ck_event.connect([this](float ms) {
     timer.disable();
@@ -285,13 +280,13 @@ void rtpclient_t::state_send_ck_short() {
 
 void rtpclient_t::state_wait_send_ck_short() {
   timer =
-      poller.add_timer_event(CK_SHORT_PERIOD, [this] { handle_event(SendCK); });
+      poller.add_timer_event(ck_short_period, [this] { handle_event(SendCK); });
 }
 
 void rtpclient_t::state_send_ck_long() {
   ck_count++;
   peer.send_ck0();
-  timer = poller.add_timer_event(CONNECT_TIMEOUT,
+  timer = poller.add_timer_event(connect_timeout,
                                  [this] { handle_event(Timeout); });
   ck_connection = peer.ck_event.connect([this](float ms) {
     timer.disable();
@@ -305,7 +300,7 @@ void rtpclient_t::state_send_ck_long() {
 void rtpclient_t::state_wait_send_ck_long() {
   ck_connection.disconnect();
   timer =
-      poller.add_timer_event(CK_LONG_PERIOD, [this] { handle_event(SendCK); });
+      poller.add_timer_event(ck_long_period, [this] { handle_event(SendCK); });
 }
 
 void rtpclient_t::state_disconnect_because_cktimeout() {
@@ -318,8 +313,8 @@ void rtpclient_t::state_error() {
   peer.disconnect();
   ERROR("Error at rtpclient_t. Can't connect or disconnected. Will try to "
         "connect again in {}s",
-        RECONNECT_TIMEOUT.count());
-  timer = poller.add_timer_event(RECONNECT_TIMEOUT,
+        reconnect_timeout.count());
+  timer = poller.add_timer_event(reconnect_timeout,
                                  [this] { handle_event(Connect); });
 }
 

@@ -374,8 +374,8 @@ void wait_for_by(std::function<void()> wait_for_packet,
 void test_client_try_several_connections() {
   rtpmidid::rtpclient_t client("Test");
 
-  rtpmidid::udppeer_t peerA_control("localhost", "13001");
-  rtpmidid::udppeer_t peerA_midi("localhost", "13002");
+  rtpmidid::udppeer_t peerA_control("localhost", "14001");
+  rtpmidid::udppeer_t peerA_midi("localhost", "14002");
 
   rtpmidid::packet_managed_t<1500> control_packet;
   rtpmidid::network_address_t control_remote_address;
@@ -385,10 +385,12 @@ void test_client_try_several_connections() {
   bool midi_packet_received = false;
 
   auto wait_for_control_packet = [&]() {
+    control_packet_received = false;
     poller_wait_until([&]() { return control_packet_received; }, 10s);
     ASSERT_TRUE(control_packet_received);
   };
   auto wait_for_midi_packet = [&]() {
+    midi_packet_received = false;
     poller_wait_until([&]() { return midi_packet_received; }, 10s);
     ASSERT_TRUE(midi_packet_received);
   };
@@ -409,15 +411,18 @@ void test_client_try_several_connections() {
         midi_remote_address = from.dup();
       });
 
+  client.connect_timeout = 200ms;
   // all in one list. Connects in reverse order (uses back() its more efficient.
   client.add_server_addresses({
-      {"localhost", "13001"},
-      {"localhost", "13001"},
-      {"nonexixtentlocalhost", "13001"},
-      {"localhost", "13000"},
+      {"localhost", "14001"},
+      {"localhost", "14001"},
+      {"nonexixtentlocalhost", "14001"},
+      {"localhost", "14000"},
   });
 
   // client.connect(); implicit from before
+  INFO("Send initial IN. When we set the address to connect to, at the end "
+       "starts the connection.");
 
   wait_for_in_and_answer_ok(wait_for_control_packet, control_packet,
                             control_remote_address, peerA_control);

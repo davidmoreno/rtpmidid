@@ -24,6 +24,7 @@
 #include "./rtppeer.hpp"
 #include "./signal.hpp"
 #include "./udppeer.hpp"
+#include <chrono>
 #include <list>
 #include <string>
 
@@ -50,6 +51,12 @@ public:
 #include "rtpclient_statemachine.hpp"
 
 public:
+  // Can be changed if required
+  std::chrono::milliseconds connect_timeout = std::chrono::seconds(10);
+  std::chrono::milliseconds reconnect_timeout = std::chrono::seconds(30);
+  std::chrono::milliseconds ck_short_period = std::chrono::seconds(2);
+  std::chrono::milliseconds ck_long_period = std::chrono::seconds(25);
+
   poller_t::timer_t timer;
 
   uint16_t local_base_port = 0;
