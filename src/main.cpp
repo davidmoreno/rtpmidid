@@ -118,32 +118,7 @@ protected:
 
   void setup_rawmidi_peers() {
     for (const auto &rawmidi : rtpmididns::settings.rawmidi) {
-      std::string name = rawmidi.name;
-      auto rawmidi_peer =
-          rtpmididns::make_rawmidi_peer(rawmidi.name, rawmidi.device);
-      if (name == "") {
-        name =
-            dynamic_cast<rtpmididns::local_rawmidi_peer_t *>(rawmidi_peer.get())
-                ->name;
-      }
-      router->add_peer(rawmidi_peer);
-      std::shared_ptr<rtpmididns::midipeer_t> rtppeer;
-
-      if (rawmidi.hostname.empty()) {
-        INFO("Creating rawmidi peer={} as listener at udp_port={}", name,
-             rawmidi.local_udp_port);
-        rtppeer = rtpmididns::make_network_rtpmidi_listener(
-            name, rawmidi.local_udp_port);
-      } else {
-        INFO("Creating rawmidi peer={} as client to hostname={} udp_port={}",
-             name, rawmidi.hostname, rawmidi.remote_udp_port);
-        rtppeer = rtpmididns::make_network_rtpmidi_client(
-            name, rawmidi.hostname, rawmidi.remote_udp_port);
-      }
-      router->add_peer(rtppeer);
-
-      router->connect(rawmidi_peer->peer_id, rtppeer->peer_id);
-      router->connect(rtppeer->peer_id, rawmidi_peer->peer_id);
+      create_rawmidi_rtpclient_pair(router.get(), rawmidi);
     }
   }
 };

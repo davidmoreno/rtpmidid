@@ -19,7 +19,9 @@
 #pragma once
 
 #include "rtpmidid/rtppeer.hpp"
+#include "settings.hpp"
 #include <memory>
+
 namespace rtpmidid {
 class rtppeer_t;
 class rtpclient_t;
@@ -68,5 +70,10 @@ make_local_alsa_listener(std::shared_ptr<midirouter_t> &router,
 //
 std::shared_ptr<midipeer_t> make_rawmidi_peer(const std::string &name,
                                               const std::string &device);
+
+/// Some helpers to create more complex peers
+void create_rawmidi_rtpclient_pair(
+    rtpmididns::midirouter_t *router,
+    const ::rtpmididns::settings_t::rawmidi_t &rawmidi);
 
 } // namespace rtpmididns

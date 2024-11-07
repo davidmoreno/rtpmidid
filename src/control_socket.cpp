@@ -145,6 +145,17 @@ void control_socket_t::data_ready(int fd) {
     fsync(fd);
 }
 
+static std::string maybe_string(const json_t &j, const char *key,
+                                const char *def) {
+  if (j.is_object()) {
+    auto it = j.find(key);
+    if (it != j.end()) {
+      return it->get<std::string>();
+    }
+  }
+  return def;
+};
+
 namespace control_socket_ns {
 struct command_t {
   const char *name;
@@ -328,6 +339,36 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
        DEBUG("Delete mdns announcement {}", name);
        control.mdns->remove_announcement(name, hostname, port);
        return "ok";
+     }},
+    {"export.rawmidi", "Exports a rawmidi device to ALSA",
+     [](control_socket_t &control, const json_t &params) {
+       // Just set the data into settings_t::rawmidi_t
+       rtpmididns::settings_t::rawmidi_t rawmidi;
+       DEBUG("Export rawmidi: {}", params.dump());
+
+       // if not device, return help with params
+       if (!params.is_object() || params["device"].is_null()) {
+         return json_t{{
+             //
+             {"error", "Need device"},
+             {"params",
+              {{"device", "Path to the device. Mandatory."},
+               {"name", "Name of the peer"},
+               {"local_udp_port", "Local UDP port"},
+               {"remote_udp_port", "Remote UDP port"},
+               {"hostname", "Hostname of the server if want to connect to. "
+                            "Else is a local listener."}}}
+             //
+         }};
+       }
+
+       rawmidi.device = params["device"];
+       rawmidi.name = maybe_string(params, "name", "");
+       rawmidi.local_udp_port = maybe_string(params, "local_udp_port", "0");
+       rawmidi.remote_udp_port = maybe_string(params, "remote_udp_port", "0");
+       rawmidi.hostname = maybe_string(params, "hostname", "");
+       create_rawmidi_rtpclient_pair(control.router.get(), rawmidi);
+       return json_t{"ok"};
      }},
     // Return some help text
     {"help", "Return help text",
