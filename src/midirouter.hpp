@@ -18,6 +18,7 @@
 
 #pragma once
 #include "json_fwd.hpp"
+#include "midipeer.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/utils.hpp"
 #include <cstdint>
@@ -59,6 +60,10 @@ public:
 
   void send_midi(peer_id_t from, const mididata_t &data);
   void send_midi(peer_id_t from, peer_id_t to, const mididata_t &data);
+  // Specific from one peer to another
+  void event(peer_id_t from, peer_id_t to, midipeer_event_e event);
+  // From one peer to all connected others
+  void event(peer_id_t from, midipeer_event_e event);
 
   // To force clear the peers and avoid the cyclic references of peers that keep
   // the router.

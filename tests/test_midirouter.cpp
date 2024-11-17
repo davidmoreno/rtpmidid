@@ -197,14 +197,25 @@ public:
                  const rtpmididns::mididata_t &) override {}
   const char *get_type() const override { return "test_signal_t"; }
   rtpmididns::json_t status() override { return rtpmididns::json_t{}; }
-  void connected(rtpmididns::midipeer_id_t to) override {
-    connections++;
-    rtpmididns::midipeer_t::connected(to);
-  }
-  void disconnected(rtpmididns::midipeer_id_t from) override {
-    connections--;
-    rtpmididns::midipeer_t::disconnected(from);
-  }
+
+  void event(rtpmididns::midipeer_event_e event,
+             rtpmididns::midipeer_id_t from) override {
+    switch (event) {
+    case rtpmididns::midipeer_event_e::CONNECTED_ROUTER:
+      connected(from);
+      break;
+    case rtpmididns::midipeer_event_e::DISCONNECTED_ROUTER:
+      disconnected(from);
+      break;
+    default:
+      break;
+    }
+    // Default behaviour, logging
+    rtpmididns::midipeer_t::event(event, from);
+  };
+
+  void connected(rtpmididns::midipeer_id_t to) { connections++; }
+  void disconnected(rtpmididns::midipeer_id_t from) { connections--; }
 };
 
 void test_connect_disconnect_signals() {

@@ -32,8 +32,12 @@ class rtpserver_t {
   NON_COPYABLE_NOR_MOVABLE(rtpserver_t)
 public:
   // Callbacks to call when new connections
-  signal_t<std::shared_ptr<rtppeer_t>> connected_event;
-  signal_t<const io_bytes_reader &> midi_event;
+  using status_change_event_t =
+      signal_t<std::shared_ptr<rtppeer_t>, rtppeer_t::status_e>;
+  status_change_event_t status_change_event;
+
+  using midi_event_t = signal_t<const io_bytes_reader &>;
+  midi_event_t midi_event;
 
   int max_peer_data_id = 1;
   std::vector<rtpserverpeer_t> peers;

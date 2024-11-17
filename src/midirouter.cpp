@@ -143,8 +143,8 @@ void midirouter_t::connect(peer_id_t from, peer_id_t to) {
 
   from_peer->send_to.push_back(to);
 
-  from_peer->peer->connected(to);
-  to_peer->peer->connected(from);
+  from_peer->peer->event(midipeer_event_e::CONNECTED_ROUTER, to);
+  to_peer->peer->event(midipeer_event_e::CONNECTED_ROUTER, from);
 
   INFO("Connect {} -> {}", from, to);
 }
@@ -162,8 +162,8 @@ void midirouter_t::disconnect(peer_id_t from, peer_id_t to) {
       from_peer->send_to.erase(
           std::remove(from_peer->send_to.begin(), from_peer->send_to.end(), to),
           from_peer->send_to.end());
-      from_peer->peer->disconnected(to);
-      to_peer->peer->disconnected(from);
+      from_peer->peer->event(midipeer_event_e::DISCONNECTED_ROUTER, to);
+      to_peer->peer->event(midipeer_event_e::DISCONNECTED_ROUTER, from);
     }
   }
 
@@ -190,6 +190,25 @@ json_t midirouter_t::status() {
     }
   }
   return routerdata;
+}
+
+void midirouter_t::event(peer_id_t from, peer_id_t to, midipeer_event_e event) {
+  auto peer = get_peer_by_id(to);
+  if (!peer)
+    return;
+  peer->event(event, from);
+}
+
+void midirouter_t::event(peer_id_t from, midipeer_event_e event) {
+  auto peerdata = get_peerdata_by_id(from);
+  if (!peerdata)
+    return;
+  for (auto &to_id : peerdata->send_to) {
+    auto topeer = get_peer_by_id(to_id);
+    if (!topeer)
+      continue;
+    topeer->event(event, from);
+  }
 }
 
 void midirouter_t::clear() {

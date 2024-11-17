@@ -47,6 +47,15 @@ network_rtpmidi_listener_t::network_rtpmidi_listener_t(
         // rtpmididns::mididata_t mididata(data.start, data.pos());
         router->send_midi(this->peer_id, data);
       });
+  status_change_connection = server.status_change_event.connect(
+      [this](std::shared_ptr<rtpmidid::rtppeer_t> peer,
+             rtpmidid::rtppeer_t::status_e status) {
+        if (status == rtpmidid::rtppeer_t::status_e::CONNECTED) {
+          router->event(peer_id, midipeer_event_e::CONNECTED_PEER);
+        } else if (rtpmidid::rtppeer_t::is_disconnected(status)) {
+          router->event(peer_id, midipeer_event_e::DISCONNECTED_PEER);
+        }
+      });
 }
 network_rtpmidi_listener_t::~network_rtpmidi_listener_t() {
   if (mdns)
