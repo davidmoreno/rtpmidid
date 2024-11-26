@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import select
+import termios
 import tty
 import shutil
 import socket
@@ -163,6 +164,7 @@ class Top:
     tab: Tabs = Tabs.ROUTES
 
     def __init__(self, conn: Connection):
+        self.tty_settings = termios.tcgetattr(sys.stdin)
         # terminal width and height from stty
         self.conn = conn
         width, height = shutil.get_terminal_size()
@@ -927,6 +929,7 @@ class Top:
         finally:
             self.print(self.ANSI_POP_SCREEN)
             tty.setcbreak(sys.stdin)
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.tty_settings)
             print("\033[?1049l", end="")
             print("\n".join(str(x) for x in self.debug_lines if x))
 
