@@ -138,12 +138,12 @@ void HwAutoAnnounce::added_port_announcement(const std::string &name,
         INFO("Auto announcing {} {} {}", name, type, port);
         auto annport = aseq_t::port_t{aseq->client_id, peer->port};
         auto con1 = aseq->connect(port, annport);
-        // auto con2 = aseq->connect(annport, port);
+        auto con2 = aseq->connect(annport, port);
         // FIXME should be removed from here, or it may grow for each new
         // client. There is no real problem as will never disconnect, but it is
         // not clean.
         connections.push_back(std::move(con1));
-        // connections.push_back(std::move(con2));
+        connections.push_back(std::move(con2));
 
         connected = true;
       });
