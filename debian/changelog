@@ -1,8 +1,12 @@
-rtpmidid (23.12~55~gd667d) unstable; urgency=medium
+rtpmidid (24.12) stable; urgency=medium
 
-  * Development version. Check `git log`.
+  * Raw MIDI devices - Can configure them in the ini file, command line or cli util.
+  * Optionally use std::format instead of fmt library, where available.
+  * Improvements to the TUI.
+  * Improvements to the INI configuration file: rawmidi devices, can set local UDP port for clients. Use regex for auto add to the autodiscover and announcement (positive and negative)
+  * More tests.
 
- -- David Moreno <dmoreno@coralbits.com>  Sat, 06 Jul 2024 23:56:01 +0200
+ -- David Moreno <dmoreno@coralbits.com>  Sun, 15 Dec 2024 12:02:08 +0100
 
 rtpmidid (23.12b2) unstable; urgency=medium
 
