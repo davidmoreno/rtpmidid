@@ -1,0 +1,20 @@
+#pragma once
+
+// clang-format off
+#cmakedefine LOG_LEVEL log_level_t::@LOG_LEVEL@
+// clang-format on
+
+#ifndef LOG_LEVEL
+#define LOG_LEVEL log_level_t::Debug
+#endif
+
+namespace rtpmidid {
+enum class log_level_t { Debug, Info, Warning, Error };
+
+
+struct build_options_t {
+  constexpr static int log_level = static_cast<int>(LOG_LEVEL);
+};
+} // namespace rtpmidid
+
+inline constexpr rtpmidid::build_options_t build_options;
