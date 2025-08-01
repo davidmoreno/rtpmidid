@@ -2,7 +2,7 @@ Source: rtpmidid
 Section: sound
 Priority: optional
 Maintainer: David Moreno <dmoreno@coralbits.com>
-Build-Depends: debhelper (>= 13~),debhelper-compat (= 13),libavahi-client-dev,libasound2-dev,python3,cmake,pandoc,git
+Build-Depends: debhelper (>= 13~),debhelper-compat (= 13),libavahi-client-dev,libasound2-dev,python3,cmake,pandoc,git,ninja-build
 Standards-Version: 4.6.1.0
 Rules-Requires-Root: no
 Homepage: https://github.com/davidmoreno/rtpmidid
