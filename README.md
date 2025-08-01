@@ -198,7 +198,7 @@ To easy build there is a simple makefile, which can be invoked to compile with
 
 Its possible to create a debian / ubuntu package with `make deb`
 
-Requires C++20 (Ubuntu 22.04+), libasound2-dev, libavahi-client-dev.
+Requires C++20 (Ubuntu 22.04+), libasound2-dev, libavahi-client-dev, libfmt-dev and ninja-build.
 
 ## Testing and bug reporting
 
