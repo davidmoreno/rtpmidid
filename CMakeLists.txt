@@ -14,6 +14,13 @@ set(CPP_VERSION "auto" CACHE STRING "Use given C++  version. 17 and 20 supported
 # option to force use fmt, depends on CPP20
 set(USE_FMT "auto" CACHE STRING "Use fmt library (ON | OFF | auto)")
 
+set(LOG_LEVEL "Debug" CACHE STRING "Set log level (Debug | Info | Warning | Error)")
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/rtpmidid/buildoptions.hpp.in"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/rtpmidid/buildoptions.hpp"
+)
+
 # if CPP is "auto", check if C++20 is available and set it
 if (CPP_VERSION STREQUAL "auto" OR CPP_VERSION STREQUAL "auto")
   message(STATUS "Checking for C++20 support")

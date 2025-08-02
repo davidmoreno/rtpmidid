@@ -19,6 +19,7 @@
 
 #pragma once
 #include "formatterhelper.hpp"
+#include "buildoptions.hpp"
 #include <array>
 #include <iostream>
 
@@ -45,10 +46,13 @@ public:
                                   int lineno);
   void log_postamble(buffer_t::iterator it);
 
-  template <typename... Args>
-  constexpr void log(logger_level_t level, const char *filename, int lineno,
+  template <logger_level_t Level, typename... Args>
+  constexpr void log(const char *filename, int lineno,
                      FMT::format_string<Args...> message, Args... args) {
-    auto it = log_preamble(level, filename, lineno);
+    if constexpr(static_cast<int>(build_options.log_level) > static_cast<int>(Level)) {
+        return;
+    }
+    auto it = log_preamble(Level, filename, lineno);
 
     auto max_size = buffer.size() - (it - buffer.begin()) - 16;
     auto res =
@@ -93,16 +97,16 @@ void println(FMT::format_string<Args...> format, Args... args) {
 #endif
 
 #define DEBUG(...)                                                             \
-  ::rtpmidid::logger2.log(rtpmidid::logger_level_t::DEBUG, __FILE__, __LINE__, \
+  ::rtpmidid::logger2.log<rtpmidid::logger_level_t::DEBUG>(__FILE__, __LINE__, \
                           __VA_ARGS__)
 #define INFO(...)                                                              \
-  ::rtpmidid::logger2.log(rtpmidid::logger_level_t::INFO, __FILE__, __LINE__,  \
+  ::rtpmidid::logger2.log<rtpmidid::logger_level_t::INFO>(__FILE__, __LINE__,  \
                           __VA_ARGS__)
 #define ERROR(...)                                                             \
-  ::rtpmidid::logger2.log(rtpmidid::logger_level_t::ERROR, __FILE__, __LINE__, \
+  ::rtpmidid::logger2.log<rtpmidid::logger_level_t::ERROR>(__FILE__, __LINE__, \
                           __VA_ARGS__)
 #define WARNING(...)                                                           \
-  ::rtpmidid::logger2.log(rtpmidid::logger_level_t::WARNING, __FILE__,         \
+  ::rtpmidid::logger2.log<rtpmidid::logger_level_t::WARNING>(__FILE__,         \
                           __LINE__, __VA_ARGS__)
 
 #define WARNING_RATE_LIMIT(seconds, ...)                                       \
