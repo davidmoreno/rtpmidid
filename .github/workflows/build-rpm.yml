@@ -1,0 +1,53 @@
+name: Build Fedora RPM from Fork
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build-rpm:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:40
+    
+    steps:
+    - uses: actions/checkout@v5
+    
+    - name: Install dependencies
+      run: |
+        dnf update -y
+        dnf install -y rpm-build rpm-devel rpmdevtools gcc-c++ cmake \
+                       ninja-build alsa-lib-devel avahi-devel pandoc \
+                       systemd-rpm-macros tar gzip
+    
+    - name: Setup RPM build environment
+      run: |
+        useradd builder
+        runuser -l builder -c 'rpmdev-setuptree'
+    
+    - name: Create source tarball from your fork
+      run: |
+        # Create clean source tarball from checked out code
+        tar czf /home/builder/rpmbuild/SOURCES/rtpmidid-23.12.tar.gz \
+            --transform 's,^\./,rtpmidid-23.12/,' \
+            --exclude='.git*' --exclude='*.rpm' --exclude='rpmbuild' \
+            --exclude='.github' .
+    
+    - name: Copy spec file to build location
+      run: |
+        cp rtpmidid.spec /home/builder/rpmbuild/SPECS/
+        chown -R builder:builder /home/builder/rpmbuild
+    
+    - name: Build RPM from your fork
+      run: |
+        runuser -l builder -c 'cd ~/rpmbuild/SPECS && rpmbuild -ba rtpmidid.spec'
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: fedora-rpms-fork
+        path: |
+          /home/builder/rpmbuild/RPMS/**/*.rpm
+          /home/builder/rpmbuild/SRPMS/*.rpm
