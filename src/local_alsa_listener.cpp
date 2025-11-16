@@ -77,12 +77,14 @@ local_alsa_listener_t::local_alsa_listener_t(const std::string &name_,
 }
 
 local_alsa_listener_t::~local_alsa_listener_t() {
-  aseq->remove_port(alsaport);
-  INFO("Remove ALSA port: {}, peer_id: {}. I remove also all connected "
-       "local_alsa_peers_t",
-       alsaport, peer_id);
-  router->for_each_peer<local_alsa_peer_t>(
-      [&](local_alsa_peer_t *peer) { router->remove_peer(peer->peer_id); });
+  if (aseq) {
+    aseq->remove_port(alsaport);
+  }
+  INFO("Remove ALSA port: {}, peer_id: {}", alsaport, peer_id);
+  if (router && rtpmidiclientworker_peer_id != MIDIPEER_ID_INVALID) {
+    router->remove_peer(rtpmidiclientworker_peer_id);
+    rtpmidiclientworker_peer_id = MIDIPEER_ID_INVALID;
+  }
 }
 
 void local_alsa_listener_t::add_endpoint(const std::string &hostname,

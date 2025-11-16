@@ -99,20 +99,15 @@ void HwAutoAnnounce::added_port_announcement(const std::string &name,
     return;
 
   // Check positive regex
-  if (!ahwaa->name_negative_regex.has_value())
-    return;
-
-  auto pos_regex = ahwaa->name_positive_regex.value();
-
-  if (!std::regex_match(name, pos_regex)) {
-    return;
+  if (ahwaa->name_positive_regex.has_value()) {
+    if (!std::regex_match(name, ahwaa->name_positive_regex.value())) {
+      return;
+    }
   }
 
   // Check negative regex
-  if (ahwaa->name_positive_regex.has_value()) {
-    auto neg_regex = ahwaa->name_negative_regex.value();
-
-    if (std::regex_match(name, neg_regex)) {
+  if (ahwaa->name_negative_regex.has_value()) {
+    if (std::regex_match(name, ahwaa->name_negative_regex.value())) {
       return;
     }
   }
