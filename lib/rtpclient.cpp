@@ -312,7 +312,7 @@ void rtpclient_t::state_disconnect_because_cktimeout() {
 void rtpclient_t::state_error() {
   peer.disconnect();
   ERROR("Error at rtpclient_t. Can't connect or disconnected. Will try to "
-        "connect again in {}s",
+        "connect again in {}ms",
         reconnect_timeout.count());
   timer = poller.add_timer_event(reconnect_timeout,
                                  [this] { handle_event(Connect); });
