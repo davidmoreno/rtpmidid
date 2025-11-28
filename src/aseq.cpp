@@ -487,8 +487,9 @@ uint8_t aseq_t::find_device(const std::string &name) {
       throw rtpmidid::exception("Error getting client info");
     }
     const char *cname = snd_seq_client_info_get_name(cinfo);
-    if (cname == name) {
+    if (name == cname) {
       retv = cid;
+      break;
     }
   }
   snd_seq_client_info_free(cinfo);
@@ -502,7 +503,7 @@ uint8_t aseq_t::find_device(const std::string &name) {
 
 /// List all ports of a device
 uint8_t aseq_t::find_port(uint8_t device_id, const std::string &name) {
-  int retv = 0;
+  int retv = -1;
   snd_seq_port_info_t *pinfo = nullptr;
 
   int ret = snd_seq_port_info_malloc(&pinfo);
@@ -519,8 +520,9 @@ uint8_t aseq_t::find_port(uint8_t device_id, const std::string &name) {
     }
     const char *pname = snd_seq_port_info_get_name(pinfo);
 
-    if (pname == name) {
+    if (name == pname) {
       retv = pid;
+      break;
     }
   }
 

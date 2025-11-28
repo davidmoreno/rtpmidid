@@ -63,10 +63,11 @@ local_alsa_multi_listener_t::new_alsa_connection(const aseq_t::port_t &port,
 
   midipeer_id_t networkpeer_id = MIDIPEER_ID_INVALID;
   router->for_each_peer<network_rtpmidi_listener_t>(
-      [&name, &networkpeer_id](auto *peer) {
+      [&](auto *peer) {
         if (peer->name_ == name) {
           peer->use_count++;
           networkpeer_id = peer->peer_id;
+          aseqpeers[port] = networkpeer_id;
           DEBUG("One more user for peer: {}, count: {}", peer->peer_id,
                 peer->use_count);
         }
@@ -111,6 +112,8 @@ void local_alsa_multi_listener_t::remove_alsa_connection(
   }
 
   rtppeer->use_count--;
+  auto tracked_peer_id = networkpeerI->second;
+  aseqpeers.erase(networkpeerI);
 
   INFO("One less user of peer: {}, use_count: {}", rtppeer->peer_id,
        rtppeer->use_count);
@@ -118,8 +121,8 @@ void local_alsa_multi_listener_t::remove_alsa_connection(
     return;
   }
   DEBUG("Removed ALSA port {}:{}, removing midipeer {}", port.client, port.port,
-        networkpeerI->second);
-  router->remove_peer(networkpeerI->second);
+        tracked_peer_id);
+  router->remove_peer(tracked_peer_id);
 }
 
 void local_alsa_multi_listener_t::alsaseq_event(snd_seq_event_t *event) {

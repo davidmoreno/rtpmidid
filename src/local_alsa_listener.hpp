@@ -59,7 +59,7 @@ public:
   mididata_to_alsaevents_t mididata_decoder;
   mididata_to_alsaevents_t mididata_encoder;
 
-  midipeer_id_t rtpmidiclientworker_peer_id;
+  midipeer_id_t rtpmidiclientworker_peer_id = MIDIPEER_ID_INVALID;
   // std::shared_ptr<rtpmidid::rtpclient_t> rtpclient;
   rtpmidid::rtppeer_t::status_change_event_t status_change_event_connection;
 

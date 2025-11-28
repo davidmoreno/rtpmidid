@@ -114,13 +114,21 @@ void rtpmididns::control_socket_t::connection_ready() {
 void control_socket_t::data_ready(int fd) {
   char buf[1024];                           // NOLINT
   size_t l = recv(fd, buf, sizeof(buf), 0); // NOLINT
+  auto remove_client = [&](int client_fd) {
+    auto it = std::find_if(clients.begin(), clients.end(),
+                           [client_fd](auto &client) {
+                             return client.fd == client_fd;
+                           });
+    if (it != clients.end()) {
+      it->listener.stop();
+      close(it->fd);
+      clients.erase(it);
+    } else if (client_fd >= 0) {
+      ::close(client_fd);
+    }
+  };
   if (l <= 0) {
-    // DEBUG("Closed control connection: {}", fd);
-    auto I = std::find_if(clients.begin(), clients.end(),
-                          [fd](auto &client) { return client.fd == fd; });
-    I->listener.stop();
-    close(I->fd);
-    clients.erase(I);
+    remove_client(fd);
     return;
   }
   if (l >= sizeof(buf) - 1) {
@@ -128,7 +136,7 @@ void control_socket_t::data_ready(int fd) {
     if (w < 0) {
       ERROR(
           "Could not send msg too long to control socket! Closing connection.");
-      ::close(fd);
+      remove_client(fd);
     }
     return;
   }
@@ -138,11 +146,8 @@ void control_socket_t::data_ready(int fd) {
   auto w = write(fd, ret.c_str(), ret.length());
   if (w < 0) {
     ERROR("Could not send msg to control socket! Closing Connection.");
-    ::close(fd);
-    fd = -1;
+    remove_client(fd);
   }
-  if (fd != -1)
-    fsync(fd);
 }
 
 static std::string maybe_string(const json_t &j, const char *key,
@@ -150,7 +155,18 @@ static std::string maybe_string(const json_t &j, const char *key,
   if (j.is_object()) {
     auto it = j.find(key);
     if (it != j.end()) {
-      return it->get<std::string>();
+      if (it->is_string()) {
+        return it->get<std::string>();
+      }
+      if (it->is_number_integer()) {
+        return std::to_string(it->get<int64_t>());
+      }
+      if (it->is_number_unsigned()) {
+        return std::to_string(it->get<uint64_t>());
+      }
+      if (it->is_number_float()) {
+        return std::to_string(it->get<double>());
+      }
     }
   }
   return def;
@@ -384,8 +400,12 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
 
 std::string control_socket_t::parse_command(const std::string &command) {
   // DEBUG("Parse command {}", command);
-  auto js = json_t::parse(command);
-
+  json_t js;
+  try {
+    js = json_t::parse(command);
+  } catch (const std::exception &e) {
+    return json_t{{"error", e.what()}}.dump();
+  }
   std::string method = js["method"];
   json_t retdata = {{"id", js["id"]}};
   try {
