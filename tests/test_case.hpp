@@ -102,7 +102,7 @@ public:
           tcase.fn();
           INFO("Test {} OK", tcase.name);
         } catch (const test_exception &e) {
-          ::rtpmidid::logger2.log(::rtpmidid::logger_level_t::ERROR, e.filename,
+          ::rtpmidid::logger2.log<::rtpmidid::logger_level_t::ERROR>(e.filename,
                                   e.line, "{}", e.error);
           ERROR("FAIL TEST {}: {}", tcase.name, e.what());
           errors += 1;
