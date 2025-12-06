@@ -455,8 +455,8 @@ void rtpmidid::mdns_rtpmidi_t::resolve_callback(
   /* Called whenever a service has been resolved successfully or timed out */
   switch (data.event) {
   case AVAHI_RESOLVER_FAILURE: {
-    auto avahi_errno = avahi_client_errno(client);
-    const char *errmsg = avahi_strerror(avahi_errno);
+    [[maybe_unused]] auto avahi_errno = avahi_client_errno(client);
+    [[maybe_unused]]const char *errmsg = avahi_strerror(avahi_errno);
     ERROR("AVAHI_RESOLVER_FAILURE Failed to resolve service=\"{}\" of type={}"
           "in domain={} host_name={} port={} with error_n={} error=\"{}\" ",
           data.name, data.type, data.domain,

@@ -92,18 +92,38 @@ void println(FMT::format_string<Args...> format, Args... args) {
 #undef WARNING
 #endif
 
+#ifndef LOG_LEVEL
+#define LOG_LEVEL 1 // 1: debug, 2: info, 3: warning, 4: error
+#endif
+
+#if LOG_LEVEL <= 1
 #define DEBUG(...)                                                             \
   ::rtpmidid::logger2.log(rtpmidid::logger_level_t::DEBUG, __FILE__, __LINE__, \
                           __VA_ARGS__)
+#else
+#define DEBUG(...)
+#endif
+#if LOG_LEVEL <= 2
 #define INFO(...)                                                              \
   ::rtpmidid::logger2.log(rtpmidid::logger_level_t::INFO, __FILE__, __LINE__,  \
                           __VA_ARGS__)
-#define ERROR(...)                                                             \
-  ::rtpmidid::logger2.log(rtpmidid::logger_level_t::ERROR, __FILE__, __LINE__, \
-                          __VA_ARGS__)
+#else
+#define INFO(...)
+#endif
+#if LOG_LEVEL <= 3
 #define WARNING(...)                                                           \
   ::rtpmidid::logger2.log(rtpmidid::logger_level_t::WARNING, __FILE__,         \
                           __LINE__, __VA_ARGS__)
+#else
+#define WARNING(...)
+#endif
+#if LOG_LEVEL <= 4
+#define ERROR(...)                                                             \
+  ::rtpmidid::logger2.log(rtpmidid::logger_level_t::ERROR, __FILE__, __LINE__, \
+                          __VA_ARGS__)
+#else
+#define ERROR(...)
+#endif
 
 #define WARNING_RATE_LIMIT(seconds, ...)                                       \
   {                                                                            \

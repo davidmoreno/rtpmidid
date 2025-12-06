@@ -90,8 +90,8 @@ public:
     }
 
     int errors = 0;
-    auto total = tests.size();
-    int count = 0;
+    [[maybe_unused]] auto total = tests.size();
+    [[maybe_unused]] int count = 0;
     for (auto &tcase : tests) {
       count += 1;
       INFO("*******************************************************************"

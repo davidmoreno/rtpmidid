@@ -92,7 +92,7 @@ void local_alsa_multi_listener_t::remove_alsa_connection(
   if (networkpeerI == aseqpeers.end()) {
     DEBUG("Removed ALSA port {}:{}, removing midipeer. NOT FOUND!", port.client,
           port.port);
-    for (auto &peers : aseqpeers) {
+    for ([[maybe_unused]] auto &peers : aseqpeers) {
       DEBUG("Known peer {}:{}", peers.first.port, peers.first.client);
     }
     return;
@@ -131,7 +131,7 @@ void local_alsa_multi_listener_t::alsaseq_event(snd_seq_event_t *event) {
   if (peerI == aseqpeers.end()) {
     WARNING("Unknown source for event {}:{}!", event->source.client,
             event->source.port);
-    for (auto &it : aseqpeers) {
+    for ([[maybe_unused]] auto &it : aseqpeers) {
       DEBUG("Known: {}:{}", it.first.client, it.first.port);
     }
     return;

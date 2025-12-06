@@ -13,6 +13,9 @@ set(LDD "auto" CACHE STRING "Use ldd linker (mold | lld | auto)")
 set(CPP_VERSION "auto" CACHE STRING "Use given C++  version. 17 and 20 supported")
 # option to force use fmt, depends on CPP20
 set(USE_FMT "auto" CACHE STRING "Use fmt library (ON | OFF | auto)")
+# option to set log level: 1=debug, 2=info, 3=warning, 4=error
+# Set from CLI with: cmake -DLOG_LEVEL=2 ..
+set(LOG_LEVEL "1" CACHE STRING "Set log level (1=debug, 2=info, 3=warning, 4=error)")
 
 # if CPP is "auto", check if C++20 is available and set it
 if (CPP_VERSION STREQUAL "auto" OR CPP_VERSION STREQUAL "auto")
@@ -123,7 +126,9 @@ execute_process(
   OUTPUT_VARIABLE RTPMIDID_VERSION
 )
 add_definitions(-DRTPMIDID_VERSION=\"${RTPMIDID_VERSION}\")
+add_definitions(-DLOG_LEVEL=${LOG_LEVEL})
 message(STATUS "Version ${RTPMIDID_VERSION}")
+message(STATUS "Log level ${LOG_LEVEL} (1=debug, 2=info, 3=warning, 4=error)")
 
 add_subdirectory(lib)
 if(NOT LIBS_ONLY)

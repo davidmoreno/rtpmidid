@@ -250,7 +250,7 @@ void rtppeer_t::parse_command_by(io_bytes_reader &buffer, port_e port) {
 void rtppeer_t::parse_command_no(io_bytes_reader &buffer, port_e port) {
   auto protocol = buffer.read_uint32();
   initiator_id = buffer.read_uint32();
-  auto remote_ssrc = buffer.read_uint32();
+  [[maybe_unused]] auto remote_ssrc = buffer.read_uint32();
 
   if (protocol != 2) {
     throw exception(

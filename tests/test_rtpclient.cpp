@@ -182,7 +182,7 @@ void test_midi_packet() {
   auto event_list = midi_packet.get_midi_events();
   DEBUG("Event list: {}", event_list.to_string());
   int count = 0;
-  for (auto midi_event : event_list) {
+  for ([[maybe_unused]] auto midi_event : event_list) {
     DEBUG("MIDI EVENT: {}", midi_event.to_string());
     count += 1;
   }

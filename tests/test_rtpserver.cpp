@@ -74,7 +74,7 @@ void test_several_connect_to_server() {
   control_client2.send(connect_msg2);
 
   ASSERT_EQUAL(server.peers.size(), 2);
-  for (auto &x : server.peers) {
+  for ([[maybe_unused]] auto &x : server.peers) {
     DEBUG("PEER {:#04x} - {}", x.peer->initiator_id, (void *)&x);
     DEBUG("InitID {:#04x}, SSRC local {:#04x} remote {:#04x} ",
           x.peer->initiator_id, x.peer->local_ssrc, x.peer->remote_ssrc);
@@ -105,7 +105,7 @@ void test_several_connect_to_server() {
   control_client.send(disconnect_msg); // This may provoke a warning, but can
                                        // be sent by remote side
 
-  for (auto &x : server.peers) {
+  for ([[maybe_unused]] auto &x : server.peers) {
     DEBUG("TIP FOR ERROR: STILL HERE? PEER {:#04x} - {}", x.peer->initiator_id,
           (void *)&x.peer);
     DEBUG("TIP FOR ERROR: STILL HERE? InitID {:#04x}, SSRC local {:#04x} "
