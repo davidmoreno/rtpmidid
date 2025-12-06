@@ -131,6 +131,23 @@ int main(int argc, char **argv) {
   }
 
   rtpmididns::parse_argv(std::move(args), &rtpmididns::settings);
+
+  // Initialize logger level from settings with validation
+  // LOG_LEVEL: 1=DEBUG, 2=INFO, 3=WARNING, 4=ERROR
+  // enum: DEBUG=0, INFO=1, WARNING=2, ERROR=3
+  constexpr int compile_time_min_enum = LOG_LEVEL - 1; // Convert to enum value
+  int runtime_level = static_cast<int>(rtpmididns::settings.log_level);
+  if (runtime_level < compile_time_min_enum) {
+    WARNING("Requested log level {} is lower than compile-time minimum {}. "
+            "Using minimum level {} instead.",
+            rtpmididns::settings.log_level, LOG_LEVEL,
+            static_cast<rtpmidid::logger_level_t>(compile_time_min_enum));
+    rtpmidid::logger2.set_log_level(
+        static_cast<rtpmidid::logger_level_t>(compile_time_min_enum));
+  } else {
+    rtpmidid::logger2.set_log_level(rtpmididns::settings.log_level);
+  }
+
   std::optional<rtpmididns::HwAutoAnnounce> hwautoannounce;
 
   signal(SIGINT, sigint_f);

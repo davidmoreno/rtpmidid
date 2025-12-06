@@ -18,6 +18,9 @@
  */
 
 #include <rtpmidid/logger.hpp>
+#include <algorithm>
+#include <rtpmidid/exceptions.hpp>
+#include <string>
 
 namespace rtpmidid {
 rtpmidid::logger_t logger2;
@@ -81,6 +84,42 @@ void logger_t::log_postamble(buffer_t::iterator it) {
   it = FMT::format_to(it, "{}", ansi_color_reset());
   *it = '\0';
   std::cout << buffer.data() << std::endl;
+}
+
+logger_level_t str_to_log_level(const std::string &value) {
+  // Check numeric values first (they don't need case conversion)
+  if (value == "0") {
+    return logger_level_t::DEBUG;
+  }
+  if (value == "1") {
+    return logger_level_t::INFO;
+  }
+  if (value == "2") {
+    return logger_level_t::WARNING;
+  }
+  if (value == "3") {
+    return logger_level_t::ERROR;
+  }
+
+  // Convert value to lowercase for case-insensitive comparison
+  std::string value_lowercase;
+  value_lowercase.resize(value.size());
+  std::transform(value.begin(), value.end(), value_lowercase.begin(),
+                 ::tolower);
+
+  if (value_lowercase == "debug") {
+    return logger_level_t::DEBUG;
+  }
+  if (value_lowercase == "info") {
+    return logger_level_t::INFO;
+  }
+  if (value_lowercase == "warning") {
+    return logger_level_t::WARNING;
+  }
+  if (value_lowercase == "error") {
+    return logger_level_t::ERROR;
+  }
+  throw rtpmidid::exception("Invalid log level value: {}. Valid values: debug, info, warning, error, or 0-3", value);
 }
 
 }; // namespace rtpmidid

@@ -154,6 +154,12 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
                          [settings](const std::string &value) {
                            settings->control_filename = value;
                          });
+  arguments.emplace_back("--log-level",
+                         "Set log level: debug, info, warning, error (or 0-3). "
+                         "Default: info",
+                         [settings](const std::string &value) {
+                           settings->log_level = rtpmidid::str_to_log_level(value);
+                         });
   arguments.emplace_back( //
       "--rtpmidi-discover",
       "Enable or disable rtpmidi discover. true | false | [posregex] | "

@@ -21,6 +21,7 @@
 #include "stringpp.hpp"
 #include <fstream>
 #include <rtpmidid/exceptions.hpp>
+#include <rtpmidid/logger.hpp>
 #include <unistd.h>
 
 namespace rtpmididns {
@@ -129,6 +130,8 @@ void IniReader::parse_line(const std::string &origline) {
       settings->alsa_name = value;
     } else if (key == "control") {
       settings->control_filename = value;
+    } else if (key == "log_level") {
+      settings->log_level = rtpmidid::str_to_log_level(value);
     } else {
       throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
     }

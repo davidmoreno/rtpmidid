@@ -28,6 +28,7 @@ struct settings_t {
   std::string alsa_name = "rtpmidid";
   bool alsa_network = true;
   std::string control_filename = "/var/run/rtpmidid/control.sock";
+  rtpmidid::logger_level_t log_level = rtpmidid::logger_level_t::INFO;
 
   // Datas a read from the ini file
   struct rtpmidi_announce_t {
@@ -123,7 +124,7 @@ VECTOR_FORMATTER(rtpmididns::settings_t::alsa_announce_t);
 VECTOR_FORMATTER(rtpmididns::settings_t::connect_to_t);
 
 BASIC_FORMATTER(rtpmididns::settings_t,
-                "settings_t[{}, {}, {}, {}, {}, {}, {}, {}]", v.alsa_name,
-                v.alsa_network, v.control_filename, v.rtpmidi_announces,
-                v.rtpmidi_discover, v.alsa_announces, v.connect_to,
-                v.alsa_hw_auto_export);
+                "settings_t[{}, {}, {}, {}, {}, {}, {}, {}, {}]", v.alsa_name,
+                v.alsa_network, v.control_filename, v.log_level,
+                v.rtpmidi_announces, v.rtpmidi_discover, v.alsa_announces,
+                v.connect_to, v.alsa_hw_auto_export);

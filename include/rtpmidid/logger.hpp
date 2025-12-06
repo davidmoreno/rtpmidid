@@ -21,6 +21,7 @@
 #include "formatterhelper.hpp"
 #include <array>
 #include <iostream>
+#include <string>
 
 namespace rtpmidid {
 enum logger_level_t { DEBUG, INFO, WARNING, ERROR };
@@ -39,15 +40,22 @@ class logger_t {
   using buffer_t = std::array<char, 1024>;
   // we use a preallocated array to avoid any allocation on debug
   buffer_t buffer;
+  logger_level_t current_log_level = logger_level_t::INFO;
 
 public:
   buffer_t::iterator log_preamble(logger_level_t level, const char *filename,
                                   int lineno);
   void log_postamble(buffer_t::iterator it);
+  void set_log_level(logger_level_t level) { current_log_level = level; }
 
   template <typename... Args>
   constexpr void log(logger_level_t level, const char *filename, int lineno,
                      FMT::format_string<Args...> message, Args... args) {
+    // Runtime filtering: only log if level is at or above current_log_level
+    if (level < current_log_level) {
+      return;
+    }
+
     auto it = log_preamble(level, filename, lineno);
 
     auto max_size = buffer.size() - (it - buffer.begin()) - 16;
@@ -62,6 +70,9 @@ public:
 
 namespace rtpmidid {
 extern rtpmidid::logger_t logger2;
+
+// Convert string to logger level (case-insensitive, accepts "debug"/"info"/"warning"/"error" or "0"/"1"/"2"/"3")
+logger_level_t str_to_log_level(const std::string &value);
 };
 
 /// Compatibility with c++23, std::print, std::println
