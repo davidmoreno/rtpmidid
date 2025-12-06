@@ -30,6 +30,8 @@ public:
       : rtpmidid::io_bytes_reader(writer.start,
                                   writer.position - writer.start) {}
   mididata_t(const rtpmidid::io_bytes_reader &reader)
-      : rtpmidid::io_bytes_reader(reader.position, reader.end - reader.start) {}
+      : rtpmidid::io_bytes_reader(
+            reader.position,
+            static_cast<uint32_t>(reader.end - reader.position)) {}
 };
 } // namespace rtpmididns
