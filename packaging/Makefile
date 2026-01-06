@@ -10,12 +10,13 @@ RELEASES_DIR ?= $(SOURCE_DIR)/releases
 DISTROS := debian-trixie ubuntu-24.04 ubuntu-25.10
 
 # Available architectures
-ARCHES := amd64 arm64 armhf
+ARCHES := amd64 arm64 armhf riscv64
 
 # Map architecture to Docker platform
 DOCKER_PLATFORM_amd64 := linux/amd64
 DOCKER_PLATFORM_arm64 := linux/arm64
 DOCKER_PLATFORM_armhf := linux/arm/v7
+DOCKER_PLATFORM_riscv64 := linux/riscv64
 
 # Get Docker platform for architecture
 get_platform = $(DOCKER_PLATFORM_$(ARCH))
