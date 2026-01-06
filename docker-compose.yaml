@@ -1,5 +1,6 @@
 services:
   rtpmidid:
+    image: ghcr.io/davidmoreno/rtpmidid:latest
     build:
       context: .
       dockerfile: Dockerfile

@@ -146,6 +146,9 @@ docker-rpm:
 	make -C packaging docker-rpm-all
 
 
+docker-push:
+	docker push ghcr.io/davidmoreno/rtpmidid:latest
+
 .PHONY: install
 
 install: install-rtpmidid install-librtpmidid0 install-librtpmidid0-dev

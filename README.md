@@ -179,26 +179,37 @@ name=Network Export
 
 ## Install and Build
 
-There are Debian packages at https://github.com/davidmoreno/rtpmidid/releases .
-They are available for Ubuntu 18.04 x64 and Raspbian 32bits, but may work
-also on other systems. Only the `rtpmidid_[version]_[arch].deb` file is needed.
+### Docker
 
-Install with:
+Download `docker-compose.yaml` and `default.ini` from the repository, then run:
 
-```
-dpkg -i rtpmidid.deb
-apt -f install
+```bash
+docker compose up -d
 ```
 
-Replace the rtpmidid.deb file with the name of the downloaded file.
-`apt -f install` ensure that all dependencies are installed.
+This will build the image and start the container. The container uses host networking for mDNS/Avahi support and mounts your ALSA MIDI devices.
 
-To easy build there is a simple makefile, which can be invoked to compile with
-`make build` . Use `make` or `make help` to get help on commands.
+View logs with:
 
-Its possible to create a debian / ubuntu package with `make deb`
+```bash
+docker compose logs -f
+```
 
-Requires C++20 (Ubuntu 22.04+), libasound2-dev, libavahi-client-dev, libfmt-dev and ninja-build.
+### Packages via docker builders
+
+Build Debian packages:
+
+```bash
+make docker-deb
+```
+
+Build RPM packages:
+
+```bash
+make docker-rpm DISTRO=fedora-43
+```
+
+Packages are output to `releases/<distro>/<arch>/`. See `packaging/README.md` for supported distributions and architectures.
 
 ## Testing and bug reporting
 
