@@ -30,7 +30,7 @@ mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
 tar czf ~/rpmbuild/SOURCES/rtpmidid-${VERSION}.tar.gz \
     --exclude='.git' \
     --exclude='build' \
-    --exclude='releases' \
+    --exclude='packaging/dist' \
     --exclude='*.deb' \
     --exclude='*.rpm' \
     --exclude='packaging/docker' \

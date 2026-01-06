@@ -4,50 +4,67 @@ This directory contains the Docker-based build system for creating Debian and RP
 
 ## Usage
 
-From the project root:
+### From the project root
+
+```bash
+# Build all packages (DEB and RPM)
+make packages
+
+# Or use the packaging Makefile directly
+make -C packaging all
+```
+
+### From the packaging directory
 
 ```bash
 # Build Debian packages for default (Debian Trixie, amd64)
-make docker-deb
+make deb
 
 # Build for specific distribution and architecture
-make docker-deb DISTRO=ubuntu-24.04 ARCH=arm64
+make deb DISTRO=ubuntu-24.04 ARCH=arm64
 
 # Build all Debian packages
-make docker-deb-all
+make deb-all
 
 # Build RPM packages for Fedora 43
-make docker-rpm DISTRO=fedora-43 ARCH=x86_64
+make rpm DISTRO=fedora-43 ARCH=x86_64
 
 # Build all RPM packages
-make docker-rpm-all
+make rpm-all
+
+# Build all packages (both DEB and RPM)
+make all
 ```
 
 ## Supported Distributions
 
 ### Debian/Ubuntu (DEB packages)
+
 - `debian-trixie` - Debian Trixie
 - `ubuntu-24.04` - Ubuntu 24.04 LTS
 - `ubuntu-25.10` - Ubuntu 25.10
 
 ### Fedora (RPM packages)
+
 - `fedora-43` - Fedora 43
 
 ## Supported Architectures
 
 ### Debian/Ubuntu
+
 - `amd64` - x86_64
 - `arm64` - ARM 64-bit
 - `armhf` - ARM 32-bit (ARMv7)
 - `riscv64` - RISC-V 64-bit
 
 ### Fedora
+
 - `x86_64` - x86_64
 - `aarch64` - ARM 64-bit
 
 ## Output
 
-Built packages are extracted to `releases/<distro>/<arch>/` directory.
+Built packages are extracted to `packaging/dist/<distro>/<arch>/` directory.
 
 - Debian packages: `*.deb` files
 - RPM packages: `*.rpm` files (binary and source RPMs)
@@ -61,6 +78,7 @@ Built packages are extracted to `releases/<distro>/<arch>/` directory.
 3. The Dockerfile should install all build dependencies listed in `debian/control`
 
 Example:
+
 ```dockerfile
 FROM <distro>:<version>
 RUN apt-get update && apt-get install -y \
@@ -88,6 +106,7 @@ WORKDIR /build
 3. The Dockerfile should install RPM build dependencies
 
 Example:
+
 ```dockerfile
 FROM fedora:43
 RUN dnf install -y \
@@ -112,4 +131,3 @@ WORKDIR /build
 
 - Docker (with buildx support recommended for multi-arch builds)
 - QEMU emulation (automatically handled by Docker for cross-arch builds)
-

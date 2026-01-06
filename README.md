@@ -209,7 +209,7 @@ Build RPM packages:
 make docker-rpm DISTRO=fedora-43
 ```
 
-Packages are output to `releases/<distro>/<arch>/`. See `packaging/README.md` for supported distributions and architectures.
+Packages are output to `packaging/dist/<distro>/<arch>/`. See `packaging/README.md` for supported distributions and architectures.
 
 ## Testing and bug reporting
 

@@ -4,7 +4,7 @@
 # Default values
 DISTRO ?= debian-trixie
 ARCH ?= amd64
-RELEASES_DIR ?= $(SOURCE_DIR)/releases
+RELEASES_DIR ?= $(PACKAGING_DIR)/dist
 
 # Available distributions (Debian/Ubuntu)
 DEB_DISTROS := debian-trixie ubuntu-24.04 ubuntu-25.10
@@ -49,16 +49,17 @@ BUILD_SCRIPT = $(if $(filter yes,$(call is_rpm)),/usr/local/bin/rtpmidid-build-r
 SOURCE_DIR = $(shell dirname $(shell pwd))
 PACKAGING_DIR = $(shell pwd)
 
-.PHONY: help docker-deb docker-deb-all docker-deb-% docker-rpm docker-rpm-all docker-rpm-%
+.PHONY: help deb deb-all deb-% rpm rpm-all rpm-% all
 
 help:
 	@echo "Docker Package Builder (Debian/Ubuntu and Fedora)"
 	@echo ""
 	@echo "Usage:"
-	@echo "  make docker-deb [DISTRO=<distro>] [ARCH=<arch>]  # Build Debian packages"
-	@echo "  make docker-rpm [DISTRO=<distro>] [ARCH=<arch>]  # Build RPM packages"
-	@echo "  make docker-deb-all  # Build all Debian packages"
-	@echo "  make docker-rpm-all   # Build all RPM packages"
+	@echo "  make deb [DISTRO=<distro>] [ARCH=<arch>]  # Build Debian packages"
+	@echo "  make rpm [DISTRO=<distro>] [ARCH=<arch>]  # Build RPM packages"
+	@echo "  make deb-all  # Build all Debian packages"
+	@echo "  make rpm-all   # Build all RPM packages"
+	@echo "  make all       # Build all packages"
 	@echo ""
 	@echo "Debian/Ubuntu distributions: $(DEB_DISTROS)"
 	@echo "Fedora distributions: $(RPM_DISTROS)"
@@ -66,28 +67,29 @@ help:
 	@echo "Fedora architectures: $(RPM_ARCHES)"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make docker-deb"
-	@echo "  make docker-deb DISTRO=ubuntu-24.04 ARCH=arm64"
-	@echo "  make docker-rpm DISTRO=fedora-43 ARCH=x86_64"
-	@echo "  make docker-deb-all"
-	@echo "  make docker-rpm-all"
+	@echo "  make deb"
+	@echo "  make deb DISTRO=ubuntu-24.04 ARCH=arm64"
+	@echo "  make rpm DISTRO=fedora-43 ARCH=x86_64"
+	@echo "  make deb-all"
+	@echo "  make rpm-all"
+	@echo "  make all"
 
 # Default target - build for default distro/arch
-docker-deb: docker-deb-$(DISTRO)-$(ARCH)
+deb: deb-$(DISTRO)-$(ARCH)
 
 # Build for all distro/arch combinations
-docker-deb-all:
-	@for distro in $(DISTROS); do \
-		for arch in $(ARCHES); do \
+deb-all:
+	@for distro in $(DEB_DISTROS); do \
+		for arch in $(DEB_ARCHES); do \
 			echo "Building for $$distro/$$arch..."; \
-			$(MAKE) docker-deb-$$distro-$$arch || true; \
+			$(MAKE) deb-$$distro-$$arch || true; \
 		done; \
 	done
 
 # Generic target for any distro-arch combination
 # Handle distro names with dots (e.g., ubuntu-24.04)
-docker-deb-%:
-	@distro_arch=$(subst docker-deb-,,$@); \
+deb-%:
+	@distro_arch=$(subst deb-,,$@); \
 	if echo "$$distro_arch" | grep -q "ubuntu-"; then \
 		distro=$$(echo $$distro_arch | sed 's/-amd64$$//' | sed 's/-arm64$$//' | sed 's/-armhf$$//'); \
 		arch=$$(echo $$distro_arch | sed 's/^.*-//'); \
@@ -95,10 +97,10 @@ docker-deb-%:
 		distro=$$(echo $$distro_arch | cut -d- -f1-2); \
 		arch=$$(echo $$distro_arch | cut -d- -f3-); \
 	fi; \
-	$(MAKE) -f $(PACKAGING_DIR)/Makefile _docker-deb-internal DISTRO=$$distro ARCH=$$arch
+	$(MAKE) -f $(PACKAGING_DIR)/Makefile _deb-internal DISTRO=$$distro ARCH=$$arch
 
 # Internal target that does the actual work
-_docker-deb-internal:
+_deb-internal:
 	@echo "Building Debian package for $(DISTRO) on $(ARCH)..."
 	@mkdir -p $(RELEASES_DIR)/$(DISTRO)/$(ARCH)
 	@platform=$(call get_platform); \
@@ -151,7 +153,7 @@ _docker-deb-internal:
 			$(BUILD_SCRIPT) \
 	); \
 	\
-	# Copy package files to releases directory \
+	# Copy package files to dist directory \
 	if [ -d /tmp/rtpmidid-output-$(DISTRO)-$(ARCH) ]; then \
 		if [ "$(call is_rpm)" = "yes" ]; then \
 			cp -v /tmp/rtpmidid-output-$(DISTRO)-$(ARCH)/*.rpm $(RELEASES_DIR)/$(DISTRO)/$(ARCH)/ 2>/dev/null || \
@@ -168,25 +170,25 @@ _docker-deb-internal:
 	echo "Package built successfully: $(RELEASES_DIR)/$(DISTRO)/$(ARCH)/"
 
 # RPM-specific targets
-docker-rpm: docker-rpm-$(or ${DISTRO},fedora-43)-$(or ${ARCH},x86_64)
+rpm: rpm-$(or ${DISTRO},fedora-43)-$(or ${ARCH},x86_64)
 
-docker-rpm-all:
+rpm-all:
 	@for distro in $(RPM_DISTROS); do \
 		for arch in $(RPM_ARCHES); do \
 			echo "Building for $$distro/$$arch..."; \
-			$(MAKE) docker-rpm-$$distro-$$arch || true; \
+			$(MAKE) rpm-$$distro-$$arch || true; \
 		done; \
 	done
 
 # Generic target for any RPM distro-arch combination
-docker-rpm-%:
-	@distro_arch=$(subst docker-rpm-,,$@); \
+rpm-%:
+	@distro_arch=$(subst rpm-,,$@); \
 	distro=$$(echo $$distro_arch | sed 's/-x86_64$$//' | sed 's/-aarch64$$//'); \
 	arch=$$(echo $$distro_arch | sed 's/^.*-//'); \
-	$(MAKE) -f $(PACKAGING_DIR)/Makefile _docker-rpm-internal DISTRO=$$distro ARCH=$$arch
+	$(MAKE) -f $(PACKAGING_DIR)/Makefile _rpm-internal DISTRO=$$distro ARCH=$$arch
 
 # Internal target for RPM builds
-_docker-rpm-internal:
+_rpm-internal:
 	@echo "Building RPM package for $(DISTRO) on $(ARCH)..."
 	@mkdir -p $(RELEASES_DIR)/$(DISTRO)/$(ARCH)
 	@platform=$(call get_platform); \
@@ -236,7 +238,7 @@ _docker-rpm-internal:
 			$(BUILD_SCRIPT) \
 	); \
 	\
-	# Copy .rpm files to releases directory \
+	# Copy .rpm files to dist directory \
 	if [ -d /tmp/rtpmidid-output-$(DISTRO)-$(ARCH) ]; then \
 		cp -v /tmp/rtpmidid-output-$(DISTRO)-$(ARCH)/*.rpm $(RELEASES_DIR)/$(DISTRO)/$(ARCH)/ 2>/dev/null || \
 		echo "Warning: No .rpm files found in output"; \
@@ -247,3 +249,5 @@ _docker-rpm-internal:
 	\
 	echo "Package built successfully: $(RELEASES_DIR)/$(DISTRO)/$(ARCH)/"
 
+# Build all packages (both DEB and RPM)
+all: deb-all rpm-all
