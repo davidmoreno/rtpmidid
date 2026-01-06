@@ -34,6 +34,8 @@ help:
 	@echo " deb       -- Generate deb package"
 	@echo " docker-deb -- Build deb package in Docker container [DISTRO=<distro>] [ARCH=<arch>]"
 	@echo " docker-deb-all -- Build deb packages for all distros/arches"
+	@echo " docker-rpm -- Build RPM package in Docker container [DISTRO=<distro>] [ARCH=<arch>]"
+	@echo " docker-rpm-all -- Build RPM packages for all distros/arches"
 	@echo " test      -- Runs all test"
 	@echo " install   -- Installs to PREFIX or DESTDIR (default /usr/local/)"
 	@echo " man       -- Generate man pages"
@@ -136,9 +138,12 @@ deb:
 
 	dpkg-buildpackage --no-sign
 
-.PHONY: docker-deb
+.PHONY: docker-deb docker-rpm
 docker-deb:
 	make -C packaging docker-deb-all
+
+docker-rpm:
+	make -C packaging docker-rpm-all
 
 
 .PHONY: install
