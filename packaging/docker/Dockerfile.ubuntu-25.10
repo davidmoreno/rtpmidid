@@ -1,0 +1,28 @@
+FROM ubuntu:25.10
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    debhelper \
+    debhelper-compat \
+    libavahi-client-dev \
+    libasound2-dev \
+    python3 \
+    cmake \
+    pandoc \
+    git \
+    ninja-build \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for building
+RUN useradd -m -s /bin/bash builder
+
+# Copy build script (build context is packaging/, so build.sh is at ../build.sh)
+COPY ../build.sh /usr/local/bin/rtpmidid-build.sh
+RUN chmod +x /usr/local/bin/rtpmidid-build.sh
+
+WORKDIR /build
+
