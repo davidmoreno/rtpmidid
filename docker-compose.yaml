@@ -1,0 +1,76 @@
+services:
+  rtpmidid:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rtpmidid
+    restart: unless-stopped
+
+    # Network configuration
+    # Use host network mode for mDNS/Avahi to work properly
+    # This allows the container to participate in multicast DNS discovery
+    # With host networking, all UDP ports are directly accessible:
+    # - 5004: Default RTP MIDI control port
+    # - 5005: Default RTP MIDI data port (control + 1)
+    # - 5004-5100+: Additional ports used for connections as configured in default.ini
+    network_mode: host
+
+    # Volume mounts
+    volumes:
+      # Mount custom default.ini configuration file
+      # Create/edit ./config/default.ini to customize settings
+      - ./default.ini:/etc/rtpmidid/default.ini:ro
+
+      # Mount ALSA MIDI devices from host
+      # This allows the container to access physical MIDI devices
+      - /dev/snd:/dev/snd:rw
+
+      # Mount dbus socket for Avahi integration
+      # Required for mDNS service discovery and announcement
+      - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
+
+      # Runtime directory for control socket
+      - rtpmidid-runtime:/var/run/rtpmidid
+
+    # Device access for ALSA
+    devices:
+      # Allow access to all ALSA devices
+      - /dev/snd:/dev/snd
+
+    # Environment variables
+    environment:
+      # Set timezone (optional, adjust as needed)
+      - TZ=UTC
+      # Avahi needs dbus
+      - DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket
+
+    # Capabilities (needed for real-time scheduling and network operations)
+    cap_add:
+      - NET_ADMIN # For network operations
+      - NET_RAW # For raw sockets (UDP)
+      - SYS_NICE # For real-time scheduling priority
+
+    # Run as root to access /dev/snd devices
+    # The container user rtpmidid doesn't have proper group mapping to host's audio group
+    # Alternative: use privileged mode or map user IDs properly
+    # For production, consider using user namespace mapping
+    privileged: true
+    user: "0:0" # Override Dockerfile USER directive to run as root for device access
+
+    # Security options
+    # Allow access to dbus for Avahi
+    security_opt:
+      - apparmor:unconfined # May need adjustment based on your security requirements
+
+    # Health check (optional)
+    # Simple check: verify the runtime directory exists (created on startup)
+    healthcheck:
+      test: [ "CMD-SHELL", "test -d /var/run/rtpmidid || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  rtpmidid-runtime:
+    driver: local
