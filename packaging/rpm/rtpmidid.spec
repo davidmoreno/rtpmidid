@@ -105,7 +105,58 @@ chmod +x %{buildroot}%{_bindir}/rtpmidid-cli
 %{_docdir}/librtpmidid0-dev/*
 
 %changelog
-* %(date +"%a %b %d %Y") David Moreno <dmoreno@coralbits.com> - %{version}-%{release}
-- Initial RPM package
+* Tue Jan 06 2026 David Moreno <dmoreno@coralbits.com> - 26.01-1
+- Docker support: Added Dockerfile, docker-compose, and comprehensive Docker documentation
+- RPM package support: Full support for building RPM packages with multi-distro and multi-arch support (including riscv64)
+- Log level configuration: New CMake option to set log level at compile time (1=debug, 2=info, 3=warning, 4=error)
+- Fixed ALSA listener cleanup to avoid double removal and invalid peer access
+- Improved error handling in control socket with robust client removal and better JSON parsing
+- Fixed hardware auto-announce: corrected regex checks and fixed sending data from network to ALSA
+- Fixed incorrect time unit in log output
+- Added missing build dependency (ninja)
+- Updated README with Docker usage instructions and packaging documentation
+- Improved packaging system with new targets for Docker-based builds
+
+* Sun Dec 15 2024 David Moreno <dmoreno@coralbits.com> - 24.12-1
+- Raw MIDI devices - Can configure them in the ini file, command line or cli util.
+- Optionally use std::format instead of fmt library, where available.
+- Improvements to the TUI.
+- Improvements to the INI configuration file: rawmidi devices, can set local UDP port for clients. Use regex for auto add to the autodiscover and announcement (positive and negative)
+- More tests.
+
+* Tue Dec 05 2023 David Moreno <dmoreno@coralbits.com> - 23.12b2-1
+- Packaging fixes
+- Compiles with newest libfmt
+- No mallocs on the hot path
+- Fixes connecting. Improved timeouts.
+
+* Tue Oct 24 2023 David Moreno <dmoreno@coralbits.com> - 23.10b1-1
+- New midirouter implementation
+- Accepts an ini file as initial configuration.
+- Control socket is more powerful and complete.
+
+* Thu Nov 04 2021 David Moreno <dmoreno@coralbits.com> - 21.11-1
+- Several MIDI packets in a single packet. This solves several issues with third party implementations.
+- Resassembly of SysEx packages
+- Internal improvements
+- More tests
+- Log colors only on terminals
+- Parsing or Real Time Events
+- Moved mdns_rtpmidi into the library
+
+* Fri Jul 23 2021 David Moreno <dmoreno@coralbits.com> - 21.07-1
+- Bugfix: bad ordering of events
+- More MIDI events
+- Bad acess initiator / ssrc
+- Bigger buffer size for sysex
+
+* Sat Jul 11 2020 David Moreno <dmoreno@coralbits.com> - 20.07-1
+- Improved Mac OS and iOS support
+- Control CLI
+- LGPL2.1 Library
+- Improved stability
+
+* Sun Apr 05 2020 David Moreno <dmoreno@coralbits.com> - 20.04.5-1
+- Initial Release.
 
 
