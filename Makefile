@@ -132,8 +132,11 @@ statemachines:
 
 .PHONY: deb
 deb:
-	debian/update-changelog.py
-
+	@# Changelog should already be updated on host before Docker build
+	@# Only update if .git exists and we're not in a Docker container
+	@if [ -d .git ] && [ ! -f /.dockerenv ]; then \
+		python3 debian/update-changelog.py || true; \
+	fi
 	dpkg-buildpackage --no-sign
 
 .PHONY: packages

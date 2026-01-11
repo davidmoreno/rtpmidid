@@ -11,7 +11,7 @@ rtpmidid (26.01) stable; urgency=medium
   * Updated README with Docker usage instructions and packaging documentation
   * Improved packaging system with new targets for Docker-based builds
 
- -- David Moreno <dmoreno@coralbits.com>  Tue, 06 Jan 2026 20:46:05 +0100
+ -- David Moreno <dmoreno@coralbits.com>  Sun, 11 Jan 2026 13:33:34 +0100
 
 rtpmidid (24.12) stable; urgency=medium
 
