@@ -95,8 +95,8 @@ public:
   bool enqueue_connect(peer_id_t from, peer_id_t to);
   bool enqueue_disconnect(peer_id_t from, peer_id_t to);
   bool enqueue_remove_peer(peer_id_t peer_id);
-  bool enqueue_event(peer_id_t from, peer_id_t to, midipeer_event_e event);
-  bool enqueue_event(peer_id_t from, midipeer_event_e event);
+  bool enqueue_event(peer_id_t from, peer_id_t to, midipeer_event_e evt);
+  bool enqueue_event(peer_id_t from, midipeer_event_e evt);
 
   peer_id_t add_peer(std::shared_ptr<midipeer_t>);
   std::shared_ptr<midipeer_t> get_peer_by_id(peer_id_t peer_id);

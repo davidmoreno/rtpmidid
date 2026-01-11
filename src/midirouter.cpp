@@ -59,9 +59,15 @@ uint32_t midirouter_t::add_peer(std::shared_ptr<midipeer_t> peer) {
   
   // If router thread is running, start this peer's thread too
   // (peers added after setup_threading() need their threads started)
+  // Note: We can't check peer->thread_running directly as it's protected,
+  // but start_thread() will check it internally
   if (router_running.load()) {
-    DEBUG("[MIDI_FLOW] Router: Starting thread for newly added peer {}", peer_id);
+    DEBUG("[MIDI_FLOW] Router: Starting thread for newly added peer {} (router_running={})", 
+          peer_id, router_running.load());
     peer->start_thread();
+  } else {
+    DEBUG("[MIDI_FLOW] Router: Not starting thread for peer {} (router_running={}, will be started in setup_threading)", 
+          peer_id, router_running.load());
   }
 
   return peer_id;
@@ -182,15 +188,20 @@ void midirouter_t::remove_peer(peer_id_t peer_id) {
 }
 
 void midirouter_t::send_midi(uint32_t from, const mididata_t &data) {
-  auto peerdata = get_peerdata_by_id(from);
-  if (!peerdata) {
-    WARNING("Sending from an unknown peer {}!", from);
-    return;
+  std::vector<peer_id_t> send_to_copy;
+  {
+    std::shared_lock<std::shared_mutex> lock(peers_mutex);
+    auto peer_it = peers.find(from);
+    if (peer_it == peers.end()) {
+      WARNING("Sending from an unknown peer {}!", from);
+      return;
+    }
+    peer_it->second.peer->packets_sent++;
+    send_to_copy = peer_it->second.send_to;
   }
-
-  peerdata->peer->packets_sent++;
-  // DEBUG("Send data to {} peers", peer->second.send_to.size());
-  for (auto to : peerdata->send_to) {
+  
+  // DEBUG("Send data to {} peers", send_to_copy.size());
+  for (auto to : send_to_copy) {
     // DEBUG("Send data {} to {}", from, to);
     send_midi(from, to, data);
   }
@@ -341,9 +352,6 @@ void midirouter_t::router_thread_loop() {
     while (routing_queue.dequeue(request)) {
       processed = true;
       requests_processed++;
-      DEBUG("[MIDI_FLOW] Router: Dequeued routing request #{} from queue, command={}, from_peer_id={}, to_peer_id={}, data_size={} bytes, queue_size={}",
-            requests_processed, static_cast<int>(request.command), request.from_peer_id, 
-            request.to_peer_id, request.data.size(), routing_queue.size());
       
       switch (request.command) {
       case rtpmidid::routing_command_e::SEND_MIDI: {
@@ -432,10 +440,6 @@ void midirouter_t::router_thread_loop() {
       }
     }
     
-    if (requests_processed > 0) {
-      DEBUG("[MIDI_FLOW] Router: Processed {} routing requests in this cycle", requests_processed);
-    }
-    
     // Sleep if no work, but wake up periodically to check
     if (!processed) {
       std::unique_lock<std::mutex> lock(router_mutex);
@@ -447,26 +451,34 @@ void midirouter_t::router_thread_loop() {
 }
 
 bool midirouter_t::enqueue_send_midi(peer_id_t from, const mididata_t &data) {
+  // If router thread is not running, process synchronously (for tests)
+  if (!router_running.load()) {
+    send_midi(from, data);
+    return true;
+  }
+  
   rtpmidid::routing_request_t request;
   request.command = rtpmidid::routing_command_e::SEND_MIDI;
   request.from_peer_id = from;
   request.to_peer_id = 0; // Broadcast
   request.data.assign(data.position, data.position + data.remaining());
   
-  DEBUG("[MIDI_FLOW] Router: enqueue_send_midi() called, from_peer_id={}, size={} bytes, routing_queue_size={}",
-        from, request.data.size(), routing_queue.size());
-  
   if (!routing_queue.enqueue(request)) {
     WARNING("[MIDI_FLOW] Router: Routing queue full, dropping MIDI packet from peer {}", from);
     return false;
   }
   router_wakeup.notify_one();
-  DEBUG("[MIDI_FLOW] Router: MIDI enqueued to routing queue successfully, queue_size={}", 
-        routing_queue.size());
   return true;
 }
 
 bool midirouter_t::enqueue_connect(peer_id_t from, peer_id_t to) {
+  // If router thread is not running, process synchronously (for tests)
+  if (!router_running.load()) {
+    std::unique_lock<std::shared_mutex> lock(peers_mutex);
+    connect(from, to);
+    return true;
+  }
+  
   rtpmidid::routing_request_t request;
   request.command = rtpmidid::routing_command_e::CONNECT;
   request.from_peer_id = from;
@@ -481,6 +493,13 @@ bool midirouter_t::enqueue_connect(peer_id_t from, peer_id_t to) {
 }
 
 bool midirouter_t::enqueue_disconnect(peer_id_t from, peer_id_t to) {
+  // If router thread is not running, process synchronously (for tests)
+  if (!router_running.load()) {
+    std::unique_lock<std::shared_mutex> lock(peers_mutex);
+    disconnect(from, to);
+    return true;
+  }
+  
   rtpmidid::routing_request_t request;
   request.command = rtpmidid::routing_command_e::DISCONNECT;
   request.from_peer_id = from;
@@ -495,6 +514,12 @@ bool midirouter_t::enqueue_disconnect(peer_id_t from, peer_id_t to) {
 }
 
 bool midirouter_t::enqueue_remove_peer(peer_id_t peer_id) {
+  // If router thread is not running, process synchronously (for tests)
+  if (!router_running.load()) {
+    remove_peer(peer_id);
+    return true;
+  }
+  
   rtpmidid::routing_request_t request;
   request.command = rtpmidid::routing_command_e::REMOVE_PEER;
   request.from_peer_id = peer_id;
@@ -509,12 +534,22 @@ bool midirouter_t::enqueue_remove_peer(peer_id_t peer_id) {
 }
 
 bool midirouter_t::enqueue_event(peer_id_t from, peer_id_t to, 
-                                 midipeer_event_e event) {
+                                 midipeer_event_e evt) {
+  // If router thread is not running, process synchronously (for tests)
+  if (!router_running.load()) {
+    if (to == 0) {
+      event(from, evt);
+    } else {
+      event(from, to, evt);
+    }
+    return true;
+  }
+  
   rtpmidid::routing_request_t request;
   request.command = rtpmidid::routing_command_e::PEER_EVENT;
   request.from_peer_id = from;
   request.to_peer_id = to;
-  request.data.push_back(static_cast<uint8_t>(event));
+  request.data.push_back(static_cast<uint8_t>(evt));
   
   if (!routing_queue.enqueue(request)) {
     WARNING("Routing queue full, dropping event");
@@ -524,8 +559,8 @@ bool midirouter_t::enqueue_event(peer_id_t from, peer_id_t to,
   return true;
 }
 
-bool midirouter_t::enqueue_event(peer_id_t from, midipeer_event_e event) {
-  return enqueue_event(from, 0, event);
+bool midirouter_t::enqueue_event(peer_id_t from, midipeer_event_e evt) {
+  return enqueue_event(from, 0, evt);
 }
 
 } // namespace rtpmididns

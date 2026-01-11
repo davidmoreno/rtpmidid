@@ -98,22 +98,10 @@ void midipeer_t::peer_thread_loop() {
     }
     
     // Process incoming MIDI packets
-    size_t queue_size_before = input_queue.size();
-    if (queue_size_before > 0) {
-      DEBUG("[MIDI_FLOW] peer {}: Checking input queue, size={} packets", peer_id, queue_size_before);
-    }
     rtpmidid::midi_packet_t packet;
-    int dequeued_count = 0;
     while (input_queue.dequeue(packet)) {
       processed = true;
-      dequeued_count++;
-      DEBUG("[MIDI_FLOW] peer {}: Dequeued MIDI packet #{} from input queue, from_peer_id={}, size={} bytes, remaining_in_queue={}",
-            peer_id, dequeued_count, packet.from_peer_id, packet.data.size(), input_queue.size());
       process_midi_packet(packet);
-    }
-    if (queue_size_before > 0 && dequeued_count == 0) {
-      WARNING("[MIDI_FLOW] peer {}: Input queue has {} packets but dequeue() returned false! Queue might be corrupted",
-             peer_id, queue_size_before);
     }
     
     // Process outgoing routing requests
@@ -131,24 +119,15 @@ void midipeer_t::peer_thread_loop() {
       }
     }
     
-    // Sleep if no work
+    // Sleep if no work (use condition variable to avoid busy waiting)
     if (!processed) {
-      DEBUG("[MIDI_FLOW] peer {}: No work, sleeping. input_queue_size={}, output_queue_size={}, command_queue_size={}",
-            peer_id, input_queue.size(), output_queue.size(), command_queue.size());
       std::unique_lock<std::mutex> lock(thread_mutex);
       thread_wakeup.wait_for(lock, 10ms, [this] {
-        bool should_wake = !thread_running.load() || 
+        return !thread_running.load() || 
                !input_queue.empty() || 
                !output_queue.empty() || 
                !command_queue.empty();
-        if (should_wake && !input_queue.empty()) {
-          DEBUG("[MIDI_FLOW] peer {}: Waking up due to input queue not empty, size={}", 
-                peer_id, input_queue.size());
-        }
-        return should_wake;
       });
-    } else {
-      DEBUG("[MIDI_FLOW] peer {}: Processed work, continuing loop", peer_id);
     }
     }
     DEBUG("[MIDI_FLOW] peer {}: Peer thread loop exiting normally", peer_id);
@@ -165,8 +144,6 @@ void midipeer_t::process_midi_packet(const rtpmidid::midi_packet_t &packet) {
   packets_recv++;
   mididata_t mididata(const_cast<uint8_t *>(packet.data.data()), 
                      static_cast<uint32_t>(packet.data.size()));
-  DEBUG("[MIDI_FLOW] peer {}: Processing MIDI packet, calling send_midi(), size={} bytes",
-        peer_id, mididata.size());
   send_midi(packet.from_peer_id, mididata);
 }
 
@@ -197,8 +174,6 @@ void midipeer_t::enqueue_to_router(const mididata_t &data) {
     WARNING("[MIDI_FLOW] peer {}: No router, cannot enqueue MIDI", peer_id);
     return;
   }
-  DEBUG("[MIDI_FLOW] peer {}: Enqueueing MIDI to router, size={} bytes", 
-        peer_id, data.size());
   router->enqueue_send_midi(peer_id, data);
 }
 
