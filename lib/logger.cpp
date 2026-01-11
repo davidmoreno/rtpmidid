@@ -20,6 +20,7 @@
 #include <rtpmidid/logger.hpp>
 #include <algorithm>
 #include <rtpmidid/exceptions.hpp>
+#include <chrono>
 #include <string>
 
 namespace rtpmidid {
@@ -84,6 +85,85 @@ void logger_t::log_postamble(buffer_t::iterator it) {
   it = FMT::format_to(it, "{}", ansi_color_reset());
   *it = '\0';
   std::cout << buffer.data() << std::endl;
+}
+
+logger_t::logger_t() {
+  start_log_thread();
+}
+
+logger_t::~logger_t() {
+  stop_log_thread();
+}
+
+void logger_t::start_log_thread() {
+  if (log_thread_running.load()) {
+    return;
+  }
+  log_thread_running = true;
+  log_thread = std::thread(&logger_t::log_thread_loop, this);
+}
+
+void logger_t::stop_log_thread() {
+  if (!log_thread_running.load()) {
+    return;
+  }
+  log_thread_running = false;
+  log_wakeup.notify_one();
+  if (log_thread.joinable()) {
+    log_thread.join();
+  }
+}
+
+void logger_t::log_thread_loop() {
+  using namespace std::chrono_literals;
+  std::vector<log_message_t> batch;
+  batch.reserve(32); // Batch up to 32 messages
+  
+  while (log_thread_running.load()) {
+    batch.clear();
+    
+    // Collect messages from queue
+    log_message_t msg;
+    while (log_queue.dequeue(msg) && batch.size() < 32) {
+      batch.push_back(std::move(msg));
+    }
+    
+    // Write batch to stdout/stderr
+    for (const auto &m : batch) {
+      if (m.level >= current_log_level) {
+        std::cout << m.message << std::endl;
+      }
+    }
+    
+    // Sleep if no work
+    if (batch.empty()) {
+      std::unique_lock<std::mutex> lock(log_mutex);
+      log_wakeup.wait_for(lock, 10ms, [this] {
+        return !log_thread_running.load() || !log_queue.empty();
+      });
+    }
+  }
+  
+  // Drain remaining messages
+  log_message_t msg;
+  while (log_queue.dequeue(msg)) {
+    if (msg.level >= current_log_level) {
+      std::cout << msg.message << std::endl;
+    }
+  }
+}
+
+bool logger_t::enqueue_log(logger_level_t level, std::string message) {
+  log_message_t msg(level, std::move(message));
+  if (!log_queue.enqueue(msg)) {
+    // Queue full - fallback to direct write (should be rare)
+    if (level >= current_log_level) {
+      std::cout << msg.message << std::endl;
+    }
+    return false;
+  }
+  log_wakeup.notify_one();
+  return true;
 }
 
 logger_level_t str_to_log_level(const std::string &value) {

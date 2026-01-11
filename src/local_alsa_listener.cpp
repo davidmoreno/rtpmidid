@@ -71,7 +71,7 @@ local_alsa_listener_t::local_alsa_listener_t(const std::string &name_,
         auto datawriter = rtpmidid::io_bytes_writer(data);
         mididata_decoder.ev_to_mididata_f(
             ev, datawriter, [this](const mididata_t &mididata) {
-              router->send_midi(peer_id, mididata);
+              enqueue_to_router(mididata);
             });
       });
 }
@@ -82,7 +82,7 @@ local_alsa_listener_t::~local_alsa_listener_t() {
   }
   INFO("Remove ALSA port: {}, peer_id: {}", alsaport, peer_id);
   if (router && rtpmidiclientworker_peer_id != MIDIPEER_ID_INVALID) {
-    router->remove_peer(rtpmidiclientworker_peer_id);
+    router->enqueue_remove_peer(rtpmidiclientworker_peer_id);
     rtpmidiclientworker_peer_id = MIDIPEER_ID_INVALID;
   }
 }
@@ -133,7 +133,7 @@ void local_alsa_listener_t::connect_to_remote_server(
 
 void local_alsa_listener_t::disconnect_from_remote_server() {
   DEBUG("Disconnect from remote server at {}:{}", hostname, port);
-  router->remove_peer(rtpmidiclientworker_peer_id);
+  router->enqueue_remove_peer(rtpmidiclientworker_peer_id);
   // rtpclient = nullptr; // for me, this is dead
   local_name = "";
 }

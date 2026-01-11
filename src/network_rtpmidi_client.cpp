@@ -34,7 +34,7 @@ network_rtpmidi_client_t::network_rtpmidi_client_t(
 
   midi_connection = peer->peer.midi_event.connect(
       [this](const rtpmidid::io_bytes_reader &data) {
-        router->send_midi(peer_id, mididata_t{data});
+        enqueue_to_router(mididata_t{data});
       });
 
   status_change_event_connection = peer->peer.status_change_event.connect(

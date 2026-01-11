@@ -33,7 +33,10 @@ network_rtpmidi_peer_t::network_rtpmidi_peer_t(
 
   midi_connection =
       peer->midi_event.connect([this](const rtpmidid::io_bytes_reader &data) {
-        router->send_midi(peer_id, mididata_t{data});
+        DEBUG("[MIDI_FLOW] network_rtpmidi_peer {}: MIDI arrived from network, size={} bytes", 
+              peer_id, data.size());
+        // Enqueue to router (non-blocking)
+        enqueue_to_router(mididata_t{data});
       });
 
   status_change_event_connection = peer->status_change_event.connect(
@@ -45,9 +48,9 @@ network_rtpmidi_peer_t::network_rtpmidi_peer_t(
               reason);
         rtpmidid::poller.call_later([this] {
           router->peer_connection_loop(peer_id, [this](auto other_peer) {
-            router->remove_peer(other_peer->peer_id);
+            router->enqueue_remove_peer(other_peer->peer_id);
           });
-          router->remove_peer(peer_id);
+          router->enqueue_remove_peer(peer_id);
         });
       });
 }

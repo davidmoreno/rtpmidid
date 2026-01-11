@@ -119,7 +119,7 @@ void local_rawmidi_peer_t::read_midi() {
   // or something...
   midi_normalizer.normalize_stream(
       packet, [&](const rtpmidid::packet_t &packet) {
-        router->send_midi(peer_id, mididata_t{packet.get_data(),
+        enqueue_to_router(mididata_t{packet.get_data(),
                                               (uint32_t)packet.get_size()});
       });
 }

@@ -45,7 +45,7 @@ network_rtpmidi_listener_t::network_rtpmidi_listener_t(
           return;
         }
         // rtpmididns::mididata_t mididata(data.start, data.pos());
-        router->send_midi(this->peer_id, data);
+        enqueue_to_router(mididata_t{data});
       });
   status_change_connection = server.status_change_event.connect(
       [this](std::shared_ptr<rtpmidid::rtppeer_t> peer,

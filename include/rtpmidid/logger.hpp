@@ -19,9 +19,15 @@
 
 #pragma once
 #include "formatterhelper.hpp"
+#include "lockfree_queue.hpp"
 #include <array>
+#include <atomic>
+#include <condition_variable>
 #include <iostream>
+#include <mutex>
 #include <string>
+#include <thread>
+#include <vector>
 
 namespace rtpmidid {
 enum logger_level_t { DEBUG, INFO, WARNING, ERROR };
@@ -36,17 +42,44 @@ ENUM_FORMATTER_END();
 
 namespace rtpmidid {
 
+// Log message structure for async logging
+struct log_message_t {
+  logger_level_t level;
+  std::string message; // Pre-formatted message
+  
+  log_message_t() : level(INFO) {}
+  log_message_t(logger_level_t l, std::string m) : level(l), message(std::move(m)) {}
+};
+
 class logger_t {
   using buffer_t = std::array<char, 1024>;
   // we use a preallocated array to avoid any allocation on debug
   buffer_t buffer;
   logger_level_t current_log_level = logger_level_t::INFO;
+  
+  // Async logging infrastructure
+  static constexpr size_t LOG_QUEUE_SIZE = 512;
+  rtpmidid::lockfree_queue<log_message_t, LOG_QUEUE_SIZE> log_queue;
+  std::thread log_thread;
+  std::atomic<bool> log_thread_running{false};
+  std::mutex log_mutex;
+  std::condition_variable log_wakeup;
+  
+  void log_thread_loop();
+  void start_log_thread();
+  void stop_log_thread();
 
 public:
+  logger_t();
+  ~logger_t();
+  
   buffer_t::iterator log_preamble(logger_level_t level, const char *filename,
                                   int lineno);
   void log_postamble(buffer_t::iterator it);
   void set_log_level(logger_level_t level) { current_log_level = level; }
+  
+  // Async log enqueue (non-blocking)
+  bool enqueue_log(logger_level_t level, std::string message);
 
   template <typename... Args>
   constexpr void log(logger_level_t level, const char *filename, int lineno,
@@ -56,14 +89,18 @@ public:
       return;
     }
 
+    // Format message
     auto it = log_preamble(level, filename, lineno);
-
     auto max_size = buffer.size() - (it - buffer.begin()) - 16;
     auto res =
         FMT::format_to_n(it, max_size, message, std::forward<Args>(args)...);
     it = res.out;
-
-    log_postamble(it);
+    it = FMT::format_to(it, "{}", "\033[0m"); // ANSI reset
+    *it = '\0';
+    
+    // Enqueue to async log thread (non-blocking)
+    std::string formatted_msg(buffer.data());
+    enqueue_log(level, std::move(formatted_msg));
   }
 };
 } // namespace rtpmidid

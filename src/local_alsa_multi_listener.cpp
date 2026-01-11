@@ -122,7 +122,7 @@ void local_alsa_multi_listener_t::remove_alsa_connection(
   }
   DEBUG("Removed ALSA port {}:{}, removing midipeer {}", port.client, port.port,
         tracked_peer_id);
-  router->remove_peer(tracked_peer_id);
+  router->enqueue_remove_peer(tracked_peer_id);
 }
 
 void local_alsa_multi_listener_t::alsaseq_event(snd_seq_event_t *event) {
@@ -139,7 +139,7 @@ void local_alsa_multi_listener_t::alsaseq_event(snd_seq_event_t *event) {
   rtpmidid::io_bytes_writer_static<1024> writer;
   alsatrans_decoder.ev_to_mididata_f(
       event, writer, [&](const mididata_t &mididata) {
-        router->send_midi(peer_id, peerI->second, mididata);
+        enqueue_to_router(mididata);
       });
 }
 

@@ -228,7 +228,7 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
        DEBUG("Params {}", params.dump());
        peer_id_t peer_id = params[0];
        DEBUG("Remove peer_id {}", peer_id);
-       control.router->remove_peer(peer_id);
+       control.router->enqueue_remove_peer(peer_id);
        return "ok";
      }},
     {"router.connect",

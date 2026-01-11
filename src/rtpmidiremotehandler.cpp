@@ -84,7 +84,7 @@ void rtpmidi_remote_handler_t::remove_peer(const std::string &name,
     if (I->name == name) {
       INFO("Remove remote peer {} / midipeer {}", I->name,
            I->alsawaiter->peer_id);
-      router->remove_peer(I->alsawaiter->peer_id);
+      router->enqueue_remove_peer(I->alsawaiter->peer_id);
       peers.erase(I);
       return;
     }

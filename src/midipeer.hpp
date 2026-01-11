@@ -22,7 +22,20 @@
 #include "rtpmidid/formatterhelper.hpp"
 #include "rtpmidid/logger.hpp"
 #include "rtpmidid/utils.hpp"
+#include "rtpmidid/lockfree_queue.hpp"
+#include "rtpmidid/threading_types.hpp"
+#include <atomic>
+#include <condition_variable>
 #include <limits>
+#include <mutex>
+#include <thread>
+
+// Forward declaration
+namespace rtpmidid {
+struct midi_packet_t;
+struct routing_request_t;
+struct peer_command_t;
+}
 
 namespace rtpmididns {
 
@@ -64,16 +77,49 @@ namespace rtpmididns {
 class midipeer_t : public std::enable_shared_from_this<midipeer_t> {
   NON_COPYABLE_NOR_MOVABLE(midipeer_t);
 
+protected:
+  // Thread management
+  std::thread peer_thread;
+  std::atomic<bool> thread_running{false};
+  std::mutex thread_mutex;
+  std::condition_variable thread_wakeup;
+  
+  // Queues for thread communication
+  static constexpr size_t INPUT_QUEUE_SIZE = 1024;
+  static constexpr size_t OUTPUT_QUEUE_SIZE = 256;
+  static constexpr size_t COMMAND_QUEUE_SIZE = 32;
+  
+  rtpmidid::lockfree_queue<rtpmidid::midi_packet_t, INPUT_QUEUE_SIZE> input_queue;
+  rtpmidid::lockfree_queue<rtpmidid::routing_request_t, OUTPUT_QUEUE_SIZE> output_queue;
+  rtpmidid::lockfree_queue<rtpmidid::peer_command_t, COMMAND_QUEUE_SIZE> command_queue;
+  
+  // Peer thread main loop
+  void peer_thread_loop();
+  
+  // Process incoming MIDI (called from peer thread)
+  virtual void process_midi_packet(const rtpmidid::midi_packet_t &packet);
+  
+  // Enqueue MIDI to router (thread-safe)
+  void enqueue_to_router(const mididata_t &data);
+
 public:
   std::shared_ptr<midirouter_t> router;
   midipeer_id_t peer_id = 0;
   /// @brief statistics
-  int packets_sent = 0;
+  std::atomic<int> packets_sent{0};
   /// @brief statistics
-  int packets_recv = 0;
+  std::atomic<int> packets_recv{0};
 
   midipeer_t() = default;
   virtual ~midipeer_t();
+  
+  // Thread management
+  void start_thread();
+  void stop_thread();
+  
+  // Thread-safe enqueue methods (can be called from any thread)
+  bool enqueue_midi_packet(const rtpmidid::midi_packet_t &packet);
+  bool enqueue_command(const rtpmidid::peer_command_t &cmd);
 
   /**
    *  @brief Returns the status of the

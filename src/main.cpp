@@ -30,8 +30,12 @@
 #include "rtpmidiremotehandler.hpp"
 #include "settings.hpp"
 #include <chrono>
+#include <cxxabi.h>
+#include <execinfo.h>
+#include <functional>
 #include <signal.h>
 #include <unistd.h>
+#include <sstream>
 
 namespace rtpmididns {
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
@@ -40,6 +44,73 @@ std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 static bool exiting = false;
+
+void print_stacktrace() {
+  void *array[50];
+  size_t size = backtrace(array, 50);
+  char **strings = backtrace_symbols(array, size);
+
+  ERROR("=== STACKTRACE ({} frames) ===", size);
+  for (size_t i = 0; i < size; i++) {
+    std::string symbol(strings[i]);
+    
+    // Parse the backtrace line format: "executable(function+offset) [address]"
+    // Example: "./rtpmidid(_Z10some_funcv+0x123) [0x456789]"
+    // Or: "/path/to/lib.so(function+offset) [0x456789]"
+    
+    size_t func_start = symbol.find('(');
+    size_t func_end = symbol.find('+', func_start);
+    size_t addr_start = symbol.find('[');
+    
+    if (func_start != std::string::npos && func_end != std::string::npos) {
+      std::string before_func = symbol.substr(0, func_start);
+      std::string mangled = symbol.substr(func_start + 1, func_end - func_start - 1);
+      std::string offset_part;
+      std::string addr_part;
+      
+      if (addr_start != std::string::npos) {
+        offset_part = symbol.substr(func_end, addr_start - func_end);
+        addr_part = symbol.substr(addr_start);
+      } else {
+        offset_part = symbol.substr(func_end);
+      }
+      
+      // Try to demangle C++ symbols
+      if (!mangled.empty() && mangled[0] != '?') {
+        int status = 0;
+        char *demangled = abi::__cxa_demangle(mangled.c_str(), nullptr, nullptr, &status);
+        if (status == 0 && demangled) {
+          std::string result = before_func + "(" + demangled + offset_part;
+          if (!addr_part.empty()) {
+            result += addr_part;
+          }
+          ERROR("  [{}] {}", i, result);
+          free(demangled);
+        } else {
+          // Couldn't demangle, print original
+          ERROR("  [{}] {}", i, symbol);
+        }
+      } else {
+        // No mangled symbol or unknown, print as-is
+        ERROR("  [{}] {}", i, symbol);
+      }
+    } else {
+      // No function info, print as-is
+      ERROR("  [{}] {}", i, symbol);
+    }
+  }
+  ERROR("==================");
+  ERROR("Note: For file/line info, use: addr2line -e build/src/rtpmidid -f -C <address>");
+  free(strings);
+}
+
+void sigabrt_f(int sig) {
+  ERROR("SIGABRT received (signal {}) - printing stacktrace", sig);
+  print_stacktrace();
+  // Re-raise to get core dump
+  signal(sig, SIG_DFL);
+  raise(sig);
+}
 
 void sigterm_f(int) {
   if (exiting) {
@@ -86,9 +157,43 @@ public:
     setup_rawmidi_peers();
 
     hwautoannounce.emplace(aseq, router);
+    
+    // Setup threading infrastructure
+    setup_threading();
+  }
+  
+  void setup_threading() {
+    // Set up router's peer enqueue function
+    router->set_peer_enqueue_function([this](rtpmididns::peer_id_t peer_id, 
+                                              const rtpmidid::midi_packet_t &packet) {
+      auto peer = router->get_peer_by_id(peer_id);
+      if (peer) {
+        peer->enqueue_midi_packet(packet);
+      }
+    });
+    
+    // Start router thread
+    router->start_router_thread();
+    
+    // Start all peer threads
+    DEBUG("[MIDI_FLOW] Main: Starting all peer threads");
+    router->for_each_peer(std::function<void(rtpmididns::midipeer_t*)>([](rtpmididns::midipeer_t *peer) {
+      DEBUG("[MIDI_FLOW] Main: Starting thread for peer {}", peer->peer_id);
+      peer->start_thread();
+    }));
+    DEBUG("[MIDI_FLOW] Main: All peer threads started");
   }
 
-  void close() { rtpmididns::mdns = nullptr; }
+  void close() { 
+    // Stop all threads
+    if (router) {
+      router->for_each_peer(std::function<void(rtpmididns::midipeer_t*)>([](rtpmididns::midipeer_t *peer) {
+        peer->stop_thread();
+      }));
+      router->stop_router_thread();
+    }
+    rtpmididns::mdns = nullptr; 
+  }
 
 protected:
   void setup_local_alsa_multilistener() {
@@ -152,6 +257,7 @@ int main(int argc, char **argv) {
 
   signal(SIGINT, sigint_f);
   signal(SIGTERM, sigterm_f);
+  signal(SIGABRT, sigabrt_f);
 
   main_t maindata;
 
@@ -160,9 +266,11 @@ int main(int argc, char **argv) {
     maindata.setup();
   } catch (const std::exception &exc) {
     ERROR("Error on setup: {}", exc.what());
+    print_stacktrace();
     return 1;
   } catch (...) {
     ERROR("Unhandled exception in setup!");
+    print_stacktrace();
     return 1;
   }
 
@@ -174,8 +282,10 @@ int main(int argc, char **argv) {
     }
   } catch (const std::exception &exc) {
     ERROR("Unhandled exception: {}!", exc.what());
+    print_stacktrace();
   } catch (...) {
     ERROR("Unhandled exception!");
+    print_stacktrace();
   }
 
   maindata.close();

@@ -60,4 +60,8 @@ endif()
 
 target_link_libraries(rtpmidid2-daemon rtpmidid-static)
 
-set_target_properties(rtpmidid2-daemon PROPERTIES OUTPUT_NAME rtpmidid)
+# Add -rdynamic for stacktrace symbol resolution
+set_target_properties(rtpmidid2-daemon PROPERTIES 
+  OUTPUT_NAME rtpmidid
+  LINK_FLAGS "-rdynamic"
+)

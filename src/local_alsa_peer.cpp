@@ -33,11 +33,16 @@ local_alsa_peer_t::local_alsa_peer_t(const std::string &name_,
   INFO("Created alsapeer {}, port {}", name, port);
 
   midi_connection = seq->midi_event[port].connect([this](snd_seq_event *ev) {
+    DEBUG("[MIDI_FLOW] local_alsa_peer {}: MIDI event received from ALSA, type={}, port={}",
+          peer_id, ev->type, port);
     rtpmidid::io_bytes_static<1024> data;
     auto datawriter = rtpmidid::io_bytes_writer(data);
     mididata_decoder.ev_to_mididata_f(ev, datawriter,
                                       [this](const mididata_t &mididata) {
-                                        router->send_midi(peer_id, mididata);
+                                        DEBUG("[MIDI_FLOW] local_alsa_peer {}: Decoded MIDI, size={} bytes, enqueueing to router",
+                                              peer_id, mididata.size());
+                                        // Enqueue to router (non-blocking)
+                                        enqueue_to_router(mididata);
                                       });
   });
 }
@@ -46,22 +51,36 @@ local_alsa_peer_t::~local_alsa_peer_t() { seq->remove_port(port); }
 
 void local_alsa_peer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   packets_recv += 1;
+  DEBUG("[MIDI_FLOW] local_alsa_peer {}: send_midi() called, from_peer_id={}, size={} bytes",
+        peer_id, from, data.size());
   auto readerdata = rtpmidid::io_bytes_reader(data);
-  mididata_encoder.mididata_to_evs_f(readerdata, [this](snd_seq_event_t *ev) {
+  mididata_encoder.mididata_to_evs_f(readerdata, [this, from](snd_seq_event_t *ev) {
+    DEBUG("[MIDI_FLOW] local_alsa_peer {}: Encoding MIDI to ALSA event, type={}, port={}",
+          this->peer_id, ev->type, this->port);
     snd_seq_ev_set_source(ev, this->port);
     snd_seq_ev_set_subs(ev); // to all subscribers
     snd_seq_ev_set_direct(ev);
+    DEBUG("[MIDI_FLOW] local_alsa_peer {}: Calling snd_seq_event_output()", this->peer_id);
     auto result = snd_seq_event_output(seq->seq, ev);
     if (result < 0) {
-      ERROR("Error: {}", snd_strerror(result));
+      ERROR("[MIDI_FLOW] local_alsa_peer {}: snd_seq_event_output() error: {}", 
+            this->peer_id, snd_strerror(result));
       snd_seq_drop_input(seq->seq);
       snd_seq_drop_output(seq->seq);
+    } else {
+      DEBUG("[MIDI_FLOW] local_alsa_peer {}: snd_seq_event_output() succeeded, bytes={}", 
+            this->peer_id, result);
     }
+    DEBUG("[MIDI_FLOW] local_alsa_peer {}: Calling snd_seq_drain_output()", this->peer_id);
     result = snd_seq_drain_output(seq->seq);
     if (result < 0) {
-      ERROR("Error: {}", snd_strerror(result));
+      ERROR("[MIDI_FLOW] local_alsa_peer {}: snd_seq_drain_output() error: {}", 
+            this->peer_id, snd_strerror(result));
       snd_seq_drop_input(seq->seq);
       snd_seq_drop_output(seq->seq);
+    } else {
+      DEBUG("[MIDI_FLOW] local_alsa_peer {}: snd_seq_drain_output() succeeded, drained {} bytes",
+            this->peer_id, result);
     }
   });
 }
