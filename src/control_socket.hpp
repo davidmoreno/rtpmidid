@@ -21,6 +21,7 @@
 #include "midirouter.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/utils.hpp"
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -53,5 +54,10 @@ public:
   void connection_ready();
   void data_ready(int fd);
   std::string parse_command(const std::string &command);
+  /// Thread-safe entry for Unix socket and WebSocket control paths.
+  std::string dispatch_command(const std::string &command);
+
+private:
+  std::mutex dispatch_mutex_;
 };
 } // namespace rtpmididns

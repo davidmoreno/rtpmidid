@@ -132,6 +132,14 @@ void IniReader::parse_line(const std::string &origline) {
       settings->control_filename = value;
     } else if (key == "log_level") {
       settings->log_level = rtpmidid::str_to_log_level(value);
+    } else if (key == "web_port") {
+      settings->web_port = std::stoi(value);
+    } else if (key == "web_bind") {
+      settings->web_bind = value;
+    } else if (key == "web_user") {
+      settings->web_user = value;
+    } else if (key == "web_password") {
+      settings->web_password = value;
     } else {
       throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
     }

@@ -160,6 +160,24 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
                          [settings](const std::string &value) {
                            settings->log_level = rtpmidid::str_to_log_level(value);
                          });
+  arguments.emplace_back(
+      "--web-port",
+      "HTTP/Web UI port; 0 disables the web server. Default: 8080",
+      [settings](const std::string &value) {
+        settings->web_port = std::stoi(value);
+      });
+  arguments.emplace_back(
+      "--web-bind",
+      "HTTP/Web UI bind address. Default: 127.0.0.1",
+      [settings](const std::string &value) { settings->web_bind = value; });
+  arguments.emplace_back(
+      "--web-user",
+      "Web UI login username (optional; use with --web-password)",
+      [settings](const std::string &value) { settings->web_user = value; });
+  arguments.emplace_back(
+      "--web-password",
+      "Web UI login password (optional; use with --web-user)",
+      [settings](const std::string &value) { settings->web_password = value; });
   arguments.emplace_back( //
       "--rtpmidi-discover",
       "Enable or disable rtpmidi discover. true | false | [posregex] | "

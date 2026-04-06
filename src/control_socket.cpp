@@ -141,7 +141,7 @@ void control_socket_t::data_ready(int fd) {
     return;
   }
   buf[l] = 0;                               // NOLINT
-  auto ret = parse_command(trim_copy(buf)); // NOLINT
+  auto ret = dispatch_command(trim_copy(buf)); // NOLINT
   ret += "\n";
   auto w = write(fd, ret.c_str(), ret.length());
   if (w < 0) {
@@ -397,6 +397,11 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
      }},
     //
 };
+
+std::string control_socket_t::dispatch_command(const std::string &command) {
+  std::lock_guard<std::mutex> lock(dispatch_mutex_);
+  return parse_command(command);
+}
 
 std::string control_socket_t::parse_command(const std::string &command) {
   // DEBUG("Parse command {}", command);

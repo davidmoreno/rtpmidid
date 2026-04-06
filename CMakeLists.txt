@@ -132,6 +132,17 @@ message(STATUS "Log level ${LOG_LEVEL} (1=debug, 2=info, 3=warning, 4=error)")
 
 add_subdirectory(lib)
 if(NOT LIBS_ONLY)
+  include(FetchContent)
+  set(HTTPLIB_INSTALL OFF CACHE BOOL "" FORCE)
+  set(HTTPLIB_USE_OPENSSL_IF_AVAILABLE OFF CACHE BOOL "" FORCE)
+  set(HTTPLIB_USE_ZLIB_IF_AVAILABLE OFF CACHE BOOL "" FORCE)
+  set(HTTPLIB_USE_BROTLI_IF_AVAILABLE OFF CACHE BOOL "" FORCE)
+  FetchContent_Declare(
+    cpp-httplib
+    GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+    GIT_TAG v0.41.0)
+  FetchContent_MakeAvailable(cpp-httplib)
+  include("${CMAKE_SOURCE_DIR}/cmake/WebDeps.cmake")
   add_subdirectory(src)
 endif(NOT LIBS_ONLY)
 

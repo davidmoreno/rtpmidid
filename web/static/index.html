@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>rtpmidid — Control</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/vendor/htmx.min.js"></script>
+  <script defer src="/vendor/alpine.min.js"></script>
+</head>
+<body class="p-4" x-data="dashboard()" x-init="init()">
+  <div class="max-w-6xl mx-auto relative">
+    <div class="starburst" aria-hidden="true"></div>
+
+    <header class="flex justify-between items-center gap-4 mb-4 flex-wrap">
+      <div>
+        <h1 class="comic-title">RTPMIDID</h1>
+        <p class="text-xs uppercase tracking-wide text-muted mt-2" style="margin-left:4px;">Network MIDI — command deck</p>
+      </div>
+      <div class="flex gap-2 items-center flex-wrap">
+        <span class="badge" :class="connected ? 'badge-ok' : 'badge-warn'" x-text="connected ? 'WS online' : 'WS offline'"></span>
+        <a class="btn btn-outline text-xs" href="/logout">Logout</a>
+      </div>
+    </header>
+
+    <p class="text-sm speech mb-4" x-show="lastError" x-text="lastError" style="display:none;"></p>
+
+    <div class="tabs">
+      <button type="button" class="tab" :class="{ 'tab-active': tab === 'status' }" @click="tab = 'status'">Status</button>
+      <button type="button" class="tab" :class="{ 'tab-active': tab === 'help' }" @click="tab = 'help'">Help (WS)</button>
+      <button type="button" class="tab" :class="{ 'tab-active': tab === 'connect' }" @click="tab = 'connect'">Connect</button>
+      <button type="button" class="tab" :class="{ 'tab-active': tab === 'router' }" @click="tab = 'router'">Router</button>
+      <button type="button" class="tab" hx-get="/help.html" hx-target="#htmx-help" hx-swap="innerHTML">Help (htmx)</button>
+    </div>
+
+    <div id="htmx-help" class="mb-4"></div>
+
+    <div x-show="tab === 'status'" class="grid-2">
+      <div class="panel">
+        <div class="panel-header flex justify-between items-center">
+          <span class="uppercase tracking-wide">Daemon status</span>
+          <button type="button" class="btn text-xs" @click="refreshStatus()">Refresh</button>
+        </div>
+        <div class="panel-body">
+          <pre class="json font-mono" x-text="pretty(statusResult)"></pre>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header uppercase tracking-wide">Methods (help)</div>
+        <div class="panel-body">
+          <pre class="json font-mono" x-text="pretty(helpResult)"></pre>
+        </div>
+      </div>
+    </div>
+
+    <div x-show="tab === 'help'" class="panel" style="display:none;">
+      <div class="panel-header uppercase tracking-wide">JSON line protocol</div>
+      <div class="panel-body text-sm">
+        <p>Send one JSON object per WebSocket text message (same as one line on the Unix control socket).</p>
+        <pre class="json font-mono mt-4">{"method":"status","params":null,"id":1}</pre>
+        <button type="button" class="btn mt-4" @click="refreshHelp()">Fetch help</button>
+      </div>
+    </div>
+
+    <div x-show="tab === 'connect'" class="panel" style="display:none;">
+      <div class="panel-header uppercase tracking-wide">connect</div>
+      <div class="panel-body flex flex-col gap-4">
+        <p class="text-sm text-muted">Adds a network RTP-MIDI listener peer (see <code class="font-mono">connect</code> in CONTROL).</p>
+        <div class="grid-2">
+          <div>
+            <label class="label">Name</label>
+            <input class="input font-mono" x-model="connectName" placeholder="MySynth">
+          </div>
+          <div>
+            <label class="label">Hostname</label>
+            <input class="input font-mono" x-model="connectHost" placeholder="192.168.1.10">
+          </div>
+          <div>
+            <label class="label">Port</label>
+            <input class="input font-mono" x-model="connectPort" placeholder="5004">
+          </div>
+        </div>
+        <button type="button" class="btn" @click="doConnect">Send connect</button>
+        <pre class="json font-mono" x-show="connectReply" x-text="pretty(connectReply)"></pre>
+      </div>
+    </div>
+
+    <div x-show="tab === 'router'" class="panel" style="display:none;">
+      <div class="panel-header uppercase tracking-wide">router.connect / disconnect</div>
+      <div class="panel-body flex flex-col gap-4">
+        <p class="text-sm text-muted">Use peer ids from Status → router. Unidirectional edges.</p>
+        <div class="grid-2">
+          <div>
+            <label class="label">From peer id</label>
+            <input class="input font-mono" type="number" x-model.number="edgeFrom">
+          </div>
+          <div>
+            <label class="label">To peer id</label>
+            <input class="input font-mono" type="number" x-model.number="edgeTo">
+          </div>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <button type="button" class="btn" @click="runRouter('router.connect')">Connect</button>
+          <button type="button" class="btn btn-outline" @click="runRouter('router.disconnect')">Disconnect</button>
+          <button type="button" class="btn btn-outline" @click="runRouterRemove()">Remove “from”</button>
+        </div>
+        <pre class="json font-mono" x-show="routerReply" x-text="pretty(routerReply)"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function dashboard() {
+      return {
+        tab: 'status',
+        ws: null,
+        connected: false,
+        lastError: '',
+        nextId: 1,
+        pending: {},
+        statusResult: null,
+        helpResult: null,
+        connectReply: null,
+        routerReply: null,
+        connectName: '',
+        connectHost: '',
+        connectPort: '5004',
+        edgeFrom: 0,
+        edgeTo: 0,
+        pretty(v) {
+          if (v == null) return '(no data yet)';
+          try { return JSON.stringify(v, null, 2); } catch (e) { return String(v); }
+        },
+        init() {
+          const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const url = proto + '//' + location.host + '/ws';
+          this.ws = new WebSocket(url);
+          this.ws.onopen = () => {
+            this.connected = true;
+            this.lastError = '';
+            this.refreshStatus();
+            this.refreshHelp();
+          };
+          this.ws.onclose = () => {
+            this.connected = false;
+            this.lastError = 'WebSocket closed.';
+          };
+          this.ws.onerror = () => {
+            this.lastError = 'WebSocket error.';
+          };
+          this.ws.onmessage = (ev) => {
+            let msg;
+            try { msg = JSON.parse(ev.data); } catch (e) {
+              this.lastError = 'Non-JSON message: ' + ev.data;
+              return;
+            }
+            if (msg.event === 'close') {
+              this.lastError = 'Server: ' + (msg.detail || 'close') + ' (code ' + (msg.code ?? '') + ')';
+              return;
+            }
+            const id = msg.id;
+            if (id != null && this.pending[id]) {
+              const cb = this.pending[id];
+              delete this.pending[id];
+              cb(msg);
+              return;
+            }
+          };
+        },
+        rpc(method, params) {
+          if (!this.ws || this.ws.readyState !== 1) {
+            this.lastError = 'WebSocket not ready.';
+            return Promise.reject(new Error('ws'));
+          }
+          const id = this.nextId++;
+          const payload = JSON.stringify({ method, params, id });
+          const p = new Promise((resolve) => {
+            this.pending[id] = (msg) => resolve(msg);
+          });
+          this.ws.send(payload);
+          return p;
+        },
+        applyRpcError(msg) {
+          if (msg && msg.error != null) {
+            this.lastError = typeof msg.error === 'string' ? msg.error : JSON.stringify(msg.error);
+          } else {
+            this.lastError = '';
+          }
+        },
+        async refreshStatus() {
+          try {
+            const msg = await this.rpc('status', null);
+            if (msg && Object.prototype.hasOwnProperty.call(msg, 'result')) {
+              this.statusResult = msg.result;
+            }
+            this.applyRpcError(msg);
+          } catch (e) { /* ws not ready */ }
+        },
+        async refreshHelp() {
+          try {
+            const msg = await this.rpc('help', null);
+            if (msg && Object.prototype.hasOwnProperty.call(msg, 'result')) {
+              this.helpResult = msg.result;
+            }
+            this.applyRpcError(msg);
+          } catch (e) { /* ws not ready */ }
+        },
+        async runRouter(method) {
+          try {
+            const msg = await this.rpc(method, { from: this.edgeFrom, to: this.edgeTo });
+            this.routerReply = msg;
+            this.applyRpcError(msg);
+            await this.refreshStatus();
+          } catch (e) { /* */ }
+        },
+        async runRouterRemove() {
+          try {
+            const msg = await this.rpc('router.remove', [this.edgeFrom]);
+            this.routerReply = msg;
+            this.applyRpcError(msg);
+            await this.refreshStatus();
+          } catch (e) { /* */ }
+        },
+        async doConnect() {
+          const name = this.connectName.trim();
+          const host = this.connectHost.trim();
+          const port = this.connectPort.trim() || '5004';
+          if (!host) {
+            this.lastError = 'Hostname required.';
+            return;
+          }
+          const params = name
+            ? { name, hostname: host, port }
+            : [host, port];
+          try {
+            const msg = await this.rpc('connect', params);
+            this.connectReply = msg;
+            this.applyRpcError(msg);
+            await this.refreshStatus();
+          } catch (e) { /* */ }
+        }
+      };
+    }
+  </script>
+</body>
+</html>

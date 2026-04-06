@@ -1,0 +1,9 @@
+<section class="speech text-sm">
+  <p class="uppercase tracking-wide" style="margin:0 0 0.5rem;font-weight:800;color:var(--accent);">Field manual</p>
+  <ul style="margin:0;padding-left:1.1rem;line-height:1.5;">
+    <li>Each WebSocket message is one JSON object: <code class="font-mono">method</code>, <code class="font-mono">params</code>, optional <code class="font-mono">id</code>.</li>
+    <li>Responses mirror the Unix socket: <code class="font-mono">result</code> or <code class="font-mono">error</code>, plus echoed <code class="font-mono">id</code>.</li>
+    <li>Try <code class="font-mono">help</code> and <code class="font-mono">status</code> with <code class="font-mono">params: null</code>.</li>
+    <li>Peer commands use <code class="font-mono">"&lt;id&gt;.&lt;subcommand&gt;"</code> as <code class="font-mono">method</code>.</li>
+  </ul>
+</section>

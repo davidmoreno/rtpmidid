@@ -30,6 +30,13 @@ struct settings_t {
   std::string control_filename = "/var/run/rtpmidid/control.sock";
   rtpmidid::logger_level_t log_level = rtpmidid::logger_level_t::INFO;
 
+  /// HTTP/Web UI: 0 = disabled, default 8080.
+  int web_port = 8080;
+  std::string web_bind = "127.0.0.1";
+  /// If both non-empty, session cookie login is required (see docs/WEB.md).
+  std::string web_user;
+  std::string web_password;
+
   // Datas a read from the ini file
   struct rtpmidi_announce_t {
     std::string name;
@@ -124,7 +131,8 @@ VECTOR_FORMATTER(rtpmididns::settings_t::alsa_announce_t);
 VECTOR_FORMATTER(rtpmididns::settings_t::connect_to_t);
 
 BASIC_FORMATTER(rtpmididns::settings_t,
-                "settings_t[{}, {}, {}, {}, {}, {}, {}, {}, {}]", v.alsa_name,
-                v.alsa_network, v.control_filename, v.log_level,
+                "settings_t[{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}]",
+                v.alsa_name, v.alsa_network, v.control_filename, v.log_level,
+                v.web_port, v.web_bind, v.web_user, v.web_password,
                 v.rtpmidi_announces, v.rtpmidi_discover, v.alsa_announces,
                 v.connect_to, v.alsa_hw_auto_export);

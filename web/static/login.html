@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>rtpmidid — Access</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="p-6">
+  <div class="max-w-6xl mx-auto relative">
+    <div class="starburst" aria-hidden="true"></div>
+    <header class="flex justify-between items-center gap-4 mb-4 flex-wrap">
+      <h1 class="comic-title">SECRET HQ</h1>
+      <span class="badge badge-warn uppercase">Auth required</span>
+    </header>
+
+    <div class="panel max-w-md">
+      <div class="panel-header uppercase tracking-wide">Identify yourself</div>
+      <div class="panel-body">
+        <p class="text-sm text-muted mb-4">Session cookie login. Same origin as the WebSocket control.</p>
+        <form method="post" action="/login" class="flex flex-col gap-4">
+          <div>
+            <label class="label" for="username">Username</label>
+            <input class="input" id="username" name="username" required autocomplete="username">
+          </div>
+          <div>
+            <label class="label" for="password">Password</label>
+            <input class="input" id="password" name="password" type="password" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn">Enter</button>
+        </form>
+        <p class="text-xs text-muted mt-4">Low-security local control only. Empty user/password in config disables auth.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

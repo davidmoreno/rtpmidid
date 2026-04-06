@@ -29,6 +29,7 @@
 #include "rtpmidid/poller.hpp"
 #include "rtpmidiremotehandler.hpp"
 #include "settings.hpp"
+#include "web_control_server.hpp"
 #include <chrono>
 #include <signal.h>
 #include <unistd.h>
@@ -67,6 +68,8 @@ protected:
   std::optional<rtpmididns::rtpmidi_remote_handler_t> rtpmidi_remote_handler;
 
 public:
+  rtpmididns::control_socket_t &web_control_socket() { return control; }
+
   // I want setup inside a try catch (and survive it), so I need a setup method
   void setup() {
     if (aseq.get() == nullptr)
@@ -167,6 +170,12 @@ int main(int argc, char **argv) {
   }
 
   // MAIN RUN
+  std::optional<rtpmididns::web_control_server_t> web_ctl;
+  if (rtpmididns::settings.web_port > 0) {
+    web_ctl.emplace(&maindata.web_control_socket());
+    web_ctl->start();
+  }
+
   try {
     INFO("Waiting for connections.");
     while (rtpmidid::poller.is_open()) {
@@ -177,6 +186,8 @@ int main(int argc, char **argv) {
   } catch (...) {
     ERROR("Unhandled exception!");
   }
+
+  web_ctl.reset();
 
   maindata.close();
 
