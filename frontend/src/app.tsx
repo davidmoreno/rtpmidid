@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import { Button } from "./components/Button";
 import { Card } from "./components/Card";
+import { ConnectionsTable } from "./components/ConnectionsTable";
+import { EdgesTable } from "./components/EdgesTable";
+import { MdnsTables } from "./components/MdnsTables";
+import { PeerLatencyPanel, PeersTable } from "./components/PeersTable";
 import { Tabs, type TabDef } from "./components/Tabs";
+import { buildConnections, buildEdges, normalizePeers, parseMdns } from "./model";
 import { RpcClient } from "./rpc";
 
 type StatusResult = {
@@ -10,6 +15,8 @@ type StatusResult = {
   mdns?: Record<string, unknown>;
   settings?: Record<string, unknown>;
 };
+
+const AUTO_TABS = new Set(["overview", "stats", "connections"]);
 
 function useTheme() {
   const [dark, setDark] = useState(() => {
@@ -45,6 +52,7 @@ export function App() {
   const [status, setStatus] = useState<string>("");
   const [data, setData] = useState<StatusResult | null>(null);
   const [tab, setTab] = useState("overview");
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [authUser, setAuthUser] = useState("");
   const [authPass, setAuthPass] = useState("");
   const [connectHost, setConnectHost] = useState("");
@@ -69,6 +77,7 @@ export function App() {
     try {
       const r = (await rpc.call("status", {})) as StatusResult;
       setData(r);
+      setLastRefresh(new Date());
     } catch (e) {
       setStatus(String(e));
     }
@@ -83,64 +92,103 @@ export function App() {
     return () => rpc.disconnect();
   }, []);
 
-  const router = (data?.router ?? []) as Record<string, unknown>[];
+  useEffect(() => {
+    if (!AUTO_TABS.has(tab)) return undefined;
+    const t = window.setInterval(() => {
+      void refresh();
+    }, 5000);
+    return () => window.clearInterval(t);
+  }, [tab, refresh]);
+
+  const routerRaw = data?.router ?? [];
+  const peers = useMemo(() => normalizePeers(routerRaw), [routerRaw]);
+  const edges = useMemo(() => buildEdges(peers), [peers]);
+  const connections = useMemo(() => buildConnections(peers), [peers]);
+  const mdnsParsed = useMemo(
+    () => parseMdns(data?.mdns as Record<string, unknown> | undefined),
+    [data?.mdns],
+  );
 
   const statsRows = useMemo(() => {
-    const edges = router.reduce(
-      (n, p) => n + ((p.send_to as number[])?.length ?? 0),
-      0,
-    );
+    const edgesN = edges.length;
     let rtpPeers = 0;
-    for (const p of router) {
-      const peers = p.peers as unknown[] | undefined;
-      if (peers) rtpPeers += peers.length;
-      const pr = p.peer as Record<string, unknown> | undefined;
-      if (pr) rtpPeers += 1;
+    for (const p of peers) {
+      const raw = p.raw.peers as unknown[] | undefined;
+      if (raw?.length) rtpPeers += raw.length;
+      if (p.raw.peer) rtpPeers += 1;
     }
     return [
-      { k: "Router peers", v: String(router.length) },
-      { k: "Router edges (send_to)", v: String(edges) },
-      { k: "RTP peer rows (approx)", v: String(rtpPeers) },
+      { k: "Router peers", v: String(peers.length) },
+      { k: "Routing edges", v: String(edgesN) },
+      { k: "RTP sub-peer rows (approx)", v: String(rtpPeers) },
       { k: "Version", v: String(data?.version ?? "—") },
     ];
-  }, [data, router]);
+  }, [data?.version, peers, edges.length]);
 
   const overviewContent = (
-    <div class="grid gap-4 lg:grid-cols-2">
-      <Card title="Router">
-        <pre class="max-h-[28rem] overflow-auto whitespace-pre-wrap break-all font-mono text-xs">
-          {JSON.stringify(router, null, 2)}
-        </pre>
+    <div class="space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+        <span>
+          Auto-refresh every <strong class="text-zinc-900 dark:text-zinc-100">5s</strong> on this tab.
+        </span>
+        {lastRefresh && (
+          <span class="tabular-nums">
+            Last update: {lastRefresh.toLocaleTimeString()}
+          </span>
+        )}
+      </div>
+      <Card title="Peers & activity">
+        <PeersTable peers={peers} />
       </Card>
-      <Card title="mDNS">
-        <pre class="max-h-[28rem] overflow-auto whitespace-pre-wrap font-mono text-xs">
-          {JSON.stringify(data?.mdns ?? {}, null, 2)}
-        </pre>
+      <Card title="Connections (router edges)">
+        <EdgesTable edges={edges} />
+      </Card>
+      <Card title="Discovery (mDNS)">
+        <MdnsTables
+          status={mdnsParsed.status}
+          announcements={mdnsParsed.announcements}
+          remotes={mdnsParsed.remotes}
+        />
+      </Card>
+    </div>
+  );
+
+  const connectionsContent = (
+    <div class="space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+        <span>
+          Auto-refresh every <strong class="text-zinc-900 dark:text-zinc-100">5s</strong>{" "}
+          on this tab.
+        </span>
+        {lastRefresh && (
+          <span class="tabular-nums">
+            Last update: {lastRefresh.toLocaleTimeString()}
+          </span>
+        )}
+      </div>
+      <Card title="Connections (router + RTP)">
+        <ConnectionsTable rows={connections} />
       </Card>
     </div>
   );
 
   const statsContent = (
-    <div class="grid gap-4 lg:grid-cols-2">
-      <Card title="Counts">{statTable(statsRows)}</Card>
-      <Card title="Latency (per peer)">
-        <div class="max-h-[28rem] overflow-auto font-mono text-xs">
-          {router.map((p) => (
-            <div
-              key={String(p.id)}
-              class="mb-3 border-2 border-zinc-800 p-2 dark:border-zinc-200"
-            >
-              <div class="font-bold">
-                #{String(p.id)} {String(p.name ?? "")} ({String(p.type ?? "")})
-              </div>
-              <div class="mt-1 text-zinc-600 dark:text-zinc-400">
-                internal_latency_ms:{" "}
-                {JSON.stringify(p.internal_latency_ms ?? null)}
-              </div>
-              <div class="text-zinc-600 dark:text-zinc-400">
-                peer / peers RTP: {JSON.stringify(p.peer ?? p.peers ?? null)}
-              </div>
-            </div>
+    <div class="space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+        <span>
+          Auto-refresh every <strong class="text-zinc-900 dark:text-zinc-100">5s</strong> on this tab.
+        </span>
+        {lastRefresh && (
+          <span class="tabular-nums">
+            Last update: {lastRefresh.toLocaleTimeString()}
+          </span>
+        )}
+      </div>
+      <Card title="Summary">{statTable(statsRows)}</Card>
+      <Card title="Latency by peer (bars)">
+        <div class="grid max-h-[70vh] gap-3 overflow-y-auto md:grid-cols-2">
+          {peers.map((p) => (
+            <PeerLatencyPanel key={p.id} peer={p} />
           ))}
         </div>
       </Card>
@@ -275,13 +323,14 @@ export function App() {
 
   const tabs: TabDef[] = [
     { id: "overview", label: "Overview", content: overviewContent },
+    { id: "connections", label: "Connections", content: connectionsContent },
     { id: "stats", label: "Statistics", content: statsContent },
     { id: "actions", label: "Actions", content: actionsContent },
     { id: "more", label: "More", content: moreContent },
   ];
 
   return (
-    <div class="mx-auto max-w-6xl p-4 font-sans">
+    <div class="mx-auto max-w-7xl p-4 font-sans">
       <header class="mb-6 flex flex-wrap items-end justify-between gap-4 border-b-4 border-zinc-900 pb-4 dark:border-zinc-100">
         <div>
           <h1 class="font-mono text-2xl font-black uppercase tracking-tight">
@@ -290,9 +339,21 @@ export function App() {
           <p class="font-mono text-xs text-zinc-600 dark:text-zinc-400">
             Web control · JSON-RPC over WebSocket
           </p>
+          {data?.version && (
+            <p class="mt-1 font-mono text-xs text-zinc-500">
+              Daemon <span class="font-bold text-zinc-800 dark:text-zinc-200">{data.version}</span>
+              {lastRefresh && (
+                <>
+                  {" "}
+                  · refreshed{" "}
+                  <span class="tabular-nums">{lastRefresh.toLocaleTimeString()}</span>
+                </>
+              )}
+            </p>
+          )}
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <Button onClick={() => void refresh()}>Refresh status</Button>
+          <Button onClick={() => void refresh()}>Refresh now</Button>
           <Button
             onClick={() => {
               setDark(!dark);

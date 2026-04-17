@@ -5,3 +5,29 @@
     @apply antialiased;
   }
 }
+
+@keyframes conn-row-activity {
+  0% {
+    box-shadow: inset 0 0 0 9999px rgb(251 191 36 / 0.14);
+  }
+  100% {
+    box-shadow: inset 0 0 0 9999px transparent;
+  }
+}
+
+.conn-row-activity {
+  animation: conn-row-activity 0.95s ease-out forwards;
+}
+
+.dark .conn-row-activity {
+  animation: conn-row-activity-dark 0.95s ease-out forwards;
+}
+
+@keyframes conn-row-activity-dark {
+  0% {
+    box-shadow: inset 0 0 0 9999px rgb(251 191 36 / 0.1);
+  }
+  100% {
+    box-shadow: inset 0 0 0 9999px transparent;
+  }
+}
