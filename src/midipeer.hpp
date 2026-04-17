@@ -23,6 +23,7 @@
 #include "rtpmidid/logger.hpp"
 #include "rtpmidid/utils.hpp"
 #include "rtpmidid/lockfree_queue.hpp"
+#include "rtpmidid/stats.hpp"
 #include "rtpmidid/threading_types.hpp"
 #include <atomic>
 #include <condition_variable>
@@ -102,7 +103,15 @@ protected:
   // Enqueue MIDI to router (thread-safe)
   void enqueue_to_router(const mididata_t &data);
 
+  mutable std::mutex internal_latency_mutex_;
+  rtpmidid::stats_t internal_until_send_stats_{20, std::chrono::seconds(120)};
+  rtpmidid::stats_t internal_send_midi_stats_{20, std::chrono::seconds(120)};
+  std::atomic<int64_t> internal_last_until_send_ns_{0};
+  std::atomic<int64_t> internal_last_send_midi_ns_{0};
+
 public:
+  /** Time from peer input enqueue to start of `send_midi`, and `send_midi` duration (ms). */
+  json_t internal_latency_stats_json() const;
   std::shared_ptr<midirouter_t> router;
   midipeer_id_t peer_id = 0;
   /// @brief statistics

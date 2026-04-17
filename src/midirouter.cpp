@@ -299,6 +299,8 @@ json_t midirouter_t::status() {
           {"sent", peer.second.peer->packets_sent.load()}
       };
       status["type"] = peer.second.peer->get_type();
+      status["internal_latency_ms"] =
+          peer.second.peer->internal_latency_stats_json();
 
       routerdata.push_back(status);
     } catch (const std::exception &exc) {

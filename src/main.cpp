@@ -19,6 +19,7 @@
 #include "argv.hpp"
 #include "aseq.hpp"
 #include "control_socket.hpp"
+#include "web_server.hpp"
 #include "factory.hpp"
 #include "hwautoannounce.hpp"
 #include "local_rawmidi_peer.hpp"
@@ -137,6 +138,7 @@ protected:
   std::optional<rtpmididns::HwAutoAnnounce> hwautoannounce;
   rtpmididns::control_socket_t control;
   std::optional<rtpmididns::rtpmidi_remote_handler_t> rtpmidi_remote_handler;
+  rtpmididns::web_server_t web;
 
 public:
   // I want setup inside a try catch (and survive it), so I need a setup method
@@ -161,6 +163,11 @@ public:
     
     // Setup threading infrastructure
     setup_threading();
+
+    web.router = router;
+    web.aseq = aseq;
+    web.mdns = rtpmididns::mdns;
+    web.start();
   }
   
   void setup_threading() {
@@ -186,6 +193,7 @@ public:
   }
 
   void close() {
+    web.stop();
     rtpmidid::dns_resolver_shutdown();
     // Stop all threads
     if (router) {

@@ -26,6 +26,7 @@
 #include <iterator>
 #include <rtpmidid/exceptions.hpp>
 #include <string>
+#include <cstdlib>
 #include <unistd.h>
 #include <vector>
 
@@ -160,6 +161,24 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
                          [settings](const std::string &value) {
                            settings->log_level = rtpmidid::str_to_log_level(value);
                          });
+  arguments.emplace_back(
+      "--web-disable", "Disable the web UI (HTTP + WebSocket control)",
+      [settings](const std::string &) { settings->web.enabled = false; }, false);
+  arguments.emplace_back("--web-listen",
+                         "Web UI bind address (default 127.0.0.1)",
+                         [settings](const std::string &value) {
+                           settings->web.listen = value;
+                         });
+  arguments.emplace_back(
+      "--web-port", "Web UI TCP port (default 8089)",
+      [settings](const std::string &value) {
+        settings->web.port = std::atoi(value.c_str());
+      });
+  arguments.emplace_back("--web-root",
+                         "Directory with built web UI (default frontend/dist)",
+                         [settings](const std::string &value) {
+                           settings->web.root = value;
+                         });
   arguments.emplace_back( //
       "--rtpmidi-discover",
       "Enable or disable rtpmidi discover. true | false | [posregex] | "
@@ -251,6 +270,10 @@ void parse_argv(const std::vector<std::string> &argv, settings_t *settings) {
       ERROR("Unknown argument: {}. Try help with --help.", key);
       exit(1);
     }
+  }
+
+  if (settings->web.root.empty()) {
+    settings->web.root = "frontend/dist";
   }
 
   DEBUG("settings after argument parsing: {}", *settings);

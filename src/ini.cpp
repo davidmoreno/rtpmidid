@@ -23,6 +23,7 @@
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/logger.hpp>
 #include <unistd.h>
+#include <cstdlib>
 
 namespace rtpmididns {
 
@@ -69,6 +70,8 @@ void IniReader::parse_line(const std::string &origline) {
 
     // sections that are unique, can not be repeated
     if (section == "general") {
+      return;
+    } else if (section == "web") {
       return;
     } else if (section == "alsa_hw_auto_export") {
       return;
@@ -132,6 +135,22 @@ void IniReader::parse_line(const std::string &origline) {
       settings->control_filename = value;
     } else if (key == "log_level") {
       settings->log_level = rtpmidid::str_to_log_level(value);
+    } else {
+      throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
+    }
+  } else if (section == "web") {
+    if (key == "enabled") {
+      settings->web.enabled = value == "true";
+    } else if (key == "listen") {
+      settings->web.listen = value;
+    } else if (key == "port") {
+      settings->web.port = std::atoi(value.c_str());
+    } else if (key == "root") {
+      settings->web.root = value;
+    } else if (key == "username") {
+      settings->web.username = value;
+    } else if (key == "password") {
+      settings->web.password = value;
     } else {
       throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
     }

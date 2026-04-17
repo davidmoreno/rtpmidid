@@ -1,4 +1,7 @@
 build
+frontend/node_modules/
+frontend/dist/
+frontend/.parcel-cache/
 .*
 !.gitignore
 dump.*

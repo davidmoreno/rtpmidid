@@ -85,6 +85,18 @@ struct settings_t {
   };
 
   std::vector<rawmidi_t> rawmidi;
+
+  /** Web UI: HTTP static + WebSocket JSON-RPC (see [web] in ini). */
+  struct web_t {
+    bool enabled = true;
+    std::string listen = "127.0.0.1";
+    int port = 8089;
+    /** Directory with Parcel output (index.html). Empty after load → `frontend/dist`. */
+    std::string root;
+    std::string username;
+    std::string password;
+  };
+  web_t web;
 };
 
 extern settings_t settings; // NOLINT
@@ -123,8 +135,10 @@ VECTOR_FORMATTER(rtpmididns::settings_t::rtpmidi_announce_t);
 VECTOR_FORMATTER(rtpmididns::settings_t::alsa_announce_t);
 VECTOR_FORMATTER(rtpmididns::settings_t::connect_to_t);
 
+BASIC_FORMATTER(rtpmididns::settings_t::web_t, "web_t[enabled={}, {}:{} root={}]",
+                v.enabled, v.listen, v.port, v.root);
 BASIC_FORMATTER(rtpmididns::settings_t,
-                "settings_t[{}, {}, {}, {}, {}, {}, {}, {}, {}]", v.alsa_name,
+                "settings_t[{}, {}, {}, {}, {}, {}, {}, {}, {}, {}]", v.alsa_name,
                 v.alsa_network, v.control_filename, v.log_level,
                 v.rtpmidi_announces, v.rtpmidi_discover, v.alsa_announces,
-                v.connect_to, v.alsa_hw_auto_export);
+                v.connect_to, v.alsa_hw_auto_export, v.web);

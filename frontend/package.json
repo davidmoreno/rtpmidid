@@ -1,0 +1,18 @@
+{
+  "name": "rtpmidid-ui",
+  "private": true,
+  "scripts": {
+    "build": "parcel build src/index.html --dist-dir dist --public-url ./",
+    "dev": "parcel src/index.html"
+  },
+  "dependencies": {
+    "preact": "^10.25.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.4",
+    "parcel": "^2.13.3",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.8.3"
+  }
+}

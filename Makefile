@@ -28,7 +28,7 @@ help:
 	@echo
 	@echo " build     -- Creates the build directory and builds the rtpmidid"
 	@echo " build-dev -- Creates the build directory and builds the rtpmidid for debugging"
-	@echo " run       -- builds and runs the daemon"
+	@echo " run       -- builds the web UI, builds the daemon, and runs it"
 	@echo " setup     -- Creates the socket control file"
 	@echo " clean     -- Cleans project"
 	@echo " deb       -- Generate deb package"
@@ -87,8 +87,12 @@ clean:
 VALGRINDFLAGS := --leak-check=full --error-exitcode=1 --num-callers=30 --track-origins=yes
 RTPMIDID_ARGS := --ini default.ini --port ${PORT} --name devel --control /tmp/rtpmidid.sock
 
+.PHONY: frontend
+frontend:
+	cd frontend && (npm ci 2>/dev/null || npm install) && npm run build
+
 .PHONY: run run-valgrind run-gdb
-run: build-dev
+run: frontend build-dev
 	build/src/rtpmidid $(RTPMIDID_ARGS)
 
 run-gdb: build-dev
@@ -154,15 +158,18 @@ install: install-rtpmidid install-librtpmidid0 install-librtpmidid0-dev
 USR=$(DESTDIR)$(PREFIX)
 ETC=$(DESTDIR)$(SYSCONFDIR)
 
-install-rtpmidid: build man
+install-rtpmidid: build man frontend
 	mkdir -p $(USR)/bin/
 	cp build/src/rtpmidid $(USR)/bin/
+	mkdir -p $(USR)/share/rtpmidid/web
+	cp -a frontend/dist/. $(USR)/share/rtpmidid/web/
 	cd cli && make compile
 	cp build/rtpmidid-cli $(USR)/bin/rtpmidid-cli
 	mkdir -p $(ETC)/systemd/system/
 	cp debian/rtpmidid.service $(ETC)/systemd/system/
 	mkdir -p $(ETC)/rtpmidid/
 	cp default.ini $(ETC)/rtpmidid/
+	perl -0pi -e 's|^root=frontend/dist$$|root=$(USR)/share/rtpmidid/web|m' $(ETC)/rtpmidid/default.ini || true
 	mkdir -p $(USR)/share/doc/rtpmidid/
 	cp README.md $(USR)/share/doc/rtpmidid/
 	cp LICENSE-daemon.txt $(USR)/share/doc/rtpmidid/LICENSE.txt

@@ -8,6 +8,8 @@ add_library(
   ini.cpp
   settings.cpp
   control_socket.cpp
+  control_rpc.cpp
+  web_server.cpp
   stringpp.cpp
   hwautoannounce.cpp
 

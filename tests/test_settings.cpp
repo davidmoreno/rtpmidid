@@ -151,6 +151,20 @@ void test_parse_ini(void) {
   ASSERT_EQUAL(settings.rawmidi[1].local_udp_port, "local_udp_port2");
   ASSERT_EQUAL(settings.rawmidi[1].remote_udp_port, "remote_udp_port2");
   ASSERT_EQUAL(settings.rawmidi[1].hostname, "hostname2");
+
+  reader.parse_line("[web]");
+  reader.parse_line("enabled=false");
+  reader.parse_line("listen=0.0.0.0");
+  reader.parse_line("port=9090");
+  reader.parse_line("root=/var/www");
+  reader.parse_line("username=u");
+  reader.parse_line("password=p");
+  ASSERT_EQUAL(settings.web.enabled, false);
+  ASSERT_EQUAL(settings.web.listen, "0.0.0.0");
+  ASSERT_EQUAL(settings.web.port, 9090);
+  ASSERT_EQUAL(settings.web.root, "/var/www");
+  ASSERT_EQUAL(settings.web.username, "u");
+  ASSERT_EQUAL(settings.web.password, "p");
 }
 
 void test_argv(void) {
@@ -184,6 +198,18 @@ void test_argv(void) {
       },
       &settings);
   ASSERT_EQUAL(settings.rawmidi.size(), 0);
+
+  rtpmididns::settings_t w;
+  rtpmididns::parse_argv(
+      {
+          "--web-disable",
+          "--web-port",
+          "7777",
+      },
+      &w);
+  ASSERT_EQUAL(w.web.enabled, false);
+  ASSERT_EQUAL(w.web.port, 7777);
+  ASSERT_EQUAL(w.web.root, "frontend/dist");
 }
 
 int main(int argc, char **argv) {
