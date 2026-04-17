@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include <chrono>
 
 namespace rtpmididns {
 // Forward declaration - actual definition in src/mididata.hpp
@@ -36,25 +37,34 @@ namespace rtpmidid {
  *
  * Stores MIDI data with source peer ID for routing.
  * Uses vector to own the data since mididata_t is just a view.
+ * Includes timing information for latency measurement.
  */
 struct midi_packet_t {
   uint32_t from_peer_id;
   // MIDI data stored as raw bytes (owned by this struct)
   // This is necessary because mididata_t is just a view
   std::vector<uint8_t> data;
+  // High-resolution timestamp when packet was received/created
+  std::chrono::steady_clock::time_point timestamp_received;
 
-  midi_packet_t() : from_peer_id(0) {}
+  midi_packet_t() 
+      : from_peer_id(0), 
+        timestamp_received(std::chrono::steady_clock::now()) {}
   // Constructor from mididata_t - implementation in .cpp file to avoid include
   midi_packet_t(uint32_t from, const rtpmididns::mididata_t &mididata);
   midi_packet_t(uint32_t from, const uint8_t *bytes, size_t size)
-      : from_peer_id(from), data(bytes, bytes + size) {}
+      : from_peer_id(from), 
+        data(bytes, bytes + size),
+        timestamp_received(std::chrono::steady_clock::now()) {}
   
   // Copy constructor - ensure vector is properly copied
   midi_packet_t(const midi_packet_t &other) = default;
   
   // Move constructor - ensure vector is properly moved
   midi_packet_t(midi_packet_t &&other) noexcept 
-      : from_peer_id(other.from_peer_id), data(std::move(other.data)) {}
+      : from_peer_id(other.from_peer_id), 
+        data(std::move(other.data)),
+        timestamp_received(other.timestamp_received) {}
   
   // Copy assignment
   midi_packet_t &operator=(const midi_packet_t &other) = default;
@@ -64,6 +74,7 @@ struct midi_packet_t {
     if (this != &other) {
       from_peer_id = other.from_peer_id;
       data = std::move(other.data);
+      timestamp_received = other.timestamp_received;
     }
     return *this;
   }

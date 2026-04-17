@@ -27,7 +27,8 @@
 namespace rtpmidid {
 midi_packet_t::midi_packet_t(uint32_t from, const rtpmididns::mididata_t &mididata)
     : from_peer_id(from),
-      data(mididata.position, mididata.position + mididata.remaining()) {}
+      data(mididata.position, mididata.position + mididata.remaining()),
+      timestamp_received(std::chrono::steady_clock::now()) {}
 }
 
 namespace rtpmididns {
@@ -142,9 +143,28 @@ void midipeer_t::peer_thread_loop() {
 
 void midipeer_t::process_midi_packet(const rtpmidid::midi_packet_t &packet) {
   packets_recv++;
+  
+  // Calculate processing time from when packet was received
+  auto now = std::chrono::steady_clock::now();
+  auto processing_time_us = std::chrono::duration_cast<std::chrono::microseconds>(
+      now - packet.timestamp_received).count();
+  
   mididata_t mididata(const_cast<uint8_t *>(packet.data.data()), 
                      static_cast<uint32_t>(packet.data.size()));
+  
+  // Time the actual send_midi call
+  auto send_start = std::chrono::steady_clock::now();
   send_midi(packet.from_peer_id, mididata);
+  auto send_end = std::chrono::steady_clock::now();
+  auto send_time_us = std::chrono::duration_cast<std::chrono::microseconds>(
+      send_end - send_start).count();
+  
+  // Log timing information
+  // Log if total processing time is significant (> 100 microseconds) or send time is high
+  // if (processing_time_us > 100 || send_time_us > 50) {
+    DEBUG("[TIMING] peer {}: MIDI packet processed - total: {} us ({:.2f} ms), send_midi: {} us, size: {} bytes",
+          peer_id, processing_time_us, processing_time_us / 1000.0, send_time_us, packet.data.size());
+  // }
 }
 
 bool midipeer_t::enqueue_midi_packet(const rtpmidid::midi_packet_t &packet) {
