@@ -120,7 +120,7 @@ Shutdown: `main_t::close()` calls `rtpmidid::dns_resolver_shutdown()` **before**
 
 ### Queues and locking
 
-- **`routing_queue`** (`midirouter.hpp`): lock-free ring buffer documented as SPSC on dequeue; **multiple producers** (poller + all peer threads) serialize on `routing_enqueue_mutex` during `enqueue_*`.
+- **`routing_queue`** (`midirouter.hpp`): `rtpmidid::mpsc_queue` (bounded ring + producer mutex) consumed only on the router thread; `enqueue_*` is safe from poller and all peer threads.
 - **Per-peer `input_queue`**: true SPSC — producer is the router thread only (`peer_enqueue_fn` → `enqueue_midi_packet`).
 - **`peers` map**: `std::shared_mutex` for reads/writes; topology changes from the control socket go through `enqueue_connect` / `enqueue_disconnect` / `enqueue_remove_peer` so they run on the router thread.
 

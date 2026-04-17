@@ -480,11 +480,7 @@ bool midirouter_t::enqueue_send_midi(peer_id_t from, const mididata_t &data) {
   request.to_peer_id = 0; // Broadcast
   request.data.assign(data.position, data.position + data.remaining());
 
-  bool enqueued;
-  {
-    std::lock_guard<std::mutex> lock(routing_enqueue_mutex);
-    enqueued = routing_queue.enqueue(std::move(request));
-  }
+  const bool enqueued = routing_queue.enqueue(std::move(request));
   if (!enqueued) {
     WARNING("[MIDI_FLOW] Router: Routing queue full, dropping MIDI packet from peer {}", from);
     return false;
@@ -506,11 +502,7 @@ bool midirouter_t::enqueue_connect(peer_id_t from, peer_id_t to) {
   request.from_peer_id = from;
   request.to_peer_id = to;
 
-  bool enqueued;
-  {
-    std::lock_guard<std::mutex> lock(routing_enqueue_mutex);
-    enqueued = routing_queue.enqueue(std::move(request));
-  }
+  const bool enqueued = routing_queue.enqueue(std::move(request));
   if (!enqueued) {
     WARNING("Routing queue full, dropping connect request");
     return false;
@@ -532,11 +524,7 @@ bool midirouter_t::enqueue_disconnect(peer_id_t from, peer_id_t to) {
   request.from_peer_id = from;
   request.to_peer_id = to;
 
-  bool enqueued;
-  {
-    std::lock_guard<std::mutex> lock(routing_enqueue_mutex);
-    enqueued = routing_queue.enqueue(std::move(request));
-  }
+  const bool enqueued = routing_queue.enqueue(std::move(request));
   if (!enqueued) {
     WARNING("Routing queue full, dropping disconnect request");
     return false;
@@ -557,11 +545,7 @@ bool midirouter_t::enqueue_remove_peer(peer_id_t peer_id) {
   request.from_peer_id = peer_id;
   request.to_peer_id = 0;
 
-  bool enqueued;
-  {
-    std::lock_guard<std::mutex> lock(routing_enqueue_mutex);
-    enqueued = routing_queue.enqueue(std::move(request));
-  }
+  const bool enqueued = routing_queue.enqueue(std::move(request));
   if (!enqueued) {
     WARNING("Routing queue full, dropping remove peer request");
     return false;
@@ -588,11 +572,7 @@ bool midirouter_t::enqueue_event(peer_id_t from, peer_id_t to,
   request.to_peer_id = to;
   request.data.push_back(static_cast<uint8_t>(evt));
 
-  bool enqueued;
-  {
-    std::lock_guard<std::mutex> lock(routing_enqueue_mutex);
-    enqueued = routing_queue.enqueue(std::move(request));
-  }
+  const bool enqueued = routing_queue.enqueue(std::move(request));
   if (!enqueued) {
     WARNING("Routing queue full, dropping event");
     return false;

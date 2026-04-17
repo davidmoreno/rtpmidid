@@ -51,11 +51,8 @@ class midirouter_t : public std::enable_shared_from_this<midirouter_t> {
   NON_COPYABLE_NOR_MOVABLE(midirouter_t)
 
 private:
-  // Routing queue: lockfree SPSC implementation; multiple producers (peer
-  // threads, poller) are serialized by routing_enqueue_mutex (MPSC-safe).
   static constexpr size_t ROUTING_QUEUE_SIZE = 4096;
-  rtpmidid::lockfree_queue<rtpmidid::routing_request_t, ROUTING_QUEUE_SIZE> routing_queue;
-  std::mutex routing_enqueue_mutex;
+  rtpmidid::mpsc_queue<rtpmidid::routing_request_t, ROUTING_QUEUE_SIZE> routing_queue;
   
   // Router thread management
   std::thread router_thread;

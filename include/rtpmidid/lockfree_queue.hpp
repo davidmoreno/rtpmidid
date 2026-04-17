@@ -23,6 +23,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 
 namespace rtpmidid {
 
@@ -38,8 +39,8 @@ namespace rtpmidid {
  * - One thread can dequeue (consumer)
  * - These must be different threads
  *
- * If multiple threads must enqueue, serialize enqueue calls with an external
- * mutex (e.g. midirouter_t::routing_enqueue_mutex around routing_queue).
+ * If multiple threads must enqueue, use @ref mpsc_queue instead of this type
+ * alone.
  *
  * @tparam T The type of items stored in the queue
  * @tparam Size The size of the ring buffer (must be power of 2)
@@ -167,6 +168,50 @@ public:
    * @brief Get maximum capacity
    */
   static constexpr size_t capacity() { return Size - 1; }
+};
+
+/**
+ * @short Bounded multi-producer single-consumer (MPSC) queue
+ *
+ * Uses a mutex so any number of threads may @ref enqueue concurrently; the
+ * consumer must call @ref dequeue from a single thread only. The underlying
+ * transport is @ref lockfree_queue (SPSC); producers are serialized to match
+ * that contract. This is not a wait-free MPSC algorithm, but it keeps producer
+ * synchronization inside one type.
+ */
+template <typename T, size_t Size>
+class mpsc_queue {
+  std::mutex enqueue_mutex_;
+  lockfree_queue<T, Size> queue_;
+
+public:
+  mpsc_queue() = default;
+  ~mpsc_queue() = default;
+
+  mpsc_queue(const mpsc_queue &) = delete;
+  mpsc_queue &operator=(const mpsc_queue &) = delete;
+  mpsc_queue(mpsc_queue &&) = delete;
+  mpsc_queue &operator=(mpsc_queue &&) = delete;
+
+  /** @return false if the ring is full */
+  bool enqueue(const T &item) {
+    std::lock_guard<std::mutex> lock(enqueue_mutex_);
+    return queue_.enqueue(item);
+  }
+
+  /** @return false if the ring is full */
+  bool enqueue(T &&item) {
+    std::lock_guard<std::mutex> lock(enqueue_mutex_);
+    return queue_.enqueue(std::move(item));
+  }
+
+  bool dequeue(T &item) { return queue_.dequeue(item); }
+
+  bool empty() const { return queue_.empty(); }
+
+  size_t size() const { return queue_.size(); }
+
+  static constexpr size_t capacity() { return lockfree_queue<T, Size>::capacity(); }
 };
 
 } // namespace rtpmidid
