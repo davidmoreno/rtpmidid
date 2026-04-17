@@ -115,12 +115,12 @@ void test_send_receive_messages() {
   auto alsa_a_to_network_connection = aseq->connect(
       rtpmididns::aseq_t::port_t{aseq->client_id, alsa_a},
       rtpmididns::aseq_t::port_t{test_client_id, 0}); // Connect to network
-  poller_wait_until([&router]() { return router->peers.size() == 3; });
+  poller_wait_until([&router]() { return router->peer_count() == 3; });
 
   rtpmididns::json_t status = router->status();
   DEBUG("{}", status.dump(2));
 
-  ASSERT_EQUAL(router->peers.size(), 3);
+  ASSERT_EQUAL(router->peer_count(), 3);
 
   int port = 0;
 
@@ -141,7 +141,7 @@ void test_send_receive_messages() {
 
   status = router->status();
   DEBUG("{}", status.dump(2));
-  ASSERT_EQUAL(router->peers.size(), 3);
+  ASSERT_EQUAL(router->peer_count(), 3);
 
   auto data = hex_to_bin("90 40 40");
   rtppeer_client_a.peer.send_midi(data);
@@ -171,12 +171,12 @@ void test_send_receive_messages() {
   status = router->status();
   DEBUG("{}", status.dump(2));
   //// 2 more peers: the rtpmidi_worker and the alsa_worker.
-  ASSERT_EQUAL(router->peers.size(), 5);
+  ASSERT_EQUAL(router->peer_count(), 5);
 
   // 4. Connect from network to ALSA A. Nothing of importance should happen
   INFO("4. Connect from network to ALSA A. Nothing of importance should "
        "happen");
-  DEBUG("Peer count: {}", router->peers.size());
+  DEBUG("Peer count: {}", router->peer_count());
 
   // Connect network to alsa a
   auto network_to_alsa_a = aseq->connect( //
@@ -188,8 +188,8 @@ void test_send_receive_messages() {
   status = router->status();
   DEBUG("{}", status.dump(2));
   //// No more peers
-  DEBUG("Found {} peers", router->peers.size());
-  ASSERT_EQUAL(router->peers.size(), 5);
+  DEBUG("Found {} peers", router->peer_count());
+  ASSERT_EQUAL(router->peer_count(), 5);
 
   // 5. Connect rtpmidi A and B manually, just copy data
   INFO("5. Connect rtpmidi A and B manually, just copy data");
@@ -216,7 +216,7 @@ void test_send_receive_messages() {
   auto alsa_b_to_a_connection =
       aseq->connect({device_id, port_id_b}, {aseq->client_id, alsa_b_rw});
 
-  ASSERT_EQUAL(router->peers.size(), 5);
+  ASSERT_EQUAL(router->peer_count(), 5);
   int midi_packets_alsa_b = 0;
   auto midievent_listener_b = aseq->midi_event[alsa_b_rw].connect(
       [&midi_packets_alsa_b](snd_seq_event_t *ev) {
@@ -306,7 +306,7 @@ void test_midirouter_alsa_listener_lifecycle() {
     INFO("Skipping test as ALSA is not available.");
     return;
   }
-  ASSERT_EQUAL(router->peers.size(), 0);
+  ASSERT_EQUAL(router->peer_count(), 0);
 
   rtpmidid::udppeer_t test_control("localhost", 0);
   rtpmidid::udppeer_t test_midi("localhost",
@@ -320,7 +320,7 @@ void test_midirouter_alsa_listener_lifecycle() {
   rtpmididns::aseq_t::port_t internal_device_port = {aseq->client_id,
                                                      internal_port};
 
-  ASSERT_EQUAL(router->peers.size(), 1);
+  ASSERT_EQUAL(router->peer_count(), 1);
 
   auto external_port1 = aseq_external->create_port("ext1");
   auto external_port2 = aseq_external->create_port("ext2");
@@ -349,38 +349,38 @@ void test_midirouter_alsa_listener_lifecycle() {
   // for example first in, then out.
   aseq_external->connect(internal_device_port, external_device_port_1);
   aseq_external->connect(internal_device_port, external_device_port_1);
-  poller_wait_until([&]() { return router->peers.size() == 2; });
-  ASSERT_EQUAL(router->peers.size(), 2);
+  poller_wait_until([&]() { return router->peer_count() == 2; });
+  ASSERT_EQUAL(router->peer_count(), 2);
   INFO("Ok, connected, now disconnect 1");
 
   aseq_external->disconnect(internal_device_port, external_device_port_1);
-  poller_wait_until([&]() { return router->peers.size() == 1; });
-  ASSERT_EQUAL(router->peers.size(), 1);
+  poller_wait_until([&]() { return router->peer_count() == 1; });
+  ASSERT_EQUAL(router->peer_count(), 1);
   INFO("Ok, disconnected, connect 2 ports");
 
   aseq_external->connect(internal_device_port, external_device_port_1);
-  poller_wait_until([&]() { return router->peers.size() == 2; });
-  ASSERT_EQUAL(router->peers.size(), 2);
+  poller_wait_until([&]() { return router->peer_count() == 2; });
+  ASSERT_EQUAL(router->peer_count(), 2);
   INFO("Ok, connected 2 (1/2) to one listener, reuse the rtpclient, disconnect "
        "1");
 
   aseq_external->connect(internal_device_port, external_device_port_2);
   poller_wait_for(10ms); // to force it to do something
-  poller_wait_until([&]() { return router->peers.size() == 2; });
-  ASSERT_EQUAL(router->peers.size(), 2);
+  poller_wait_until([&]() { return router->peer_count() == 2; });
+  ASSERT_EQUAL(router->peer_count(), 2);
 
   INFO("Ok, connected 2 (2/2) to one listener, reuse the rtpclient, disconnect "
        "1");
 
   aseq_external->disconnect(internal_device_port, external_device_port_1);
   poller_wait_for(10ms); // to force it to do something
-  poller_wait_until([&]() { return router->peers.size() == 2; });
-  ASSERT_EQUAL(router->peers.size(), 2);
+  poller_wait_until([&]() { return router->peer_count() == 2; });
+  ASSERT_EQUAL(router->peer_count(), 2);
   INFO("Ok, disconnected 1, still peer exists");
 
   aseq_external->disconnect(internal_device_port, external_device_port_2);
-  poller_wait_until([&]() { return router->peers.size() == 1; });
-  ASSERT_EQUAL(router->peers.size(), 1);
+  poller_wait_until([&]() { return router->peer_count() == 1; });
+  ASSERT_EQUAL(router->peer_count(), 1);
   INFO("Ok, disconnected 2, peer not exists");
 }
 

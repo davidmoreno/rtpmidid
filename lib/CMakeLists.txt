@@ -10,7 +10,7 @@ add_library(
   rtpmidid-static
   STATIC
   rtpmidipacket.cpp rtppeer.cpp rtpclient.cpp rtpserver.cpp rtpserverpeer.cpp
-  mdns_rtpmidi.cpp poller.cpp logger.cpp
+  mdns_rtpmidi.cpp poller.cpp logger.cpp dns_resolver.cpp
   utils.cpp stats.cpp networkaddress.cpp udppeer.cpp
 )
 
@@ -34,7 +34,7 @@ add_library(
   rtpmidid-shared
   SHARED
   rtpmidipacket.cpp rtppeer.cpp rtpclient.cpp rtpserver.cpp rtpserverpeer.cpp
-  mdns_rtpmidi.cpp poller.cpp logger.cpp
+  mdns_rtpmidi.cpp poller.cpp logger.cpp dns_resolver.cpp
   utils.cpp stats.cpp networkaddress.cpp udppeer.cpp
 )
 

@@ -16,6 +16,7 @@ set(USE_FMT "auto" CACHE STRING "Use fmt library (ON | OFF | auto)")
 # option to set log level: 1=debug, 2=info, 3=warning, 4=error
 # Set from CLI with: cmake -DLOG_LEVEL=2 ..
 set(LOG_LEVEL "1" CACHE STRING "Set log level (1=debug, 2=info, 3=warning, 4=error)")
+option(RTPMIDID_ENABLE_TIMING "Enable steady_clock timing on MIDI hot path" OFF)
 
 # if CPP is "auto", check if C++20 is available and set it
 if (CPP_VERSION STREQUAL "auto" OR CPP_VERSION STREQUAL "auto")
@@ -127,6 +128,10 @@ execute_process(
 )
 add_definitions(-DRTPMIDID_VERSION=\"${RTPMIDID_VERSION}\")
 add_definitions(-DLOG_LEVEL=${LOG_LEVEL})
+if (RTPMIDID_ENABLE_TIMING)
+  add_compile_definitions(RTPMIDID_ENABLE_TIMING=1)
+  message(STATUS "RTPMIDID_ENABLE_TIMING: per-packet steady_clock in peer path")
+endif()
 message(STATUS "Version ${RTPMIDID_VERSION}")
 message(STATUS "Log level ${LOG_LEVEL} (1=debug, 2=info, 3=warning, 4=error)")
 

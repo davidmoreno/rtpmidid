@@ -107,6 +107,7 @@ class network_address_list_t {
 public:
   network_address_list_t();
   network_address_list_t(const std::string &name, const std::string &port);
+  network_address_list_t(network_address_list_t &&other) noexcept;
   ~network_address_list_t();
 
   network_address_list_t &operator=(network_address_list_t &&other);

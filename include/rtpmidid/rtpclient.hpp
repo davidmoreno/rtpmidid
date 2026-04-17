@@ -24,6 +24,7 @@
 #include "./rtppeer.hpp"
 #include "./signal.hpp"
 #include "./udppeer.hpp"
+#include <atomic>
 #include <chrono>
 #include <list>
 #include <string>
@@ -49,6 +50,9 @@ public:
   };
 
 #include "rtpclient_statemachine.hpp"
+
+protected:
+  void continue_resolve_from_dns_list();
 
 public:
   // Can be changed if required
@@ -90,6 +94,11 @@ public:
   network_address_list_t resolve_next_dns_sockaddress_list;
   // Iterator to the current endpoint
   network_address_list_t::iterator_t resolve_next_dns_sockaddress_list_I;
+
+private:
+  std::atomic<uint32_t> dns_resolve_request_{0};
+  std::atomic<uint32_t> dns_inflight_request_{0};
+  std::atomic<bool> dns_resolve_abort_{false};
 
 public:
   rtpclient_t(std::string name);

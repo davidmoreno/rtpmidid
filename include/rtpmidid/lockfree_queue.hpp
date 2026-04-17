@@ -38,6 +38,9 @@ namespace rtpmidid {
  * - One thread can dequeue (consumer)
  * - These must be different threads
  *
+ * If multiple threads must enqueue, serialize enqueue calls with an external
+ * mutex (e.g. midirouter_t::routing_enqueue_mutex around routing_queue).
+ *
  * @tparam T The type of items stored in the queue
  * @tparam Size The size of the ring buffer (must be power of 2)
  */

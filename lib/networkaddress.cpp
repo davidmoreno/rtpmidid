@@ -159,6 +159,11 @@ void network_address_t::set_port(int port) {
 
 network_address_list_t::network_address_list_t() : info(nullptr) {}
 
+network_address_list_t::network_address_list_t(network_address_list_t &&other) noexcept
+    : info(other.info) {
+  other.info = nullptr;
+}
+
 network_address_list_t::network_address_list_t(const std::string &name,
                                                const std::string &port) {
   addrinfo hints{};

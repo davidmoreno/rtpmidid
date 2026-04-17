@@ -16,9 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "rtpmidid/logger.hpp"
 #include "rtpmidid/udppeer.hpp"
 #include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/network.hpp"
+#include <cerrno>
 #include "rtpmidid/networkaddress.hpp"
 #include "rtpmidid/poller.hpp"
 #include <arpa/inet.h>
@@ -104,10 +106,16 @@ void udppeer_t::data_ready() {
 ssize_t udppeer_t::sendto(const packet_t &packet,
                           const network_address_t &addr) {
 
-  auto res = ::sendto(fd, packet.get_data(), packet.get_size(), 0,
+  auto res = ::sendto(fd, packet.get_data(), packet.get_size(), MSG_DONTWAIT,
                       addr.get_sockaddr(), addr.get_socklen());
 
   if (res < 0) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      WARNING_RATE_LIMIT(
+          5, "UDP send would block ({}), dropping {} bytes to {}",
+          strerror(errno), packet.get_size(), addr.to_string());
+      return res;
+    }
     std::string addr_str = addr.to_string();
     ERROR("Error sending to {}. This is UDP... so just lost! ({})", addr_str,
           strerror(errno));

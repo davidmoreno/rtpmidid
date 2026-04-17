@@ -36,6 +36,7 @@ Key source files:
 - `src/midirouter.cpp` - Central MIDI routing logic
 - `src/midipeer.cpp` - Base peer interface
 - `lib/poller.cpp` - Event loop implementation
+- `lib/dns_resolver.cpp` - Async `getaddrinfo` worker + eventfd wakeup
 - `lib/rtppeer.cpp` - RTP-MIDI peer protocol
 
 ---
@@ -102,13 +103,32 @@ graph TB
 
 ## Main Event Loop
 
-The daemon uses a single-threaded, event-driven architecture based on Linux epoll.
+The daemon is **multi-threaded** with a **Linux epoll** main loop (`rtpmidid::poller`) for real-time I/O. Other work runs on dedicated threads so blocking operations (DNS, control CLI, ALSA drain) do not stall unrelated peers.
+
+### Thread inventory
+
+| Thread | Role | Key files |
+|--------|------|-----------|
+| **Main / poller** | `epoll_wait`; UDP (`MSG_DONTWAIT`), ALSA sequencer FD, Avahi watches, DNS `eventfd`, `call_later` | `lib/poller.cpp`, `src/main.cpp` |
+| **Router** | Consumes `midirouter_t::routing_queue`; dispatches `SEND_MIDI` to peer input queues | `src/midirouter.cpp` |
+| **Per peer** | One `std::thread` per `midipeer_t`; runs `send_midi()` (ALSA / network) | `src/midipeer.cpp` |
+| **DNS worker** | Blocking `getaddrinfo`; wakes poller via `eventfd` | `lib/dns_resolver.cpp`, `include/rtpmidid/dns_resolver.hpp` |
+| **Control socket** | Dedicated thread; `poll()` + blocking `accept`/`recv`/`write` on Unix socket | `src/control_socket.cpp` |
+| **Logger** | Drains lock-free log queue | `lib/logger.cpp` |
+
+Shutdown: `main_t::close()` calls `rtpmidid::dns_resolver_shutdown()` **before** stopping router/peer threads so the DNS worker exits cleanly while `poller` is still valid.
+
+### Queues and locking
+
+- **`routing_queue`** (`midirouter.hpp`): lock-free ring buffer documented as SPSC on dequeue; **multiple producers** (poller + all peer threads) serialize on `routing_enqueue_mutex` during `enqueue_*`.
+- **Per-peer `input_queue`**: true SPSC — producer is the router thread only (`peer_enqueue_fn` → `enqueue_midi_packet`).
+- **`peers` map**: `std::shared_mutex` for reads/writes; topology changes from the control socket go through `enqueue_connect` / `enqueue_disconnect` / `enqueue_remove_peer` so they run on the router thread.
 
 ### Poller Implementation
 
 The `poller_t` class (`lib/poller.cpp`) is a singleton (`rtpmidid::poller`) that manages:
 
-1. **File Descriptor Events**: Network sockets, ALSA sequencer, control socket
+1. **File Descriptor Events**: Network sockets, ALSA sequencer, Avahi integration, DNS resolver `eventfd`
 2. **Timer Events**: Periodic tasks like CK (clock) messages, connection timeouts
 3. **Deferred Execution**: `call_later()` for operations that must run outside current call stack
 
@@ -155,14 +175,18 @@ The daemon handles `SIGINT` and `SIGTERM` by calling `rtpmidid::poller.close()`,
 
 ### Performance Considerations
 
-Since all MIDI processing happens in the main event loop, **avoid slow operations** that can introduce latency:
+**Avoid slow work on the poller thread** (UDP/ALSA read paths, timers, Avahi callbacks, DNS completion handlers): that thread drives all RTP timers and network reads.
 
-**Operations to Avoid in Hot Paths:**
+**Operations to Avoid on the Poller Thread:**
 - **Memory allocation** (`malloc`/`free`, `new`/`delete`, `std::vector::push_back` that triggers reallocation)
 - **Disk I/O** (file reads/writes, logging to files)
 - **Console I/O** (logging to stdout/stderr)
-- **System calls** that may block (DNS lookups, socket operations without `O_NONBLOCK`)
+- **Blocking `getaddrinfo`** — use `dns_resolver()` / `resolve_async()` (`lib/rtpclient.cpp`)
 - **String operations** that allocate (`std::string` concatenation, `FMT::format` with heap allocation)
+
+**Peer threads** may still hit blocking ALSA (`snd_seq_drain_output`) or full UDP buffers (`MSG_DONTWAIT` + drop on `EAGAIN` in `lib/udppeer.cpp`); that only delays the involved peer’s queue.
+
+**Optional compile-time instrumentation:** `-DRTPMIDID_ENABLE_TIMING=1` (CMake option `RTPMIDID_ENABLE_TIMING`) enables `steady_clock` timestamps on `midi_packet_t` and per-packet timing logs in `process_midi_packet` — off by default for hot-path overhead.
 
 **Best Practices:**
 - Use stack-allocated buffers: `io_bytes_writer_static<N>` instead of dynamic allocation
@@ -203,9 +227,8 @@ The following areas of the codebase may need review for performance-critical use
    - `status()` creates `std::vector<json_t>` with heap allocations
    - Only called from control socket (not hot path), but worth noting
 
-5. **ALSA sequencer output** (`src/aseq.cpp`, various peers)
-   - Calls `snd_seq_drain_output()` after each event (may block)
-   - Consider batching events or using `snd_seq_event_output_buffer()`
+5. **ALSA sequencer output** (`src/local_alsa_peer.cpp`)
+   - Uses one `snd_seq_drain_output()` per `send_midi()` batch (after all `snd_seq_event_output` calls) to reduce syscalls; may still block that peer’s thread only
 
 ---
 
@@ -229,6 +252,11 @@ void connect(peer_id_t from, peer_id_t to);
 void disconnect(peer_id_t from, peer_id_t to);
 void send_midi(peer_id_t from, const mididata_t& data);
 json_t status();  // For control socket
+// Thread-safe when router thread is running (used from peer / poller threads):
+bool enqueue_send_midi(peer_id_t from, const mididata_t& data);
+bool enqueue_connect(peer_id_t from, peer_id_t to);
+bool enqueue_disconnect(peer_id_t from, peer_id_t to);
+bool enqueue_remove_peer(peer_id_t peer_id);
 ```
 
 **File:** `src/midirouter.cpp`
@@ -296,6 +324,15 @@ mDNS service discovery using Avahi. Handles:
 Remote handler (`rtpmidiremotehandler.cpp`) creates ALSA listener peers for discovered services.
 
 **File:** `lib/mdns_rtpmidi.cpp`
+
+### dns_resolver_t
+
+Async hostname resolution for RTP clients:
+
+- `rtpmidid::dns_resolver().resolve_async(host, port, callback)` queues work on an internal worker thread; `callback`’s first hop runs on the **poller thread** from an `eventfd` read handler (implementations typically use `poller.call_later` to resume `rtpclient_t` state machines).
+- `rtpmidid::dns_resolver_shutdown()` joins the worker and removes the `eventfd` from `poller` — call from application shutdown **before** `poller.close()` / static teardown (`src/main.cpp`).
+
+**Files:** `include/rtpmidid/dns_resolver.hpp`, `lib/dns_resolver.cpp`
 
 ---
 
@@ -528,11 +565,9 @@ echo '{"method":"status","id":1}' | nc -U /var/run/rtpmidid/control.sock
 
 The control socket implementation is in `src/control_socket.cpp`:
 
-1. Socket is created in constructor and added to poller
-2. Incoming connections are accepted and added as clients
-3. Each client has its own listener for data events
-4. Commands are parsed as JSON and dispatched to handlers
-5. Response is written back and connection remains open
+1. A **dedicated server thread** runs `poll()` on the listening Unix socket and all accepted client FDs (blocking I/O is OK here — it does not run on the epoll/MIDI poller thread).
+2. JSON commands are parsed and dispatched to the same handler table as before; `router.connect` / `router.disconnect` use `enqueue_*` so topology changes are serialized on the router thread.
+3. Responses are written on the control thread; `router->status()` uses `shared_lock` on the peer map and is safe from that thread.
 
 ---
 
@@ -714,9 +749,7 @@ Output format includes colorized level, source file, line number, and message:
 
 3. **No Jack MIDI Support**: Only ALSA sequencer is supported
 
-4. **Single Threaded**: All processing happens in one thread
-   - Works well for typical MIDI loads
-   - May need optimization for very high throughput
+4. **Throughput tuning**: Many peer threads and queue depth limits may need tuning for very high event rates or many simultaneous peers
 
 ### Architectural Considerations
 
@@ -735,7 +768,7 @@ Output format includes colorized level, source file, line number, and message:
 
 **Modifying the event loop:**
 - The poller is a singleton - only one instance allowed
-- All I/O must be non-blocking
+- All FDs registered with `poller.add_fd_in` must use non-blocking I/O (UDP uses `MSG_DONTWAIT`; ALSA uses `SND_SEQ_NONBLOCK`)
 - Use `call_later()` for operations that might invalidate iterators
 - Timer cleanup happens automatically via RAII
 

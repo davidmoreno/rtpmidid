@@ -18,8 +18,16 @@
 #include "control_socket.hpp"
 #include "factory.hpp"
 #include "settings.hpp"
+#include <algorithm>
+#include <cerrno>
+#include <cstddef>
+#include <signal.h>
+#include <poll.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <unistd.h>
+#include <vector>
 
 #include "json.hpp"
 #include "midipeer.hpp"
@@ -38,6 +46,23 @@ const char *const MSG_TOO_LONG =
 //     "{\"error\": \"Unknown command\", \"code\": 2}";
 
 static const std::regex PEER_COMMAND_RE = std::regex("^(\\d*)\\.(.*)");
+
+namespace {
+
+/** Avoid SIGPIPE / process exit when the client has already closed its end. */
+ssize_t control_conn_send(int fd, const void *buf, size_t len) {
+#if defined(__linux__) && defined(MSG_NOSIGNAL)
+  return ::send(fd, buf, len, MSG_NOSIGNAL);
+#else
+  return ::write(fd, buf, len);
+#endif
+}
+
+void send_control_goodbye(int fd) {
+  (void)control_conn_send(fd, MSG_CLOSE_CONN, strlen(MSG_CLOSE_CONN));
+}
+
+} // namespace
 
 control_socket_t::control_socket_t() {
   std::string &socketfile = settings.control_filename;
@@ -74,80 +99,135 @@ control_socket_t::control_socket_t() {
     return;
   }
   ::chmod(socketfile.c_str(), 0777);
-  connection_listener = rtpmidid::poller.add_fd_in(
-      socket, [this](int fd) { this->connection_ready(); });
   INFO("Control socket ready at {}", socketfile);
   start_time = time(NULL);
+
+  server_running_.store(true, std::memory_order_release);
+  try {
+    server_thread_ = std::thread(&control_socket_t::server_thread_main, this);
+  } catch (const std::exception &e) {
+    server_running_.store(false, std::memory_order_release);
+    ERROR("Could not start control socket thread: {}", e.what());
+    ::close(socket);
+    socket = -1;
+  }
 }
 
 // NOLINTNEXTLINE(bugprone-exception-escape)
 rtpmididns::control_socket_t::~control_socket_t() noexcept {
-  for (auto &client : clients) {
-    client.listener.stop();
-
-    auto n = write(client.fd, MSG_CLOSE_CONN, strlen(MSG_CLOSE_CONN));
-    if (n < 0) {
-      DEBUG("Could not send goodbye packet to control.");
+  server_running_.store(false, std::memory_order_release);
+  if (server_thread_.joinable()) {
+    if (socket >= 0) {
+      (void)::shutdown(socket, SHUT_RDWR);
     }
-    close(client.fd);
+    server_thread_.join();
   }
-  connection_listener.stop();
-  close(socket);
+  if (socket >= 0) {
+    ::close(socket);
+    socket = -1;
+  }
   DEBUG("Closed control socket");
 }
 
-void rtpmididns::control_socket_t::connection_ready() {
-  int fd = accept(socket, NULL, NULL);
+void control_socket_t::server_thread_main() {
+  const int listen_fd = socket;
+  if (listen_fd < 0) {
+    return;
+  }
 
-  if (fd != -1) {
-    client_t client;
-    client.listener = rtpmidid::poller.add_fd_in(
-        fd, [this](int fd) { this->data_ready(fd); });
-    client.fd = fd;
-    clients.push_back(std::move(client));
-    // DEBUG("Added control connection: {}", fd);
-  } else {
-    ERROR("\"accept()\" failed, continuing...");
+#if !defined(_WIN32)
+  (void)::signal(SIGPIPE, SIG_IGN);
+#endif
+
+  std::vector<struct pollfd> pfds;
+  pfds.reserve(16);
+  pfds.push_back({listen_fd, POLLIN, 0});
+
+  while (server_running_.load(std::memory_order_acquire)) {
+    const int pr = ::poll(pfds.data(), static_cast<nfds_t>(pfds.size()), 1000);
+    if (pr < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      break;
+    }
+
+    for (size_t i = 0; i < pfds.size();) {
+      struct pollfd &p = pfds[i];
+      if (p.revents == 0) {
+        ++i;
+        continue;
+      }
+
+      if (p.fd == listen_fd) {
+        if (p.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+          ++i;
+          continue;
+        }
+        if ((p.revents & POLLIN) &&
+            server_running_.load(std::memory_order_acquire)) {
+          const int cfd = ::accept(listen_fd, nullptr, nullptr);
+          if (cfd >= 0) {
+            pfds.push_back({cfd, POLLIN, 0});
+          } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            break;
+          }
+        }
+        p.revents = 0;
+        ++i;
+        continue;
+      }
+
+      if (p.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+        send_control_goodbye(p.fd);
+        ::close(p.fd);
+        pfds.erase(pfds.begin() + static_cast<std::ptrdiff_t>(i));
+        continue;
+      }
+      if (p.revents & POLLIN) {
+        const bool close_me = handle_client_data(p.fd);
+        if (close_me) {
+          ::close(p.fd);
+          pfds.erase(pfds.begin() + static_cast<std::ptrdiff_t>(i));
+          continue;
+        }
+      }
+      p.revents = 0;
+      ++i;
+    }
+  }
+
+  for (size_t i = 1; i < pfds.size(); ++i) {
+    send_control_goodbye(pfds[i].fd);
+    ::close(pfds[i].fd);
   }
 }
 
-void control_socket_t::data_ready(int fd) {
+bool control_socket_t::handle_client_data(int fd) {
   char buf[1024];                           // NOLINT
-  size_t l = recv(fd, buf, sizeof(buf), 0); // NOLINT
-  auto remove_client = [&](int client_fd) {
-    auto it = std::find_if(clients.begin(), clients.end(),
-                           [client_fd](auto &client) {
-                             return client.fd == client_fd;
-                           });
-    if (it != clients.end()) {
-      it->listener.stop();
-      close(it->fd);
-      clients.erase(it);
-    } else if (client_fd >= 0) {
-      ::close(client_fd);
-    }
-  };
+  const ssize_t l = recv(fd, buf, sizeof(buf), 0); // NOLINT
   if (l <= 0) {
-    remove_client(fd);
-    return;
+    send_control_goodbye(fd);
+    return true;
   }
-  if (l >= sizeof(buf) - 1) {
-    auto w = write(fd, MSG_TOO_LONG, strlen(MSG_TOO_LONG));
+  if (static_cast<size_t>(l) >= sizeof(buf) - 1) {
+    const ssize_t w =
+        control_conn_send(fd, MSG_TOO_LONG, strlen(MSG_TOO_LONG));
     if (w < 0) {
       ERROR(
           "Could not send msg too long to control socket! Closing connection.");
-      remove_client(fd);
     }
-    return;
+    return true;
   }
-  buf[l] = 0;                               // NOLINT
+  buf[static_cast<size_t>(l)] = 0;          // NOLINT
   auto ret = parse_command(trim_copy(buf)); // NOLINT
   ret += "\n";
-  auto w = write(fd, ret.c_str(), ret.length());
+  const ssize_t w = control_conn_send(fd, ret.c_str(), ret.length());
   if (w < 0) {
     ERROR("Could not send msg to control socket! Closing Connection.");
-    remove_client(fd);
+    return true;
   }
+  return false;
 }
 
 static std::string maybe_string(const json_t &j, const char *key,
@@ -238,7 +318,7 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
        peer_id_t from_peer_id = params["from"];
        peer_id_t to_peer_id = params["to"];
        DEBUG("Connect peers: {} -> {}", from_peer_id, to_peer_id);
-       control.router->connect(from_peer_id, to_peer_id);
+       control.router->enqueue_connect(from_peer_id, to_peer_id);
        return "ok";
      }},
     {"router.disconnect",
@@ -248,7 +328,7 @@ const std::vector<control_socket_ns::command_t> COMMANDS{
        peer_id_t from_peer_id = params["from"];
        peer_id_t to_peer_id = params["to"];
        DEBUG("Disconnect peers: {} -> {}", from_peer_id, to_peer_id);
-       control.router->disconnect(from_peer_id, to_peer_id);
+       control.router->enqueue_disconnect(from_peer_id, to_peer_id);
        return "ok";
      }},
     {"connect",

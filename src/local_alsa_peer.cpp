@@ -63,26 +63,26 @@ void local_alsa_peer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
     DEBUG("[MIDI_FLOW] local_alsa_peer {}: Calling snd_seq_event_output()", this->peer_id);
     auto result = snd_seq_event_output(seq->seq, ev);
     if (result < 0) {
-      ERROR("[MIDI_FLOW] local_alsa_peer {}: snd_seq_event_output() error: {}", 
+      ERROR("[MIDI_FLOW] local_alsa_peer {}: snd_seq_event_output() error: {}",
             this->peer_id, snd_strerror(result));
       snd_seq_drop_input(seq->seq);
       snd_seq_drop_output(seq->seq);
     } else {
-      DEBUG("[MIDI_FLOW] local_alsa_peer {}: snd_seq_event_output() succeeded, bytes={}", 
-            this->peer_id, result);
-    }
-    DEBUG("[MIDI_FLOW] local_alsa_peer {}: Calling snd_seq_drain_output()", this->peer_id);
-    result = snd_seq_drain_output(seq->seq);
-    if (result < 0) {
-      ERROR("[MIDI_FLOW] local_alsa_peer {}: snd_seq_drain_output() error: {}", 
-            this->peer_id, snd_strerror(result));
-      snd_seq_drop_input(seq->seq);
-      snd_seq_drop_output(seq->seq);
-    } else {
-      DEBUG("[MIDI_FLOW] local_alsa_peer {}: snd_seq_drain_output() succeeded, drained {} bytes",
+      DEBUG("[MIDI_FLOW] local_alsa_peer {}: snd_seq_event_output() succeeded, bytes={}",
             this->peer_id, result);
     }
   });
+  DEBUG("[MIDI_FLOW] local_alsa_peer {}: Calling snd_seq_drain_output()", this->peer_id);
+  int result = snd_seq_drain_output(seq->seq);
+  if (result < 0) {
+    ERROR("[MIDI_FLOW] local_alsa_peer {}: snd_seq_drain_output() error: {}",
+          this->peer_id, snd_strerror(result));
+    snd_seq_drop_input(seq->seq);
+    snd_seq_drop_output(seq->seq);
+  } else {
+    DEBUG("[MIDI_FLOW] local_alsa_peer {}: snd_seq_drain_output() succeeded, drained {} bytes",
+          this->peer_id, result);
+  }
 }
 
 json_t local_alsa_peer_t::status() {

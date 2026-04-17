@@ -25,6 +25,7 @@
 #include "midipeer.hpp"
 #include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/logger.hpp"
+#include "rtpmidid/dns_resolver.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidiremotehandler.hpp"
@@ -184,7 +185,8 @@ public:
     DEBUG("[MIDI_FLOW] Main: All peer threads started");
   }
 
-  void close() { 
+  void close() {
+    rtpmidid::dns_resolver_shutdown();
     // Stop all threads
     if (router) {
       router->for_each_peer(std::function<void(rtpmididns::midipeer_t*)>([](rtpmididns::midipeer_t *peer) {
@@ -258,6 +260,7 @@ int main(int argc, char **argv) {
   signal(SIGINT, sigint_f);
   signal(SIGTERM, sigterm_f);
   signal(SIGABRT, sigabrt_f);
+  signal(SIGPIPE, SIG_IGN);
 
   main_t maindata;
 

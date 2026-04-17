@@ -51,9 +51,11 @@ class midirouter_t : public std::enable_shared_from_this<midirouter_t> {
   NON_COPYABLE_NOR_MOVABLE(midirouter_t)
 
 private:
-  // Thread-safe routing queue (SPSC: peers produce, router thread consumes)
+  // Routing queue: lockfree SPSC implementation; multiple producers (peer
+  // threads, poller) are serialized by routing_enqueue_mutex (MPSC-safe).
   static constexpr size_t ROUTING_QUEUE_SIZE = 4096;
   rtpmidid::lockfree_queue<rtpmidid::routing_request_t, ROUTING_QUEUE_SIZE> routing_queue;
+  std::mutex routing_enqueue_mutex;
   
   // Router thread management
   std::thread router_thread;
@@ -101,6 +103,11 @@ public:
   peer_id_t add_peer(std::shared_ptr<midipeer_t>);
   std::shared_ptr<midipeer_t> get_peer_by_id(peer_id_t peer_id);
   peerconnection_t *get_peerdata_by_id(peer_id_t peer_id);
+
+  /** Thread-safe peer map size (use instead of `peers.size()` from other threads). */
+  size_t peer_count() const;
+  /** Thread-safe copy of `send_to` for `from` (empty if unknown). */
+  std::vector<peer_id_t> send_targets_for(peer_id_t from) const;
 
   void remove_peer(peer_id_t);
   void connect(peer_id_t from, peer_id_t to);

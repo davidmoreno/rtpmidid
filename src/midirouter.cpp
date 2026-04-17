@@ -91,6 +91,20 @@ peerconnection_t *midirouter_t::get_peerdata_by_id(peer_id_t peer_id) {
   return nullptr;
 }
 
+size_t midirouter_t::peer_count() const {
+  std::shared_lock<std::shared_mutex> lock(peers_mutex);
+  return peers.size();
+}
+
+std::vector<peer_id_t> midirouter_t::send_targets_for(peer_id_t from) const {
+  std::shared_lock<std::shared_mutex> lock(peers_mutex);
+  auto it = peers.find(from);
+  if (it == peers.end()) {
+    return {};
+  }
+  return it->second.send_to;
+}
+
 void midirouter_t::peer_connection_loop(
     peer_id_t peer_id, std::function<void(std::shared_ptr<midipeer_t>)> func) {
   auto peerdata = get_peerdata_by_id(peer_id);
@@ -147,31 +161,34 @@ void midirouter_t::remove_peer(peer_id_t peer_id) {
     return;
   }
 
-  // Find all the peers that are connected to this peer and disconnect them
-  for (auto &peer : peers) {
-    // need to copy the send_to vector to avoid iterator invalidation
-    auto send_to_copy = peer.second.send_to;
-    for (auto send_to_id : send_to_copy) {
-      if (send_to_id == peer_id) {
-        // Disconnect inline (we already have the lock)
-        for (auto it = peer.second.send_to.begin(); 
-             it != peer.second.send_to.end(); ++it) {
-          if (*it == peer_id) {
-            peer.second.send_to.erase(it);
-            // Don't call event() on peers that might be destroyed - just remove connection
-            break;
-          }
-        }
-      }
-      // Disconnect reverse direction
-      for (auto it = toremove->second.send_to.begin();
-           it != toremove->second.send_to.end(); ++it) {
-        if (*it == peer.first) {
-          toremove->second.send_to.erase(it);
-          break;
-        }
+  // Tear down all edges involving peer_id (fires DISCONNECTED_ROUTER like disconnect())
+  {
+    const auto outgoing = toremove->second.send_to;
+    for (auto to_id : outgoing) {
+      disconnect(peer_id, to_id);
+    }
+  }
+  std::vector<peer_id_t> inbound_from;
+  for (const auto &p : peers) {
+    if (p.first == peer_id) {
+      continue;
+    }
+    for (auto to : p.second.send_to) {
+      if (to == peer_id) {
+        inbound_from.push_back(p.first);
+        break;
       }
     }
+  }
+  for (auto from_id : inbound_from) {
+    disconnect(from_id, peer_id);
+  }
+
+  toremove = peers.find(peer_id);
+  if (toremove == peers.end()) {
+    std::lock_guard<std::mutex> lock2(removing_peers_mutex);
+    removing_peers.erase(peer_id);
+    return;
   }
 
   // Clear router reference before erasing
@@ -462,8 +479,13 @@ bool midirouter_t::enqueue_send_midi(peer_id_t from, const mididata_t &data) {
   request.from_peer_id = from;
   request.to_peer_id = 0; // Broadcast
   request.data.assign(data.position, data.position + data.remaining());
-  
-  if (!routing_queue.enqueue(request)) {
+
+  bool enqueued;
+  {
+    std::lock_guard<std::mutex> lock(routing_enqueue_mutex);
+    enqueued = routing_queue.enqueue(std::move(request));
+  }
+  if (!enqueued) {
     WARNING("[MIDI_FLOW] Router: Routing queue full, dropping MIDI packet from peer {}", from);
     return false;
   }
@@ -483,8 +505,13 @@ bool midirouter_t::enqueue_connect(peer_id_t from, peer_id_t to) {
   request.command = rtpmidid::routing_command_e::CONNECT;
   request.from_peer_id = from;
   request.to_peer_id = to;
-  
-  if (!routing_queue.enqueue(request)) {
+
+  bool enqueued;
+  {
+    std::lock_guard<std::mutex> lock(routing_enqueue_mutex);
+    enqueued = routing_queue.enqueue(std::move(request));
+  }
+  if (!enqueued) {
     WARNING("Routing queue full, dropping connect request");
     return false;
   }
@@ -504,8 +531,13 @@ bool midirouter_t::enqueue_disconnect(peer_id_t from, peer_id_t to) {
   request.command = rtpmidid::routing_command_e::DISCONNECT;
   request.from_peer_id = from;
   request.to_peer_id = to;
-  
-  if (!routing_queue.enqueue(request)) {
+
+  bool enqueued;
+  {
+    std::lock_guard<std::mutex> lock(routing_enqueue_mutex);
+    enqueued = routing_queue.enqueue(std::move(request));
+  }
+  if (!enqueued) {
     WARNING("Routing queue full, dropping disconnect request");
     return false;
   }
@@ -524,8 +556,13 @@ bool midirouter_t::enqueue_remove_peer(peer_id_t peer_id) {
   request.command = rtpmidid::routing_command_e::REMOVE_PEER;
   request.from_peer_id = peer_id;
   request.to_peer_id = 0;
-  
-  if (!routing_queue.enqueue(request)) {
+
+  bool enqueued;
+  {
+    std::lock_guard<std::mutex> lock(routing_enqueue_mutex);
+    enqueued = routing_queue.enqueue(std::move(request));
+  }
+  if (!enqueued) {
     WARNING("Routing queue full, dropping remove peer request");
     return false;
   }
@@ -550,8 +587,13 @@ bool midirouter_t::enqueue_event(peer_id_t from, peer_id_t to,
   request.from_peer_id = from;
   request.to_peer_id = to;
   request.data.push_back(static_cast<uint8_t>(evt));
-  
-  if (!routing_queue.enqueue(request)) {
+
+  bool enqueued;
+  {
+    std::lock_guard<std::mutex> lock(routing_enqueue_mutex);
+    enqueued = routing_queue.enqueue(std::move(request));
+  }
+  if (!enqueued) {
     WARNING("Routing queue full, dropping event");
     return false;
   }

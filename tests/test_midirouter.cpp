@@ -143,7 +143,7 @@ void test_midirouter_from_alsa() {
       });
 
   rtpmididns::midipeer_t *midipeer =
-      router->peers[rtpmidinetwork_id].peer.get();
+      router->get_peer_by_id(rtpmidinetwork_id).get();
   ASSERT_TRUE(midipeer);
   test_midiio_t *rtppeer = dynamic_cast<test_midiio_t *>(midipeer);
   // rtppeer->writer.print_hex();
@@ -230,9 +230,12 @@ void test_connect_disconnect_signals() {
   router->connect(peera->peer_id, peerb->peer_id);
   ASSERT_EQUAL(peera->connections, 1);
   ASSERT_EQUAL(peerb->connections, 1);
-  ASSERT_EQUAL(router->peers[peera->peer_id].send_to.size(), 1);
-  ASSERT_EQUAL(router->peers[peera->peer_id].send_to[0], peerb->peer_id);
-  ASSERT_EQUAL(router->peers[peerb->peer_id].send_to.size(), 0);
+  {
+    const auto from_a = router->send_targets_for(peera->peer_id);
+    ASSERT_EQUAL(from_a.size(), 1);
+    ASSERT_EQUAL(from_a[0], peerb->peer_id);
+  }
+  ASSERT_EQUAL(router->send_targets_for(peerb->peer_id).size(), 0);
 
   DEBUG("Remove one connection");
   router->disconnect(peera->peer_id, peerb->peer_id);

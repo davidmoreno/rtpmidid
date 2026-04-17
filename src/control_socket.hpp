@@ -19,10 +19,11 @@
 #pragma once
 #include "aseq.hpp"
 #include "midirouter.hpp"
-#include "rtpmidid/poller.hpp"
 #include "rtpmidid/utils.hpp"
+#include <atomic>
+#include <memory>
 #include <string>
-#include <vector>
+#include <thread>
 
 namespace rtpmidid {
 class mdns_rtpmidi_t;
@@ -32,26 +33,23 @@ namespace rtpmididns {
 class control_socket_t {
   NON_COPYABLE_NOR_MOVABLE(control_socket_t)
 
-  struct client_t {
-    int fd = -1;
-    rtpmidid::poller_t::listener_t listener;
-  };
+  std::thread server_thread_;
+  std::atomic<bool> server_running_{false};
+
+  void server_thread_main();
+  /** @return true if @p fd should be closed and removed from the poll set */
+  bool handle_client_data(int fd);
 
 public:
-  int socket;
-  std::vector<client_t> clients;
-  rtpmidid::poller_t::listener_t connection_listener;
-  time_t start_time;
+  int socket = -1;
+  time_t start_time = 0;
   std::shared_ptr<midirouter_t> router = nullptr;
   std::shared_ptr<aseq_t> aseq = nullptr;
   std::shared_ptr<rtpmidid::mdns_rtpmidi_t> mdns = nullptr;
 
-public:
   control_socket_t();
   ~control_socket_t() noexcept;
 
-  void connection_ready();
-  void data_ready(int fd);
   std::string parse_command(const std::string &command);
 };
 } // namespace rtpmididns

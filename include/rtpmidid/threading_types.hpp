@@ -47,15 +47,23 @@ struct midi_packet_t {
   // High-resolution timestamp when packet was received/created
   std::chrono::steady_clock::time_point timestamp_received;
 
-  midi_packet_t() 
-      : from_peer_id(0), 
-        timestamp_received(std::chrono::steady_clock::now()) {}
+  midi_packet_t() : from_peer_id(0)
+#ifdef RTPMIDID_ENABLE_TIMING
+        ,
+        timestamp_received(std::chrono::steady_clock::now())
+#endif
+  {
+  }
   // Constructor from mididata_t - implementation in .cpp file to avoid include
   midi_packet_t(uint32_t from, const rtpmididns::mididata_t &mididata);
   midi_packet_t(uint32_t from, const uint8_t *bytes, size_t size)
-      : from_peer_id(from), 
-        data(bytes, bytes + size),
-        timestamp_received(std::chrono::steady_clock::now()) {}
+      : from_peer_id(from), data(bytes, bytes + size)
+#ifdef RTPMIDID_ENABLE_TIMING
+        ,
+        timestamp_received(std::chrono::steady_clock::now())
+#endif
+  {
+  }
   
   // Copy constructor - ensure vector is properly copied
   midi_packet_t(const midi_packet_t &other) = default;

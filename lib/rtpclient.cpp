@@ -17,6 +17,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <memory>
+#include <rtpmidid/dns_resolver.hpp>
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/network.hpp>
@@ -60,6 +62,9 @@ rtpclient_t::rtpclient_t(const std::string name) : peer(std::move(name)) {
 }
 
 rtpclient_t::~rtpclient_t() {
+  dns_resolve_abort_.store(true, std::memory_order_release);
+  dns_inflight_request_.store(0, std::memory_order_release);
+  dns_resolve_request_.fetch_add(1, std::memory_order_acq_rel);
   if (peer.is_connected()) {
     try {
       peer.send_goodbye(rtppeer_t::CONTROL_PORT);
@@ -130,19 +135,7 @@ void rtpclient_t::state_prepare_next_dns() {
   handle_event(NextReady);
 }
 
-void rtpclient_t::state_resolve_next_ip_port() {
-  // First time, get next address and resolve
-  if (!resolve_next_dns_sockaddress_list.is_valid()) {
-    resolve_next_dns_sockaddress_list = network_address_list_t(
-        resolve_next_dns_endpoint.hostname, resolve_next_dns_endpoint.port);
-    resolve_next_dns_sockaddress_list_I =
-        resolve_next_dns_sockaddress_list.begin();
-  } else {
-    // Following use the next resolved item
-    resolve_next_dns_sockaddress_list_I++;
-  }
-
-  // If any left, go for it, if not failed resolve this address port pair
+void rtpclient_t::continue_resolve_from_dns_list() {
   if (resolve_next_dns_sockaddress_list_I !=
       resolve_next_dns_sockaddress_list.end()) {
     control_address = (*resolve_next_dns_sockaddress_list_I).dup();
@@ -159,6 +152,40 @@ void rtpclient_t::state_resolve_next_ip_port() {
     resolve_next_dns_sockaddress_list = network_address_list_t();
     handle_event(ConnectListExhausted);
   }
+}
+
+void rtpclient_t::state_resolve_next_ip_port() {
+  if (!resolve_next_dns_sockaddress_list.is_valid()) {
+    const uint32_t req =
+        dns_resolve_request_.fetch_add(1, std::memory_order_acq_rel) + 1;
+    dns_inflight_request_.store(req, std::memory_order_release);
+
+    std::string host = resolve_next_dns_endpoint.hostname;
+    std::string port = resolve_next_dns_endpoint.port;
+
+    dns_resolver().resolve_async(std::move(host), std::move(port),
+                                 [this, req](network_address_list_t list) {
+      auto list_sp =
+          std::make_shared<network_address_list_t>(std::move(list));
+      poller.call_later([this, req, list_sp]() {
+        if (dns_resolve_abort_.load(std::memory_order_acquire)) {
+          return;
+        }
+        if (dns_inflight_request_.load(std::memory_order_acquire) != req) {
+          return;
+        }
+        dns_inflight_request_.store(0, std::memory_order_release);
+        resolve_next_dns_sockaddress_list = std::move(*list_sp);
+        resolve_next_dns_sockaddress_list_I =
+            resolve_next_dns_sockaddress_list.begin();
+        continue_resolve_from_dns_list();
+      });
+    });
+    return;
+  }
+
+  resolve_next_dns_sockaddress_list_I++;
+  continue_resolve_from_dns_list();
 }
 
 void rtpclient_t::state_connect_control() {
