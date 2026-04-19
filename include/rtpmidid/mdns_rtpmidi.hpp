@@ -45,7 +45,10 @@ struct announcement_t {
 };
 struct remote_announcement_t {
   std::string name;
+  /** mDNS / Avahi target host name (often *.local). */
   std::string address;
+  /** Resolved IP string (IPv4 or IPv6) from Avahi at resolve time. */
+  std::string ip;
   int port;
 };
 

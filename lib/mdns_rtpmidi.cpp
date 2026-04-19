@@ -483,8 +483,8 @@ void rtpmidid::mdns_rtpmidi_t::resolve_callback(
     // make unique? or filter on interface?
     discovered_remote(rtpmidid::remote_announcement_t{
         data.name,
-        data.host_name,
-        // avahi_address_str.data(),
+        data.host_name ? std::string(data.host_name) : std::string{},
+        std::string(avahi_address_str.data()),
         data.port,
     });
   }

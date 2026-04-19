@@ -27,7 +27,7 @@ export function Tabs({ tabs, active, onChange }: Props) {
           </button>
         ))}
       </div>
-      {tabs.find((x) => x.id === active)?.content}
+      {tabs.find((x) => x.id === active)?.content ?? tabs[0]?.content}
     </div>
   );
 }

@@ -59,6 +59,7 @@ json_t mdns_status(const std::shared_ptr<rtpmidid::mdns_rtpmidi_t> &mdns) {
     remote_announcements.push_back({
         {"name", announcement.name},
         {"hostname", announcement.address},
+        {"ip", announcement.ip},
         {"port", announcement.port},
     });
   }

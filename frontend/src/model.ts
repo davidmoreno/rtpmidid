@@ -78,11 +78,71 @@ export function normalizePeers(router: unknown[]): RouterPeer[] {
 }
 
 export type MdnsAnnouncement = { name: string; port: number | string };
+
+export type MdnsAnnouncementGroup = {
+  name: string;
+  port: number | string;
+  /** Rows merged (same name+port). */
+  count: number;
+};
+
 export type MdnsRemote = {
   name: string;
   hostname: string;
+  /** Resolved IP from daemon (Avahi); may be empty on older daemons. */
+  ip: string;
   port: number | string;
+  /** Original JSON entry for extra fields in UI. */
+  raw?: Record<string, unknown>;
 };
+
+/** One logical remote (name + port) with all resolved addresses / variants. */
+export type MdnsRemoteGroup = {
+  name: string;
+  port: number | string;
+  /** Unique mDNS hostnames from instances. */
+  addresses: string[];
+  /** Unique resolved IPs (what you connect to). */
+  ips: string[];
+  instances: MdnsRemote[];
+};
+
+export function groupMdnsAnnouncements(
+  announcements: MdnsAnnouncement[],
+): MdnsAnnouncementGroup[] {
+  const map = new Map<string, MdnsAnnouncementGroup>();
+  for (const a of announcements) {
+    const key = `${a.name}\0${String(a.port)}`;
+    const prev = map.get(key);
+    if (prev) prev.count += 1;
+    else map.set(key, { name: a.name, port: a.port, count: 1 });
+  }
+  return Array.from(map.values()).sort((x, y) => {
+    const c = x.name.localeCompare(y.name);
+    return c !== 0 ? c : String(x.port).localeCompare(String(y.port));
+  });
+}
+
+export function groupMdnsRemotes(remotes: MdnsRemote[]): MdnsRemoteGroup[] {
+  const map = new Map<string, MdnsRemoteGroup>();
+  for (const r of remotes) {
+    const key = `${r.name}\0${String(r.port)}`;
+    let g = map.get(key);
+    if (!g) {
+      g = { name: r.name, port: r.port, addresses: [], ips: [], instances: [] };
+      map.set(key, g);
+    }
+    g.instances.push(r);
+    const h = r.hostname.trim();
+    if (h && !g.addresses.includes(h)) g.addresses.push(h);
+    const ip = r.ip.trim();
+    if (ip && !g.ips.includes(ip)) g.ips.push(ip);
+  }
+  return Array.from(map.values()).sort((a, b) => {
+    const c = a.name.localeCompare(b.name);
+    return c !== 0 ? c : String(a.port).localeCompare(String(b.port));
+  });
+}
 
 export function parseMdns(mdns: Record<string, unknown> | undefined): {
   status: string;
@@ -108,7 +168,9 @@ export function parseMdns(mdns: Record<string, unknown> | undefined): {
       rem.push({
         name: String(o.name ?? ""),
         hostname: String(o.hostname ?? ""),
+        ip: String(o.ip ?? "").trim(),
         port: num(o.port) || String(o.port ?? ""),
+        raw: o,
       });
     }
   }
@@ -141,6 +203,25 @@ export function buildEdges(peers: RouterPeer[]): EdgeRow[] {
     }
   }
   return out;
+}
+
+/** For each peer id, router peers that send_to this id (reverse of send_to). */
+export function buildRecvFromMap(peers: RouterPeer[]): Map<number, number[]> {
+  const m = new Map<number, number[]>();
+  for (const p of peers) {
+    for (const tid of p.send_to) {
+      let arr = m.get(tid);
+      if (!arr) {
+        arr = [];
+        m.set(tid, arr);
+      }
+      arr.push(p.id);
+    }
+  }
+  for (const arr of m.values()) {
+    arr.sort((a, b) => a - b);
+  }
+  return m;
 }
 
 /** RTP `latency_ms` blocks from `peer` and each `peers[]` entry in status JSON. */
@@ -211,12 +292,19 @@ function rtpRemoteLabel(obj: Record<string, unknown>): string {
 
 export type ConnectionKind = "router" | "rtp_server" | "rtp_link";
 
+export type ConnectionParticipant = { id: number; name: string };
+
 export type ConnectionRow = {
   id: string;
   kind: ConnectionKind;
   kindLabel: string;
   summary: string;
-  participants: string;
+  /** Display direction: → router one-way, ↔ merged bidi, · hub, → RTP link. */
+  direction: string;
+  /** Router peers that can be focused from the table (click). */
+  participantPeers: ConnectionParticipant[];
+  /** Extra non-router text (e.g. RTP remote labels). */
+  participantNote?: string;
   /** Router peer ids when present (RTP remotes are not router peers). */
   participantRouterIds: number[];
   /** Logical party count (hub + remotes, or from→to, etc.). */
@@ -227,6 +315,10 @@ export type ConnectionRow = {
   rtpLastMax?: number;
   rtpAvgMax?: number;
   trafficTotal: number;
+  /** Sum of packets_recv on listed router peers (activity ←). */
+  recvSum: number;
+  /** Sum of packets_sent on listed router peers (activity →). */
+  sentSum: number;
   /** Present when this row merges A→B and B→A. */
   bidirectional?: boolean;
 };
@@ -252,7 +344,6 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
       id: string;
       bidirectional: boolean;
       summary: string;
-      participants: string;
       participantRouterIds: number[];
       nParticipants: number;
     },
@@ -263,13 +354,22 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
     const ra = minMaxField(triples, "average");
     const intU = spanLast(parts, (x) => x.internal?.until?.last);
     const intS = spanLast(parts, (x) => x.internal?.sendMidi?.last);
-    const traffic = parts.reduce((s, x) => s + x.recv + x.sent, 0);
+    /** Sum of packets_sent only — avoids double-counting the same routed packet (sent + recv on the wire). */
+    const traffic = parts.reduce((s, x) => s + x.sent, 0);
+    const recvSum = parts.reduce((s, x) => s + x.recv, 0);
+    const sentSum = parts.reduce((s, x) => s + x.sent, 0);
+    const direction = opts.bidirectional ? "bidi" : "→";
+    const participantPeers: ConnectionParticipant[] = parts.map((x) => ({
+      id: x.id,
+      name: x.name || "—",
+    }));
     out.push({
       id: opts.id,
       kind: "router",
-      kindLabel: opts.bidirectional ? "Router ↔" : "Router",
+      kindLabel: opts.bidirectional ? "Router bidi" : "Router",
       summary: opts.summary,
-      participants: opts.participants,
+      direction,
+      participantPeers,
       participantRouterIds: opts.participantRouterIds,
       nParticipants: opts.nParticipants,
       intUntilMax: intU.max,
@@ -277,6 +377,8 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
       rtpLastMax: rl.max,
       rtpAvgMax: ra.max,
       trafficTotal: traffic,
+      recvSum,
+      sentSum,
       bidirectional: opts.bidirectional || undefined,
     });
   };
@@ -300,7 +402,6 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
             id: `route_pair:${lo}:${hi}`,
             bidirectional: true,
             summary: `${lo}↔${hi}`,
-            participants: `#${lo} ${pLo.name || "—"} ↔ #${hi} ${pHi.name || "—"}`,
             participantRouterIds: [lo, hi],
             nParticipants: 2,
           });
@@ -313,9 +414,6 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
         id: `route:${from}->${tid}`,
         bidirectional: false,
         summary: `${from}→${tid}`,
-        participants: to
-          ? `#${from} ${p.name || "—"} → #${tid} ${to.name || "—"}`
-          : `#${from} ${p.name || "—"} → #${tid} ?`,
         participantRouterIds: to ? [from, tid] : [from, tid],
         nParticipants: to ? 2 : 1,
       });
@@ -345,7 +443,9 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
       kind: "rtp_server",
       kindLabel: "RTP server",
       summary: `${p.id}: ${hubName}`,
-      participants: `#${p.id} ${hubName || "—"} (hub)${subPart}`,
+      direction: "·",
+      participantPeers: [{ id: p.id, name: hubName || "—" }],
+      participantNote: subPart ? `(hub)${subPart}` : "(hub)",
       participantRouterIds: [p.id],
       nParticipants: 1 + subLabels.length,
       intUntilMax: intU.max,
@@ -353,6 +453,8 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
       rtpLastMax: rl.max,
       rtpAvgMax: ra.max,
       trafficTotal: p.recv + p.sent,
+      recvSum: p.recv,
+      sentSum: p.sent,
     });
   }
 
@@ -377,7 +479,9 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
       kind: "rtp_link",
       kindLabel,
       summary: rem,
-      participants: `#${p.id} ${p.name || "—"} · ${rem}`,
+      direction: "→",
+      participantPeers: [{ id: p.id, name: p.name || "—" }],
+      participantNote: ` · ${rem}`,
       participantRouterIds: [p.id],
       nParticipants: 2,
       intUntilMax: intU.max,
@@ -385,6 +489,8 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
       rtpLastMax: rl.max,
       rtpAvgMax: ra.max,
       trafficTotal: p.recv + p.sent,
+      recvSum: p.recv,
+      sentSum: p.sent,
     });
   }
 

@@ -1,6 +1,7 @@
-import { useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { RouterPeer } from "../model";
-import { LatencyBar } from "./LatencyBar";
+import { buildRecvFromMap } from "../model";
+import { peerCombinedLatencyMs, PeerLatencyHoverCell } from "./LatencyBar";
 
 type SortKey =
   | "id"
@@ -8,10 +9,9 @@ type SortKey =
   | "type"
   | "recv"
   | "sent"
-  | "total"
+  | "events"
   | "send_n"
-  | "int_u"
-  | "net_l";
+  | "lat_sum";
 
 function sortPeers(peers: RouterPeer[], key: SortKey, asc: boolean): RouterPeer[] {
   const dir = asc ? 1 : -1;
@@ -27,14 +27,14 @@ function sortPeers(peers: RouterPeer[], key: SortKey, asc: boolean): RouterPeer[
         return p.recv;
       case "sent":
         return p.sent;
-      case "total":
+      case "events":
         return p.recv + p.sent;
       case "send_n":
         return p.send_to.length;
-      case "int_u":
-        return p.internal?.until?.last ?? -1;
-      case "net_l":
-        return p.network?.last ?? -1;
+      case "lat_sum": {
+        const c = peerCombinedLatencyMs(p);
+        return c === null ? -1 : c;
+      }
       default:
         return 0;
     }
@@ -76,16 +76,26 @@ function Th({
   );
 }
 
-type Props = { peers: RouterPeer[] };
+type Props = { peers: RouterPeer[]; highlightPeerId?: number | null };
 
-export function PeersTable({ peers }: Props) {
-  const [sortKey, setSortKey] = useState<SortKey>("total");
+export function PeersTable({ peers, highlightPeerId }: Props) {
+  const [sortKey, setSortKey] = useState<SortKey>("events");
   const [sortAsc, setSortAsc] = useState(false);
+  const rowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
+
+  const recvFrom = useMemo(() => buildRecvFromMap(peers), [peers]);
+  const byId = useMemo(() => new Map(peers.map((p) => [p.id, p])), [peers]);
 
   const sorted = useMemo(
     () => sortPeers(peers, sortKey, sortAsc),
     [peers, sortKey, sortAsc],
   );
+
+  useEffect(() => {
+    if (highlightPeerId === undefined || highlightPeerId === null) return;
+    const el = rowRefs.current.get(highlightPeerId);
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [highlightPeerId, sorted]);
 
   const toggle = (k: SortKey) => {
     if (sortKey === k) setSortAsc(!sortAsc);
@@ -95,8 +105,18 @@ export function PeersTable({ peers }: Props) {
     }
   };
 
+  const fmtFrom = (ids: number[] | undefined) => {
+    if (!ids?.length) return "—";
+    return ids
+      .map((id) => {
+        const q = byId.get(id);
+        return `#${id}${q?.name ? ` ${q.name}` : ""}`;
+      })
+      .join(", ");
+  };
+
   return (
-    <div class="overflow-x-auto">
+    <div class="overflow-x-auto overflow-y-visible">
       <table class="w-full min-w-[56rem] border-collapse border-2 border-zinc-900 text-left dark:border-zinc-100">
         <thead>
           <tr>
@@ -131,10 +151,10 @@ export function PeersTable({ peers }: Props) {
               onClick={() => toggle("sent")}
             />
             <Th
-              label="Total"
-              active={sortKey === "total"}
+              label="Events Σ"
+              active={sortKey === "events"}
               asc={sortAsc}
-              onClick={() => toggle("total")}
+              onClick={() => toggle("events")}
             />
             <Th
               label="→#"
@@ -143,19 +163,16 @@ export function PeersTable({ peers }: Props) {
               onClick={() => toggle("send_n")}
             />
             <th class="border-b-2 border-zinc-900 bg-zinc-200 px-2 py-2 font-mono text-xs font-bold uppercase dark:border-zinc-100 dark:bg-zinc-800">
-              send_to
+              → to
+            </th>
+            <th class="border-b-2 border-zinc-900 bg-zinc-200 px-2 py-2 font-mono text-xs font-bold uppercase dark:border-zinc-100 dark:bg-zinc-800">
+              ← from
             </th>
             <Th
-              label="IntΔ"
-              active={sortKey === "int_u"}
+              label="Latency"
+              active={sortKey === "lat_sum"}
               asc={sortAsc}
-              onClick={() => toggle("int_u")}
-            />
-            <Th
-              label="RTP ms"
-              active={sortKey === "net_l"}
-              asc={sortAsc}
-              onClick={() => toggle("net_l")}
+              onClick={() => toggle("lat_sum")}
             />
           </tr>
         </thead>
@@ -163,15 +180,23 @@ export function PeersTable({ peers }: Props) {
           {sorted.map((p) => (
             <tr
               key={p.id}
-              class="border-b border-zinc-300 odd:bg-white even:bg-zinc-50 dark:border-zinc-700 dark:odd:bg-zinc-950 dark:even:bg-zinc-900/80"
+              ref={(el) => {
+                if (el) rowRefs.current.set(p.id, el);
+                else rowRefs.current.delete(p.id);
+              }}
+              class={`border-b border-zinc-300 odd:bg-white even:bg-zinc-50 dark:border-zinc-700 dark:odd:bg-zinc-950 dark:even:bg-zinc-900/80 ${
+                highlightPeerId === p.id
+                  ? "ring-2 ring-inset ring-amber-500 dark:ring-amber-400"
+                  : ""
+              }`}
             >
               <td class="px-2 py-1.5 font-mono text-sm font-bold tabular-nums">
                 {p.id}
               </td>
-              <td class="max-w-[14rem] truncate px-2 py-1.5 font-mono text-sm">
+              <td class="max-w-[12rem] truncate px-2 py-1.5 font-mono text-sm">
                 {p.name || "—"}
               </td>
-              <td class="px-2 py-1.5 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+              <td class="max-w-[10rem] truncate px-2 py-1.5 font-mono text-xs text-zinc-600 dark:text-zinc-400">
                 {p.type}
               </td>
               <td class="px-2 py-1.5 font-mono text-sm tabular-nums">{p.recv}</td>
@@ -182,64 +207,24 @@ export function PeersTable({ peers }: Props) {
               <td class="px-2 py-1.5 font-mono text-sm tabular-nums">
                 {p.send_to.length}
               </td>
-              <td class="max-w-[10rem] truncate px-2 py-1.5 font-mono text-xs">
+              <td class="max-w-[11rem] truncate px-2 py-1.5 font-mono text-[11px]">
                 {p.send_to.length ? p.send_to.join(", ") : "—"}
               </td>
-              <td class="min-w-[7rem] px-2 py-1 font-mono text-xs tabular-nums">
-                {p.internal?.until?.last !== undefined
-                  ? `${p.internal.until.last.toFixed(3)}`
-                  : "—"}
+              <td class="max-w-[11rem] truncate px-2 py-1.5 font-mono text-[11px]">
+                {fmtFrom(recvFrom.get(p.id))}
               </td>
-              <td class="min-w-[6rem] px-2 py-1 font-mono text-xs tabular-nums">
-                {p.network?.last !== undefined
-                  ? `${p.network.last.toFixed(2)}`
-                  : "—"}
+              <td class="relative min-w-[10rem] overflow-visible px-1 py-1 align-top">
+                <PeerLatencyHoverCell peer={p} />
               </td>
             </tr>
           ))}
         </tbody>
       </table>
       <p class="mt-2 font-mono text-[10px] text-zinc-500">
-        Total = recv + sent (sort default: most active). IntΔ = internal queue→
-        send_midi (ms). RTP ms = CK latency when available.
+        Events Σ = recv + sent (packet counters). Latency bar = sum of available
+        last-sample latencies; hover for breakdown. Scale:{" "}
+        <code class="rounded bg-zinc-200 px-0.5 dark:bg-zinc-800">latencyScale.ts</code>.
       </p>
-    </div>
-  );
-}
-
-export function PeerLatencyPanel({ peer }: { peer: RouterPeer }) {
-  return (
-    <div class="border-2 border-zinc-800 p-3 dark:border-zinc-200">
-      <div class="mb-2 font-mono text-sm font-bold">
-        #{peer.id} {peer.name || "(unnamed)"}
-      </div>
-      <div class="grid gap-3 sm:grid-cols-2">
-        <div>
-          <div class="mb-1 font-mono text-[10px] font-bold uppercase text-zinc-500">
-            Internal (this peer)
-          </div>
-          <LatencyBar
-            label="Until send_midi (last)"
-            triple={peer.internal?.until}
-            capMs={25}
-          />
-          <LatencyBar
-            label="send_midi() (last)"
-            triple={peer.internal?.sendMidi}
-            capMs={10}
-          />
-        </div>
-        <div>
-          <div class="mb-1 font-mono text-[10px] font-bold uppercase text-zinc-500">
-            Network RTP (if any)
-          </div>
-          {peer.network ? (
-            <LatencyBar label="CK latency (last)" triple={peer.network} capMs={150} />
-          ) : (
-            <p class="font-mono text-xs text-zinc-500">No RTP latency on this peer.</p>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

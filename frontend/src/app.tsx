@@ -1,13 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Button } from "./components/Button";
 import { Card } from "./components/Card";
 import { ConnectionsTable } from "./components/ConnectionsTable";
 import { EdgesTable } from "./components/EdgesTable";
 import { MdnsTables } from "./components/MdnsTables";
-import { PeerLatencyPanel, PeersTable } from "./components/PeersTable";
+import { PeersTable } from "./components/PeersTable";
 import { Tabs, type TabDef } from "./components/Tabs";
 import { buildConnections, buildEdges, normalizePeers, parseMdns } from "./model";
 import { RpcClient } from "./rpc";
+import {
+  DEFAULT_STATUS_REFRESH_MS,
+  parseStoredStatusRefreshMs,
+  STATUS_REFRESH_CHOICES,
+  STORAGE_KEY_STATUS_REFRESH_MS,
+} from "./statusRefresh";
 
 type StatusResult = {
   version?: string;
@@ -16,7 +22,7 @@ type StatusResult = {
   settings?: Record<string, unknown>;
 };
 
-const AUTO_TABS = new Set(["overview", "stats", "connections"]);
+const AUTO_TABS = new Set(["connections", "peers", "mdns", "about"]);
 
 function useTheme() {
   const [dark, setDark] = useState(() => {
@@ -49,9 +55,18 @@ function statTable(rows: { k: string; v: string }[]) {
 
 export function App() {
   const { dark, setDark } = useTheme();
+  const [refreshIntervalMs, setRefreshIntervalMs] = useState(() =>
+    typeof localStorage !== "undefined"
+      ? parseStoredStatusRefreshMs(
+          localStorage.getItem(STORAGE_KEY_STATUS_REFRESH_MS),
+        )
+      : DEFAULT_STATUS_REFRESH_MS,
+  );
   const [status, setStatus] = useState<string>("");
   const [data, setData] = useState<StatusResult | null>(null);
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState("connections");
+  const [highlightPeerId, setHighlightPeerId] = useState<number | null>(null);
+  const highlightClearTimer = useRef<number | undefined>(undefined);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [authUser, setAuthUser] = useState("");
   const [authPass, setAuthPass] = useState("");
@@ -73,15 +88,43 @@ export function App() {
     [],
   );
 
+  /** Avoid overlapping `status` RPCs (periodic poll vs Actions-tab follow-up refresh). */
+  const refreshInFlightRef = useRef(false);
+
   const refresh = useCallback(async () => {
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
     try {
       const r = (await rpc.call("status", {})) as StatusResult;
       setData(r);
       setLastRefresh(new Date());
     } catch (e) {
       setStatus(String(e));
+    } finally {
+      refreshInFlightRef.current = false;
     }
   }, [rpc]);
+
+  const onSelectPeerFromConnections = useCallback((id: number) => {
+    setTab("peers");
+    setHighlightPeerId(id);
+    if (highlightClearTimer.current !== undefined) {
+      window.clearTimeout(highlightClearTimer.current);
+    }
+    highlightClearTimer.current = window.setTimeout(() => {
+      setHighlightPeerId(null);
+      highlightClearTimer.current = undefined;
+    }, 3000);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (highlightClearTimer.current !== undefined) {
+        window.clearTimeout(highlightClearTimer.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     rpc.setAuth(authUser, authPass);
@@ -92,13 +135,26 @@ export function App() {
     return () => rpc.disconnect();
   }, []);
 
+  /** Poll only after the previous `status` finishes; spacing is `refreshIntervalMs` between completions. */
   useEffect(() => {
-    if (!AUTO_TABS.has(tab)) return undefined;
-    const t = window.setInterval(() => {
-      void refresh();
-    }, 5000);
-    return () => window.clearInterval(t);
-  }, [tab, refresh]);
+    if (!AUTO_TABS.has(tab) || refreshIntervalMs <= 0) return undefined;
+    let cancelled = false;
+    let timerId: number | undefined;
+
+    const step = async () => {
+      await refresh();
+      if (!cancelled) {
+        timerId = window.setTimeout(step, refreshIntervalMs);
+      }
+    };
+
+    timerId = window.setTimeout(step, refreshIntervalMs);
+
+    return () => {
+      cancelled = true;
+      if (timerId !== undefined) window.clearTimeout(timerId);
+    };
+  }, [tab, refresh, refreshIntervalMs]);
 
   const routerRaw = data?.router ?? [];
   const peers = useMemo(() => normalizePeers(routerRaw), [routerRaw]);
@@ -125,25 +181,63 @@ export function App() {
     ];
   }, [data?.version, peers, edges.length]);
 
-  const overviewContent = (
-    <div class="space-y-4">
-      <div class="flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-zinc-600 dark:text-zinc-400">
-        <span>
-          Auto-refresh every <strong class="text-zinc-900 dark:text-zinc-100">5s</strong> on this tab.
-        </span>
-        {lastRefresh && (
-          <span class="tabular-nums">
-            Last update: {lastRefresh.toLocaleTimeString()}
-          </span>
+  const refreshBanner = (
+    <div class="flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+      <span>
+        {refreshIntervalMs <= 0 ? (
+          <>
+            Automatic polling{" "}
+            <strong class="text-zinc-900 dark:text-zinc-100">off</strong> — data
+            updates only after Actions commands or reloading.
+          </>
+        ) : (
+          <>
+            Poll every{" "}
+            <strong class="text-zinc-900 dark:text-zinc-100">
+              {STATUS_REFRESH_CHOICES.find((c) => c.ms === refreshIntervalMs)
+                ?.label ?? `${refreshIntervalMs / 1000}s`}
+            </strong>{" "}
+            after each status response on this tab.
+          </>
         )}
-      </div>
-      <Card title="Peers & activity">
-        <PeersTable peers={peers} />
+      </span>
+      {lastRefresh && (
+        <span class="tabular-nums">
+          Last update: {lastRefresh.toLocaleTimeString()}
+        </span>
+      )}
+    </div>
+  );
+
+  const peersContent = (
+    <div class="space-y-4">
+      {refreshBanner}
+      <Card title="Peers">
+        <PeersTable peers={peers} highlightPeerId={highlightPeerId} />
       </Card>
-      <Card title="Connections (router edges)">
+      <Card title="Router edges">
         <EdgesTable edges={edges} />
       </Card>
-      <Card title="Discovery (mDNS)">
+    </div>
+  );
+
+  const connectionsContent = (
+    <div class="space-y-4">
+      {refreshBanner}
+      <Card title="Connections (router + RTP)">
+        <ConnectionsTable
+          rows={connections}
+          refreshIntervalMs={refreshIntervalMs}
+          onSelectPeer={onSelectPeerFromConnections}
+        />
+      </Card>
+    </div>
+  );
+
+  const mdnsContent = (
+    <div class="space-y-4">
+      {refreshBanner}
+      <Card title="mDNS">
         <MdnsTables
           status={mdnsParsed.status}
           announcements={mdnsParsed.announcements}
@@ -153,44 +247,23 @@ export function App() {
     </div>
   );
 
-  const connectionsContent = (
+  const aboutContent = (
     <div class="space-y-4">
-      <div class="flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-zinc-600 dark:text-zinc-400">
-        <span>
-          Auto-refresh every <strong class="text-zinc-900 dark:text-zinc-100">5s</strong>{" "}
-          on this tab.
-        </span>
-        {lastRefresh && (
-          <span class="tabular-nums">
-            Last update: {lastRefresh.toLocaleTimeString()}
-          </span>
-        )}
-      </div>
-      <Card title="Connections (router + RTP)">
-        <ConnectionsTable rows={connections} />
-      </Card>
-    </div>
-  );
-
-  const statsContent = (
-    <div class="space-y-4">
-      <div class="flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-zinc-600 dark:text-zinc-400">
-        <span>
-          Auto-refresh every <strong class="text-zinc-900 dark:text-zinc-100">5s</strong> on this tab.
-        </span>
-        {lastRefresh && (
-          <span class="tabular-nums">
-            Last update: {lastRefresh.toLocaleTimeString()}
-          </span>
-        )}
-      </div>
-      <Card title="Summary">{statTable(statsRows)}</Card>
-      <Card title="Latency by peer (bars)">
-        <div class="grid max-h-[70vh] gap-3 overflow-y-auto md:grid-cols-2">
-          {peers.map((p) => (
-            <PeerLatencyPanel key={p.id} peer={p} />
-          ))}
-        </div>
+      {refreshBanner}
+      <Card title="About this UI">
+        <p class="mb-3 font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-300">
+          Web dashboard for{" "}
+          <strong class="text-zinc-900 dark:text-zinc-100">rtpmidid</strong>: live
+          connections, router peers, RTP view, and mDNS discovery. Commands are
+          sent over JSON-RPC on a WebSocket to the daemon.
+        </p>
+        {statTable(statsRows)}
+        <p class="mt-3 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+          Latency bars use a shared piecewise scale and color tiers in{" "}
+          <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-800">latencyScale.ts</code>
+          . Each row shows one bar for the <strong>sum</strong> of available
+          samples; hover the bar for a per-metric breakdown.
+        </p>
       </Card>
     </div>
   );
@@ -313,20 +386,12 @@ export function App() {
     </div>
   );
 
-  const moreContent = (
-    <Card title="More">
-      <p class="font-mono text-sm text-zinc-600 dark:text-zinc-400">
-        Reserved for future tabs (logs, mDNS browser, …).
-      </p>
-    </Card>
-  );
-
   const tabs: TabDef[] = [
-    { id: "overview", label: "Overview", content: overviewContent },
     { id: "connections", label: "Connections", content: connectionsContent },
-    { id: "stats", label: "Statistics", content: statsContent },
+    { id: "peers", label: "Peers", content: peersContent },
+    { id: "mdns", label: "mDNS", content: mdnsContent },
+    { id: "about", label: "About", content: aboutContent },
     { id: "actions", label: "Actions", content: actionsContent },
-    { id: "more", label: "More", content: moreContent },
   ];
 
   return (
@@ -353,7 +418,26 @@ export function App() {
           )}
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <Button onClick={() => void refresh()}>Refresh now</Button>
+          <label class="flex items-center gap-2 font-mono text-xs">
+            <span class="whitespace-nowrap text-zinc-600 dark:text-zinc-400">
+              Poll
+            </span>
+            <select
+              class="border-2 border-zinc-900 bg-white px-2 py-1.5 font-mono dark:border-zinc-100 dark:bg-zinc-950"
+              value={refreshIntervalMs}
+              onChange={(e) => {
+                const ms = Number((e.target as HTMLSelectElement).value);
+                setRefreshIntervalMs(ms);
+                localStorage.setItem(STORAGE_KEY_STATUS_REFRESH_MS, String(ms));
+              }}
+            >
+              {STATUS_REFRESH_CHOICES.map((c) => (
+                <option key={c.ms} value={c.ms}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <Button
             onClick={() => {
               setDark(!dark);
