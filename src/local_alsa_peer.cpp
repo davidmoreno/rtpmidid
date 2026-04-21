@@ -76,6 +76,13 @@ void local_alsa_peer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   DEBUG("[MIDI_FLOW] local_alsa_peer {}: send_midi() called, from_peer_id={}, size={} bytes",
         peer_id, from, data.size());
   auto readerdata = rtpmidid::io_bytes_reader(data);
+  // Hold output_mutex for the entire output+drain sequence: ALSA's userspace
+  // library is not thread-safe for concurrent snd_seq_event_output /
+  // snd_seq_drain_output calls on the same snd_seq_t*. The drain must also
+  // happen inside the lambda so the snd_seq_event_t stack frame in
+  // mididata_to_evs_f is still live when ALSA flushes it (important for SysEx
+  // events whose data.ext.ptr points into that frame).
+  std::scoped_lock lock(seq->output_mutex);
   mididata_encoder.mididata_to_evs_f(readerdata, [this, from](snd_seq_event_t *ev) {
     DEBUG("[MIDI_FLOW] local_alsa_peer {}: Encoding MIDI to ALSA event, type={}, port={}",
           this->peer_id, ev->type, this->port);
@@ -89,22 +96,22 @@ void local_alsa_peer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
             this->peer_id, snd_strerror(result));
       snd_seq_drop_input(seq->seq);
       snd_seq_drop_output(seq->seq);
+      return;
+    }
+    DEBUG("[MIDI_FLOW] local_alsa_peer {}: snd_seq_event_output() succeeded, bytes={}",
+          this->peer_id, result);
+    DEBUG("[MIDI_FLOW] local_alsa_peer {}: Calling snd_seq_drain_output()", this->peer_id);
+    result = snd_seq_drain_output(seq->seq);
+    if (result < 0) {
+      ERROR("[MIDI_FLOW] local_alsa_peer {}: snd_seq_drain_output() error: {}",
+            this->peer_id, snd_strerror(result));
+      snd_seq_drop_input(seq->seq);
+      snd_seq_drop_output(seq->seq);
     } else {
-      DEBUG("[MIDI_FLOW] local_alsa_peer {}: snd_seq_event_output() succeeded, bytes={}",
+      DEBUG("[MIDI_FLOW] local_alsa_peer {}: snd_seq_drain_output() succeeded, drained {} bytes",
             this->peer_id, result);
     }
   });
-  DEBUG("[MIDI_FLOW] local_alsa_peer {}: Calling snd_seq_drain_output()", this->peer_id);
-  int result = snd_seq_drain_output(seq->seq);
-  if (result < 0) {
-    ERROR("[MIDI_FLOW] local_alsa_peer {}: snd_seq_drain_output() error: {}",
-          this->peer_id, snd_strerror(result));
-    snd_seq_drop_input(seq->seq);
-    snd_seq_drop_output(seq->seq);
-  } else {
-    DEBUG("[MIDI_FLOW] local_alsa_peer {}: snd_seq_drain_output() succeeded, drained {} bytes",
-          this->peer_id, result);
-  }
 }
 
 router_peer_row_t local_alsa_peer_t::status() const {

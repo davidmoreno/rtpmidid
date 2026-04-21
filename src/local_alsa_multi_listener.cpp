@@ -145,15 +145,13 @@ void local_alsa_multi_listener_t::alsaseq_event(snd_seq_event_t *event) {
 void local_alsa_multi_listener_t::send_midi(midipeer_id_t from,
                                             const mididata_t &data) {
   for (auto &peer : aseqpeers) {
-    // DEBUG("Look for dest alsa peer: {} == {} ? {}", peer.second, from,
-    //       peer.second == from);
     if (peer.second == from) {
       auto mididata_copy =
           mididata_t(data); // Its just the pointers, not the data itself
       auto port = peer.first;
+      std::scoped_lock lock(seq->output_mutex);
       alsatrans_encoder.mididata_to_evs_f(
           mididata_copy, [this, port](snd_seq_event_t *ev) {
-            // DEBUG("Send to ALSA port {}:{}", port.client, port.port);
             snd_seq_ev_set_source(ev, this->port);
             snd_seq_ev_set_dest(ev, port.client, port.port);
             snd_seq_ev_set_direct(ev);
@@ -163,6 +161,7 @@ void local_alsa_multi_listener_t::send_midi(midipeer_id_t from,
                     snd_strerror(result));
               snd_seq_drop_input(seq->seq);
               snd_seq_drop_output(seq->seq);
+              return;
             }
             result = snd_seq_drain_output(seq->seq);
             if (result < 0) {

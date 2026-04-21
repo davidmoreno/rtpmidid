@@ -19,6 +19,7 @@
 #pragma once
 #include "dm_json_status.hpp"
 #include <alsa/asoundlib.h>
+#include <mutex>
 #include <vector>
 #include <memory>
 #include <mididata.hpp>
@@ -98,6 +99,10 @@ public:
   std::string name;
   snd_seq_t *seq;
   snd_seq_client_pool_t *pool;
+  // Guards snd_seq_event_output / snd_seq_drain_output / snd_seq_drop_output
+  // on the shared seq handle. ALSA's userspace library is not thread-safe for
+  // concurrent output operations on the same snd_seq_t*.
+  std::mutex output_mutex;
   // std::vector<int> fds; // Normally 1?
   std::map<int, rtpmidid::signal_t<port_t, const std::string &>>
       subscribe_event;

@@ -141,6 +141,7 @@ void local_alsa_listener_t::disconnect_from_remote_server() {
 void local_alsa_listener_t::send_midi(midipeer_id_t from,
                                       const mididata_t &data) {
   mididata_t mididata{data};
+  std::scoped_lock lock(aseq->output_mutex);
   mididata_encoder.mididata_to_evs_f(mididata, [this](snd_seq_event_t *ev) {
     snd_seq_ev_set_source(ev, alsaport);
     snd_seq_ev_set_subs(ev); // to all subscribers
@@ -150,6 +151,7 @@ void local_alsa_listener_t::send_midi(midipeer_id_t from,
       ERROR("Error: {}", snd_strerror(result));
       snd_seq_drop_input(aseq->seq);
       snd_seq_drop_output(aseq->seq);
+      return;
     }
     result = snd_seq_drain_output(aseq->seq);
     if (result < 0) {
