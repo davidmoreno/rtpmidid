@@ -6,7 +6,13 @@ import { EdgesTable } from "./components/EdgesTable";
 import { MdnsTables } from "./components/MdnsTables";
 import { PeersTable } from "./components/PeersTable";
 import { Tabs, type TabDef } from "./components/Tabs";
-import { buildConnections, buildEdges, normalizePeers, parseMdns } from "./model";
+import {
+  buildConnections,
+  buildEdges,
+  connectionRowIdLinkingPeers,
+  normalizePeers,
+  parseMdns,
+} from "./model";
 import { RpcClient } from "./rpc";
 import {
   DEFAULT_STATUS_REFRESH_MS,
@@ -14,6 +20,11 @@ import {
   STATUS_REFRESH_CHOICES,
   STORAGE_KEY_STATUS_REFRESH_MS,
 } from "./statusRefresh";
+import {
+  normalizeRtpMidiUdpPort,
+  sanitizePeerBaseName,
+  type WireLocalChoice,
+} from "./midiEnumerate";
 
 type StatusResult = {
   version?: string;
@@ -67,6 +78,10 @@ export function App() {
   const [tab, setTab] = useState("connections");
   const [highlightPeerId, setHighlightPeerId] = useState<number | null>(null);
   const highlightClearTimer = useRef<number | undefined>(undefined);
+  const [highlightConnectionRowId, setHighlightConnectionRowId] = useState<
+    string | null
+  >(null);
+  const connectionHighlightClearTimer = useRef<number | undefined>(undefined);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [authUser, setAuthUser] = useState("");
   const [authPass, setAuthPass] = useState("");
@@ -122,6 +137,9 @@ export function App() {
       if (highlightClearTimer.current !== undefined) {
         window.clearTimeout(highlightClearTimer.current);
       }
+      if (connectionHighlightClearTimer.current !== undefined) {
+        window.clearTimeout(connectionHighlightClearTimer.current);
+      }
     },
     [],
   );
@@ -163,6 +181,120 @@ export function App() {
   const mdnsParsed = useMemo(
     () => parseMdns(data?.mdns as Record<string, unknown> | undefined),
     [data?.mdns],
+  );
+
+  const wireMdnsRemoteToLocal = useCallback(
+    async (args: {
+      serviceName: string;
+      target: string;
+      port: number | string;
+      local: WireLocalChoice;
+    }) => {
+      try {
+        const snap = (await rpc.call("status", {})) as StatusResult;
+        const idsBefore = new Set(
+          normalizePeers(snap.router ?? []).map((p) => p.id),
+        );
+
+        const peerBase = sanitizePeerBaseName(
+          args.local.listingLabel,
+          args.serviceName,
+        );
+        const uniquePeerName = `WEB:${peerBase}:${Date.now().toString(36)}`.slice(
+          0,
+          64,
+        );
+
+        if (args.local.mode === "alsa_seq") {
+          await rpc.call("router.create", {
+            type: "local_alsa_peer_t",
+            name: uniquePeerName,
+            alsa_client: args.local.client,
+            alsa_port: args.local.port,
+          });
+        } else {
+          await rpc.call("router.create", {
+            type: "local_rawmidi_t",
+            name: uniquePeerName,
+            device: args.local.device,
+          });
+        }
+
+        const afterLocal = (await rpc.call("status", {})) as StatusResult;
+        const peersAfterLocal = normalizePeers(afterLocal.router ?? []);
+        const newLocals = peersAfterLocal.filter(
+          (p) =>
+            !idsBefore.has(p.id) &&
+            (p.type === "local_alsa_peer_t" ||
+              p.type === "local_rawmidi_peer_t"),
+        );
+        const localPeer = newLocals.sort((a, b) => b.id - a.id)[0];
+        if (!localPeer) {
+          throw new Error(
+            "Could not create local ALSA sequencer or raw MIDI peer",
+          );
+        }
+
+        const idsMid = new Set(peersAfterLocal.map((p) => p.id));
+
+        const safe =
+          args.serviceName.replace(/\s+/g, " ").trim().slice(0, 48) ||
+          "Remote";
+        const clientName = `WEB · ${safe}`;
+
+        await rpc.call("router.create", {
+          type: "network_rtpmidi_client_t",
+          name: clientName,
+          hostname: args.target.trim(),
+          port: normalizeRtpMidiUdpPort(args.port),
+        });
+
+        const afterClient = (await rpc.call("status", {})) as StatusResult;
+        const peersAfterClient = normalizePeers(afterClient.router ?? []);
+        const newClients = peersAfterClient.filter(
+          (p) =>
+            !idsMid.has(p.id) && p.type === "network_rtpmidi_client_t",
+        );
+        const clientPeer = newClients.sort((a, b) => b.id - a.id)[0];
+        if (!clientPeer) {
+          throw new Error("Could not find new RTP MIDI client peer after create");
+        }
+
+        await rpc.call("router.connect", {
+          from: localPeer.id,
+          to: clientPeer.id,
+        });
+        await rpc.call("router.connect", {
+          from: clientPeer.id,
+          to: localPeer.id,
+        });
+
+        const fin = (await rpc.call("status", {})) as StatusResult;
+        setData(fin);
+        setLastRefresh(new Date());
+        setStatus("");
+
+        const peersFinal = normalizePeers(fin.router ?? []);
+        const rowId = connectionRowIdLinkingPeers(
+          peersFinal,
+          localPeer.id,
+          clientPeer.id,
+        );
+        setHighlightConnectionRowId(rowId);
+        setTab("connections");
+
+        if (connectionHighlightClearTimer.current !== undefined) {
+          window.clearTimeout(connectionHighlightClearTimer.current);
+        }
+        connectionHighlightClearTimer.current = window.setTimeout(() => {
+          setHighlightConnectionRowId(null);
+          connectionHighlightClearTimer.current = undefined;
+        }, 4000);
+      } catch (e) {
+        setStatus(String(e));
+      }
+    },
+    [rpc],
   );
 
   const statsRows = useMemo(() => {
@@ -228,6 +360,7 @@ export function App() {
         <ConnectionsTable
           rows={connections}
           refreshIntervalMs={refreshIntervalMs}
+          highlightConnectionRowId={highlightConnectionRowId}
           onSelectPeer={onSelectPeerFromConnections}
         />
       </Card>
@@ -242,6 +375,8 @@ export function App() {
           status={mdnsParsed.status}
           announcements={mdnsParsed.announcements}
           remotes={mdnsParsed.remotes}
+          rpc={rpc}
+          onWireMdnsToLocal={wireMdnsRemoteToLocal}
         />
       </Card>
     </div>

@@ -65,10 +65,18 @@ void network_rtpmidi_client_t::send_midi(midipeer_id_t from,
 };
 
 json_t network_rtpmidi_client_t::status() {
-  return json_t{
+  json_t j{
       {"name", peer->peer.remote_name}, //
       {"peer", peer_status(peer->peer)},
   };
+  // Until RTP connects, peer_status.remote uses hostname "null" (no sockaddr yet).
+  // Expose the configured endpoint for UIs and debugging.
+  if (!peer->address_port_known.empty()) {
+    const auto &ep = peer->address_port_known.front();
+    j["connect_hostname"] = ep.hostname;
+    j["connect_port"] = ep.port;
+  }
+  return j;
 };
 
 } // namespace rtpmididns

@@ -624,6 +624,67 @@ void aseq_t::for_connections(const port_t &port,
   snd_seq_query_subscribe_free(subs);
 }
 
+json_t aseq_t::enumerate_exported_ports_json() {
+  json_t arr = json_t::array();
+
+  snd_seq_client_info_t *cinfo = nullptr;
+  snd_seq_client_info_alloca(&cinfo);
+  snd_seq_client_info_set_client(cinfo, -1);
+
+  while (snd_seq_query_next_client(seq, cinfo) >= 0) {
+    const int cid = snd_seq_client_info_get_client(cinfo);
+    if (cid == static_cast<int>(client_id)) {
+      continue;
+    }
+    const std::string cname = snd_seq_client_info_get_name(cinfo);
+    const auto ctype_enum =
+        get_type_by_seq_type(snd_seq_client_info_get_type(cinfo));
+    std::string kind_str = "software";
+    switch (ctype_enum) {
+    case aseq_t::TYPE_HARDWARE:
+      kind_str = "hardware";
+      break;
+    case aseq_t::TYPE_SOFTWARE:
+      kind_str = "software";
+      break;
+    case aseq_t::TYPE_SYSTEM:
+      kind_str = "system";
+      break;
+    default:
+      break;
+    }
+
+    snd_seq_port_info_t *pinfo = nullptr;
+    snd_seq_port_info_alloca(&pinfo);
+    snd_seq_port_info_set_client(pinfo, cid);
+    snd_seq_port_info_set_port(pinfo, -1);
+
+    while (snd_seq_query_next_port(seq, pinfo) >= 0) {
+      const unsigned cap = snd_seq_port_info_get_capability(pinfo);
+      if ((cap & SND_SEQ_PORT_CAP_NO_EXPORT) != 0) {
+        continue;
+      }
+      const int pid = snd_seq_port_info_get_port(pinfo);
+      std::string pname = snd_seq_port_info_get_name(pinfo);
+      std::string label =
+          (cname == pname) ? cname : FMT::format("{} · {}", cname, pname);
+
+      arr.push_back(json_t{
+          {"type", "alsa_seq"},
+          {"id", FMT::format("{}:{}", cid, pid)},
+          {"client", cid},
+          {"port", pid},
+          {"client_name", cname},
+          {"port_name", pname},
+          {"label", label},
+          {"kind", kind_str},
+      });
+    }
+  }
+
+  return arr;
+}
+
 // TODO: these buffer sizes should probably be configurable or pinned to pool
 // size in bytes
 mididata_to_alsaevents_t::mididata_to_alsaevents_t()

@@ -160,10 +160,17 @@ type Props = {
   rows: ConnectionRow[];
   /** Row flash duration; matches poll interval when polling is on. */
   refreshIntervalMs: number;
+  /** Pulse ring + scroll after mDNS Connect (matches `ConnectionRow.id`). */
+  highlightConnectionRowId?: string | null;
   onSelectPeer?: (id: number) => void;
 };
 
-export function ConnectionsTable({ rows, refreshIntervalMs, onSelectPeer }: Props) {
+export function ConnectionsTable({
+  rows,
+  refreshIntervalMs,
+  highlightConnectionRowId,
+  onSelectPeer,
+}: Props) {
   const rowFlashMs =
     refreshIntervalMs > 0 ? refreshIntervalMs : DEFAULT_STATUS_REFRESH_MS;
 
@@ -174,11 +181,22 @@ export function ConnectionsTable({ rows, refreshIntervalMs, onSelectPeer }: Prop
   const [sentPulse, setSentPulse] = useState<Set<string>>(() => new Set());
   const prevMapRef = useRef<Map<string, Snap> | null>(null);
   const timersRef = useRef<Map<string, number>>(new Map());
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
   const sorted = useMemo(
     () => sortConnections(rows, sortKey, sortAsc),
     [rows, sortKey, sortAsc],
   );
+
+  useEffect(() => {
+    if (
+      highlightConnectionRowId === undefined ||
+      highlightConnectionRowId === null
+    )
+      return;
+    const el = rowRefs.current.get(highlightConnectionRowId);
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [highlightConnectionRowId, sorted]);
 
   useEffect(() => {
     const nextMap = new Map<string, Snap>();
@@ -293,7 +311,12 @@ export function ConnectionsTable({ rows, refreshIntervalMs, onSelectPeer }: Prop
           {sorted.map((r, idx) => (
             <tr
               key={r.id}
+              ref={(el) => {
+                if (el) rowRefs.current.set(r.id, el);
+                else rowRefs.current.delete(r.id);
+              }}
               class={`border-b border-zinc-300 odd:bg-white even:bg-zinc-50 dark:border-zinc-700 dark:odd:bg-zinc-950 dark:even:bg-zinc-900/80 ${flashing.has(r.id) ? "conn-row-activity" : ""
+                } ${highlightConnectionRowId === r.id ? "ring-2 ring-inset ring-amber-500 dark:ring-amber-400" : ""
                 }`}
             >
               <td class="px-2 py-1.5 font-mono text-sm font-bold tabular-nums text-zinc-800 dark:text-zinc-100">
@@ -353,8 +376,8 @@ export function ConnectionsTable({ rows, refreshIntervalMs, onSelectPeer }: Prop
         # = row order in this table. I/O: ← green / → orange mean recv or sent totals
         increased vs the previous poll; they clear on the next poll if there was no
         increase (header selector sets poll rate). Opposite router edges A→B
-        and B→A are merged (Dir <span class="font-bold">bidi</span>, both peer
-        ids). Router Traffic Σ = sum of packets_sent. RTP: recv/sent on that
+        and B→A are merged (Dir <span class="font-bold">↔</span>, one row).
+        Router Traffic Σ = sum of packets_sent. RTP: recv/sent on that
         peer. Click a peer chip to open Peers and highlight it.
       </p>
     </div>

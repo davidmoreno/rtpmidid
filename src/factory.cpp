@@ -60,7 +60,14 @@ make_local_alsa_listener(std::shared_ptr<midirouter_t> &router,
 
 std::shared_ptr<midipeer_t> make_local_alsa_peer(const std::string &name,
                                                  std::shared_ptr<aseq_t> aseq) {
-  return std::make_shared<local_alsa_peer_t>(name, aseq);
+  return make_local_alsa_peer(name, aseq, -1, -1);
+}
+
+std::shared_ptr<midipeer_t>
+make_local_alsa_peer(const std::string &name, std::shared_ptr<aseq_t> aseq,
+                     int subscribe_from_client, int subscribe_from_port) {
+  return std::make_shared<local_alsa_peer_t>(name, aseq, subscribe_from_client,
+                                             subscribe_from_port);
 }
 
 std::shared_ptr<midipeer_t>

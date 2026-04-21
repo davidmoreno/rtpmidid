@@ -278,16 +278,41 @@ function spanLast<T>(
   return { min: Math.min(...vals), max: Math.max(...vals) };
 }
 
-/** Label for RTP sub-peer / `peer` object (has `remote` from peer_status). */
-function rtpRemoteLabel(obj: Record<string, unknown>): string {
+/**
+ * Label from nested `peer` JSON (`peer_status()`): `remote.hostname` may be the
+ * literal `"null"` when no sockaddr is set yet (see `network_address_t::hostname()`).
+ */
+export function rtpRemoteLabel(obj: Record<string, unknown>): string {
   const r = obj.remote as Record<string, unknown> | undefined;
   if (!r) return "remote";
   const name = String(r.name ?? "").trim();
-  const host = String(r.hostname ?? "").trim();
-  const port = r.port !== undefined && r.port !== "" ? String(r.port) : "";
+  let host = String(r.hostname ?? "").trim();
+  if (host === "null") host = "";
+  const pr = r.port;
+  let port = "";
+  if (pr !== undefined && pr !== null && pr !== "") {
+    port = String(pr);
+    if (port === "null") port = "";
+  }
   if (name && host) return port ? `${name} @ ${host}:${port}` : `${name} @ ${host}`;
   if (host) return port ? `${host}:${port}` : host;
   return name || "remote";
+}
+
+/** Summary line for RTP client / RTP peer router rows (prefers configured connect_*). */
+export function rtpClientConnectionSummary(peerRow: Record<string, unknown>): string {
+  const ch = String(peerRow.connect_hostname ?? "").trim();
+  const cpRaw = peerRow.connect_port;
+  const cp =
+    cpRaw !== undefined && cpRaw !== null && String(cpRaw).length > 0
+      ? String(cpRaw)
+      : "";
+  if (ch || cp) {
+    if (ch && cp) return `${ch}:${cp}`;
+    return ch || cp;
+  }
+  const peerObj = peerRow.peer as Record<string, unknown> | undefined;
+  return peerObj ? rtpRemoteLabel(peerObj) : "—";
 }
 
 export type ConnectionKind = "router" | "rtp_server" | "rtp_link";
@@ -299,7 +324,7 @@ export type ConnectionRow = {
   kind: ConnectionKind;
   kindLabel: string;
   summary: string;
-  /** Display direction: → router one-way, ↔ merged bidi, · hub, → RTP link. */
+  /** Display direction: → one-way, ↔ merged A↔B router pair, · hub, → RTP link. */
   direction: string;
   /** Router peers that can be focused from the table (click). */
   participantPeers: ConnectionParticipant[];
@@ -331,12 +356,7 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
   const byId = new Map(peers.map((p) => [p.id, p]));
   const out: ConnectionRow[] = [];
 
-  const sendMap = new Map<number, number[]>();
-  for (const p of peers) {
-    sendMap.set(p.id, p.send_to);
-  }
-
-  const emittedUndirected = new Set<string>();
+  const peerLabel = (pr: RouterPeer): string => pr.name.trim() || `#${pr.id}`;
 
   const pushRouterRow = (
     parts: RouterPeer[],
@@ -358,7 +378,7 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
     const traffic = parts.reduce((s, x) => s + x.sent, 0);
     const recvSum = parts.reduce((s, x) => s + x.recv, 0);
     const sentSum = parts.reduce((s, x) => s + x.sent, 0);
-    const direction = opts.bidirectional ? "bidi" : "→";
+    const direction = opts.bidirectional ? "↔" : "→";
     const participantPeers: ConnectionParticipant[] = parts.map((x) => ({
       id: x.id,
       name: x.name || "—",
@@ -383,17 +403,29 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
     });
   };
 
+  /** Every directed router edge `fromId->toId` (must be collected before emitting rows). */
+  const directedEdges = new Set<string>();
+  for (const p of peers) {
+    for (const tid of p.send_to) {
+      if (p.id !== tid) directedEdges.add(`${p.id}->${tid}`);
+    }
+  }
+
+  const emittedBidirectionalPair = new Set<string>();
+  const emittedDirectedOneway = new Set<string>();
+
   for (const p of peers) {
     for (const tid of p.send_to) {
       const from = p.id;
       if (from === tid) continue;
-      const toPeer = byId.get(tid);
-      if (toPeer) {
-        const hasReverse = sendMap.get(tid)?.includes(from) ?? false;
-        if (hasReverse) {
-          const ukey = pairKeyUnordered(from, tid);
-          if (emittedUndirected.has(ukey)) continue;
-          emittedUndirected.add(ukey);
+
+      const fwd = `${from}->${tid}`;
+      const back = `${tid}->${from}`;
+      const ukey = pairKeyUnordered(from, tid);
+
+      if (directedEdges.has(fwd) && directedEdges.has(back)) {
+        if (!emittedBidirectionalPair.has(ukey)) {
+          emittedBidirectionalPair.add(ukey);
           const lo = Math.min(from, tid);
           const hi = Math.max(from, tid);
           const pLo = byId.get(lo)!;
@@ -401,21 +433,27 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
           pushRouterRow([pLo, pHi], {
             id: `route_pair:${lo}:${hi}`,
             bidirectional: true,
-            summary: `${lo}↔${hi}`,
+            summary: `${peerLabel(pLo)} ↔ ${peerLabel(pHi)}`,
             participantRouterIds: [lo, hi],
             nParticipants: 2,
           });
-          continue;
         }
+        continue;
       }
-      const to = toPeer;
-      const parts = to ? [p, to] : [p];
+
+      if (emittedDirectedOneway.has(fwd)) continue;
+      emittedDirectedOneway.add(fwd);
+
+      const toPeer = byId.get(tid);
+      const parts = toPeer ? [p, toPeer] : [p];
       pushRouterRow(parts, {
         id: `route:${from}->${tid}`,
         bidirectional: false,
-        summary: `${from}→${tid}`,
-        participantRouterIds: to ? [from, tid] : [from, tid],
-        nParticipants: to ? 2 : 1,
+        summary: toPeer
+          ? `${peerLabel(p)} → ${peerLabel(toPeer)}`
+          : `${peerLabel(p)} → #${tid}`,
+        participantRouterIds: toPeer ? [from, tid] : [from, tid],
+        nParticipants: toPeer ? 2 : 1,
       });
     }
   }
@@ -470,8 +508,7 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
     const ra = minMaxField(triples, "average");
     const intU = spanLast([p], (x) => x.internal?.until?.last);
     const intS = spanLast([p], (x) => x.internal?.sendMidi?.last);
-    const peerObj = p.raw.peer as Record<string, unknown> | undefined;
-    const rem = peerObj ? rtpRemoteLabel(peerObj) : "—";
+    const rem = rtpClientConnectionSummary(p.raw);
     const kindLabel =
       p.type === "network_rtpmidi_client_t" ? "RTP client" : "RTP peer";
     out.push({
@@ -495,4 +532,41 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
   }
 
   return out;
+}
+
+/**
+ * After connect adds a local_alsa_listener_t peer, find the Connections row that
+ * lists that router peer. If multiple listeners share the display name, the
+ * greatest peer id (typically the newest) is chosen.
+ */
+export function connectionRowIdForAlsaListenerName(
+  peers: RouterPeer[],
+  serviceName: string,
+): string | null {
+  const name = serviceName.trim();
+  const listeners = peers.filter(
+    (p) =>
+      p.type === "local_alsa_listener_t" &&
+      (p.name === name || p.name.trim() === name),
+  );
+  if (!listeners.length) return null;
+  const peer = listeners.reduce((a, b) => (a.id > b.id ? a : b));
+  const rows = buildConnections(peers);
+  const row = rows.find((r) => r.participantRouterIds.includes(peer.id));
+  return row?.id ?? null;
+}
+
+/** Connections row that lists both router peers (e.g. local ALSA + RTP client). */
+export function connectionRowIdLinkingPeers(
+  peers: RouterPeer[],
+  peerIdA: number,
+  peerIdB: number,
+): string | null {
+  const rows = buildConnections(peers);
+  const row = rows.find(
+    (r) =>
+      r.participantRouterIds.includes(peerIdA) &&
+      r.participantRouterIds.includes(peerIdB),
+  );
+  return row?.id ?? null;
 }

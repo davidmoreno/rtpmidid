@@ -24,6 +24,8 @@
 #include <rtpmidid/poller.hpp>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <cstring>
+#include <glob.h>
 #include <unistd.h>
 
 #include "json.hpp"
@@ -224,3 +226,33 @@ static std::string get_name_from_devname(const std::string &device) {
   }
   return name;
 }
+
+namespace rtpmididns {
+
+json_t enumerate_rawmidi_devices_json() {
+  json_t arr = json_t::array();
+  glob_t gl;
+  memset(&gl, 0, sizeof(gl));
+  if (glob("/dev/snd/midiC*", 0, nullptr, &gl) != 0) {
+    return arr;
+  }
+  for (size_t i = 0; i < gl.gl_pathc; ++i) {
+    std::string path = gl.gl_pathv[i];
+    struct stat st;
+    if (stat(path.c_str(), &st) < 0 || !S_ISCHR(st.st_mode)) {
+      continue;
+    }
+    std::string friendly = get_rawmidi_name(path);
+    arr.push_back(json_t{
+        {"type", "rawmidi"},
+        {"id", path},
+        {"device", path},
+        {"label", friendly.empty() ? path : friendly},
+        {"kind", "rawmidi"},
+    });
+  }
+  globfree(&gl);
+  return arr;
+}
+
+} // namespace rtpmididns

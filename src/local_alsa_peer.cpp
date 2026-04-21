@@ -23,11 +23,14 @@
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/iobytes.hpp"
+#include "rtpmidid/logger.hpp"
 
 using namespace rtpmididns;
 
 local_alsa_peer_t::local_alsa_peer_t(const std::string &name_,
-                                     std::shared_ptr<aseq_t> seq_)
+                                     std::shared_ptr<aseq_t> seq_,
+                                     int subscribe_from_client,
+                                     int subscribe_from_port)
     : seq(seq_), name(name_) {
   port = seq->create_port(name);
   INFO("Created alsapeer {}, port {}", name, port);
@@ -45,9 +48,29 @@ local_alsa_peer_t::local_alsa_peer_t(const std::string &name_,
                                         enqueue_to_router(mididata);
                                       });
   });
+
+  if (subscribe_from_client >= 0 && subscribe_from_port >= 0 &&
+      subscribe_from_client <= 255 && subscribe_from_port <= 255) {
+    subscribe_src_client_ = subscribe_from_client;
+    subscribe_src_port_ = subscribe_from_port;
+    try {
+      alsa_source_subscription_ = seq->connect(
+          aseq_t::port_t(static_cast<uint8_t>(subscribe_from_client),
+                         static_cast<uint8_t>(subscribe_from_port)),
+          aseq_t::port_t(seq->client_id, port));
+      INFO("ALSA subscribe {}:{} -> rtpmidid {}:{} ({})", subscribe_from_client,
+           subscribe_from_port, seq->client_id, port, name);
+    } catch (const std::exception &e) {
+      WARNING("ALSA subscribe {}:{} failed for peer {}: {}", subscribe_from_client,
+              subscribe_from_port, name, e.what());
+    }
+  }
 }
 
-local_alsa_peer_t::~local_alsa_peer_t() { seq->remove_port(port); }
+local_alsa_peer_t::~local_alsa_peer_t() {
+  alsa_source_subscription_.reset();
+  seq->remove_port(port);
+}
 
 void local_alsa_peer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   packets_recv += 1;
@@ -86,8 +109,10 @@ void local_alsa_peer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
 }
 
 json_t local_alsa_peer_t::status() {
-  return json_t{
-      {"name", name}, {"port", port},
-      //
-  };
+  json_t j{{"name", name}, {"port", port}};
+  if (subscribe_src_client_ >= 0 && subscribe_src_port_ >= 0) {
+    j["alsa_subscribe_from"] =
+        json_t{{"client", subscribe_src_client_}, {"port", subscribe_src_port_}};
+  }
+  return j;
 }

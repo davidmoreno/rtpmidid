@@ -3,7 +3,9 @@
  * Copyright (C) 2019-2025 David Moreno Montero <dmoreno@coralbits.com>
  */
 #include "control_rpc.hpp"
+#include "aseq.hpp"
 #include "factory.hpp"
+#include "local_rawmidi_peer.hpp"
 #include "midirouter.hpp"
 #include <rtpmidid/logger.hpp>
 #include "midipeer.hpp"
@@ -191,7 +193,22 @@ static const std::vector<control_rpc_ns::command_t> COMMANDS{
          return peer->status();
        }
        if (type == "local_alsa_peer_t") {
-         auto peer = make_local_alsa_peer(params["name"], ctx.aseq);
+         int sub_c = -1;
+         int sub_p = -1;
+         if (params.contains("alsa_client") &&
+             params["alsa_client"].is_number_integer()) {
+           sub_c = params["alsa_client"].get<int>();
+         }
+         if (params.contains("alsa_port") &&
+             params["alsa_port"].is_number_integer()) {
+           sub_p = params["alsa_port"].get<int>();
+         }
+         std::shared_ptr<midipeer_t> peer;
+         if (sub_c >= 0 && sub_p >= 0) {
+           peer = make_local_alsa_peer(params["name"], ctx.aseq, sub_c, sub_p);
+         } else {
+           peer = make_local_alsa_peer(params["name"], ctx.aseq);
+         }
          ctx.router->add_peer(peer);
          return peer->status();
        }
@@ -206,7 +223,11 @@ static const std::vector<control_rpc_ns::command_t> COMMANDS{
              {"network_rtpmidi_listener_t",
               {{"name", "Name of the peer"},
                {"udp_port", "UDP port to listen [random]"}}},
-             {"local_alsa_peer_t", {{"name", "Name of the peer"}}},
+             {"local_alsa_peer_t",
+              {{"name", "Name of the peer"},
+               {"alsa_client", "Optional: external ALSA client id to subscribe from"},
+               {"alsa_port",
+                "Optional: external ALSA port index (with alsa_client)"}}},
          };
        }
        ERROR("Unknown peer type or non construtible yet: {}", type);
@@ -252,6 +273,21 @@ static const std::vector<control_rpc_ns::command_t> COMMANDS{
        rawmidi.hostname = maybe_string(params, "hostname", "");
        create_rawmidi_rtpclient_pair(ctx.router.get(), rawmidi);
        return json_t{"ok"};
+     }},
+    {"midi.listAlsaSeq",
+     "List ALSA sequencer ports (exported), excluding this daemon. Each item: "
+     "type, id (client:port), client, port, names, label, kind.",
+     [](control_rpc_context_t &ctx, const json_t &) {
+       if (!ctx.aseq) {
+         return json_t{{"error", "ALSA sequencer not available"}};
+       }
+       return ctx.aseq->enumerate_exported_ports_json();
+     }},
+    {"midi.listRawMidi",
+     "List raw MIDI devices under /dev/snd/midiC*. Each item: type, id, "
+     "device path, label, kind.",
+     [](control_rpc_context_t &, const json_t &) {
+       return enumerate_rawmidi_devices_json();
      }},
     {"help", "Return help text",
      [](control_rpc_context_t &, const json_t &) {

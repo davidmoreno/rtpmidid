@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include "json.hpp"
 #include "midi_normalizer.hpp"
 #include "midipeer.hpp"
 #include "rtpmidid/poller.hpp"
@@ -54,4 +55,8 @@ public:
   void disconnected(midipeer_id_t peer_id);
   const char *get_type() const override { return "local_rawmidi_peer_t"; }
 };
+
+/** `/dev/snd/midi*` devices for UI / RPC (device path + friendly label). */
+json_t enumerate_rawmidi_devices_json();
+
 } // namespace rtpmididns

@@ -20,6 +20,7 @@
 #include "aseq.hpp"
 #include "midipeer.hpp"
 #include "rtpmidid/utils.hpp"
+#include <optional>
 
 namespace rtpmididns {
 /**
@@ -40,7 +41,14 @@ public:
   rtpmidid::connection_t<aseq_t::port_t> unsubscribe_connection;
   rtpmidid::connection_t<snd_seq_event_t *> midi_connection;
 
-  local_alsa_peer_t(const std::string &name, std::shared_ptr<aseq_t> seq);
+  /** When set, ALSA subscription external client:port → this peer's port (recv). */
+  std::optional<aseq_t::connection_t> alsa_source_subscription_;
+  int subscribe_src_client_ = -1;
+  int subscribe_src_port_ = -1;
+
+  local_alsa_peer_t(const std::string &name, std::shared_ptr<aseq_t> seq,
+                    int subscribe_from_client = -1,
+                    int subscribe_from_port = -1);
   ~local_alsa_peer_t() override;
   json_t status() override;
   void send_midi(midipeer_id_t from, const mididata_t &) override;
