@@ -27,6 +27,12 @@
 
 namespace rtpmididns {
 
+/** Generic `{"error":"..."}` body used in inline error results. */
+// [dm-json]
+struct rpc_error_body_t {
+  std::string error;
+};
+
 // [dm-json]
 struct rpc_help_entry_t {
   std::string name;
