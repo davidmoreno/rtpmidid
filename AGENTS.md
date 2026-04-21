@@ -223,9 +223,8 @@ The following areas of the codebase may need review for performance-critical use
    - Example: `local_alsa_peer.cpp` logs errors on every failed ALSA event
    - Use `ERROR_ONCE()` or `WARNING_RATE_LIMIT()` to reduce I/O
 
-4. **JSON status generation** (`src/midirouter.cpp`)
-   - `status()` creates `std::vector<json_t>` with heap allocations
-   - Only called from control socket (not hot path), but worth noting
+4. **JSON status generation** (`src/midirouter.cpp`, `src/dm_json_status.hpp`)
+   - `midirouter_t::status_rows()` builds typed `router_peer_row_t` vectors; serialization uses **dm-json** (`to_json` / generated code) on the control / WebSocket threads only (not hot path)
 
 5. **ALSA sequencer output** (`src/local_alsa_peer.cpp`)
    - Uses one `snd_seq_drain_output()` per `send_midi()` batch (after all `snd_seq_event_output` calls) to reduce syscalls; may still block that peer’s thread only
@@ -251,7 +250,7 @@ void remove_peer(peer_id_t id);
 void connect(peer_id_t from, peer_id_t to);
 void disconnect(peer_id_t from, peer_id_t to);
 void send_midi(peer_id_t from, const mididata_t& data);
-json_t status();  // For control socket
+std::vector<router_peer_row_t> status_rows(); // Typed status for control socket / WS
 // Thread-safe when router thread is running (used from peer / poller threads):
 bool enqueue_send_midi(peer_id_t from, const mididata_t& data);
 bool enqueue_connect(peer_id_t from, peer_id_t to);
@@ -270,11 +269,12 @@ Abstract base class for all MIDI peers. Each peer has:
 
 **Virtual interface:**
 ```cpp
-virtual json_t status() = 0;                              // Status for control socket
-virtual void send_midi(midipeer_id_t from, const mididata_t&) = 0;  // Receive MIDI
-virtual void event(midipeer_event_e event, midipeer_id_t from);     // Connection events
-virtual json_t command(const std::string& cmd, const json_t& data); // Control commands
-virtual const char* get_type() const = 0;                 // Type identifier string
+virtual void fill_peer_status_row(router_peer_row_t& row) = 0;      // Typed status fragment
+virtual void send_midi(midipeer_id_t from, const mididata_t&) = 0; // Receive MIDI
+virtual void event(midipeer_event_e event, midipeer_id_t from);    // Connection events
+virtual bool control_peer_command(std::string_view cmd, std::string_view params_json,
+                                  dmjson::writer_t& out, std::string& err); // Control commands
+virtual const char* get_type() const = 0;                          // Type identifier string
 ```
 
 **Events:**
@@ -522,12 +522,16 @@ The daemon exposes a Unix domain socket for runtime control and monitoring.
 |---------|-------------|------------|
 | `status` | Get daemon status, all peers, mDNS state | none |
 | `help` | List available commands | none |
-| `connect` | Connect to remote RTP-MIDI server | `[hostname]`, `[hostname, port]`, or `[name, hostname, port]` |
-| `router.remove` | Remove a peer | `[peer_id]` |
+| `connect` | Connect to remote RTP-MIDI server | Object `{"hostname", "port"?, "name"?}` (CLI still accepts legacy positional args; they are normalized to this shape) |
+| `router.remove` | Remove a peer | `{"peer_id": id}` |
 | `router.connect` | Connect two peers | `{"from": id, "to": id}` |
 | `router.disconnect` | Disconnect two peers | `{"from": id, "to": id}` |
-| `router.create` | Create a new peer | `{"type": "...", ...}` |
-| `mdns.remove` | Remove mDNS announcement | `{"name": "...", "port": ...}` |
+| `router.create.list` | List create-peer field schemas | `{}` |
+| `router.create.local_rawmidi` | Create raw MIDI peer | `{"name", "device"}` |
+| `router.create.network_rtpmidi_client` | Create RTP-MIDI client | `{"name", "hostname", "port"}` |
+| `router.create.network_rtpmidi_listener` | Create RTP-MIDI listener | `{"name", "udp_port"}` |
+| `router.create.local_alsa_peer` | Create ALSA sequencer peer | `{"name", "alsa_client"?, "alsa_port"?}` |
+| `mdns.remove` | Remove mDNS announcement | `{"name", "hostname"?, "port"}` |
 | `export.rawmidi` | Export raw MIDI device | `{"device": "...", ...}` |
 | `{peer_id}.{cmd}` | Send command to specific peer | varies |
 
@@ -567,7 +571,7 @@ The control socket implementation is in `src/control_socket.cpp`:
 
 1. A **dedicated server thread** runs `poll()` on the listening Unix socket and all accepted client FDs (blocking I/O is OK here — it does not run on the epoll/MIDI poller thread).
 2. JSON commands are parsed and dispatched to the same handler table as before; `router.connect` / `router.disconnect` use `enqueue_*` so topology changes are serialized on the router thread.
-3. Responses are written on the control thread; `router->status()` uses `shared_lock` on the peer map and is safe from that thread.
+3. Responses are written on the control thread; `router->status_rows()` uses `shared_lock` on the peer map and is safe from that thread.
 
 ---
 
@@ -590,6 +594,9 @@ tests/
 ├── test_rtpserver.cpp         # RTP server tests
 ├── test_settings.cpp          # Settings parsing tests
 ├── test_signals.cpp           # Signal handling tests
+├── test_dm_json_runtime.cpp   # dm-json writer / rpc::scan_envelope
+├── test_dm_json_generated.cpp # dm-json generated round-trips
+├── test_dm_json_gen/          # unittest goldens for scripts/dm_json_gen.py
 └── test_utils.cpp             # Utility function tests
 ```
 
@@ -598,6 +605,9 @@ tests/
 ```bash
 # Build and run all tests
 make test
+
+# Generator golden tests (stdlib unittest only)
+make test-gen
 
 # Run specific test
 ./build/tests/test_rtppeer
@@ -779,7 +789,7 @@ Output format includes colorized level, source file, line number, and message:
 - Use RAII for resource management (poller listeners, timers)
 - Prefer factory functions over direct construction
 - Use `NON_COPYABLE_NOR_MOVABLE` macro for non-copyable classes
-- JSON for data exchange (nlohmann/json)
+- JSON for control / Web UI via **dm-json** (`lib/dm_json/`, `scripts/dm_json_gen.py`, annotated structs in `src/dm_json_*.hpp`)
 
 ### References
 

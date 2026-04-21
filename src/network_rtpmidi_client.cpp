@@ -17,7 +17,6 @@
  */
 
 #include "network_rtpmidi_client.hpp"
-#include "json.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
@@ -64,19 +63,16 @@ void network_rtpmidi_client_t::send_midi(midipeer_id_t from,
   peer->peer.send_midi(data);
 };
 
-json_t network_rtpmidi_client_t::status() {
-  json_t j{
-      {"name", peer->peer.remote_name}, //
-      {"peer", peer_status(peer->peer)},
-  };
-  // Until RTP connects, peer_status.remote uses hostname "null" (no sockaddr yet).
-  // Expose the configured endpoint for UIs and debugging.
+router_peer_row_t network_rtpmidi_client_t::status() const {
+  router_peer_row_t row;
+  row.name = peer->peer.remote_name;
+  row.peer = rtp_peer_status_from(peer->peer);
   if (!peer->address_port_known.empty()) {
     const auto &ep = peer->address_port_known.front();
-    j["connect_hostname"] = ep.hostname;
-    j["connect_port"] = ep.port;
+    row.connect_hostname = ep.hostname;
+    row.connect_port = ep.port;
   }
-  return j;
-};
+  return row;
+}
 
 } // namespace rtpmididns

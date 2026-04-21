@@ -18,8 +18,7 @@
  */
 
 #pragma once
-#include "json.hpp"
-#include "json_fwd.hpp"
+#include "dm_json_generated.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "settings.hpp"

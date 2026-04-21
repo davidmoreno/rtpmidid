@@ -1,0 +1,132 @@
+/**
+ * Real Time Protocol Music Instrument Digital Interface Daemon
+ * Copyright (C) 2019-2026 David Moreno Montero <dmoreno@coralbits.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+#pragma once
+
+#include <cstdint>
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "dm_json_status.hpp"
+
+namespace rtpmididns {
+
+// [dm-json]
+struct rpc_help_entry_t {
+  std::string name;
+  std::string description;
+};
+
+// [dm-json]
+struct router_remove_params_t {
+  uint64_t peer_id;
+};
+
+// [dm-json]
+struct router_connect_params_t {
+  uint64_t from;
+  uint64_t to;
+};
+
+// [dm-json]
+struct connect_params_t {
+  std::optional<std::string> name; // [dm-json: omit_if_null]
+  std::string hostname;
+  std::optional<std::string> port; // [dm-json: omit_if_null] default 5004 in handler
+};
+
+// [dm-json]
+struct mdns_remove_params_t {
+  std::string name;
+  std::optional<std::string> hostname; // [dm-json: omit_if_null]
+  int32_t port;
+};
+
+// [dm-json]
+struct export_rawmidi_error_t {
+  std::string error;
+  std::map<std::string, std::string> params;
+};
+
+// [dm-json]
+struct export_rawmidi_params_t {
+  std::string device;
+  std::optional<std::string> name;            // [dm-json: omit_if_null]
+  std::optional<std::string> local_udp_port;   // [dm-json: omit_if_null]
+  std::optional<std::string> remote_udp_port;  // [dm-json: omit_if_null]
+  std::optional<std::string> hostname;         // [dm-json: omit_if_null]
+};
+
+// [dm-json]
+struct create_local_rawmidi_params_t {
+  std::string name;
+  std::string device;
+};
+
+// [dm-json]
+struct create_network_rtpmidi_client_params_t {
+  std::string name;
+  std::string hostname;
+  std::string port;
+};
+
+// [dm-json]
+struct create_network_rtpmidi_listener_params_t {
+  std::string name;
+  uint16_t udp_port;
+};
+
+// [dm-json]
+struct create_local_alsa_peer_params_t {
+  std::string name;
+  std::optional<int32_t> alsa_client; // [dm-json: omit_if_null]
+  std::optional<int32_t> alsa_port;   // [dm-json: omit_if_null]
+};
+
+/** router.create.list — nested type name -> field -> description */
+// [dm-json]
+struct router_create_list_t {
+  std::map<std::string, std::map<std::string, std::string>> schemas;
+};
+
+// [dm-json]
+struct listener_add_endpoint_params_t {
+  std::string hostname;
+  std::string port;
+};
+
+// [dm-json]
+struct listener_remove_endpoint_params_t {
+  std::string hostname;
+  std::string port;
+};
+
+// [dm-json]
+struct listener_help_entry_t {
+  std::string name;
+  std::string description;
+};
+
+// [dm-json]
+struct ws_auth_params_t {
+  std::string username;
+  std::string password;
+};
+
+} // namespace rtpmididns

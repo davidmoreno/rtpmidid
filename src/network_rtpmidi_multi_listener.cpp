@@ -18,7 +18,6 @@
 
 #include "network_rtpmidi_multi_listener.hpp"
 #include "factory.hpp"
-#include "json.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "utils.hpp"
@@ -52,25 +51,20 @@ network_rtpmidi_multi_listener_t::network_rtpmidi_multi_listener_t(
 void network_rtpmidi_multi_listener_t::send_midi(midipeer_id_t from,
                                                  const mididata_t &) {}
 
-json_t network_rtpmidi_multi_listener_t::status() {
-  std::vector<json_t> peers;
-  for (auto &peer : server.peers) {
-    auto &peerpeer = peer.peer;
-    peers.push_back(peer_status(*peerpeer));
+router_peer_row_t network_rtpmidi_multi_listener_t::status() const {
+  router_peer_row_t row;
+  std::vector<rtp_peer_status_t> plist;
+  for (const auto &peer : server.peers) {
+    plist.push_back(rtp_peer_status_from(*peer.peer));
   }
-
-  return json_t{
-      //
-      {"peers", peers},      //
-      {"name", server.name}, //
-      {"listening",
-       {
-           //
-           {"name", server.name},           //
-           {"control_port", server.port()}, //
-           {"midi_port", server.port() + 1} //
-       }} //
-  };
+  row.peers = std::move(plist);
+  row.name = server.name;
+  listening_ports_t lp;
+  lp.name = server.name;
+  lp.control_port = server.port();
+  lp.midi_port = static_cast<uint16_t>(server.port() + 1);
+  row.listening = lp;
+  return row;
 }
 
 } // namespace rtpmididns

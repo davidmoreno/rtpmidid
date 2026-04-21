@@ -1,13 +1,28 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
  * Copyright (C) 2019-2025 David Moreno Montero <dmoreno@coralbits.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "web_server.hpp"
 #include "aseq.hpp"
 #include "control_rpc.hpp"
 #include "midirouter.hpp"
 #include "settings.hpp"
-#include "json.hpp"
+#include "dm_json_generated.hpp"
+#include "dm_json_rpc.hpp"
+#include <rtpmidid/dm_json/runtime.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/mdns_rtpmidi.hpp>
 
@@ -69,19 +84,20 @@ bool check_basic_auth(const httplib::Request &req, const std::string &user,
   return decoded.substr(0, colon) == user && decoded.substr(colon + 1) == pass;
 }
 
-bool auth_ws_first_frame(const json_t &js, const std::string &user,
+bool auth_ws_first_frame(std::string_view msg, const std::string &user,
                          const std::string &pass) {
-  if (!js.contains("method") || !js["method"].is_string()) {
+  dmjson::rpc::envelope_info_t env;
+  std::string err;
+  if (!dmjson::rpc::scan_envelope(msg, env, err))
     return false;
-  }
-  if (js["method"].get<std::string>() != "_auth") {
+  if (env.method != "_auth")
     return false;
-  }
-  const auto &p = js["params"];
-  if (!p.is_object()) {
+  ws_auth_params_t p{};
+  const std::string_view pj =
+      env.has_params ? env.params_json : std::string_view("{}");
+  if (!dmjson::from_json(pj, p))
     return false;
-  }
-  return p.value("username", "") == user && p.value("password", "") == pass;
+  return p.username == user && p.password == pass;
 }
 
 } // namespace
@@ -159,37 +175,55 @@ void web_server_t::thread_main() {
       if (rr != httplib::ws::ReadResult::Text) {
         continue;
       }
-      json_t js;
-      try {
-        js = json_t::parse(msg);
-      } catch (const std::exception &e) {
-        json_t err{{"error", e.what()}};
-        (void)ws.send(err.dump());
+      dmjson::rpc::envelope_info_t env;
+      std::string perr;
+      if (!dmjson::rpc::scan_envelope(msg, env, perr)) {
+        dmjson::writer_t ew;
+        ew.begin_object();
+        ew.key("error");
+        ew.string_value(perr);
+        ew.end_object();
+        std::string es;
+        ew.swap_into_string(es);
+        (void)ws.send(es);
         continue;
       }
 
       if (!authed) {
-        if (need_auth && auth_ws_first_frame(js, user, pass)) {
+        if (need_auth && auth_ws_first_frame(msg, user, pass)) {
           authed = true;
-          json_t ok;
-          if (js.contains("id")) {
-            ok["id"] = js["id"];
-          }
-          ok["result"] = "ok";
-          (void)ws.send(ok.dump());
+          dmjson::writer_t okw;
+          okw.begin_object();
+          okw.key("id");
+          if (env.has_id)
+            okw.raw(env.id_json);
+          else
+            okw.raw("null");
+          okw.key("result");
+          okw.string_value("ok");
+          okw.end_object();
+          std::string os;
+          okw.swap_into_string(os);
+          (void)ws.send(os);
           continue;
         }
-        json_t err;
-        if (js.contains("id")) {
-          err["id"] = js["id"];
-        }
-        err["error"] = "unauthorized";
-        (void)ws.send(err.dump());
+        dmjson::writer_t ew;
+        ew.begin_object();
+        ew.key("id");
+        if (env.has_id)
+          ew.raw(env.id_json);
+        else
+          ew.raw("null");
+        ew.key("error");
+        ew.string_value("unauthorized");
+        ew.end_object();
+        std::string es;
+        ew.swap_into_string(es);
+        (void)ws.send(es);
         break;
       }
 
-      json_t out = control_rpc_dispatch(ctx, js);
-      (void)ws.send(out.dump());
+      (void)ws.send(control_rpc_dispatch_line(ctx, msg));
     }
   });
 

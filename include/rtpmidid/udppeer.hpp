@@ -83,7 +83,7 @@ public:
   void close();
 
   bool is_open() const { return fd >= 0; }
-  network_address_t get_address();
+  network_address_t get_address() const;
 };
 
 } // namespace rtpmidid

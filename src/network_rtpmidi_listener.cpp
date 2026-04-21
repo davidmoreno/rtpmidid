@@ -17,7 +17,6 @@
  */
 
 #include "network_rtpmidi_listener.hpp"
-#include "json.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
@@ -67,18 +66,15 @@ void network_rtpmidi_listener_t::send_midi(midipeer_id_t from,
   server.send_midi_to_all_peers(mididata);
 }
 
-json_t network_rtpmidi_listener_t::status() {
-  std::vector<json_t> peers;
-  for (auto &peer : server.peers) {
-    auto &peerpeer = peer.peer;
-    peers.push_back(peer_status(*peerpeer));
+router_peer_row_t network_rtpmidi_listener_t::status() const {
+  router_peer_row_t row;
+  std::vector<rtp_peer_status_t> plist;
+  for (const auto &peer : server.peers) {
+    plist.push_back(rtp_peer_status_from(*peer.peer));
   }
-  return json_t{
-      {"name", name_},         //
-      {"port", server.port()}, //
-      {"peers",                //
-       peers}
-      //
-  };
+  row.name = name_;
+  row.port = static_cast<int32_t>(server.port());
+  row.peers = std::move(plist);
+  return row;
 }
 } // namespace rtpmididns

@@ -44,7 +44,7 @@ public:
                                    const std::string &port,
                                    std::shared_ptr<aseq_t> aseq);
   void send_midi(midipeer_id_t from, const mididata_t &) override;
-  json_t status() override;
+  router_peer_row_t status() const override;
   const char *get_type() const override {
     return "network_rtpmidi_multi_listener_t";
   }

@@ -34,6 +34,7 @@ help:
 	@echo " deb       -- Generate deb package"
 	@echo " packages  -- Build all packages (DEB and RPM) in Docker containers"
 	@echo " test      -- Runs all test"
+	@echo " test-gen  -- Runs unittest golden tests for dm_json_gen.py"
 	@echo " install   -- Installs to PREFIX or DESTDIR (default /usr/local/)"
 	@echo " man       -- Generate man pages"
 	@echo
@@ -121,12 +122,15 @@ setup:
 	sudo mkdir -p /var/run/rtpmidid
 	sudo chown $(shell whoami) /var/run/rtpmidid
 
-.PHONY: test build-test
+.PHONY: test build-test test-gen
 test: build-test
 	mkdir -p build
 	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON -G "Unix Makefiles" $(CMAKE_EXTRA_ARGS)
 	cd build/tests && make -j
 	cd build/tests && CTEST_OUTPUT_ON_FAILURE=1 make test
+
+test-gen:
+	cd tests/test_dm_json_gen && python3 -m unittest -q
 
 statemachines:
 	scripts/statemachine_to_cpp.py \

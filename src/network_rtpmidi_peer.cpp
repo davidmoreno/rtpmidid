@@ -17,7 +17,6 @@
  */
 
 #include "network_rtpmidi_peer.hpp"
-#include "json.hpp"
 #include "mididata.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/iobytes.hpp"
@@ -63,11 +62,11 @@ void network_rtpmidi_peer_t::send_midi(midipeer_id_t from,
   peer->send_midi(data);
 };
 
-json_t network_rtpmidi_peer_t::status() {
-  return json_t{
-      {"name", peer->remote_name}, //
-      {"peer", peer_status(*peer)},
-  };
-};
+router_peer_row_t network_rtpmidi_peer_t::status() const {
+  router_peer_row_t row;
+  row.name = peer->remote_name;
+  row.peer = rtp_peer_status_from(*peer);
+  return row;
+}
 
 } // namespace rtpmididns

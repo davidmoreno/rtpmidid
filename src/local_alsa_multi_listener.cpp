@@ -19,7 +19,6 @@
 #include "local_alsa_multi_listener.hpp"
 #include "aseq.hpp"
 #include "factory.hpp"
-#include "json.hpp"
 #include "local_alsa_peer.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
@@ -176,23 +175,19 @@ void local_alsa_multi_listener_t::send_midi(midipeer_id_t from,
     }
   }
 }
-json_t local_alsa_multi_listener_t::status() {
-  json_t connections{};
-  for (auto &peer : aseqpeers) {
-    auto port = peer.first;
-    auto to = peer.second;
-    connections.push_back({
-        //
-        {"alsa", FMT::format("{}:{}", port.client, port.port)},
-        {"local", to} //
-    });
+router_peer_row_t local_alsa_multi_listener_t::status() const {
+  router_peer_row_t row;
+  std::vector<alsa_connection_item_t> connections;
+  for (const auto &peer : aseqpeers) {
+    const auto &port = peer.first;
+    alsa_connection_item_t it;
+    it.alsa = FMT::format("{}:{}", port.client, port.port);
+    it.local = std::to_string(peer.second);
+    connections.push_back(std::move(it));
   }
-
-  return json_t{
-      {"name", name}, //
-      {"connections", connections}
-      //
-  };
+  row.name = name;
+  row.connections = std::move(connections);
+  return row;
 }
 
 } // namespace rtpmididns

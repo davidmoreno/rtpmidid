@@ -32,6 +32,42 @@ def maybe_int(txt: str):
     return txt
 
 
+def normalize_rpc_command(cmd):
+    """Adapt legacy CLI shapes to the current JSON-RPC wire format."""
+    if not isinstance(cmd, dict):
+        return cmd
+    method = cmd.get("method")
+    params = cmd.get("params")
+    if method == "connect" and isinstance(params, list):
+        if len(params) == 1:
+            return {**cmd, "params": {"hostname": str(params[0])}}
+        if len(params) == 2:
+            return {
+                **cmd,
+                "params": {"hostname": str(params[0]), "port": str(params[1])},
+            }
+        if len(params) >= 3:
+            return {
+                **cmd,
+                "params": {
+                    "name": str(params[0]),
+                    "hostname": str(params[1]),
+                    "port": str(params[2]),
+                },
+            }
+    if method == "router.remove" and isinstance(params, list) and len(params) == 1:
+        return {**cmd, "params": {"peer_id": params[0]}}
+    return cmd
+
+
+ROUTER_CREATE_TYPE_TO_METHOD = {
+    "local_rawmidi_t": "router.create.local_rawmidi",
+    "network_rtpmidi_client_t": "router.create.network_rtpmidi_client",
+    "network_rtpmidi_listener_t": "router.create.network_rtpmidi_listener",
+    "local_alsa_peer_t": "router.create.local_alsa_peer",
+}
+
+
 def parse_arguments(argv):
     import argparse
 
@@ -301,7 +337,9 @@ class Top:
 
     def command_kill(self):
         current_id = self.current_row["id"]
-        self.conn.command({"method": "router.remove", "params": [current_id]})
+        self.conn.command(
+            {"method": "router.remove", "params": {"peer_id": current_id}}
+        )
 
     def command_connect(self):
         current_id = self.current_row["id"]
@@ -320,21 +358,43 @@ class Top:
         self.expand_peers = not self.expand_peers
 
     def command_new_peer(self):
-        data = self.conn.command(
-            {"method": "router.create", "params": {"type": "list"}}
-        )
+        data = self.conn.command({"method": "router.create.list", "params": {}})
+        result = data.get("result") or {}
+        schemas = result.get("schemas", result)
+        if not isinstance(schemas, dict) or not schemas:
+            self.dialog("Invalid router.create.list response", background=self.ANSI_BG_RED)
+            return
 
-        name = self.dialog_select("Type of peer", list(data["result"].keys()))
+        name = self.dialog_select("Type of peer", list(schemas.keys()))
         if not name:
             return
-        params = {"type": name}
-        for key, description in data["result"][name].items():
+        method = ROUTER_CREATE_TYPE_TO_METHOD.get(name)
+        if not method:
+            self.dialog(f"Unsupported peer type {name}", background=self.ANSI_BG_RED)
+            return
+        params = {}
+        for key, description in schemas[name].items():
             value = self.dialog_ask(description)
             if value is None:
                 return
             params[key] = value
 
-        ret = self.conn.command({"method": "router.create", "params": params})
+        if name == "network_rtpmidi_listener_t" and "udp_port" in params:
+            try:
+                params["udp_port"] = int(str(params["udp_port"]))
+            except Exception:
+                self.dialog("udp_port must be an integer", background=self.ANSI_BG_RED)
+                return
+        if name == "local_alsa_peer_t":
+            for fld in ("alsa_client", "alsa_port"):
+                if fld in params and params[fld] not in (None, ""):
+                    try:
+                        params[fld] = int(str(params[fld]))
+                    except Exception:
+                        self.dialog(f"{fld} must be an integer", background=self.ANSI_BG_RED)
+                        return
+
+        ret = self.conn.command({"method": method, "params": params})
         if "error" in ret:
             self.dialog(ret["error"], background=self.ANSI_BG_RED)
 
@@ -955,6 +1015,7 @@ def main(argv):
         return Top(conn).top_loop()
 
     for cmd in parse_commands(settings.command or ["help"]):
+        cmd = normalize_rpc_command(cmd)
         print(">>> %s" % json.dumps(cmd), file=sys.stderr)
         ret = conn.command(cmd)
         print(json.dumps(ret, indent=2))

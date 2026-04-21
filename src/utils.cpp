@@ -17,42 +17,29 @@
  */
 
 #include "utils.hpp"
-#include "json.hpp"
-#include "rtpmidid/rtppeer.hpp"
 
 namespace rtpmididns {
-json_t peer_status(rtpmidid::rtppeer_t &peer) {
+rtp_peer_status_t rtp_peer_status_from(const rtpmidid::rtppeer_t &peer) {
+  rtp_peer_status_t out;
   auto stats = peer.stats.average_and_stddev();
-  return json_t{
-      //
-      {"latency_ms",
-       {
-           {"last", peer.latency / 10.0},
-           {"average", stats.average.count() / 1000.0},
-           {"stddev", stats.stddev.count() / 1000.0},
-       }},
-      {"status", std::to_string(peer.status)},
-      {"local",
-       {
-           {"sequence_number", peer.seq_nr},            //
-           {"sequence_number_ack", peer.seq_nr_ack},    //
-           {"name", peer.local_name},                   //
-           {"ssrc", peer.local_ssrc},                   //
-           {"port", peer.local_address.port()},         //
-           {"hostname", peer.local_address.hostname()}, //
-       }},                                              //
-      {
-          "remote",
-          {
-              //
-              {"name", peer.remote_name},                   //
-              {"sequence_number", peer.remote_seq_nr},      //
-              {"ssrc", peer.remote_ssrc},                   //
-              {"port", peer.remote_address.port()},         //
-              {"hostname", peer.remote_address.hostname()}, //
-          } //
-      }
-      //
-  };
+  out.latency_ms.last = peer.latency / 10.0;
+  out.latency_ms.average = stats.average.count() / 1000.0;
+  out.latency_ms.stddev = stats.stddev.count() / 1000.0;
+  out.status = std::to_string(static_cast<int>(peer.status));
+
+  out.local.name = peer.local_name;
+  out.local.hostname = peer.local_address.hostname();
+  out.local.port = peer.local_address.port();
+  out.local.ssrc = peer.local_ssrc;
+  out.local.sequence_number = peer.seq_nr;
+  out.local.sequence_number_ack = peer.seq_nr_ack;
+
+  out.remote.name = peer.remote_name;
+  out.remote.hostname = peer.remote_address.hostname();
+  out.remote.port = peer.remote_address.port();
+  out.remote.ssrc = peer.remote_ssrc;
+  out.remote.sequence_number = peer.remote_seq_nr;
+  out.remote.sequence_number_ack = std::nullopt;
+  return out;
 }
 } // namespace rtpmididns

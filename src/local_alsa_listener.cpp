@@ -19,7 +19,7 @@
 #include "local_alsa_listener.hpp"
 #include "aseq.hpp"
 #include "factory.hpp"
-#include "json.hpp"
+#include "dm_json_generated.hpp"
 #include "local_alsa_peer.hpp"
 #include "mididata.hpp"
 #include "rtpmidid/iobytes.hpp"
@@ -160,70 +160,78 @@ void local_alsa_listener_t::send_midi(midipeer_id_t from,
   });
 }
 
-json_t local_alsa_listener_t::status() {
-  json_t jendpoints;
-  for (auto &endpoint : endpoints) {
-    jendpoints.push_back(
-        json_t{{"hostname", endpoint.hostname}, {"port", endpoint.port}});
+router_peer_row_t local_alsa_listener_t::status() const {
+  router_peer_row_t row;
+  std::vector<listener_endpoint_t> eps;
+  for (const auto &endpoint : endpoints) {
+    listener_endpoint_t e;
+    e.hostname = endpoint.hostname;
+    e.port = endpoint.port;
+    eps.push_back(std::move(e));
   }
-  std::string status;
-  if (connection_count > 0)
-    status = "CONNECTED";
-  else
-    status = "WAITING";
-
-  return json_t{
-      //
-      {"name",
-       FMT::format("{} <-> {}", local_name == "" ? "[WATING]" : local_name,
-                   remote_name)},
-      {"endpoints", jendpoints},
-      {"connection_count", connection_count},
-      {"status", status}
-      //
-  };
+  row.endpoints = std::move(eps);
+  row.connection_count = connection_count;
+  row.status = connection_count > 0 ? "CONNECTED" : "WAITING";
+  row.name = FMT::format("{} <-> {}", local_name.empty() ? "[WAITING]" : local_name,
+                         remote_name);
+  return row;
 }
 
-json_t local_alsa_listener_t::command(const std::string &cmd,
-                                      const json_t &data) {
+bool local_alsa_listener_t::control_peer_command(std::string_view cmd,
+                                                 std::string_view params_json,
+                                                 ::rtpmididns::dmjson::writer_t &out,
+                                                 std::string &out_error) {
   if (cmd == "add_endpoint") {
-    std::string hostname = data["hostname"];
-    std::string port;
-    if (data["port"].is_number()) {
-      port = std::to_string(data["port"].get<int>());
-    } else {
-      port = data["port"];
+    listener_add_endpoint_params_t p{};
+    if (!dmjson::from_json(params_json, p)) {
+      out_error = "bad params";
+      return false;
     }
-    add_endpoint(hostname, port);
-    return json_t{"ok"};
+    add_endpoint(p.hostname, p.port);
+    dmjson::write_ok_array(out);
+    return true;
   }
   if (cmd == "remove_endpoint") {
-    std::string hostname = data["hostname"];
-    std::string port;
-    if (data["port"].is_number()) {
-      port = std::to_string(data["port"].get<int>());
-    } else {
-      port = data["port"];
+    listener_remove_endpoint_params_t p{};
+    if (!dmjson::from_json(params_json, p)) {
+      out_error = "bad params";
+      return false;
     }
     for (auto it = endpoints.begin(); it != endpoints.end(); ++it) {
-      if (it->hostname == hostname && it->port == port) {
-        DEBUG("Removing endpoint {}:{} from {}", hostname, port, remote_name);
+      if (it->hostname == p.hostname && it->port == p.port) {
+        DEBUG("Removing endpoint {}:{} from {}", p.hostname, p.port, remote_name);
         endpoints.erase(it);
-        return json_t{"ok"};
+        dmjson::write_ok_array(out);
+        return true;
       }
-      ERROR("Try to remove endpoint {}:{} but not found", hostname, port);
     }
-    return json_t{"error", "Endpoint not found"};
+    ERROR("Try to remove endpoint {}:{} but not found", p.hostname, p.port);
+    out_error = "Endpoint not found";
+    return false;
   }
   if (cmd == "help") {
-    return json_t{{
-        {{"name", "add_endpoint"},
-         {"description", "Add an endpoint to connect to"}},
-        {{"name", "remove_endpoint"},
-         {"description", "Remove an endpoint to connect to"}},
-    }};
+    out.begin_array();
+    {
+      out.array_item();
+      out.begin_object();
+      out.key("name");
+      out.string_value("add_endpoint");
+      out.key("description");
+      out.string_value("Add an endpoint to connect to");
+      out.end_object();
+    }
+    {
+      out.array_item();
+      out.begin_object();
+      out.key("name");
+      out.string_value("remove_endpoint");
+      out.key("description");
+      out.string_value("Remove an endpoint to connect to");
+      out.end_object();
+    }
+    out.end_array();
+    return true;
   }
-
-  return midipeer_t::command(cmd, data);
+  return midipeer_t::control_peer_command(cmd, params_json, out, out_error);
 }
 } // namespace rtpmididns

@@ -17,7 +17,6 @@
  */
 
 #include "midirouter.hpp"
-#include "json.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "rtpmidid/logger.hpp"
@@ -286,25 +285,25 @@ void midirouter_t::disconnect(peer_id_t from, peer_id_t to) {
   }
 }
 
-json_t midirouter_t::status() {
+std::vector<router_peer_row_t> midirouter_t::status_rows() const {
   std::shared_lock<std::shared_mutex> lock(peers_mutex);
-  std::vector<json_t> routerdata;
+  std::vector<router_peer_row_t> routerdata;
   for (auto peer : peers) {
     try {
-      auto status = peer.second.peer->status();
-      status["id"] = peer.first;
-      status["send_to"] = peer.second.send_to;
-      status["stats"] = json_t{
-          {"recv", peer.second.peer->packets_recv.load()},
-          {"sent", peer.second.peer->packets_sent.load()}
-      };
-      status["type"] = peer.second.peer->get_type();
-      status["internal_latency_ms"] =
-          peer.second.peer->internal_latency_stats_json();
-
-      routerdata.push_back(status);
+      auto row = peer.second.peer->status();
+      row.id = peer.first;
+      row.send_to = peer.second.send_to;
+      row.type = peer.second.peer->get_type();
+      peer_stats_t st;
+      st.recv = static_cast<uint64_t>(peer.second.peer->packets_recv.load());
+      st.sent = static_cast<uint64_t>(peer.second.peer->packets_sent.load());
+      row.stats = st;
+      row.internal_latency_ms = peer.second.peer->internal_latency_stats();
+      routerdata.push_back(std::move(row));
     } catch (const std::exception &exc) {
-      routerdata.push_back(json_t{{"error", exc.what()}});
+      router_peer_row_t row{};
+      row.error = exc.what();
+      routerdata.push_back(std::move(row));
     }
   }
   return routerdata;

@@ -17,8 +17,9 @@
  */
 
 #pragma once
-#include "json.hpp"
+#include "dm_json_status.hpp"
 #include <alsa/asoundlib.h>
+#include <vector>
 #include <memory>
 #include <mididata.hpp>
 #include <rtpmidid/exceptions.hpp>
@@ -133,7 +134,7 @@ public:
   void for_connections(const port_t &port, std::function<void(const port_t &)>);
 
   /** ALSA sequencer clients/ports (exported), excluding this process. For UI / RPC. */
-  json_t enumerate_exported_ports_json();
+  std::vector<alsa_seq_port_row_t> enumerate_exported_ports();
 };
 
 std::vector<std::string> get_ports(aseq_t *);

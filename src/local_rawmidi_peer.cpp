@@ -28,7 +28,6 @@
 #include <glob.h>
 #include <unistd.h>
 
-#include "json.hpp"
 #include "local_rawmidi_peer.hpp"
 #include "mididata.hpp"
 #include "midirouter.hpp"
@@ -84,13 +83,12 @@ void local_rawmidi_peer_t::close() {
 
 local_rawmidi_peer_t::~local_rawmidi_peer_t() { close(); }
 
-json_t local_rawmidi_peer_t::status() {
-  json_t j{
-      {"name", name},
-      {"device", device},
-      {"status", fd >= 0 ? "open" : "closed"} //
-  };
-  return j;
+router_peer_row_t local_rawmidi_peer_t::status() const {
+  router_peer_row_t row;
+  row.name = name;
+  row.device = device;
+  row.status = fd >= 0 ? "open" : "closed";
+  return row;
 }
 
 void local_rawmidi_peer_t::send_midi(midipeer_id_t from,
@@ -229,8 +227,8 @@ static std::string get_name_from_devname(const std::string &device) {
 
 namespace rtpmididns {
 
-json_t enumerate_rawmidi_devices_json() {
-  json_t arr = json_t::array();
+std::vector<rawmidi_device_row_t> enumerate_rawmidi_devices() {
+  std::vector<rawmidi_device_row_t> arr;
   glob_t gl;
   memset(&gl, 0, sizeof(gl));
   if (glob("/dev/snd/midiC*", 0, nullptr, &gl) != 0) {
@@ -243,13 +241,13 @@ json_t enumerate_rawmidi_devices_json() {
       continue;
     }
     std::string friendly = get_rawmidi_name(path);
-    arr.push_back(json_t{
-        {"type", "rawmidi"},
-        {"id", path},
-        {"device", path},
-        {"label", friendly.empty() ? path : friendly},
-        {"kind", "rawmidi"},
-    });
+    rawmidi_device_row_t row;
+    row.type = "rawmidi";
+    row.id = path;
+    row.device = path;
+    row.label = friendly.empty() ? path : friendly;
+    row.kind = "rawmidi";
+    arr.push_back(std::move(row));
   }
   globfree(&gl);
   return arr;

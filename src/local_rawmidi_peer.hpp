@@ -18,7 +18,6 @@
 
 #pragma once
 
-#include "json.hpp"
 #include "midi_normalizer.hpp"
 #include "midipeer.hpp"
 #include "rtpmidid/poller.hpp"
@@ -48,7 +47,7 @@ public:
   void open();
   void close();
 
-  json_t status() override;
+  router_peer_row_t status() const override;
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   void event(midipeer_event_e event, midipeer_id_t from) override;
   void connected(midipeer_id_t peer_id);
@@ -57,6 +56,6 @@ public:
 };
 
 /** `/dev/snd/midi*` devices for UI / RPC (device path + friendly label). */
-json_t enumerate_rawmidi_devices_json();
+std::vector<rawmidi_device_row_t> enumerate_rawmidi_devices();
 
 } // namespace rtpmididns

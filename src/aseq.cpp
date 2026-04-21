@@ -624,8 +624,8 @@ void aseq_t::for_connections(const port_t &port,
   snd_seq_query_subscribe_free(subs);
 }
 
-json_t aseq_t::enumerate_exported_ports_json() {
-  json_t arr = json_t::array();
+std::vector<alsa_seq_port_row_t> aseq_t::enumerate_exported_ports() {
+  std::vector<alsa_seq_port_row_t> arr;
 
   snd_seq_client_info_t *cinfo = nullptr;
   snd_seq_client_info_alloca(&cinfo);
@@ -669,16 +669,16 @@ json_t aseq_t::enumerate_exported_ports_json() {
       std::string label =
           (cname == pname) ? cname : FMT::format("{} · {}", cname, pname);
 
-      arr.push_back(json_t{
-          {"type", "alsa_seq"},
-          {"id", FMT::format("{}:{}", cid, pid)},
-          {"client", cid},
-          {"port", pid},
-          {"client_name", cname},
-          {"port_name", pname},
-          {"label", label},
-          {"kind", kind_str},
-      });
+      alsa_seq_port_row_t row;
+      row.type = "alsa_seq";
+      row.id = FMT::format("{}:{}", cid, pid);
+      row.client = cid;
+      row.port = pid;
+      row.client_name = cname;
+      row.port_name = pname;
+      row.label = label;
+      row.kind = kind_str;
+      arr.push_back(std::move(row));
     }
   }
 

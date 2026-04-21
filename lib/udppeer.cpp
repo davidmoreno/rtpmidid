@@ -127,7 +127,7 @@ ssize_t udppeer_t::sendto(const packet_t &packet,
   return res;
 }
 
-network_address_t udppeer_t::get_address() {
+network_address_t udppeer_t::get_address() const {
   struct sockaddr_storage addr;
   socklen_t len = sizeof(addr);
   if (fd < 0) {

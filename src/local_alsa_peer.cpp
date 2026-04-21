@@ -18,7 +18,6 @@
 
 #include "local_alsa_peer.hpp"
 #include "aseq.hpp"
-#include "json.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
@@ -108,11 +107,15 @@ void local_alsa_peer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   }
 }
 
-json_t local_alsa_peer_t::status() {
-  json_t j{{"name", name}, {"port", port}};
+router_peer_row_t local_alsa_peer_t::status() const {
+  router_peer_row_t row;
+  row.name = name;
+  row.port = port;
   if (subscribe_src_client_ >= 0 && subscribe_src_port_ >= 0) {
-    j["alsa_subscribe_from"] =
-        json_t{{"client", subscribe_src_client_}, {"port", subscribe_src_port_}};
+    alsa_subscribe_from_t s;
+    s.client = subscribe_src_client_;
+    s.port = subscribe_src_port_;
+    row.alsa_subscribe_from = s;
   }
-  return j;
+  return row;
 }

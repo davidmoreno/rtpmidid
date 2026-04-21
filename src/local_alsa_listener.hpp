@@ -17,6 +17,7 @@
  */
 
 #pragma once
+#include <string_view>
 #include "aseq.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
@@ -70,13 +71,15 @@ public:
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   const char *get_type() const override { return "local_alsa_listener_t"; }
-  json_t status() override;
+  router_peer_row_t status() const override;
 
   void add_endpoint(const std::string &hostname, const std::string &port);
   void connect_to_remote_server(const std::string &portname);
   void disconnect_from_remote_server();
 
-  json_t command(const std::string &cmd, const json_t &data) override;
+  bool control_peer_command(std::string_view cmd, std::string_view params_json,
+                            ::rtpmididns::dmjson::writer_t &out,
+                            std::string &out_error) override;
 };
 
 } // namespace rtpmididns

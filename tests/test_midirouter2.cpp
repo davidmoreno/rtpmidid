@@ -18,7 +18,7 @@
 
 #include "../src/aseq.hpp"
 #include "../src/factory.hpp"
-#include "../src/json.hpp"
+#include "dm_json_generated.hpp"
 #include "../src/mididata.hpp"
 #include "../src/midirouter.hpp"
 #include "../src/network_rtpmidi_listener.hpp"
@@ -117,8 +117,7 @@ void test_send_receive_messages() {
       rtpmididns::aseq_t::port_t{test_client_id, 0}); // Connect to network
   poller_wait_until([&router]() { return router->peer_count() == 3; });
 
-  rtpmididns::json_t status = router->status();
-  DEBUG("{}", status.dump(2));
+  DEBUG("router status_rows: {}", router->status_rows().size());
 
   ASSERT_EQUAL(router->peer_count(), 3);
 
@@ -139,8 +138,7 @@ void test_send_receive_messages() {
            rtpmidid::rtppeer_t::status_e::CONNECTED;
   });
 
-  status = router->status();
-  DEBUG("{}", status.dump(2));
+  DEBUG("router status_rows: {}", router->status_rows().size());
   ASSERT_EQUAL(router->peer_count(), 3);
 
   auto data = hex_to_bin("90 40 40");
@@ -168,8 +166,7 @@ void test_send_receive_messages() {
   uint8_t port_id_b = aseq->find_port(device_id, "RTPPEER B");
   DEBUG("Got ALSA seq for RTPPEER B at {}:{}", (int)device_id, (int)port_id_b);
 
-  status = router->status();
-  DEBUG("{}", status.dump(2));
+  DEBUG("router status_rows: {}", router->status_rows().size());
   //// 2 more peers: the rtpmidi_worker and the alsa_worker.
   ASSERT_EQUAL(router->peer_count(), 5);
 
@@ -185,8 +182,7 @@ void test_send_receive_messages() {
   );
 
   poller_wait_for(100ms);
-  status = router->status();
-  DEBUG("{}", status.dump(2));
+  DEBUG("router status_rows: {}", router->status_rows().size());
   //// No more peers
   DEBUG("Found {} peers", router->peer_count());
   ASSERT_EQUAL(router->peer_count(), 5);
@@ -253,9 +249,9 @@ void test_send_receive_messages() {
   poller_wait_until([&]() { return midi_packets_alsa_a == 2; });
   ASSERT_EQUAL(midi_packets_alsa_a, 2);
 
-  DEBUG("Router: {}", router->status().dump(2));
+  DEBUG("Router peers: {}", router->status_rows().size());
   router->clear();
-  DEBUG("Router: {}", router->status().dump(2));
+  DEBUG("Router peers after clear: {}", router->status_rows().size());
 
   DEBUG("END");
 }

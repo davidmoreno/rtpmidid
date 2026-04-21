@@ -50,6 +50,6 @@ public:
   ~network_rtpmidi_listener_t() override;
   const char *get_type() const override { return "network_rtpmidi_listener_t"; }
   void send_midi(midipeer_id_t from, const mididata_t &) override;
-  json_t status() override;
+  router_peer_row_t status() const override;
 };
 } // namespace rtpmididns

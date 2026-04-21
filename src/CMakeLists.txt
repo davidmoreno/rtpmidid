@@ -1,3 +1,6 @@
+include("${CMAKE_SOURCE_DIR}/cmake/DmJson.cmake")
+dmjson_add_library(rtpmidid-dmjson)
+
 # set files for the static library
 add_library(
   rtpmidid2-static
@@ -37,6 +40,7 @@ add_executable(
 )
 
 target_link_libraries(rtpmidid2-daemon rtpmidid2-static)
+target_link_libraries(rtpmidid2-static PUBLIC rtpmidid-dmjson)
 
 target_link_libraries(rtpmidid2-daemon ${FMT_LIBRARIES})
 target_include_directories(rtpmidid2-daemon PUBLIC ${FMT_INCLUDE_DIRS})

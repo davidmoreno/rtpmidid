@@ -52,7 +52,7 @@ public:
   // NOLINTNEXTLINE(bugprone-exception-escape)
   ~rtpserver_t();
 
-  int port() { return control.get_address().port(); }
+  int port() const { return control.get_address().port(); }
 
   void create_peer_from(io_bytes_reader &&buffer, const network_address_t &addr,
                         rtppeer_t::port_e port);

@@ -19,12 +19,11 @@
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "mididata.hpp"
+#include "dm_json_generated.hpp"
 #include "rtpmidid/stats.hpp"
 #include "rtpmidid/threading_types.hpp"
-#include "json.hpp"
 #include <chrono>
 
-// Implement midi_packet_t constructor that needs mididata_t definition
 namespace rtpmidid {
 midi_packet_t::midi_packet_t(uint32_t from, const rtpmididns::mididata_t &mididata)
     : from_peer_id(from),
@@ -34,23 +33,35 @@ midi_packet_t::midi_packet_t(uint32_t from, const rtpmididns::mididata_t &midida
 
 namespace rtpmididns {
 
-midipeer_t::~midipeer_t() {
-  stop_thread();
-  // Don't call router->remove_peer() here - it can cause deadlocks
-  // The router should handle peer removal through enqueue_remove_peer()
-  // or the peer should be removed before destruction
-}
-json_t midipeer_t::command(const std::string &cmd, const json_t &data) {
-  ERROR("Unknown command: {}", cmd);
+midipeer_t::~midipeer_t() { stop_thread(); }
+
+bool midipeer_t::control_peer_command(std::string_view cmd, std::string_view params_json,
+                                      ::rtpmididns::dmjson::writer_t &out,
+                                      std::string &out_error) {
+  (void)params_json;
   if (cmd == "help") {
-    return {json_t::object({})};
+    out.begin_array();
+    static const char *const cmds[] = {"status"};
+    static const char *const desc[] = {"Return peer status"};
+    for (std::size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); ++i) {
+      out.array_item();
+      out.begin_object();
+      out.key("name");
+      out.string_value(cmds[i]);
+      out.key("description");
+      out.string_value(desc[i]);
+      out.end_object();
+    }
+    out.end_array();
+    return true;
   }
   if (cmd == "status") {
-    return status();
+    dmjson::to_json(status(), out);
+    return true;
   }
-  return json_t({
-      {"error", "Command not implemented"},
-  });
+  ERROR("Unknown command: {}", cmd);
+  out_error = "Command not implemented";
+  return false;
 }
 
 void midipeer_t::start_thread() {
@@ -69,12 +80,11 @@ void midipeer_t::stop_thread() {
     return;
   }
   thread_running = false;
-  
-  // Send shutdown command
+
   rtpmidid::peer_command_t cmd;
   cmd.command = rtpmidid::peer_command_e::SHUTDOWN;
   command_queue.enqueue(cmd);
-  
+
   thread_wakeup.notify_one();
   if (peer_thread.joinable()) {
     peer_thread.join();
@@ -83,59 +93,50 @@ void midipeer_t::stop_thread() {
 
 void midipeer_t::peer_thread_loop() {
   using namespace std::chrono_literals;
-  
+
   try {
     DEBUG("[MIDI_FLOW] peer {}: Peer thread loop started", peer_id);
     while (thread_running.load()) {
-    bool processed = false;
-    
-    // Process commands first (highest priority)
-    rtpmidid::peer_command_t cmd;
-    while (command_queue.dequeue(cmd)) {
-      processed = true;
-      if (cmd.command == rtpmidid::peer_command_e::SHUTDOWN) {
-        return;
-      }
-      // Other commands can be handled by subclasses
-    }
-    
-    // Process incoming MIDI packets
-    rtpmidid::midi_packet_t packet;
-    while (input_queue.dequeue(packet)) {
-      processed = true;
-      process_midi_packet(packet);
-    }
-    
-    // Process outgoing routing requests
-    rtpmidid::routing_request_t request;
-    while (output_queue.dequeue(request)) {
-      processed = true;
-      if (router) {
-        // Enqueue to router (this will be handled by router thread)
-        if (request.command == rtpmidid::routing_command_e::SEND_MIDI) {
-          mididata_t mididata(request.data.data(), 
-                             static_cast<uint32_t>(request.data.size()));
-          router->enqueue_send_midi(peer_id, mididata);
+      bool processed = false;
+
+      rtpmidid::peer_command_t cmd;
+      while (command_queue.dequeue(cmd)) {
+        processed = true;
+        if (cmd.command == rtpmidid::peer_command_e::SHUTDOWN) {
+          return;
         }
-        // Other routing commands can be handled similarly
       }
-    }
-    
-    // Sleep if no work (use condition variable to avoid busy waiting)
-    if (!processed) {
-      std::unique_lock<std::mutex> lock(thread_mutex);
-      thread_wakeup.wait_for(lock, 10ms, [this] {
-        return !thread_running.load() || 
-               !input_queue.empty() || 
-               !output_queue.empty() || 
-               !command_queue.empty();
-      });
-    }
+
+      rtpmidid::midi_packet_t packet;
+      while (input_queue.dequeue(packet)) {
+        processed = true;
+        process_midi_packet(packet);
+      }
+
+      rtpmidid::routing_request_t request;
+      while (output_queue.dequeue(request)) {
+        processed = true;
+        if (router) {
+          if (request.command == rtpmidid::routing_command_e::SEND_MIDI) {
+            mididata_t mididata(request.data.data(),
+                                static_cast<uint32_t>(request.data.size()));
+            router->enqueue_send_midi(peer_id, mididata);
+          }
+        }
+      }
+
+      if (!processed) {
+        std::unique_lock<std::mutex> lock(thread_mutex);
+        thread_wakeup.wait_for(lock, 10ms, [this] {
+          return !thread_running.load() || !input_queue.empty() ||
+                 !output_queue.empty() || !command_queue.empty();
+        });
+      }
     }
     DEBUG("[MIDI_FLOW] peer {}: Peer thread loop exiting normally", peer_id);
   } catch (const std::exception &e) {
     ERROR("[MIDI_FLOW] peer {}: Exception in peer thread loop: {}", peer_id, e.what());
-    throw; // Re-throw to terminate thread
+    throw;
   } catch (...) {
     ERROR("[MIDI_FLOW] peer {}: Unknown exception in peer thread loop", peer_id);
     throw;
@@ -153,7 +154,7 @@ void midipeer_t::process_midi_packet(const rtpmidid::midi_packet_t &packet) {
     internal_until_send_stats_.add_stat(until_send_ns);
   }
   internal_last_until_send_ns_.store(until_send_ns.count(),
-                                       std::memory_order_relaxed);
+                                     std::memory_order_relaxed);
 
   mididata_t mididata(const_cast<uint8_t *>(packet.data.data()),
                       static_cast<uint32_t>(packet.data.size()));
@@ -188,7 +189,7 @@ bool midipeer_t::enqueue_midi_packet(const rtpmidid::midi_packet_t &packet) {
     return false;
   }
   thread_wakeup.notify_one();
-  DEBUG("[MIDI_FLOW] peer {}: MIDI packet enqueued successfully, queue_size={}", 
+  DEBUG("[MIDI_FLOW] peer {}: MIDI packet enqueued successfully, queue_size={}",
         peer_id, input_queue.size());
   return true;
 }
@@ -210,7 +211,7 @@ void midipeer_t::enqueue_to_router(const mididata_t &data) {
   router->enqueue_send_midi(peer_id, data);
 }
 
-json_t midipeer_t::internal_latency_stats_json() const {
+internal_latency_ms_t midipeer_t::internal_latency_stats() const {
   std::lock_guard<std::mutex> lock(internal_latency_mutex_);
   const auto u = internal_until_send_stats_.average_and_stddev();
   const auto s = internal_send_midi_stats_.average_and_stddev();
@@ -218,16 +219,19 @@ json_t midipeer_t::internal_latency_stats_json() const {
       internal_last_until_send_ns_.load(std::memory_order_relaxed) / 1e6;
   const double last_send_ms =
       internal_last_send_midi_ns_.load(std::memory_order_relaxed) / 1e6;
-  return json_t{
-      {"until_send_midi_ms",
-       {{"last", last_until_ms},
-        {"average", u.average.count() / 1e6},
-        {"stddev", u.stddev.count() / 1e6}}},
-      {"send_midi_ms",
-       {{"last", last_send_ms},
-        {"average", s.average.count() / 1e6},
-        {"stddev", s.stddev.count() / 1e6}}},
+  internal_latency_ms_t out = {
+    .until_send_midi_ms = {
+      .last = last_until_ms,
+      .average = u.average.count() / 1e6,
+      .stddev = u.stddev.count() / 1e6,
+    },
+    .send_midi_ms = {
+      .last = last_send_ms,
+      .average = s.average.count() / 1e6,
+      .stddev = s.stddev.count() / 1e6,
+    },
   };
+  return out;
 }
 
 } // namespace rtpmididns

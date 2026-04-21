@@ -1,6 +1,19 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
  * Copyright (C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "control_socket.hpp"
 #include "control_rpc.hpp"
@@ -16,7 +29,7 @@
 #include <unistd.h>
 #include <vector>
 
-#include "json.hpp"
+#include <rtpmidid/dm_json/runtime.hpp>
 #include "stringpp.hpp"
 
 namespace rtpmididns {
@@ -195,17 +208,8 @@ bool control_socket_t::handle_client_data(int fd) {
   }
   buf[static_cast<size_t>(l)] = 0;
   control_rpc_context_t ctx{router, aseq, mdns};
-  json_t js;
-  try {
-    js = json_t::parse(trim_copy(buf));
-  } catch (const std::exception &e) {
-    auto err = json_t{{"error", e.what()}};
-    const std::string out = err.dump() + "\n";
-    (void)control_conn_send(fd, out.c_str(), out.length());
-    return false;
-  }
-  const json_t ret = control_rpc_dispatch(ctx, js);
-  const std::string retstr = ret.dump() + "\n";
+  const std::string retstr =
+      control_rpc_dispatch_line(ctx, trim_copy(std::string(buf)));
   const ssize_t w = control_conn_send(fd, retstr.c_str(), retstr.length());
   if (w < 0) {
     ERROR("Could not send msg to control socket! Closing Connection.");
@@ -215,14 +219,22 @@ bool control_socket_t::handle_client_data(int fd) {
 }
 
 std::string control_socket_t::parse_command(const std::string &command) {
-  json_t js;
-  try {
-    js = json_t::parse(command);
-  } catch (const std::exception &e) {
-    return json_t{{"error", e.what()}}.dump();
-  }
   control_rpc_context_t ctx{router, aseq, mdns};
-  return control_rpc_dispatch(ctx, js).dump();
+  try {
+    std::string r = control_rpc_dispatch_line(ctx, command);
+    if (!r.empty() && r.back() == '\n')
+      r.pop_back();
+    return r;
+  } catch (const std::exception &e) {
+    rtpmididns::dmjson::writer_t w;
+    w.begin_object();
+    w.key("error");
+    w.string_value(e.what());
+    w.end_object();
+    std::string s;
+    w.swap_into_string(s);
+    return s;
+  }
 }
 
 } // namespace rtpmididns

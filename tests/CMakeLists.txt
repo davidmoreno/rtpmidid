@@ -122,3 +122,13 @@ if (NOT LIBS_ONLY)
     target_include_directories(test_settings PUBLIC ${ALSA_INCLUDE_DIRS})
     target_compile_options(test_settings PUBLIC ${ALSA_CFLAGS_OTHER})
 endif (NOT LIBS_ONLY)
+
+add_executable(test_dm_json_runtime test_dm_json_runtime.cpp)
+target_link_libraries(test_dm_json_runtime rtpmidid-dmjson rtpmidid-shared -pthread)
+target_link_libraries(test_dm_json_runtime ${FMT_LIBRARIES})
+add_test(NAME test_dm_json_runtime COMMAND test_dm_json_runtime)
+
+add_executable(test_dm_json_generated test_dm_json_generated.cpp)
+target_link_libraries(test_dm_json_generated rtpmidid-dmjson rtpmidid-shared -pthread)
+target_link_libraries(test_dm_json_generated ${FMT_LIBRARIES})
+add_test(NAME test_dm_json_generated COMMAND test_dm_json_generated)

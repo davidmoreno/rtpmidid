@@ -35,6 +35,30 @@ type StatusResult = {
 
 const AUTO_TABS = new Set(["connections", "peers", "mdns", "about"]);
 
+/** Legacy `router.create` `{ type, ... }` maps to split RPC methods. */
+const ROUTER_CREATE_TYPE_TO_METHOD: Record<string, string> = {
+  local_rawmidi_t: "router.create.local_rawmidi",
+  network_rtpmidi_client_t: "router.create.network_rtpmidi_client",
+  network_rtpmidi_listener_t: "router.create.network_rtpmidi_listener",
+  local_alsa_peer_t: "router.create.local_alsa_peer",
+};
+
+async function rpcCallRouterCreatePayload(
+  rpc: RpcClient,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const t = payload.type;
+  if (typeof t !== "string") {
+    throw new Error('router create JSON must include a string "type" field');
+  }
+  const method = ROUTER_CREATE_TYPE_TO_METHOD[t];
+  if (!method) {
+    throw new Error(`Unknown router.create type: ${t}`);
+  }
+  const { type: _drop, ...rest } = payload;
+  await rpc.call(method, rest);
+}
+
 function useTheme() {
   const [dark, setDark] = useState(() => {
     const s = localStorage.getItem("rtpmidid-theme");
@@ -206,15 +230,13 @@ export function App() {
         );
 
         if (args.local.mode === "alsa_seq") {
-          await rpc.call("router.create", {
-            type: "local_alsa_peer_t",
+          await rpc.call("router.create.local_alsa_peer", {
             name: uniquePeerName,
             alsa_client: args.local.client,
             alsa_port: args.local.port,
           });
         } else {
-          await rpc.call("router.create", {
-            type: "local_rawmidi_t",
+          await rpc.call("router.create.local_rawmidi", {
             name: uniquePeerName,
             device: args.local.device,
           });
@@ -242,8 +264,7 @@ export function App() {
           "Remote";
         const clientName = `WEB · ${safe}`;
 
-        await rpc.call("router.create", {
-          type: "network_rtpmidi_client_t",
+        await rpc.call("router.create.network_rtpmidi_client", {
           name: clientName,
           hostname: args.target.trim(),
           port: normalizeRtpMidiUdpPort(args.port),
@@ -453,10 +474,15 @@ export function App() {
         <Button
           onClick={async () => {
             try {
-              const params =
-                connectName.trim() === ""
-                  ? [connectHost, connectPort]
-                  : [connectName, connectHost, connectPort];
+              const params: Record<string, string> = {
+                hostname: connectHost.trim(),
+              };
+              if (connectPort.trim() !== "") {
+                params.port = connectPort.trim();
+              }
+              if (connectName.trim() !== "") {
+                params.name = connectName.trim();
+              }
               await rpc.call("connect", params);
               await refresh();
             } catch (e) {
@@ -467,7 +493,22 @@ export function App() {
           connect
         </Button>
       </Card>
-      <Card title="router.create (JSON)">
+      <Card title="router.create (typed JSON)">
+        <p class="mb-2 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+          Use legacy shape{" "}
+          <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-800">
+            {`{"type":"local_rawmidi_t",...}`}
+          </code>{" "}
+          (type keys from{" "}
+          <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-800">
+            router.create.list
+          </code>
+          ), or full JSON-RPC{" "}
+          <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-800">
+            {`{"method":"…","params":{…}}`}
+          </code>
+          .
+        </p>
         <textarea
           class="mb-2 h-32 w-full border-2 border-zinc-900 bg-white p-2 font-mono text-xs dark:border-zinc-100 dark:bg-zinc-950"
           value={createJson}
@@ -479,14 +520,18 @@ export function App() {
           onClick={async () => {
             try {
               const o = JSON.parse(createJson) as Record<string, unknown>;
-              await rpc.call("router.create", o);
+              if (typeof o.method === "string") {
+                await rpc.call(o.method, (o.params as object) ?? {});
+              } else {
+                await rpcCallRouterCreatePayload(rpc, o);
+              }
               await refresh();
             } catch (e) {
               setStatus(String(e));
             }
           }}
         >
-          router.create
+          send
         </Button>
       </Card>
       <Card title="router.connect">

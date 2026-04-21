@@ -18,7 +18,6 @@
 
 #include "../src/aseq.hpp"
 #include "../src/factory.hpp"
-#include "../src/json.hpp"
 #include "../src/local_alsa_multi_listener.hpp"
 #include "../src/mididata.hpp"
 #include "../src/midipeer.hpp"
@@ -46,7 +45,7 @@ public:
   }
   const char *get_type() const override { return "test_midiio_t"; }
 
-  rtpmididns::json_t status() override { return rtpmididns::json_t{}; }
+  rtpmididns::router_peer_row_t status() const override { return {}; }
 };
 
 rtpmididns::network_rtpmidi_listener_t::network_rtpmidi_listener_t(
@@ -56,9 +55,7 @@ rtpmididns::network_rtpmidi_listener_t::~network_rtpmidi_listener_t() {}
 
 void rtpmididns::network_rtpmidi_listener_t::send_midi(midipeer_id_t from,
                                                        const mididata_t &) {}
-rtpmididns::json_t rtpmididns::network_rtpmidi_listener_t::status() {
-  return rtpmididns::json_t{};
-}
+rtpmididns::router_peer_row_t rtpmididns::network_rtpmidi_listener_t::status() const { return {}; }
 
 // rtpmididns::alsapeer_t::alsapeer_t(const std::string &name,
 //                                    rtpmidid::aseq &seq_)
@@ -196,7 +193,7 @@ public:
   void send_midi(rtpmididns::midipeer_id_t from,
                  const rtpmididns::mididata_t &) override {}
   const char *get_type() const override { return "test_signal_t"; }
-  rtpmididns::json_t status() override { return rtpmididns::json_t{}; }
+  rtpmididns::router_peer_row_t status() const override { return {}; }
 
   void event(rtpmididns::midipeer_event_e event,
              rtpmididns::midipeer_id_t from) override {
