@@ -380,7 +380,6 @@ export function App() {
       <Card title="Connections (router + RTP)">
         <ConnectionsTable
           rows={connections}
-          refreshIntervalMs={refreshIntervalMs}
           highlightConnectionRowId={highlightConnectionRowId}
           onSelectPeer={onSelectPeerFromConnections}
         />
