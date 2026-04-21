@@ -29,8 +29,8 @@ function tickPositionsForStrip(compact: boolean): { ms: number; pct: number }[] 
   return compact
     ? tickPositionsPct().filter((x) => [1, 10, 100, 1000, 10_000].includes(x.ms))
     : tickPositionsPct().filter((x) =>
-        LATENCY_TICK_MS.includes(x.ms as (typeof LATENCY_TICK_MS)[number]),
-      );
+      LATENCY_TICK_MS.includes(x.ms as (typeof LATENCY_TICK_MS)[number]),
+    );
 }
 
 /** Bar track: fill + subtle ticks drawn inside the track (no native title). */
@@ -46,7 +46,7 @@ export function LatencyTrack({
   const ticks = tickPositionsForStrip(compact);
 
   return (
-    <div class="relative h-2.5 w-full overflow-hidden border-2 border-zinc-900 bg-zinc-200 dark:border-zinc-100 dark:bg-zinc-800">
+    <div class="relative h-2.5 w-full overflow-hidden border-2 border-zinc-900 bg-zinc-200 dark:border-zinc-100 dark:bg-zinc-800 h-[14px]">
       <div
         class={`absolute bottom-0 left-0 top-0 z-0 transition-[width] duration-200 ${tierFillClass(tier)}`}
         style={{ width: `${pct}%` }}
