@@ -52,43 +52,19 @@ T parse_rpc_params(std::string_view json) {
 
 static const std::regex PEER_COMMAND_RE(R"(^(\d+)\.(.*)$)");
 
-static void write_rpc_error(::rtpmididns::dmjson::writer_t &w,
-                            const dmjson::rpc::envelope_info_t &env,
-                            std::string_view msg) {
-  w.begin_object();
-  w.key("id");
-  w.raw(env.has_id ? env.id_json : std::string("null"));
-  w.key("error");
-  w.string_value(msg);
-  w.end_object();
-}
-
-static void write_rpc_result_json(::rtpmididns::dmjson::writer_t &w,
-                                  const dmjson::rpc::envelope_info_t &env,
-                                  std::string_view result_json) {
-  w.begin_object();
-  w.key("id");
-  w.raw(env.has_id ? env.id_json : std::string("null"));
-  w.key("result");
-  w.raw(result_json);
-  w.end_object();
+static std::string id_json(const dmjson::rpc::envelope_info_t &env) {
+  return env.has_id ? env.id_json : "null";
 }
 
 // Finish a response by serialising a typed value via the generated to_json.
 template <typename T>
-static std::string respond(dmjson::writer_t &w,
-                           const dmjson::rpc::envelope_info_t &env,
-                           const T &value) {
-  write_rpc_result_json(w, env, dmjson::to_json(value));
-  std::string out;
-  w.swap_into_string(out);
-  return out + "\n";
+static std::string respond(const dmjson::rpc::envelope_info_t &env, const T &value) {
+  return dmjson::to_json(rpc_result_t{id_json(env), dmjson::to_json(value)}) + "\n";
 }
 
 // Finish a response with a vector of typed values.
 template <typename Row>
-static std::string respond_rows(dmjson::writer_t &w,
-                                const dmjson::rpc::envelope_info_t &env,
+static std::string respond_rows(const dmjson::rpc::envelope_info_t &env,
                                 const std::vector<Row> &rows) {
   dmjson::writer_t arr;
   arr.begin_array();
@@ -99,29 +75,18 @@ static std::string respond_rows(dmjson::writer_t &w,
   arr.end_array();
   std::string arr_json;
   arr.swap_into_string(arr_json);
-  write_rpc_result_json(w, env, arr_json);
-  std::string out;
-  w.swap_into_string(out);
-  return out + "\n";
+  return dmjson::to_json(rpc_result_t{id_json(env), std::move(arr_json)}) + "\n";
 }
 
 // Finish a response with `["ok"]`.
-static std::string respond_ok(dmjson::writer_t &w,
-                              const dmjson::rpc::envelope_info_t &env) {
-  write_rpc_result_json(w, env, R"(["ok"])");
-  std::string out;
-  w.swap_into_string(out);
-  return out + "\n";
+static std::string respond_ok(const dmjson::rpc::envelope_info_t &env) {
+  return dmjson::to_json(rpc_result_t{id_json(env), R"(["ok"])"}) + "\n";
 }
 
 // Finish an error response.
-static std::string respond_error(dmjson::writer_t &w,
-                                 const dmjson::rpc::envelope_info_t &env,
+static std::string respond_error(const dmjson::rpc::envelope_info_t &env,
                                  std::string_view msg) {
-  write_rpc_error(w, env, msg);
-  std::string out;
-  w.swap_into_string(out);
-  return out + "\n";
+  return dmjson::to_json(rpc_error_envelope_t{id_json(env), std::string(msg)}) + "\n";
 }
 
 static mdns_snapshot_t mdns_snapshot(const std::shared_ptr<rtpmidid::mdns_rtpmidi_t> &mdns) {
@@ -197,8 +162,6 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
   const std::string_view params =
       env.has_params ? env.params_json : std::string_view("{}");
 
-  dmjson::writer_t w;
-
   try {
     if (env.method == "status") {
       daemon_status_t ds;
@@ -207,24 +170,24 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       ds.settings.control_filename = settings.control_filename;
       ds.router = ctx.router->status_rows();
       ds.mdns = mdns_snapshot(ctx.mdns);
-      return respond(w, env, ds);
+      return respond(env, ds);
     }
     if (env.method == "router.remove") {
       auto p = parse_rpc_params<router_remove_params_t>(params);
       ctx.router->enqueue_remove_peer(static_cast<peer_id_t>(p.peer_id));
-      return respond_ok(w, env);
+      return respond_ok(env);
     }
     if (env.method == "router.connect") {
       auto p = parse_rpc_params<router_connect_params_t>(params);
       ctx.router->enqueue_connect(static_cast<peer_id_t>(p.from),
                                   static_cast<peer_id_t>(p.to));
-      return respond_ok(w, env);
+      return respond_ok(env);
     }
     if (env.method == "router.disconnect") {
       auto p = parse_rpc_params<router_connect_params_t>(params);
       ctx.router->enqueue_disconnect(static_cast<peer_id_t>(p.from),
                                      static_cast<peer_id_t>(p.to));
-      return respond_ok(w, env);
+      return respond_ok(env);
     }
     if (env.method == "connect") {
       auto p = parse_rpc_params<connect_params_t>(params);
@@ -233,25 +196,25 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       ctx.router->add_peer(make_local_alsa_listener(
           ctx.router, p.name.value_or(p.hostname), p.hostname,
           p.port.value_or("5004"), ctx.aseq, "0"));
-      return respond_ok(w, env);
+      return respond_ok(env);
     }
     if (env.method == "router.create.local_rawmidi") {
       auto p = parse_rpc_params<create_local_rawmidi_params_t>(params);
       auto peer = make_rawmidi_peer(p.name, p.device);
       ctx.router->add_peer(peer);
-      return respond(w, env, peer->status());
+      return respond(env, peer->status());
     }
     if (env.method == "router.create.network_rtpmidi_client") {
       auto p = parse_rpc_params<create_network_rtpmidi_client_params_t>(params);
       auto peer = make_network_rtpmidi_client(p.name, p.hostname, p.port);
       ctx.router->add_peer(peer);
-      return respond(w, env, peer->status());
+      return respond(env, peer->status());
     }
     if (env.method == "router.create.network_rtpmidi_listener") {
       auto p = parse_rpc_params<create_network_rtpmidi_listener_params_t>(params);
       auto peer = make_network_rtpmidi_listener(p.name, std::to_string(p.udp_port));
       ctx.router->add_peer(peer);
-      return respond(w, env, peer->status());
+      return respond(env, peer->status());
     }
     if (env.method == "router.create.local_alsa_peer") {
       auto p = parse_rpc_params<create_local_alsa_peer_params_t>(params);
@@ -259,16 +222,16 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
                       ? make_local_alsa_peer(p.name, ctx.aseq, *p.alsa_client, *p.alsa_port)
                       : make_local_alsa_peer(p.name, ctx.aseq);
       ctx.router->add_peer(peer);
-      return respond(w, env, peer->status());
+      return respond(env, peer->status());
     }
     if (env.method == "router.create.list")
-      return respond(w, env, build_router_create_list());
+      return respond(env, build_router_create_list());
     if (env.method == "mdns.remove") {
       if (!ctx.mdns)
         throw std::runtime_error("mDNS not available");
       auto p = parse_rpc_params<mdns_remove_params_t>(params);
       ctx.mdns->remove_announcement(p.name, p.hostname.value_or(""), p.port);
-      return respond_ok(w, env);
+      return respond_ok(env);
     }
     if (env.method == "export.rawmidi") {
       auto p = parse_rpc_params<export_rawmidi_params_t>(params);
@@ -280,7 +243,7 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
         err.params["local_udp_port"] = "Local UDP port";
         err.params["remote_udp_port"] = "Remote UDP port";
         err.params["hostname"] = "Hostname of the server if want to connect to. Else is a local listener.";
-        return respond(w, env, err);
+        return respond(env, err);
       }
       rtpmididns::settings_t::rawmidi_t rawmidi;
       rawmidi.device = p.device;
@@ -289,37 +252,34 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       rawmidi.remote_udp_port = p.remote_udp_port.value_or("0");
       rawmidi.hostname = p.hostname.value_or("");
       create_rawmidi_rtpclient_pair(ctx.router.get(), rawmidi);
-      return respond_ok(w, env);
+      return respond_ok(env);
     }
     if (env.method == "midi.listAlsaSeq") {
       if (!ctx.aseq)
-        return respond(w, env, rpc_error_body_t{"ALSA sequencer not available"});
-      return respond_rows(w, env, ctx.aseq->enumerate_exported_ports());
+        return respond(env, rpc_error_body_t{"ALSA sequencer not available"});
+      return respond_rows(env, ctx.aseq->enumerate_exported_ports());
     }
     if (env.method == "midi.listRawMidi")
-      return respond_rows(w, env, enumerate_rawmidi_devices());
+      return respond_rows(env, enumerate_rawmidi_devices());
     if (env.method == "help")
-      return respond_rows(w, env, build_help_entries());
+      return respond_rows(env, build_help_entries());
 
     std::smatch match;
     if (std::regex_match(env.method, match, PEER_COMMAND_RE)) {
       const auto peer_id = static_cast<peer_id_t>(std::stoul(match[1].str()));
       auto peer = ctx.router->get_peer_by_id(peer_id);
       if (!peer)
-        return respond_error(w, env, FMT::format("Unknown peer '{}'", peer_id));
+        return respond_error(env, FMT::format("Unknown peer '{}'", peer_id));
       std::string perr;
       dmjson::writer_t inner;
       if (!peer->control_peer_command(match[2].str(), params, inner, perr))
-        return respond_error(w, env, perr);
-      write_rpc_result_json(w, env, inner.view());
-      std::string out;
-      w.swap_into_string(out);
-      return out + "\n";
+        return respond_error(env, perr);
+      return dmjson::to_json(rpc_result_t{id_json(env), std::string(inner.view())}) + "\n";
     }
 
-    return respond_error(w, env, FMT::format("Unknown method '{}'", env.method));
+    return respond_error(env, FMT::format("Unknown method '{}'", env.method));
   } catch (const std::exception &e) {
-    return respond_error(w, env, e.what());
+    return respond_error(env, e.what());
   }
 }
 

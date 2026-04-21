@@ -134,6 +134,12 @@ public:
 
   /** Read a JSON string token (for object keys). */
   void read_string_key_into(std::string &out);
+
+  /**
+   * Capture the next JSON value verbatim (any type) into out as raw JSON text.
+   * Useful for "opaque" fields that carry pre-serialised JSON through the struct.
+   */
+  void read_raw_into(std::string &out);
 };
 
 namespace rpc {

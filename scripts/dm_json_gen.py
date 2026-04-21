@@ -15,6 +15,7 @@ class FieldOpt:
     json_key: Optional[str] = None
     omit_if_null: bool = False
     omit_if_empty: bool = False
+    opaque: bool = False
 
 
 @dataclass
@@ -49,6 +50,8 @@ def parse_field_opts(comment: str) -> FieldOpt:
         fo.omit_if_null = True
     if re.search(r"\bomit_if_empty\b", body):
         fo.omit_if_empty = True
+    if re.search(r"\bopaque\b", body):
+        fo.opaque = True
     return fo
 
 
@@ -153,6 +156,8 @@ def parse_struct_fields(body: str) -> List[Field]:
                     fo.omit_if_null = True
                 if mx.omit_if_empty:
                     fo.omit_if_empty = True
+                if mx.opaque:
+                    fo.opaque = True
             if j < n and body[j] == "\n":
                 j += 1
             fields.append(Field(ctype=typ, name=nam, opt=fo))
@@ -463,6 +468,10 @@ def emit_to_json_struct(s: StructDecl, structs: Set[str], enums: Set[str]) -> Li
             lines.append("    " + write_scalar_w(t, acc))
             lines.append("  }")
             continue
+        if f.opt.opaque and strip_type(t) == "std::string":
+            lines.append(f'  w.key("{k}");')
+            lines.append(f"  w.raw({acc});")
+            continue
         lines.append(f'  w.key("{k}");')
         lines.extend("  " + x for x in emit_write_value(t, acc, "", structs, enums))
     lines.append("  w.end_object();")
@@ -495,7 +504,9 @@ def emit_from_json_struct(s: StructDecl, structs: Set[str], enums: Set[str]) -> 
         lines.append(f'{prefix}key == "{k}") {{')
         lines.append(f"        if (seen_{f.name}) return false;")
         lines.append(f"        seen_{f.name} = true;")
-        if tm and tm[0] == "std::optional":
+        if f.opt.opaque and strip_type(t) == "std::string":
+            lines.append(f"        r.read_raw_into({acc});")
+        elif tm and tm[0] == "std::optional":
             inner = tm[1]
             lines.append("        r.skip_ws();")
             lines.append("        if (r.peek() == 'n') {")

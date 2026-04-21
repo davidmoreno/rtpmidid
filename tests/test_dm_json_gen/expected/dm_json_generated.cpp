@@ -8,6 +8,8 @@ void to_json(const ::rtpmididns::golden_foo_t &o, writer_t &w) {
   w.int_value(static_cast<int64_t>(o.x));
   w.key("y");
   w.string_value(o.y);
+  w.key("raw");
+  w.raw(o.raw);
   w.end_object();
 }
 
@@ -15,6 +17,7 @@ bool from_json(reader_t &r, ::rtpmididns::golden_foo_t &o) noexcept {
   try {
     bool seen_x = false;
     bool seen_y = false;
+    bool seen_raw = false;
     while (true) {
       if (r.try_consume_object_end())
         break;
@@ -32,6 +35,12 @@ bool from_json(reader_t &r, ::rtpmididns::golden_foo_t &o) noexcept {
         if (seen_y) return false;
         seen_y = true;
         r.read_string_into(o.y);
+        hit = true;
+      }
+      else if (key == "raw") {
+        if (seen_raw) return false;
+        seen_raw = true;
+        r.read_raw_into(o.raw);
         hit = true;
       }
       if (!hit)

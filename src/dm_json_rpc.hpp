@@ -33,6 +33,26 @@ struct rpc_error_body_t {
   std::string error;
 };
 
+/**
+ * JSON-RPC success envelope: {"id": <raw>, "result": <raw>}.
+ * Both fields are opaque — they carry pre-serialised JSON verbatim.
+ */
+// [dm-json]
+struct rpc_result_t {
+  std::string id;     // [dm-json: opaque]
+  std::string result; // [dm-json: opaque]
+};
+
+/**
+ * JSON-RPC error envelope: {"id": <raw>, "error": "..."}.
+ * id is opaque (raw JSON); error is a plain string.
+ */
+// [dm-json]
+struct rpc_error_envelope_t {
+  std::string id; // [dm-json: opaque]
+  std::string error;
+};
+
 // [dm-json]
 struct rpc_help_entry_t {
   std::string name;

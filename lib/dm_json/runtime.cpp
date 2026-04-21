@@ -325,6 +325,14 @@ void reader_t::read_string_into(std::string &out) {
 
 void reader_t::read_string_key_into(std::string &out) { read_string_into(out); }
 
+void reader_t::read_raw_into(std::string &out) {
+  skip_ws();
+  const std::string_view before = remaining();
+  skip_value();
+  const std::string_view after = remaining();
+  out.assign(before.data(), before.size() - after.size());
+}
+
 bool reader_t::read_bool() {
   skip_ws();
   std::string_view rem = remaining();
