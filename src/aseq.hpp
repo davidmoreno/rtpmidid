@@ -127,6 +127,12 @@ public:
   /// Connect two ports
   connection_t connect(const port_t &from, const port_t &to);
   void disconnect(const port_t &from, const port_t &to);
+  /**
+   * Connect two external ports (neither belongs to this client).
+   * This is the programmatic equivalent of `aconnect`.
+   */
+  void connect_external(const port_t &from, const port_t &to);
+  void disconnect_external(const port_t &from, const port_t &to);
   /// Disconnects everything from this port
   void disconnect_port(uint8_t port);
 
@@ -140,6 +146,8 @@ public:
 
   /** ALSA sequencer clients/ports (exported), excluding this process. For UI / RPC. */
   std::vector<alsa_seq_port_row_t> enumerate_exported_ports();
+  /** List current ALSA sequencer subscriptions (aconnect links). For UI / RPC. */
+  std::vector<alsa_subscription_row_t> enumerate_subscriptions();
 };
 
 std::vector<std::string> get_ports(aseq_t *);

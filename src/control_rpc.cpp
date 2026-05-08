@@ -136,6 +136,8 @@ static std::vector<rpc_help_entry_t> build_help_entries() {
       {"router.remove", "Remove a peer from the router"},
       {"router.connect", "Connects two peers at the router. Unidirectional connection."},
       {"router.disconnect", "Disconnects two peers at the router."},
+      {"endpoint.connect", "Connect two endpoints (alsa/raw/remote). Server chooses ALSA aconnect vs router peers."},
+      {"endpoint.disconnect", "Disconnect two endpoints (alsa/raw/remote)."},
       {"connect", "Connect to a remote RTP-MIDI server (object {hostname, port?, name?})"},
       {"router.create.local_rawmidi", "Create raw MIDI peer"},
       {"router.create.network_rtpmidi_client", "Create RTP-MIDI client peer"},
@@ -145,9 +147,198 @@ static std::vector<rpc_help_entry_t> build_help_entries() {
       {"mdns.remove", "Delete an mDNS announcement"},
       {"export.rawmidi", "Export a rawmidi device to RTP"},
       {"midi.listAlsaSeq", "List ALSA sequencer ports"},
+      {"midi.listAlsaSubscriptions", "List ALSA sequencer subscriptions (aconnect links)"},
       {"midi.listRawMidi", "List raw MIDI devices"},
       {"help", "Return help text"},
   };
+}
+
+enum class endpoint_kind_e { ALSA, RAW, MDNS, HOST, PEER };
+
+struct endpoint_id_t {
+  endpoint_kind_e kind;
+  // ALSA
+  int client = -1;
+  int port = -1;
+  // RAW
+  std::string device;
+  // HOST
+  std::string hostname;
+  std::string hostport;
+  // MDNS
+  std::string mdns_name;
+  int mdns_port = -1;
+  // PEER
+  uint64_t peer_id = 0;
+};
+
+static bool parse_endpoint_id(std::string_view s, endpoint_id_t &out) {
+  const std::string str(s);
+  if (std::startswith(str, "alsa:")) {
+    const auto rest = str.substr(5);
+    const auto pos = rest.find(':');
+    if (pos == std::string::npos)
+      return false;
+    try {
+      out.kind = endpoint_kind_e::ALSA;
+      out.client = std::stoi(rest.substr(0, pos));
+      out.port = std::stoi(rest.substr(pos + 1));
+      return out.client >= 0 && out.client <= 255 && out.port >= 0 &&
+             out.port <= 255;
+    } catch (...) {
+      return false;
+    }
+  }
+  if (std::startswith(str, "raw:")) {
+    out.kind = endpoint_kind_e::RAW;
+    out.device = str.substr(4);
+    return !out.device.empty();
+  }
+  if (std::startswith(str, "host:")) {
+    out.kind = endpoint_kind_e::HOST;
+    const auto rest = str.substr(5);
+    const auto pos = rest.rfind(':');
+    if (pos == std::string::npos)
+      return false;
+    out.hostname = rest.substr(0, pos);
+    out.hostport = rest.substr(pos + 1);
+    return !out.hostname.empty() && !out.hostport.empty();
+  }
+  if (std::startswith(str, "mdns:")) {
+    const auto rest = str.substr(5);
+    const auto sep = rest.rfind("::");
+    if (sep == std::string::npos)
+      return false;
+    out.kind = endpoint_kind_e::MDNS;
+    out.mdns_name = rest.substr(0, sep);
+    try {
+      out.mdns_port = std::stoi(rest.substr(sep + 2));
+    } catch (...) {
+      return false;
+    }
+    return !out.mdns_name.empty() && out.mdns_port > 0 && out.mdns_port <= 65535;
+  }
+  if (std::startswith(str, "peer:")) {
+    out.kind = endpoint_kind_e::PEER;
+    try {
+      out.peer_id = static_cast<uint64_t>(std::stoull(str.substr(5)));
+      return out.peer_id > 0;
+    } catch (...) {
+      return false;
+    }
+  }
+  return false;
+}
+
+static std::pair<std::string, std::string>
+mdns_resolve_to_hostport(const std::shared_ptr<rtpmidid::mdns_rtpmidi_t> &mdns,
+                         const std::string &name, int port) {
+  if (!mdns)
+    throw std::runtime_error("mDNS not available");
+  for (const auto &a : mdns->remote_announcements) {
+    if (a.name != name)
+      continue;
+    if (static_cast<int>(a.port) != port)
+      continue;
+    // Prefer the service hostname when present so routing is chosen by the OS
+    // (and we avoid binding to a potentially unsuitable resolved IP).
+    const std::string host = !a.address.empty() ? a.address : a.ip;
+    if (!host.empty())
+      return {host, std::to_string(port)};
+  }
+  throw std::runtime_error("mDNS remote not found");
+}
+
+static std::vector<router_peer_row_t>
+router_rows_snapshot(const control_rpc_context_t &ctx) {
+  return ctx.router ? ctx.router->status_rows()
+                    : std::vector<router_peer_row_t>{};
+}
+
+static std::optional<peer_id_t>
+find_peer_for_alsa(const std::vector<router_peer_row_t> &rows, int client,
+                   int port) {
+  for (const auto &r : rows) {
+    if (r.type.value_or("") != "local_alsa_peer_t")
+      continue;
+    if (!r.alsa_subscribe_from)
+      continue;
+    if (r.alsa_subscribe_from->client == client &&
+        r.alsa_subscribe_from->port == port) {
+      return static_cast<peer_id_t>(r.id.value_or(0));
+    }
+  }
+  return std::nullopt;
+}
+
+static std::optional<peer_id_t>
+find_peer_for_raw(const std::vector<router_peer_row_t> &rows,
+                  const std::string &device) {
+  for (const auto &r : rows) {
+    if (r.type.value_or("") != "local_rawmidi_peer_t")
+      continue;
+    if (r.device && *r.device == device)
+      return static_cast<peer_id_t>(r.id.value_or(0));
+  }
+  return std::nullopt;
+}
+
+static std::optional<peer_id_t>
+find_peer_for_host(const std::vector<router_peer_row_t> &rows,
+                   const std::string &hostname, const std::string &port) {
+  for (const auto &r : rows) {
+    if (r.type.value_or("") != "network_rtpmidi_client_t")
+      continue;
+    const auto rh = r.connect_hostname.value_or("");
+    const auto rp = r.connect_port.value_or("");
+    if (rh == hostname && rp == port)
+      return static_cast<peer_id_t>(r.id.value_or(0));
+  }
+  return std::nullopt;
+}
+
+static peer_id_t ensure_peer_for_endpoint(control_rpc_context_t &ctx,
+                                         const endpoint_id_t &eid,
+                                         const std::vector<router_peer_row_t> &rows) {
+  if (!ctx.router)
+    throw std::runtime_error("router not available");
+  if (eid.kind == endpoint_kind_e::PEER)
+    return static_cast<peer_id_t>(eid.peer_id);
+  if (eid.kind == endpoint_kind_e::ALSA) {
+    const auto found = find_peer_for_alsa(rows, eid.client, eid.port);
+    if (found && *found != 0)
+      return *found;
+    if (!ctx.aseq)
+      throw std::runtime_error("ALSA sequencer not available");
+    const std::string name = FMT::format("WEB:ALSA:{}:{}", eid.client, eid.port);
+    auto peer = make_local_alsa_peer(name, ctx.aseq, eid.client, eid.port);
+    return ctx.router->add_peer(peer);
+  }
+  if (eid.kind == endpoint_kind_e::RAW) {
+    const auto found = find_peer_for_raw(rows, eid.device);
+    if (found && *found != 0)
+      return *found;
+    const std::string name = FMT::format("WEB:RAW:{}", eid.device);
+    auto peer = make_rawmidi_peer(name, eid.device);
+    return ctx.router->add_peer(peer);
+  }
+  if (eid.kind == endpoint_kind_e::MDNS) {
+    const auto hp = mdns_resolve_to_hostport(ctx.mdns, eid.mdns_name, eid.mdns_port);
+    endpoint_id_t host{};
+    host.kind = endpoint_kind_e::HOST;
+    host.hostname = hp.first;
+    host.hostport = hp.second;
+    return ensure_peer_for_endpoint(ctx, host, rows);
+  }
+  if (eid.kind == endpoint_kind_e::HOST) {
+    const auto found = find_peer_for_host(rows, eid.hostname, eid.hostport);
+    if (found && *found != 0)
+      return *found;
+    const std::string nm = FMT::format("WEB · {}", eid.hostname);
+    auto peer = make_network_rtpmidi_client(nm, eid.hostname, eid.hostport);
+    return ctx.router->add_peer(peer);
+  }
+  throw std::runtime_error("Unknown endpoint kind");
 }
 
 } // namespace
@@ -187,6 +378,61 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       auto p = parse_rpc_params<router_connect_params_t>(params);
       ctx.router->enqueue_disconnect(static_cast<peer_id_t>(p.from),
                                      static_cast<peer_id_t>(p.to));
+      return respond_ok(env);
+    }
+    if (env.method == "endpoint.connect") {
+      auto p = parse_rpc_params<endpoint_connect_params_t>(params);
+      endpoint_id_t a{};
+      endpoint_id_t b{};
+      if (!parse_endpoint_id(p.from, a) || !parse_endpoint_id(p.to, b))
+        throw std::runtime_error("Need {from,to} endpoint ids");
+      const bool bidi = p.bidi.value_or(true);
+
+      if (a.kind == endpoint_kind_e::ALSA && b.kind == endpoint_kind_e::ALSA) {
+        if (!ctx.aseq)
+          throw std::runtime_error("ALSA sequencer not available");
+        const aseq_t::port_t from{static_cast<uint8_t>(a.client),
+                                  static_cast<uint8_t>(a.port)};
+        const aseq_t::port_t to{static_cast<uint8_t>(b.client),
+                                static_cast<uint8_t>(b.port)};
+        ctx.aseq->connect_external(from, to);
+        if (bidi)
+          ctx.aseq->connect_external(to, from);
+        return respond_ok(env);
+      }
+
+      const auto rows = router_rows_snapshot(ctx);
+      const auto pa = ensure_peer_for_endpoint(ctx, a, rows);
+      const auto pb = ensure_peer_for_endpoint(ctx, b, rows);
+      ctx.router->enqueue_connect(pa, pb);
+      if (bidi)
+        ctx.router->enqueue_connect(pb, pa);
+      return respond_ok(env);
+    }
+    if (env.method == "endpoint.disconnect") {
+      auto p = parse_rpc_params<endpoint_disconnect_params_t>(params);
+      endpoint_id_t a{};
+      endpoint_id_t b{};
+      if (!parse_endpoint_id(p.from, a) || !parse_endpoint_id(p.to, b))
+        throw std::runtime_error("Need {from,to} endpoint ids");
+
+      if (a.kind == endpoint_kind_e::ALSA && b.kind == endpoint_kind_e::ALSA) {
+        if (!ctx.aseq)
+          throw std::runtime_error("ALSA sequencer not available");
+        const aseq_t::port_t from{static_cast<uint8_t>(a.client),
+                                  static_cast<uint8_t>(a.port)};
+        const aseq_t::port_t to{static_cast<uint8_t>(b.client),
+                                static_cast<uint8_t>(b.port)};
+        ctx.aseq->disconnect_external(from, to);
+        ctx.aseq->disconnect_external(to, from);
+        return respond_ok(env);
+      }
+
+      const auto rows = router_rows_snapshot(ctx);
+      const auto pa = ensure_peer_for_endpoint(ctx, a, rows);
+      const auto pb = ensure_peer_for_endpoint(ctx, b, rows);
+      ctx.router->enqueue_disconnect(pa, pb);
+      ctx.router->enqueue_disconnect(pb, pa);
       return respond_ok(env);
     }
     if (env.method == "connect") {
@@ -258,6 +504,11 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       if (!ctx.aseq)
         return respond(env, rpc_error_body_t{"ALSA sequencer not available"});
       return respond_rows(env, ctx.aseq->enumerate_exported_ports());
+    }
+    if (env.method == "midi.listAlsaSubscriptions") {
+      if (!ctx.aseq)
+        return respond(env, rpc_error_body_t{"ALSA sequencer not available"});
+      return respond_rows(env, ctx.aseq->enumerate_subscriptions());
     }
     if (env.method == "midi.listRawMidi")
       return respond_rows(env, enumerate_rawmidi_devices());

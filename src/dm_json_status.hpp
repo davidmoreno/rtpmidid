@@ -81,6 +81,16 @@ struct alsa_connection_item_t {
 };
 
 // [dm-json]
+struct alsa_subscription_row_t {
+  int32_t from_client;
+  int32_t from_port;
+  int32_t to_client;
+  int32_t to_port;
+  std::string from_label;
+  std::string to_label;
+};
+
+// [dm-json]
 struct listening_ports_t {
   std::string name;
   uint16_t control_port;

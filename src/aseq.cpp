@@ -19,6 +19,7 @@
 #include <alsa/seq.h>
 #include <alsa/seq_event.h>
 #include <rtpmidid/logger.hpp>
+#include <unordered_set>
 
 namespace rtpmididns {
 void error_handler(const char *file, int line, const char *function, int err,
@@ -438,6 +439,64 @@ aseq_t::connection_t aseq_t::connect(const port_t &from, const port_t &to) {
   return aseq_t::connection_t(shared_from_this(), from, to);
 }
 
+void aseq_t::connect_external(const port_t &from, const port_t &to) {
+  DEBUG("Connect external ALSA ports {} -> {}", from.to_string(), to.to_string());
+  int res = 0;
+  if (from.client == client_id) {
+    res = snd_seq_connect_to(seq, from.port, to.client, to.port);
+  } else if (to.client == client_id) {
+    res = snd_seq_connect_from(seq, to.port, from.client, from.port);
+  } else {
+    snd_seq_port_subscribe_t *port_sub = nullptr;
+    snd_seq_port_subscribe_alloca(&port_sub);
+    snd_seq_addr_t sender{};
+    sender.client = from.client;
+    sender.port = from.port;
+    snd_seq_addr_t dest{};
+    dest.client = to.client;
+    dest.port = to.port;
+    snd_seq_port_subscribe_set_sender(port_sub, &sender);
+    snd_seq_port_subscribe_set_dest(port_sub, &dest);
+    res = snd_seq_subscribe_port(seq, port_sub);
+  }
+  if (res == -16) {
+    WARNING("ALSA seq error 16: {} -> {}. Already connected?",
+            from.to_string(), to.to_string());
+    return;
+  }
+  if (res < 0) {
+    throw rtpmidid::exception("Failed external ALSA connection: {} -> {}: {} ({})",
+                              from.to_string(), to.to_string(),
+                              snd_strerror(res), res);
+  }
+}
+
+void aseq_t::disconnect_external(const port_t &from, const port_t &to) {
+  DEBUG("Disconnect external ALSA ports {} -> {}", from.to_string(), to.to_string());
+  int res = 0;
+  if (from.client == client_id) {
+    res = snd_seq_disconnect_to(seq, from.port, to.client, to.port);
+  } else if (to.client == client_id) {
+    res = snd_seq_disconnect_from(seq, to.port, from.client, from.port);
+  } else {
+    snd_seq_port_subscribe_t *port_sub = nullptr;
+    snd_seq_port_subscribe_alloca(&port_sub);
+    snd_seq_addr_t sender{};
+    sender.client = from.client;
+    sender.port = from.port;
+    snd_seq_addr_t dest{};
+    dest.client = to.client;
+    dest.port = to.port;
+    snd_seq_port_subscribe_set_sender(port_sub, &sender);
+    snd_seq_port_subscribe_set_dest(port_sub, &dest);
+    res = snd_seq_unsubscribe_port(seq, port_sub);
+  }
+  if (res < 0) {
+    ERROR("Failed external ALSA disconnection: {} -> {}: {} ({})",
+          from.to_string(), to.to_string(), snd_strerror(res), res);
+  }
+}
+
 void aseq_t::disconnect(const port_t &from, const port_t &to) {
   DEBUG("Disconnect alsa ports {} <> {}", from.to_string(), to.to_string());
   bool done = false;
@@ -622,6 +681,110 @@ void aseq_t::for_connections(const port_t &port,
   }
 
   snd_seq_query_subscribe_free(subs);
+}
+
+std::vector<alsa_subscription_row_t> aseq_t::enumerate_subscriptions() {
+  std::vector<alsa_subscription_row_t> out;
+  std::unordered_set<std::string> seen;
+
+  auto portLabel = [this](const snd_seq_addr_t &addr) -> std::string {
+    snd_seq_client_info_t *client_info = nullptr;
+    snd_seq_port_info_t *port_info = nullptr;
+    snd_seq_client_info_malloc(&client_info);
+    snd_seq_port_info_malloc(&port_info);
+    std::string label;
+    if (snd_seq_get_any_client_info(seq, addr.client, client_info) >= 0 &&
+        snd_seq_get_any_port_info(seq, addr.client, addr.port, port_info) >= 0) {
+      const char *cn = snd_seq_client_info_get_name(client_info);
+      const char *pn = snd_seq_port_info_get_name(port_info);
+      label = FMT::format("{}:{} · {} / {}", addr.client, addr.port,
+                          cn ? cn : "?", pn ? pn : "?");
+    } else {
+      label = FMT::format("{}:{}", addr.client, addr.port);
+    }
+    snd_seq_client_info_free(client_info);
+    snd_seq_port_info_free(port_info);
+    return label;
+  };
+
+  snd_seq_client_info_t *cinfo = nullptr;
+  snd_seq_port_info_t *pinfo = nullptr;
+  snd_seq_query_subscribe_t *subs = nullptr;
+  snd_seq_client_info_malloc(&cinfo);
+  snd_seq_port_info_malloc(&pinfo);
+  snd_seq_query_subscribe_malloc(&subs);
+
+  snd_seq_client_info_set_client(cinfo, -1);
+  while (snd_seq_query_next_client(seq, cinfo) >= 0) {
+    const int cid = snd_seq_client_info_get_client(cinfo);
+    if (cid < 0)
+      continue;
+    snd_seq_port_info_set_client(pinfo, cid);
+    snd_seq_port_info_set_port(pinfo, -1);
+    while (snd_seq_query_next_port(seq, pinfo) >= 0) {
+      const int pid = snd_seq_port_info_get_port(pinfo);
+      if (pid < 0)
+        continue;
+      snd_seq_addr_t root{};
+      root.client = static_cast<uint8_t>(cid);
+      root.port = static_cast<uint8_t>(pid);
+      snd_seq_query_subscribe_set_root(subs, &root);
+
+      for (auto type : {SND_SEQ_QUERY_SUBS_READ, SND_SEQ_QUERY_SUBS_WRITE}) {
+        snd_seq_query_subscribe_set_type(subs, type);
+        snd_seq_query_subscribe_set_index(subs, 0);
+        while (snd_seq_query_port_subscribers(seq, subs) >= 0) {
+          const snd_seq_addr_t *addr = nullptr;
+          const snd_seq_addr_t *rt = nullptr;
+          if (snd_seq_query_subscribe_get_type(subs) == SND_SEQ_QUERY_SUBS_READ) {
+            addr = snd_seq_query_subscribe_get_addr(subs);
+            rt = snd_seq_query_subscribe_get_root(subs);
+          } else {
+            rt = snd_seq_query_subscribe_get_addr(subs);
+            addr = snd_seq_query_subscribe_get_root(subs);
+          }
+          if (!addr || !rt) {
+            snd_seq_query_subscribe_set_index(
+                subs, snd_seq_query_subscribe_get_index(subs) + 1);
+            continue;
+          }
+          const std::string key =
+              FMT::format("{}:{}->{}:{}", rt->client, rt->port, addr->client, addr->port);
+          if (!seen.insert(key).second) {
+            snd_seq_query_subscribe_set_index(
+                subs, snd_seq_query_subscribe_get_index(subs) + 1);
+            continue;
+          }
+          alsa_subscription_row_t row;
+          row.from_client = rt->client;
+          row.from_port = rt->port;
+          row.to_client = addr->client;
+          row.to_port = addr->port;
+          row.from_label = portLabel(*rt);
+          row.to_label = portLabel(*addr);
+          out.push_back(std::move(row));
+          snd_seq_query_subscribe_set_index(
+              subs, snd_seq_query_subscribe_get_index(subs) + 1);
+        }
+      }
+    }
+  }
+
+  snd_seq_client_info_free(cinfo);
+  snd_seq_port_info_free(pinfo);
+  snd_seq_query_subscribe_free(subs);
+
+  std::sort(out.begin(), out.end(),
+            [](const alsa_subscription_row_t &a, const alsa_subscription_row_t &b) {
+              if (a.from_client != b.from_client)
+                return a.from_client < b.from_client;
+              if (a.from_port != b.from_port)
+                return a.from_port < b.from_port;
+              if (a.to_client != b.to_client)
+                return a.to_client < b.to_client;
+              return a.to_port < b.to_port;
+            });
+  return out;
 }
 
 std::vector<alsa_seq_port_row_t> aseq_t::enumerate_exported_ports() {

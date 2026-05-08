@@ -4,6 +4,7 @@ import { Card } from "./components/Card";
 import { ConnectionsTable } from "./components/ConnectionsTable";
 import { EdgesTable } from "./components/EdgesTable";
 import { MdnsTables } from "./components/MdnsTables";
+import { PeersCards } from "./components/PeersCards";
 import { PeersTable } from "./components/PeersTable";
 import { Tabs, type TabDef } from "./components/Tabs";
 import {
@@ -25,6 +26,12 @@ import {
   sanitizePeerBaseName,
   type WireLocalChoice,
 } from "./midiEnumerate";
+import {
+  parseMidiAlsaSeqResult,
+  parseMidiRawmidiResult,
+  type MidiAlsaSeqEntry,
+  type MidiRawmidiEntry,
+} from "./midiEnumerate";
 
 type StatusResult = {
   version?: string;
@@ -33,7 +40,7 @@ type StatusResult = {
   settings?: Record<string, unknown>;
 };
 
-const AUTO_TABS = new Set(["connections", "peers", "mdns", "about"]);
+const AUTO_TABS = new Set(["connections", "peer_cards", "peers", "mdns", "about"]);
 
 /** Legacy `router.create` `{ type, ... }` maps to split RPC methods. */
 const ROUTER_CREATE_TYPE_TO_METHOD: Record<string, string> = {
@@ -99,7 +106,11 @@ export function App() {
   );
   const [status, setStatus] = useState<string>("");
   const [data, setData] = useState<StatusResult | null>(null);
-  const [tab, setTab] = useState("connections");
+  const [tab, setTab] = useState(() => {
+    const raw = typeof window !== "undefined" ? window.location.hash : "";
+    const h = raw.startsWith("#") ? raw.slice(1) : raw;
+    return h || "connections";
+  });
   const [highlightPeerId, setHighlightPeerId] = useState<number | null>(null);
   const highlightClearTimer = useRef<number | undefined>(undefined);
   const [highlightConnectionRowId, setHighlightConnectionRowId] = useState<
@@ -117,6 +128,9 @@ export function App() {
   );
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
+  const [alsaSeq, setAlsaSeq] = useState<MidiAlsaSeqEntry[]>([]);
+  const [rawmidi, setRawmidi] = useState<MidiRawmidiEntry[]>([]);
+  const [alsaSubs, setAlsaSubs] = useState<unknown[]>([]);
 
   const rpc = useMemo(
     () =>
@@ -137,12 +151,27 @@ export function App() {
       const r = (await rpc.call("status", {})) as StatusResult;
       setData(r);
       setLastRefresh(new Date());
+      if (tab === "peer_cards") {
+        try {
+          const [rAlsa, rRaw, rSubs] = await Promise.all([
+            rpc.call("midi.listAlsaSeq", {}),
+            rpc.call("midi.listRawMidi", {}),
+            rpc.call("midi.listAlsaSubscriptions", {}),
+          ]);
+          setAlsaSeq(parseMidiAlsaSeqResult(rAlsa) ?? []);
+          setRawmidi(parseMidiRawmidiResult(rRaw) ?? []);
+          setAlsaSubs(Array.isArray(rSubs) ? (rSubs as unknown[]) : []);
+        } catch (e) {
+          // Keep old lists on error; status banner already shows errors for status RPC.
+          console.debug("midi list refresh failed", e);
+        }
+      }
     } catch (e) {
       setStatus(String(e));
     } finally {
       refreshInFlightRef.current = false;
     }
-  }, [rpc]);
+  }, [rpc, tab]);
 
   const onSelectPeerFromConnections = useCallback((id: number) => {
     setTab("peers");
@@ -176,6 +205,13 @@ export function App() {
       .catch((e) => setStatus(String(e)));
     return () => rpc.disconnect();
   }, []);
+
+  // On entering the Peers (endpoint) tab, do an immediate refresh so ALSA/raw
+  // enumeration is populated without waiting for the next poll tick.
+  useEffect(() => {
+    if (tab !== "peer_cards") return;
+    void refresh();
+  }, [tab, refresh]);
 
   /** Poll only after the previous `status` finishes; spacing is `refreshIntervalMs` between completions. */
   useEffect(() => {
@@ -356,7 +392,13 @@ export function App() {
       </span>
       {lastRefresh && (
         <span class="tabular-nums">
-          Last update: {lastRefresh.toLocaleTimeString()}
+          Last update:{" "}
+          {lastRefresh.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          })}
         </span>
       )}
     </div>
@@ -371,6 +413,22 @@ export function App() {
       <Card title="Router edges">
         <EdgesTable edges={edges} />
       </Card>
+    </div>
+  );
+
+  const peerCardsContent = (
+    <div class="space-y-4">
+      {refreshBanner}
+      <PeersCards
+        peers={peers}
+        mdnsRemotes={mdnsParsed.remotes}
+        alsaSeq={alsaSeq}
+        rawmidi={rawmidi}
+        alsaSubs={alsaSubs}
+        rpc={rpc}
+        onAfterAction={refresh}
+        onStatus={setStatus}
+      />
     </div>
   );
 
@@ -567,11 +625,38 @@ export function App() {
 
   const tabs: TabDef[] = [
     { id: "connections", label: "Connections", content: connectionsContent },
+    { id: "peer_cards", label: "Peers", content: peerCardsContent },
     { id: "peers", label: "Peers", content: peersContent },
     { id: "mdns", label: "mDNS", content: mdnsContent },
     { id: "about", label: "About", content: aboutContent },
     { id: "actions", label: "Actions", content: actionsContent },
   ];
+
+  // Keep active tab in location hash for reload/back-forward.
+  useEffect(() => {
+    const ids = new Set(tabs.map((t) => t.id));
+    if (!ids.has(tab)) {
+      setTab("connections");
+      return;
+    }
+    const next = `#${tab}`;
+    if (window.location.hash !== next) {
+      window.location.hash = next;
+    }
+  }, [tab, tabs]);
+
+  useEffect(() => {
+    const ids = new Set(tabs.map((t) => t.id));
+    const onHash = () => {
+      const raw = window.location.hash;
+      const h = raw.startsWith("#") ? raw.slice(1) : raw;
+      if (h && ids.has(h)) setTab(h);
+    };
+    window.addEventListener("hashchange", onHash);
+    // If we loaded an invalid hash before tabs existed, fix it now.
+    onHash();
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [tabs]);
 
   return (
     <div class="mx-auto max-w-7xl p-4 font-sans">
@@ -590,7 +675,14 @@ export function App() {
                 <>
                   {" "}
                   · refreshed{" "}
-                  <span class="tabular-nums">{lastRefresh.toLocaleTimeString()}</span>
+                  <span class="tabular-nums">
+                    {lastRefresh.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                      hour12: false,
+                    })}
+                  </span>
                 </>
               )}
             </p>

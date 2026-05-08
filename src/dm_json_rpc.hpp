@@ -155,4 +155,17 @@ struct ws_auth_params_t {
   std::string password;
 };
 
+// [dm-json]
+struct endpoint_connect_params_t {
+  std::string from;
+  std::string to;
+  std::optional<bool> bidi; // [dm-json: omit_if_null] default true in handler
+};
+
+// [dm-json]
+struct endpoint_disconnect_params_t {
+  std::string from;
+  std::string to;
+};
+
 } // namespace rtpmididns
