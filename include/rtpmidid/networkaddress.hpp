@@ -34,6 +34,8 @@ private:
   sockaddr *addr;
   socklen_t len;
   bool managed = false; // If managed, release memory on destruction
+  // Extra context to help debug "null" addresses (e.g. empty getaddrinfo list).
+  std::string debug_context_;
 
 public:
   network_address_t(sockaddr *addr, socklen_t len) : addr(addr), len(len) {};
@@ -45,6 +47,7 @@ public:
     addr = other.addr;
     len = other.len;
     managed = other.managed;
+    debug_context_ = std::move(other.debug_context_);
     other.managed = false;
     other.addr = nullptr;
     other.len = 0;
@@ -65,6 +68,7 @@ public:
     addr = other.addr;
     len = other.len;
     managed = other.managed;
+    debug_context_ = std::move(other.debug_context_);
     other.managed = false;
     other.addr = nullptr;
     other.len = 0;
@@ -84,6 +88,7 @@ public:
     memcpy(addr, this->addr, this->len);
     auto ret = network_address_t(addr, len);
     ret.managed = true;
+    ret.debug_context_ = debug_context_;
     return ret;
   }
   sockaddr const *get_sockaddr() const { return addr; }
@@ -91,6 +96,8 @@ public:
   int get_aifamily() const { return addr->sa_family; }
 
   bool is_valid() const { return addr != nullptr; }
+  const std::string &debug_context() const { return debug_context_; }
+  void set_debug_context(std::string ctx) { debug_context_ = std::move(ctx); }
 
   // resolve all the possible addresses for a given address and port, until
   // return true, return false if no address pass the loop successfully.
@@ -103,6 +110,9 @@ public:
 class network_address_list_t {
   NON_COPYABLE(network_address_list_t);
   addrinfo *info = nullptr;
+  std::string query_name_;
+  std::string query_port_;
+  int last_gai_error_ = 0;
 
 public:
   network_address_list_t();
@@ -115,6 +125,9 @@ public:
   network_address_t get_first() const;
 
   bool is_valid() const { return info != nullptr; }
+  const std::string &query_name() const { return query_name_; }
+  const std::string &query_port() const { return query_port_; }
+  int last_gai_error() const { return last_gai_error_; }
 
   class iterator_t {
     addrinfo *info = nullptr;

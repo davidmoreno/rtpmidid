@@ -21,8 +21,16 @@
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/networkaddress.hpp>
+#include <netdb.h>
 
 namespace rtpmidid {
+
+static std::string network_address_null_reason(const network_address_t &self) {
+  if (!self.debug_context().empty()) {
+    return self.debug_context();
+  }
+  return "no debug context (likely default-constructed or empty getaddrinfo list)";
+}
 
 network_address_t::network_address_t(int fd) {
   auto addr = sockaddr_storage_to_sockaddr(new sockaddr_storage());
@@ -46,7 +54,8 @@ network_address_t::~network_address_t() {
 
 int network_address_t::port() const {
   if (!addr) {
-    ERROR("This network address do not point to any address.");
+    ERROR("network_address_t is null; can not read port ({}).",
+          network_address_null_reason(*this));
     return 0;
   }
   if (addr->sa_family == AF_INET) {
@@ -57,7 +66,8 @@ int network_address_t::port() const {
 
 std::string network_address_t::ip() const {
   if (!addr) {
-    ERROR("This network address do not point to any address.");
+    ERROR("network_address_t is null; can not read ip ({}).",
+          network_address_null_reason(*this));
     return "null";
   }
   std::array<char, INET6_ADDRSTRLEN> name{};
@@ -84,6 +94,9 @@ std::string network_address_t::hostname() const {
 
 std::string network_address_t::to_string() const {
   if (!addr) {
+    if (!debug_context().empty()) {
+      return FMT::format("null ({})", debug_context());
+    }
     return "null";
   }
 
@@ -126,7 +139,10 @@ bool network_address_t::resolve_loop(const std::string &address,
   hints.ai_next = nullptr;
 
   addrinfo *result;
-  if (getaddrinfo(address.c_str(), port.c_str(), &hints, &result) != 0) {
+  const int gai = getaddrinfo(address.c_str(), port.c_str(), &hints, &result);
+  if (gai != 0) {
+    ERROR("getaddrinfo failed resolving {}:{} ({})", address, port,
+          gai_strerror(gai));
     return false;
   }
 
@@ -143,7 +159,8 @@ bool network_address_t::resolve_loop(const std::string &address,
 
 void network_address_t::set_port(int port) {
   if (!addr) {
-    ERROR("This network address do not point to any address.");
+    ERROR("network_address_t is null; can not set port={} ({}).", port,
+          network_address_null_reason(*this));
     return;
   }
   assert(managed); // Only managed addresses can be modified.
@@ -160,12 +177,18 @@ void network_address_t::set_port(int port) {
 network_address_list_t::network_address_list_t() : info(nullptr) {}
 
 network_address_list_t::network_address_list_t(network_address_list_t &&other) noexcept
-    : info(other.info) {
+    : info(other.info), query_name_(std::move(other.query_name_)),
+      query_port_(std::move(other.query_port_)),
+      last_gai_error_(other.last_gai_error_) {
   other.info = nullptr;
+  other.last_gai_error_ = 0;
 }
 
 network_address_list_t::network_address_list_t(const std::string &name,
                                                const std::string &port) {
+  query_name_ = name;
+  query_port_ = port;
+
   addrinfo hints{};
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_DGRAM;
@@ -175,8 +198,10 @@ network_address_list_t::network_address_list_t(const std::string &name,
   hints.ai_addr = nullptr;
   hints.ai_next = nullptr;
 
-  if (getaddrinfo(name.c_str(), port.c_str(), &hints, &info) != 0) {
-    ERROR("Error getting address info for {}:{}", name, port);
+  const int gai = getaddrinfo(name.c_str(), port.c_str(), &hints, &info);
+  last_gai_error_ = gai;
+  if (gai != 0) {
+    ERROR("getaddrinfo failed for {}:{} ({})", name, port, gai_strerror(gai));
     if (info) {
       freeaddrinfo(info);
     }
@@ -196,15 +221,27 @@ network_address_list_t::operator=(network_address_list_t &&other) {
     freeaddrinfo(info);
   }
   info = other.info;
+  query_name_ = std::move(other.query_name_);
+  query_port_ = std::move(other.query_port_);
+  last_gai_error_ = other.last_gai_error_;
   other.info = nullptr;
+  other.last_gai_error_ = 0;
   return *this;
 }
 
 network_address_t network_address_list_t::get_first() const {
   if (info == nullptr) {
-    return network_address_t{};
+    network_address_t ret{};
+    const char *gai_s = last_gai_error_ ? gai_strerror(last_gai_error_) : "n/a";
+    ret.set_debug_context(FMT::format(
+        "empty resolution list for {}:{} (gai={}: {})",
+        query_name_.empty() ? "<empty>" : query_name_,
+        query_port_.empty() ? "<empty>" : query_port_, last_gai_error_, gai_s));
+    return ret;
   }
-  return network_address_t{info->ai_addr, info->ai_addrlen};
+  network_address_t out{info->ai_addr, info->ai_addrlen};
+  out.set_debug_context(FMT::format("resolved from {}:{}", query_name_, query_port_));
+  return out;
 }
 
 std::string network_address_list_t::to_string() const {
