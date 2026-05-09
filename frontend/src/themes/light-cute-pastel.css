@@ -72,13 +72,14 @@
   --color-success-heading: #15803d;
   --color-warn-heading: #be185d;
 
-  --latency-track-bg: #fce7f3;
+  /* Soft trough; purple ramp on the moving fill only */
+  --latency-track-bg: #fdf2f8;
   --latency-track-border: #f9a8d4;
-  --latency-tier-0: #fdf2f8;
-  --latency-tier-1: #34d399;
-  --latency-tier-2: #fcd34d;
-  --latency-tier-3: #fb7185;
-  --latency-tick: rgba(91, 71, 99, 0.15);
+  --latency-tier-0: #ddd6fe;
+  --latency-tier-1: #c4b5fd;
+  --latency-tier-2: #a78bfa;
+  --latency-tier-3: #7c3aed;
+  --latency-tick: rgba(91, 71, 99, 0.22);
   --latency-value-fg: #5b4763;
 
   --color-tooltip-bg: #fffbfd;

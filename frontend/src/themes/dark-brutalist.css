@@ -92,7 +92,9 @@
 
   --font-ui: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  --color-header-border: #fafafa;
+  --color-header-border: #18181b;
+  /* Same police-tape header as light brutalist; dark text on yellow for contrast */
+  --color-header-bg: #facc15;
 
   --color-mdns-row-hover: rgba(39, 39, 42, 1);
   --color-mdns-row-selected-bg: rgba(120, 53, 15, 0.45);
@@ -111,4 +113,10 @@
   --color-accent-hot-hover-bg: rgba(217, 119, 6, 0.5);
 
   --ring-offset: #18181b;
+}
+
+[data-theme="dark-brutalist"] .ui-header-bar {
+  --color-fg: #18181b;
+  --color-fg-muted: #3f3f46;
+  --color-fg-subtle: #52525b;
 }

@@ -91,6 +91,14 @@ export function useFixedTooltip() {
     [cancelHide],
   );
 
+  /** Update contents (and anchor rect) while the tooltip stays open — e.g. live poll data. */
+  const refresh = useCallback((anchorEl: Element, content: ComponentChildren) => {
+    setTip((prev) => {
+      if (prev === null) return prev;
+      return { anchor: anchorEl.getBoundingClientRect(), content };
+    });
+  }, []);
+
   useEffect(() => {
     if (tip == null) return undefined;
     const close = (ev: Event) => {
@@ -118,6 +126,7 @@ export function useFixedTooltip() {
   return {
     tip,
     show,
+    refresh,
     scheduleHide,
     cancelHide,
     portal: (

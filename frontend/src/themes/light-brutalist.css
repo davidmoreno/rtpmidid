@@ -93,6 +93,8 @@
   --font-ui: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   --color-header-border: #18181b;
+  /* Hi-vis / police-tape style header (yellow + black diagonal bands) */
+  --color-header-bg: #facc15;
 
   --color-mdns-row-hover: rgba(244, 244, 245, 1);
   --color-mdns-row-selected-bg: rgba(254, 243, 199, 1);

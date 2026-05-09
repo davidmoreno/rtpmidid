@@ -1,4 +1,5 @@
 import type { ComponentChildren } from "preact";
+import { useEffect, useRef } from "preact/hooks";
 import type { ConnectionRow, LatencyTriple, RouterPeer } from "../model";
 import { useFixedTooltip } from "./FixedTooltipPortal";
 import {
@@ -84,14 +85,21 @@ export function LatencyHoverBar({
   compact = false,
   showValue = true,
 }: HoverBarProps) {
-  const tt = useFixedTooltip();
+  const anchorRef = useRef<HTMLDivElement | null>(null);
+  const { tip, show, refresh, scheduleHide, portal } = useFixedTooltip();
+
+  useEffect(() => {
+    if (tip === null || anchorRef.current === null) return;
+    refresh(anchorRef.current, detail);
+  }, [combinedMs, detail, tip, refresh]);
 
   return (
     <div class="min-w-[5rem] font-mono text-[10px]">
       <div
+        ref={anchorRef}
         class="cursor-default py-0.5"
-        onMouseEnter={(e) => tt.show(e.currentTarget as HTMLElement, detail)}
-        onMouseLeave={tt.scheduleHide}
+        onMouseEnter={(e) => show(e.currentTarget as HTMLElement, detail)}
+        onMouseLeave={scheduleHide}
       >
         <div class="flex items-center gap-1">
           <div class="relative min-h-[14px] flex-1">
@@ -104,7 +112,7 @@ export function LatencyHoverBar({
           )}
         </div>
       </div>
-      {tt.portal}
+      {portal}
     </div>
   );
 }

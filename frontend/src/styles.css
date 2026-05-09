@@ -53,6 +53,8 @@
 
   .ui-header-bar {
     border-bottom: calc(var(--border-width) * 2) solid var(--color-header-border);
+    background-color: var(--color-header-bg, transparent);
+    background-image: var(--header-bg-image, none);
   }
 
   .ui-banner-warn {
