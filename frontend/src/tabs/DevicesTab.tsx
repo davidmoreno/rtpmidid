@@ -17,7 +17,7 @@ type Props = {
   onStatus: (msg: string) => void;
 };
 
-export function PeerCardsTab({
+export function DevicesTab({
   refreshIntervalMs,
   lastRefresh,
   peers,

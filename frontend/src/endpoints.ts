@@ -2,7 +2,7 @@ import type { MdnsRemote, RouterPeer } from "./model";
 import { groupMdnsRemotes } from "./model";
 import type { MidiAlsaSeqEntry, MidiRawmidiEntry } from "./midiEnumerate";
 
-export type EndpointKind = "alsa_seq" | "rawmidi" | "remote";
+export type EndpointKind = "alsa_seq" | "rawmidi" | "rtpmidi";
 
 export type Endpoint = {
   /** Opaque id understood by server endpoint.connect/disconnect. */
@@ -124,7 +124,7 @@ export function buildEndpoints(args: {
     const hostSub = best ? `${best}:${String(port)}` : `${String(port)}`;
     out.push({
       id: endpointIdForMdns(g.name, port),
-      kind: "remote",
+      kind: "rtpmidi",
       label: g.name || "Remote",
       sub: `mDNS · ${hostSub}`,
       peerId: matchPeerForRemote(args.peers, cands, port),
@@ -132,7 +132,7 @@ export function buildEndpoints(args: {
   }
 
   // Stable sort: kind then label then id.
-  const rank: Record<EndpointKind, number> = { remote: 0, alsa_seq: 1, rawmidi: 2 };
+  const rank: Record<EndpointKind, number> = { rtpmidi: 0, alsa_seq: 1, rawmidi: 2 };
   out.sort((a, b) => {
     const ra = rank[a.kind];
     const rb = rank[b.kind];

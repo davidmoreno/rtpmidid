@@ -206,6 +206,28 @@
     box-shadow: inset 0 0 0 2px var(--color-ring-highlight);
   }
 
+  /**
+   * Favorite flash on device cards. Tailwind utilities (bg-*, ui-shadow-card) override
+   * normal component rules — use !important so this wins on every theme.
+   */
+  .ui-peer-card-spotlight {
+    position: relative !important;
+    z-index: 2;
+    overflow: visible !important;
+    isolation: isolate;
+    border-color: var(--color-ring-highlight, #f59e0b) !important;
+    box-shadow:
+      inset 0 0 0 4px var(--color-ring-highlight, #f59e0b),
+      0 0 0 4px var(--color-ring-highlight, #f59e0b),
+      0 0 36px 6px color-mix(in srgb, var(--color-ring-highlight, #f59e0b) 70%, transparent),
+      var(--shadow-card) !important;
+    background-color: color-mix(
+      in srgb,
+      var(--color-surface) 55%,
+      var(--color-ring-highlight, #f59e0b) 45%
+    ) !important;
+  }
+
   .ui-chip-link {
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-chip-border);
@@ -505,7 +527,6 @@
     border-color: var(--color-io-in-border);
     background-color: var(--color-io-in-bg);
     color: var(--color-io-in-fg);
-    box-shadow: var(--shadow-io-in);
   }
   .ui-led-remote-on {
     border-color: var(--color-badge-remote-border);
@@ -521,6 +542,27 @@
     box-shadow: var(--shadow-btn);
   }
   .ui-toggle-off {
+    border: var(--border-width) solid var(--color-border-muted);
+    background-color: var(--color-surface-2);
+    color: var(--color-fg-muted);
+  }
+
+  .ui-filter-toggle-local-on {
+    border: var(--border-width) solid var(--color-badge-local-border);
+    background-color: var(--color-badge-local-bg);
+    color: var(--color-badge-local-fg);
+  }
+  .ui-filter-toggle-local-off {
+    border: var(--border-width) solid var(--color-border-muted);
+    background-color: var(--color-surface-2);
+    color: var(--color-fg-muted);
+  }
+  .ui-filter-toggle-remote-on {
+    border: var(--border-width) solid var(--color-badge-remote-border);
+    background-color: var(--color-badge-remote-bg);
+    color: var(--color-badge-remote-fg);
+  }
+  .ui-filter-toggle-remote-off {
     border: var(--border-width) solid var(--color-border-muted);
     background-color: var(--color-surface-2);
     color: var(--color-fg-muted);

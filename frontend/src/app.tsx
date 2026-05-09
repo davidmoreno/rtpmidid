@@ -30,13 +30,13 @@ import { AboutTab } from "./tabs/AboutTab";
 import { ActionsTab } from "./tabs/ActionsTab";
 import { ConnectionsTab } from "./tabs/ConnectionsTab";
 import { MdnsTab } from "./tabs/MdnsTab";
-import { PeerCardsTab } from "./tabs/PeerCardsTab";
+import { DevicesTab } from "./tabs/DevicesTab";
 import { PeersTab } from "./tabs/PeersTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 
 const AUTO_TABS = new Set([
+  "devices",
   "connections",
-  "peer_cards",
   "peers",
   "mdns",
   "about",
@@ -55,8 +55,9 @@ export function App() {
   const [data, setData] = useState<StatusResult | null>(null);
   const [tab, setTab] = useState(() => {
     const raw = typeof window !== "undefined" ? window.location.hash : "";
-    const h = raw.startsWith("#") ? raw.slice(1) : raw;
-    return h || "connections";
+    let h = raw.startsWith("#") ? raw.slice(1) : raw;
+    if (h === "peer_cards") h = "devices";
+    return h || "devices";
   });
   const [highlightPeerId, setHighlightPeerId] = useState<number | null>(null);
   const highlightClearTimer = useRef<number | undefined>(undefined);
@@ -87,7 +88,7 @@ export function App() {
       const r = (await rpc.call("status", {})) as StatusResult;
       setData(r);
       setLastRefresh(new Date());
-      if (tab === "peer_cards") {
+      if (tab === "devices") {
         try {
           const [rAlsa, rRaw, rSubs] = await Promise.all([
             rpc.call("midi.listAlsaSeq", {}),
@@ -141,7 +142,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (tab !== "peer_cards") return;
+    if (tab !== "devices") return;
     void refresh();
   }, [tab, refresh]);
 
@@ -303,23 +304,10 @@ export function App() {
 
   const tabs: TabDef[] = [
     {
-      id: "connections",
-      label: "Connections",
+      id: "devices",
+      label: "Devices",
       content: (
-        <ConnectionsTab
-          refreshIntervalMs={refreshIntervalMs}
-          lastRefresh={lastRefresh}
-          connections={connections}
-          highlightConnectionRowId={highlightConnectionRowId}
-          onSelectPeer={onSelectPeerFromConnections}
-        />
-      ),
-    },
-    {
-      id: "peer_cards",
-      label: "Peers",
-      content: (
-        <PeerCardsTab
+        <DevicesTab
           refreshIntervalMs={refreshIntervalMs}
           lastRefresh={lastRefresh}
           peers={peers}
@@ -330,6 +318,19 @@ export function App() {
           rpc={rpc}
           onAfterAction={refresh}
           onStatus={setStatus}
+        />
+      ),
+    },
+    {
+      id: "connections",
+      label: "Connections",
+      content: (
+        <ConnectionsTab
+          refreshIntervalMs={refreshIntervalMs}
+          lastRefresh={lastRefresh}
+          connections={connections}
+          highlightConnectionRowId={highlightConnectionRowId}
+          onSelectPeer={onSelectPeerFromConnections}
         />
       ),
     },
@@ -396,7 +397,7 @@ export function App() {
   useEffect(() => {
     const ids = new Set(tabs.map((t) => t.id));
     if (!ids.has(tab)) {
-      setTab("connections");
+      setTab("devices");
       return;
     }
     const next = `#${tab}`;
@@ -409,7 +410,8 @@ export function App() {
     const ids = new Set(tabs.map((t) => t.id));
     const onHash = () => {
       const raw = window.location.hash;
-      const h = raw.startsWith("#") ? raw.slice(1) : raw;
+      let h = raw.startsWith("#") ? raw.slice(1) : raw;
+      if (h === "peer_cards") h = "devices";
       if (h && ids.has(h)) setTab(h);
     };
     window.addEventListener("hashchange", onHash);

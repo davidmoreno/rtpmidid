@@ -1,5 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "preact/hooks";
 import type { MdnsRemote, RouterPeer } from "../model";
+import {
+  loadDeviceFavoriteIds,
+  saveDeviceFavoriteIds,
+} from "../deviceFavorites";
 import { buildRecvFromMap } from "../model";
 import type { MidiAlsaSeqEntry, MidiRawmidiEntry } from "../midiEnumerate";
 import type { RpcClient } from "../rpc";
@@ -12,7 +23,53 @@ type EndpointGroup = "local" | "remote";
 type SortKey = "activity" | "name" | "kind" | "connected";
 
 function groupForEndpoint(e: Endpoint): EndpointGroup {
-  return e.kind === "remote" ? "remote" : "local";
+  return e.kind === "rtpmidi" ? "remote" : "local";
+}
+
+function endpointActivity(
+  e: Endpoint,
+  byPeerId: Map<number, RouterPeer>,
+): number {
+  if (e.peerId === undefined) return -1;
+  const p = byPeerId.get(e.peerId);
+  return p ? p.recv + p.sent : -1;
+}
+
+/** Same ordering as the Devices card grid: favorites first, then current Sort mode. */
+function compareEndpointsForDevicesSort(
+  a: Endpoint,
+  b: Endpoint,
+  sortKey: SortKey,
+  favoriteIds: Set<string>,
+  isPeerConnected: Map<number, boolean>,
+  byPeerId: Map<number, RouterPeer>,
+): number {
+  const fa = favoriteIds.has(a.id) ? 1 : 0;
+  const fb = favoriteIds.has(b.id) ? 1 : 0;
+  if (fa !== fb) return fb - fa;
+
+  const activity = (e: Endpoint) => endpointActivity(e, byPeerId);
+  const connFlag = (e: Endpoint): number =>
+    e.peerId !== undefined && (isPeerConnected.get(e.peerId) ?? false) ? 1 : 0;
+
+  if (sortKey === "name") {
+    const c = a.label.localeCompare(b.label);
+    return c !== 0 ? c : a.id.localeCompare(b.id);
+  }
+  if (sortKey === "kind") {
+    const ca = groupForEndpoint(a);
+    const cb = groupForEndpoint(b);
+    if (ca !== cb) return ca === "remote" ? -1 : 1;
+    const c = a.kind.localeCompare(b.kind);
+    return c !== 0 ? c : a.label.localeCompare(b.label);
+  }
+  if (sortKey === "connected") {
+    const da = connFlag(a);
+    const db = connFlag(b);
+    if (da !== db) return db - da;
+    return activity(b) - activity(a);
+  }
+  return activity(b) - activity(a) || a.label.localeCompare(b.label);
 }
 
 function SelectBadge({ e }: { e: Endpoint }) {
@@ -32,11 +89,19 @@ function SelectBadge({ e }: { e: Endpoint }) {
 function ConnectPeerDialog({
   selfId,
   endpoints,
+  favoriteIds,
+  sortKey,
+  isPeerConnected,
+  byPeerId,
   onClose,
   onConnect,
 }: {
   selfId: string;
   endpoints: Endpoint[];
+  favoriteIds: Set<string>;
+  sortKey: SortKey;
+  isPeerConnected: Map<number, boolean>;
+  byPeerId: Map<number, RouterPeer>;
   onClose: () => void;
   onConnect: (otherId: string) => void;
 }) {
@@ -46,11 +111,22 @@ function ConnectPeerDialog({
   const opts = useMemo(() => endpoints.filter((x) => x.id !== selfId), [endpoints, selfId]);
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return opts;
-    return opts.filter((e) =>
-      [e.label, e.sub, e.kind, e.id].join(" ").toLowerCase().includes(s),
+    const base = !s
+      ? opts
+      : opts.filter((e) =>
+          [e.label, e.sub, e.kind, e.id].join(" ").toLowerCase().includes(s),
+        );
+    return [...base].sort((a, b) =>
+      compareEndpointsForDevicesSort(
+        a,
+        b,
+        sortKey,
+        favoriteIds,
+        isPeerConnected,
+        byPeerId,
+      ),
     );
-  }, [opts, q]);
+  }, [opts, q, favoriteIds, sortKey, isPeerConnected, byPeerId]);
 
   useEffect(() => {
     setQ("");
@@ -318,7 +394,9 @@ export function PeersCards({
   }, [peers]);
 
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const pendingFavoriteScrollRef = useRef<string | null>(null);
   const [highlightIds, setHighlightIds] = useState<Set<string>>(() => new Set());
+  const [spotlightIds, setSpotlightIds] = useState<Set<string>>(() => new Set());
   const highlightTimer = useRef<number | undefined>(undefined);
 
   useEffect(
@@ -347,6 +425,44 @@ export function PeersCards({
     }
   };
 
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() =>
+    loadDeviceFavoriteIds(),
+  );
+
+  const toggleFavorite = useCallback((id: string) => {
+    pendingFavoriteScrollRef.current = id;
+    setFavoriteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      saveDeviceFavoriteIds(next);
+      return next;
+    });
+  }, []);
+
+  /* layoutEffect: apply spotlight in the same frame as DOM reorder so paint always shows it */
+  useLayoutEffect(() => {
+    const id = pendingFavoriteScrollRef.current;
+    if (id === null) return;
+    pendingFavoriteScrollRef.current = null;
+
+    setSpotlightIds(new Set([id]));
+
+    const scrollTimer = window.setTimeout(() => {
+      const el = cardRefs.current.get(id);
+      el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, 200);
+
+    const clearTimer = window.setTimeout(() => {
+      setSpotlightIds(new Set());
+    }, 200 + 1000);
+
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [favoriteIds]);
+
   const filtered = useMemo(() => {
     const list = endpoints.filter((e) => {
       const g = groupForEndpoint(e);
@@ -358,35 +474,16 @@ export function PeersCards({
       return true;
     });
 
-    const activity = (e: Endpoint): number => {
-      if (e.peerId === undefined) return -1;
-      const p = byPeerId.get(e.peerId);
-      return p ? p.recv + p.sent : -1;
-    };
-    const connFlag = (e: Endpoint): number =>
-      e.peerId !== undefined && (isPeerConnected.get(e.peerId) ?? false) ? 1 : 0;
-
-    return [...list].sort((a, b) => {
-      if (sortKey === "name") {
-        const c = a.label.localeCompare(b.label);
-        return c !== 0 ? c : a.id.localeCompare(b.id);
-      }
-      if (sortKey === "kind") {
-        const ca = groupForEndpoint(a);
-        const cb = groupForEndpoint(b);
-        if (ca !== cb) return ca === "remote" ? -1 : 1;
-        const c = a.kind.localeCompare(b.kind);
-        return c !== 0 ? c : a.label.localeCompare(b.label);
-      }
-      if (sortKey === "connected") {
-        const da = connFlag(a);
-        const db = connFlag(b);
-        if (da !== db) return db - da;
-        return activity(b) - activity(a);
-      }
-      // activity
-      return activity(b) - activity(a) || a.label.localeCompare(b.label);
-    });
+    return [...list].sort((a, b) =>
+      compareEndpointsForDevicesSort(
+        a,
+        b,
+        sortKey,
+        favoriteIds,
+        isPeerConnected,
+        byPeerId,
+      ),
+    );
   }, [
     endpoints,
     showLocal,
@@ -396,6 +493,7 @@ export function PeersCards({
     sortKey,
     isPeerConnected,
     byPeerId,
+    favoriteIds,
   ]);
 
   const [connectDialogForId, setConnectDialogForId] = useState<string | null>(
@@ -492,13 +590,34 @@ export function PeersCards({
       <section class="ui-peer-card-shell">
         <div class="flex flex-wrap items-end justify-between gap-3">
           <div class="flex flex-wrap items-center gap-2">
-            <Toggle label="Local" value={showLocal} onChange={setShowLocal} />
-            <Toggle label="Remote" value={showRemote} onChange={setShowRemote} />
+            <button
+              type="button"
+              onClick={() => setShowLocal(!showLocal)}
+              class={`rounded-[var(--radius-sm)] px-2 py-1 font-mono text-[11px] font-black uppercase transition-[transform,opacity] duration-150 hover:opacity-95 active:scale-[0.98] ${
+                showLocal ? "ui-filter-toggle-local-on" : "ui-filter-toggle-local-off"
+              }`}
+            >
+              Local
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowRemote(!showRemote)}
+              class={`rounded-[var(--radius-sm)] px-2 py-1 font-mono text-[11px] font-black uppercase transition-[transform,opacity] duration-150 hover:opacity-95 active:scale-[0.98] ${
+                showRemote ? "ui-filter-toggle-remote-on" : "ui-filter-toggle-remote-off"
+              }`}
+            >
+              Remote
+            </button>
             <Toggle
               label="Connected"
               value={connectedOnly}
               onChange={setConnectedOnly}
             />
+            <span class="font-mono text-[10px] ui-text-muted">
+              Showing{" "}
+              <span class="font-black ui-text">{shown.length}</span>
+              <span class="ui-text-subtle"> / {endpoints.length}</span> endpoints
+            </span>
             <div class="ml-2 flex items-center gap-2">
               <span class="font-mono text-[11px] font-bold uppercase ui-text-muted">
                 Sort
@@ -527,24 +646,6 @@ export function PeersCards({
             />
           </label>
         </div>
-        <div class="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px] ui-text-muted">
-          <span>
-            Showing{" "}
-            <span class="font-black ui-text">
-              {shown.length}
-            </span>{" "}
-            / {endpoints.length} endpoint(s)
-          </span>
-          <span class="ui-text-subtle">·</span>
-          <span class="inline-flex items-center gap-1">
-            <AccentPill group="local" connected={true}>
-              local = green
-            </AccentPill>
-            <AccentPill group="remote" connected={true}>
-              remote = blue
-            </AccentPill>
-          </span>
-        </div>
       </section>
 
       <div class="grid gap-4">
@@ -561,10 +662,16 @@ export function PeersCards({
                 `alsa:${r.to_client}:${r.to_port}` === e.id,
             );
           const conn = connRouter || connAlsa;
+          const isSpotlight = spotlightIds.has(e.id);
+          const spot = isSpotlight ? " ui-peer-card-spotlight" : "";
           const ring = highlightIds.has(e.id) ? " ui-tr-highlight" : "";
-          const surf = conn
-            ? "bg-[color:var(--color-surface)]"
-            : "bg-[color:var(--color-surface-zebra-b)]";
+          /* Avoid Tailwind bg-* / ui-shadow-card overriding .ui-peer-card-spotlight */
+          const surf = isSpotlight
+            ? ""
+            : conn
+              ? "bg-[color:var(--color-surface)]"
+              : "bg-[color:var(--color-surface-zebra-b)]";
+          const cardShadow = isSpotlight ? "" : "ui-shadow-card ";
           const accentBorder =
             g === "local"
               ? conn
@@ -607,47 +714,78 @@ export function PeersCards({
                 if (el) cardRefs.current.set(e.id, el);
                 else cardRefs.current.delete(e.id);
               }}
-              class={`overflow-hidden rounded-[var(--radius-md)] border-2 ui-shadow-card ${surf} ${accentBorder}${ring}`}
+              class={`${isSpotlight ? "overflow-visible" : "overflow-hidden"} rounded-[var(--radius-md)] border-2 ${cardShadow}${surf} ${accentBorder}${spot}${ring}`}
             >
               <div class="ui-peer-card-head px-3 py-2">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <div class="flex min-w-0 flex-wrap items-center gap-2">
-                    <span class="min-w-0 truncate font-mono text-sm font-black ui-text">
-                      {e.label}
-                    </span>
-                    <AccentPill group={g} connected={conn}>
-                      {g === "local" ? "LOCAL" : "REMOTE"}
-                    </AccentPill>
-                    <span class="truncate font-mono text-[10px] font-bold uppercase tracking-wide ui-text-muted">
-                      {e.kind}
-                    </span>
-                    {pid !== undefined ? (
-                      <span class="ui-peer-cap">
-                        peer #{pid}
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex min-w-0 items-center gap-2">
+                      <button
+                        type="button"
+                        class="-ml-1 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md font-mono text-2xl leading-none outline-none transition-all duration-200 ease-out ui-text-muted hover:scale-110 hover:bg-[color:var(--color-surface-2)] hover:text-[color:var(--color-ring-highlight)] hover:shadow-[0_0_0_1px_color-mix(in_srgb,var(--color-ring-highlight)_35%,transparent)] focus-visible:ring-2 focus-visible:ring-[color:var(--color-ring-highlight)] active:scale-95"
+                        aria-label={
+                          favoriteIds.has(e.id)
+                            ? "Remove from favorites"
+                            : "Add to favorites"
+                        }
+                        aria-pressed={favoriteIds.has(e.id)}
+                        title="Favorite (stored in this browser)"
+                        onClick={(ev) => {
+                          ev.preventDefault();
+                          ev.stopPropagation();
+                          toggleFavorite(e.id);
+                        }}
+                      >
+                        {favoriteIds.has(e.id) ? (
+                          <span
+                            class="text-[color:var(--color-ring-highlight)] drop-shadow-[0_1px_3px_color-mix(in_srgb,var(--color-ring-highlight)_45%,transparent)]"
+                            aria-hidden
+                          >
+                            ★
+                          </span>
+                        ) : (
+                          <span aria-hidden>☆</span>
+                        )}
+                      </button>
+                      <span class="min-w-0 truncate font-mono text-sm font-black ui-text">
+                        {e.label}
                       </span>
-                    ) : null}
+                    </div>
+                    <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] ui-text-muted">
+                      <AccentPill group={g} connected={conn}>
+                        {g === "local" ? "LOCAL" : "REMOTE"}
+                      </AccentPill>
+                      <span class="truncate font-mono text-[10px] font-bold uppercase tracking-wide ui-text-muted">
+                        {e.kind}
+                      </span>
+                      {pid !== undefined ? (
+                        <span class="ui-peer-cap">
+                          peer #{pid}
+                        </span>
+                      ) : null}
+                      <span class="ui-text-subtle">·</span>
+                      <span class="min-w-0 flex-1 truncate">{e.sub}</span>
+                    </div>
                   </div>
-                  <div class="flex items-center gap-1.5">
-                    <Led
-                      label="IN"
-                      active={pid !== undefined && inPulse.has(pid)}
-                      group={g}
-                      disabled={pid === undefined}
-                    />
-                    <Led
-                      label="OUT"
-                      active={pid !== undefined && outPulse.has(pid)}
-                      group={g}
-                      disabled={pid === undefined}
-                    />
+                  <div class="flex shrink-0 flex-col items-end gap-1.5">
+                    <div class="flex items-center gap-1.5">
+                      <Led
+                        label="IN"
+                        active={pid !== undefined && inPulse.has(pid)}
+                        group={g}
+                        disabled={pid === undefined}
+                      />
+                      <Led
+                        label="OUT"
+                        active={pid !== undefined && outPulse.has(pid)}
+                        group={g}
+                        disabled={pid === undefined}
+                      />
+                    </div>
+                    <span class="font-mono text-[10px] font-black uppercase tracking-wide ui-text-subtle">
+                      {conn ? "connected" : "disconnected"}
+                    </span>
                   </div>
-                </div>
-                <div class="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px] ui-text-muted">
-                  <span class="font-bold uppercase ui-text-subtle">
-                    {conn ? "connected" : "disconnected"}
-                  </span>
-                  <span class="ui-text-subtle">·</span>
-                  <span class="truncate">{e.sub}</span>
                 </div>
               </div>
 
@@ -828,6 +966,10 @@ export function PeersCards({
         <ConnectPeerDialog
           selfId={connectDialogForId}
           endpoints={endpoints}
+          favoriteIds={favoriteIds}
+          sortKey={sortKey}
+          isPeerConnected={isPeerConnected}
+          byPeerId={byPeerId}
           onClose={() => setConnectDialogForId(null)}
           onConnect={(otherId) => {
             const from = connectDialogForId;
@@ -837,11 +979,6 @@ export function PeersCards({
         />
       )}
 
-      <p class="font-mono text-[10px] ui-text-subtle">
-        Connected = has any router edge in or out (only for endpoints currently backed
-        by a router peer) or an ALSA subscription (ALSA↔ALSA). IN/OUT LEDs light when
-        the matched peer recv/sent counters increased since the previous poll.
-      </p>
     </div>
   );
 }
