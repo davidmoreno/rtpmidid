@@ -88,10 +88,10 @@ function Th({
   onClick: () => void;
 }) {
   return (
-    <th class="border-b-2 border-zinc-900 bg-zinc-200 px-2 py-2 text-left dark:border-zinc-100 dark:bg-zinc-800">
+    <th class="ui-th-sort">
       <button
         type="button"
-        class={`font-mono text-xs font-bold uppercase tracking-wide hover:underline ${active ? "text-amber-800 dark:text-amber-300" : ""}`}
+        class={`font-mono text-xs font-bold uppercase tracking-wide hover:underline ${active ? "ui-text-sort-active" : "ui-text"}`}
         onClick={onClick}
       >
         {label}
@@ -117,19 +117,13 @@ function DirectionCircles({
     >
       <span
         title="Inbound: packets_recv increased since previous poll (stays lit each poll while increasing)"
-        class={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 font-mono text-[11px] font-bold leading-none ease-out transition-[background-color,border-color,color,box-shadow] duration-[500ms] ${recvActive
-          ? "border-emerald-700 bg-emerald-400 text-zinc-900 shadow-[0_0_14px_rgba(52,211,153,0.9)] dark:border-emerald-300 dark:bg-emerald-400"
-          : "border-zinc-400 bg-zinc-100 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-          }`}
+        class={`ui-io flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold leading-none ease-out transition-[background-color,border-color,color,box-shadow] duration-[500ms] ${recvActive ? "ui-io-in-on" : ""}`}
       >
         ←
       </span>
       <span
         title="Outbound: packets_sent increased since previous poll (stays lit each poll while increasing)"
-        class={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 font-mono text-[11px] font-bold leading-none ease-out transition-[background-color,border-color,color,box-shadow] duration-[500ms] ${sentActive
-          ? "border-orange-700 bg-orange-400 text-zinc-900 shadow-[0_0_14px_rgba(251,146,60,0.9)] dark:border-orange-300 dark:bg-orange-400"
-          : "border-zinc-400 bg-zinc-100 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-          }`}
+        class={`ui-io flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold leading-none ease-out transition-[background-color,border-color,color,box-shadow] duration-[500ms] ${sentActive ? "ui-io-out-on" : ""}`}
       >
         →
       </span>
@@ -204,14 +198,14 @@ export function ConnectionsTable({
   };
 
   return (
-    <div class="overflow-x-auto overflow-y-visible">
-      <table class="w-full min-w-[52rem] border-collapse border-2 border-zinc-900 text-left dark:border-zinc-100">
+    <div class="ui-table-shell overflow-y-visible">
+      <table class="ui-table min-w-[52rem] text-left">
         <thead>
           <tr>
-            <th class="border-b-2 border-zinc-900 bg-zinc-200 px-2 py-2 text-left font-mono text-xs font-bold uppercase dark:border-zinc-100 dark:bg-zinc-800">
+            <th class="ui-th-sort text-left font-mono text-xs font-bold uppercase">
               #
             </th>
-            <th class="border-b-2 border-zinc-900 bg-zinc-200 px-2 py-2 text-left font-mono text-[10px] font-bold uppercase text-zinc-600 dark:border-zinc-100 dark:bg-zinc-800 dark:text-zinc-400">
+            <th class="ui-th-sort text-left font-mono text-[10px] font-bold uppercase ui-text-muted">
               I/O
             </th>
             <Th
@@ -238,7 +232,7 @@ export function ConnectionsTable({
               asc={sortAsc}
               onClick={() => toggle("summary")}
             />
-            <th class="border-b-2 border-zinc-900 bg-zinc-200 px-2 py-2 font-mono text-xs font-bold uppercase dark:border-zinc-100 dark:bg-zinc-800">
+            <th class="ui-th-sort font-mono text-xs font-bold uppercase">
               Participants
             </th>
             <Th
@@ -263,10 +257,10 @@ export function ConnectionsTable({
                 if (el) rowRefs.current.set(r.id, el);
                 else rowRefs.current.delete(r.id);
               }}
-              class={`border-b border-zinc-300 odd:bg-white even:bg-zinc-50 dark:border-zinc-700 dark:odd:bg-zinc-950 dark:even:bg-zinc-900/80 ${highlightConnectionRowId === r.id ? "ring-2 ring-inset ring-amber-500 dark:ring-amber-400" : ""
+              class={`ui-tr-zebra ${highlightConnectionRowId === r.id ? "ui-tr-highlight" : ""
                 }`}
             >
-              <td class="px-2 py-1.5 font-mono text-sm font-bold tabular-nums text-zinc-800 dark:text-zinc-100">
+              <td class="px-2 py-1.5 font-mono text-sm font-bold tabular-nums ui-text">
                 {idx + 1}
               </td>
               <td class="px-1 py-1 align-middle">
@@ -288,14 +282,14 @@ export function ConnectionsTable({
               <td class="max-w-[14rem] truncate px-2 py-1.5 font-mono text-xs">
                 {r.summary}
               </td>
-              <td class="max-w-[28rem] px-2 py-1.5 font-mono text-[11px] leading-snug text-zinc-800 dark:text-zinc-200">
+              <td class="max-w-[28rem] px-2 py-1.5 font-mono text-[11px] leading-snug ui-text">
                 <span class="inline-flex flex-wrap items-center gap-1">
                   {r.participantPeers.map((pp, i) => (
                     <span key={pp.id} class="inline-flex items-center gap-1">
-                      {i > 0 ? <span class="text-zinc-400">·</span> : null}
+                      {i > 0 ? <span class="ui-text-subtle">·</span> : null}
                       <button
                         type="button"
-                        class="rounded border border-zinc-400 bg-zinc-100 px-1 py-0.5 text-left hover:bg-amber-100 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                        class="ui-chip-link font-mono text-[11px]"
                         onClick={() => onSelectPeer?.(pp.id)}
                       >
                         #{pp.id} {pp.name}
@@ -303,7 +297,7 @@ export function ConnectionsTable({
                     </span>
                   ))}
                   {r.participantNote && (
-                    <span class="text-zinc-600 dark:text-zinc-400">
+                    <span class="ui-text-muted">
                       {r.participantNote}
                     </span>
                   )}
@@ -319,7 +313,7 @@ export function ConnectionsTable({
           ))}
         </tbody>
       </table>
-      <p class="mt-2 font-mono text-[10px] text-zinc-500">
+      <p class="mt-2 font-mono text-[10px] ui-text-subtle">
         # = row order in this table. I/O: ← green / → orange mean recv or sent totals
         increased vs the previous poll; they clear on the next poll if there was no
         increase (header selector sets poll rate). Opposite router edges A→B

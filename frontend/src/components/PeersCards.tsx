@@ -19,10 +19,10 @@ function SelectBadge({ e }: { e: Endpoint }) {
   const g = groupForEndpoint(e);
   const cls =
     g === "local"
-      ? "border-emerald-900 bg-emerald-50 text-emerald-950 dark:border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200"
-      : "border-sky-900 bg-sky-50 text-sky-950 dark:border-sky-200 dark:bg-sky-500/10 dark:text-sky-200";
+      ? "ui-badge-local inline-flex items-center gap-1 rounded px-1 py-0.5 font-mono text-[11px] font-bold"
+      : "ui-badge-remote inline-flex items-center gap-1 rounded px-1 py-0.5 font-mono text-[11px] font-bold";
   return (
-    <span class={`inline-flex items-center gap-1 rounded border-2 px-1 py-0.5 font-mono text-[11px] font-bold ${cls}`}>
+    <span class={cls}>
       <span class="max-w-[12rem] truncate">{e.label}</span>
       <span class="text-[9px] font-black uppercase opacity-80">{e.kind}</span>
     </span>
@@ -56,26 +56,26 @@ function FancyEndpointSelect({
 
   return (
     <details class="group relative">
-      <summary class="list-none cursor-pointer border-2 border-zinc-900 bg-white px-2 py-1 font-mono text-xs font-black shadow-[3px_3px_0_0_#18181b] hover:bg-zinc-100 hover:ring-2 hover:ring-inset hover:ring-zinc-900 dark:border-zinc-100 dark:bg-zinc-950 dark:shadow-[3px_3px_0_0_#fafafa] dark:hover:bg-zinc-900 dark:hover:ring-zinc-100">
+      <summary class="ui-details-summary list-none cursor-pointer">
         <span class="flex items-center justify-between gap-2">
           <span class="min-w-0">
             {selected ? (
               <SelectBadge e={selected} />
             ) : (
-              <span class="text-zinc-600 dark:text-zinc-400">Choose endpoint…</span>
+              <span class="ui-text-muted">Choose endpoint…</span>
             )}
           </span>
-          <span class="font-black text-zinc-700 dark:text-zinc-300">▾</span>
+          <span class="font-black ui-text-muted">▾</span>
         </span>
       </summary>
 
-      <div class="absolute z-50 mt-1 w-full border-2 border-zinc-900 bg-white shadow-[6px_6px_0_0_#18181b] dark:border-zinc-100 dark:bg-zinc-950 dark:shadow-[6px_6px_0_0_#fafafa]">
-        <div class="border-b-2 border-zinc-900 bg-zinc-200 p-2 dark:border-zinc-100 dark:bg-zinc-800">
+      <div class="ui-details-panel absolute z-50 mt-1 w-full">
+        <div class="ui-details-search-wrap">
           <input
             value={q}
             onInput={(e) => setQ((e.target as HTMLInputElement).value)}
             placeholder="Search endpoints…"
-            class="w-full border-2 border-zinc-900 bg-white px-2 py-1 font-mono text-[11px] font-bold dark:border-zinc-100 dark:bg-zinc-950"
+            class="ui-input mt-0 font-mono text-[11px] font-bold"
           />
         </div>
         <div class="max-h-64 overflow-y-auto p-2">
@@ -85,13 +85,13 @@ function FancyEndpointSelect({
                 const g = groupForEndpoint(e);
                 const cls =
                   g === "local"
-                    ? "border-emerald-900 bg-emerald-50 text-emerald-950 hover:bg-emerald-100 dark:border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/15"
-                    : "border-sky-900 bg-sky-50 text-sky-950 hover:bg-sky-100 dark:border-sky-200 dark:bg-sky-500/10 dark:text-sky-200 dark:hover:bg-sky-500/15";
+                    ? "ui-endpoint-opt-local"
+                    : "ui-endpoint-opt-remote";
                 return (
                   <button
                     type="button"
                     key={e.id}
-                    class={`w-full border-2 p-2 text-left font-mono ${cls}`}
+                    class={`w-full rounded-[var(--radius-sm)] border-2 p-2 text-left font-mono ${cls}`}
                     onClick={(ev) => {
                       ev.preventDefault();
                       onChange(e.id);
@@ -119,7 +119,7 @@ function FancyEndpointSelect({
               })}
             </div>
           ) : (
-            <div class="font-mono text-[11px] text-zinc-500">No matches.</div>
+            <div class="font-mono text-[11px] ui-text-subtle">No matches.</div>
           )}
         </div>
       </div>
@@ -147,12 +147,8 @@ function AccentPill({
     "inline-flex items-center gap-1 rounded border-2 px-1.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-wide";
   const cls =
     group === "local"
-      ? connected
-        ? `${base} border-emerald-900 bg-emerald-200 text-emerald-950 dark:border-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-200`
-        : `${base} border-emerald-900 bg-emerald-100 text-emerald-950 dark:border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200`
-      : connected
-        ? `${base} border-sky-900 bg-sky-200 text-sky-950 dark:border-sky-200 dark:bg-sky-500/25 dark:text-sky-200`
-        : `${base} border-sky-900 bg-sky-100 text-sky-950 dark:border-sky-200 dark:bg-sky-500/15 dark:text-sky-200`;
+      ? `${base} ui-pill-local ${connected ? "ui-pill-local-connected" : ""}`
+      : `${base} ui-pill-remote ${connected ? "ui-pill-remote-connected" : ""}`;
   return <span class={cls}>{children}</span>;
 }
 
@@ -168,11 +164,8 @@ function Led({
   disabled: boolean;
 }) {
   const lit =
-    group === "local"
-      ? "border-emerald-700 bg-emerald-400 text-zinc-900 shadow-[0_0_14px_rgba(52,211,153,0.9)] dark:border-emerald-300 dark:bg-emerald-400"
-      : "border-sky-700 bg-sky-400 text-zinc-900 shadow-[0_0_14px_rgba(56,189,248,0.9)] dark:border-sky-300 dark:bg-sky-400";
-  const unlit =
-    "border-zinc-400 bg-zinc-100 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-400";
+    group === "local" ? "ui-led-local-on" : "ui-led-remote-on";
+  const unlit = "ui-led-off";
   return (
     <span
       title={
@@ -397,10 +390,8 @@ export function PeersCards({
     <button
       type="button"
       onClick={() => onChange(!value)}
-      class={`border-2 px-2 py-1 font-mono text-[11px] font-black uppercase shadow-[3px_3px_0_0_#18181b] dark:shadow-[3px_3px_0_0_#fafafa] ${
-        value
-          ? "border-zinc-900 bg-amber-300 text-zinc-950 dark:border-zinc-100 dark:bg-amber-600 dark:text-zinc-950"
-          : "border-zinc-500 bg-zinc-100 text-zinc-700 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300"
+      class={`rounded-[var(--radius-sm)] px-2 py-1 font-mono text-[11px] font-black uppercase ${
+        value ? "ui-toggle-on" : "ui-toggle-off"
       }`}
     >
       {label}
@@ -452,7 +443,7 @@ export function PeersCards({
 
   return (
     <div class="space-y-4">
-      <section class="border-2 border-zinc-900 bg-white p-3 shadow-[6px_6px_0_0_#18181b] dark:border-zinc-100 dark:bg-zinc-900 dark:shadow-[6px_6px_0_0_#fafafa]">
+      <section class="ui-peer-card-shell">
         <div class="flex flex-wrap items-end justify-between gap-3">
           <div class="flex flex-wrap items-center gap-2">
             <Toggle label="Local" value={showLocal} onChange={setShowLocal} />
@@ -463,11 +454,11 @@ export function PeersCards({
               onChange={setConnectedOnly}
             />
             <div class="ml-2 flex items-center gap-2">
-              <span class="font-mono text-[11px] font-bold uppercase text-zinc-600 dark:text-zinc-400">
+              <span class="font-mono text-[11px] font-bold uppercase ui-text-muted">
                 Sort
               </span>
               <select
-                class="border-2 border-zinc-900 bg-white px-2 py-1 font-mono text-[11px] font-bold dark:border-zinc-100 dark:bg-zinc-950"
+                class="ui-select mt-0 py-1 font-mono text-[11px] font-bold"
                 value={sortKey}
                 onChange={(e) =>
                   setSortKey((e.target as HTMLSelectElement).value as SortKey)
@@ -480,25 +471,25 @@ export function PeersCards({
               </select>
             </div>
           </div>
-          <label class="min-w-[14rem] grow font-mono text-[11px] font-bold uppercase text-zinc-600 dark:text-zinc-400">
+          <label class="min-w-[14rem] grow font-mono text-[11px] font-bold uppercase ui-text-muted">
             Search
             <input
-              class="mt-1 w-full border-2 border-zinc-900 bg-white px-2 py-1 font-mono text-xs dark:border-zinc-100 dark:bg-zinc-950"
+              class="ui-input mt-1 text-xs"
               value={query}
               onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
               placeholder="name, device, host, kind…"
             />
           </label>
         </div>
-        <div class="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px] text-zinc-600 dark:text-zinc-400">
+        <div class="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px] ui-text-muted">
           <span>
             Showing{" "}
-            <span class="font-black text-zinc-900 dark:text-zinc-100">
+            <span class="font-black ui-text">
               {shown.length}
             </span>{" "}
             / {endpoints.length} endpoint(s)
           </span>
-          <span class="text-zinc-400">·</span>
+          <span class="ui-text-subtle">·</span>
           <span class="inline-flex items-center gap-1">
             <AccentPill group="local" connected={true}>
               local = green
@@ -524,20 +515,18 @@ export function PeersCards({
                 `alsa:${r.to_client}:${r.to_port}` === e.id,
             );
           const conn = connRouter || connAlsa;
-          const ring = highlightIds.has(e.id)
-            ? " ring-2 ring-inset ring-amber-500 dark:ring-amber-400"
-            : "";
-          const base = conn
-            ? "border-2 bg-white shadow-[6px_6px_0_0_#18181b] dark:bg-zinc-900 dark:shadow-[6px_6px_0_0_#fafafa]"
-            : "border-2 bg-zinc-100 shadow-[6px_6px_0_0_#18181b] dark:bg-zinc-950 dark:shadow-[6px_6px_0_0_#fafafa]";
+          const ring = highlightIds.has(e.id) ? " ui-tr-highlight" : "";
+          const surf = conn
+            ? "bg-[color:var(--color-surface)]"
+            : "bg-[color:var(--color-surface-zebra-b)]";
           const accentBorder =
             g === "local"
               ? conn
-                ? "border-emerald-900 dark:border-emerald-200"
-                : "border-emerald-950 dark:border-emerald-300"
+                ? "border-[color:var(--color-badge-local-border)]"
+                : "border-[color:var(--color-badge-local-fg)]"
               : conn
-                ? "border-sky-900 dark:border-sky-200"
-                : "border-sky-950 dark:border-sky-300";
+                ? "border-[color:var(--color-badge-remote-border)]"
+                : "border-[color:var(--color-badge-remote-fg)]";
 
           const outPeerIds = pid !== undefined && peer ? peer.send_to : [];
           const inPeerIds = pid !== undefined ? (recvFrom.get(pid) ?? []) : [];
@@ -574,22 +563,22 @@ export function PeersCards({
                 if (el) cardRefs.current.set(e.id, el);
                 else cardRefs.current.delete(e.id);
               }}
-              class={`${base} ${accentBorder}${ring}`}
+              class={`overflow-hidden rounded-[var(--radius-md)] border-2 ui-shadow-card ${surf} ${accentBorder}${ring}`}
             >
-              <div class="border-b-2 border-zinc-900 bg-zinc-200 px-3 py-2 dark:border-zinc-100 dark:bg-zinc-800">
+              <div class="ui-peer-card-head px-3 py-2">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                   <div class="flex min-w-0 flex-wrap items-center gap-2">
-                    <span class="min-w-0 truncate font-mono text-sm font-black text-zinc-950 dark:text-zinc-50">
+                    <span class="min-w-0 truncate font-mono text-sm font-black ui-text">
                       {e.label}
                     </span>
                     <AccentPill group={g} connected={conn}>
                       {g === "local" ? "LOCAL" : "REMOTE"}
                     </AccentPill>
-                    <span class="truncate font-mono text-[10px] font-bold uppercase tracking-wide text-zinc-600 dark:text-zinc-300">
+                    <span class="truncate font-mono text-[10px] font-bold uppercase tracking-wide ui-text-muted">
                       {e.kind}
                     </span>
                     {pid !== undefined ? (
-                      <span class="rounded border border-zinc-400 bg-zinc-100 px-1 py-0.5 font-mono text-[10px] font-black uppercase text-zinc-700 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+                      <span class="ui-peer-cap">
                         peer #{pid}
                       </span>
                     ) : null}
@@ -609,11 +598,11 @@ export function PeersCards({
                     />
                   </div>
                 </div>
-                <div class="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px] text-zinc-700 dark:text-zinc-300">
-                  <span class="font-bold uppercase text-zinc-500 dark:text-zinc-400">
+                <div class="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px] ui-text-muted">
+                  <span class="font-bold uppercase ui-text-subtle">
                     {conn ? "connected" : "disconnected"}
                   </span>
-                  <span class="text-zinc-400">·</span>
+                  <span class="ui-text-subtle">·</span>
                   <span class="truncate">{e.sub}</span>
                 </div>
               </div>
@@ -622,35 +611,35 @@ export function PeersCards({
                 <div class="grid gap-3 md:grid-cols-[1fr_auto]">
                   <div class="space-y-2">
                     <div class="flex flex-wrap items-center gap-2 font-mono text-xs">
-                      <span class="font-black uppercase text-zinc-600 dark:text-zinc-400">
+                      <span class="font-black uppercase ui-text-muted">
                         Stats
                       </span>
-                      <span class="text-zinc-400">·</span>
+                      <span class="ui-text-subtle">·</span>
                       {peer ? (
                         <>
                           <span class="tabular-nums">
                             recv{" "}
-                            <strong class="text-zinc-900 dark:text-zinc-100">
+                            <strong class="ui-text">
                               {peer.recv}
                             </strong>
                           </span>
                           <span class="tabular-nums">
                             sent{" "}
-                            <strong class="text-zinc-900 dark:text-zinc-100">
+                            <strong class="ui-text">
                               {peer.sent}
                             </strong>
                           </span>
                           <span class="tabular-nums">
                             Σ{" "}
-                            <strong class="text-zinc-900 dark:text-zinc-100">
+                            <strong class="ui-text">
                               {peer.recv + peer.sent}
                             </strong>
                           </span>
                           {peerCombinedLatencyMs(peer) !== null ? (
                             <>
-                              <span class="text-zinc-400">·</span>
+                              <span class="ui-text-subtle">·</span>
                               <span class="inline-flex items-center gap-2">
-                                <span class="font-black uppercase text-zinc-600 dark:text-zinc-400">
+                                <span class="font-black uppercase ui-text-muted">
                                   Lat
                                 </span>
                                 <span class="relative min-w-[10rem]">
@@ -661,12 +650,12 @@ export function PeersCards({
                           ) : null}
                         </>
                       ) : (
-                        <span class="text-zinc-500">—</span>
+                        <span class="ui-text-subtle">—</span>
                       )}
                     </div>
 
                     <div>
-                      <div class="mb-1 font-mono text-[10px] font-black uppercase text-zinc-600 dark:text-zinc-400">
+                      <div class="mb-1 font-mono text-[10px] font-black uppercase ui-text-muted">
                         connected to ({connectedEndpoints.length}{e.kind === "alsa_seq" ? ` + ${alsaOut.length + alsaIn.length} alsa` : ""})
                       </div>
                       <div class="flex flex-wrap gap-1">
@@ -674,35 +663,29 @@ export function PeersCards({
                           connectedEndpoints.map(({ ce, dir }) => (
                             <span
                               key={ce.id}
-                              class={`inline-flex items-center gap-1 rounded border-2 px-1 py-0.5 font-mono text-[11px] font-bold ${
+                              class={`inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1 py-0.5 font-mono text-[11px] font-bold ${
                                 groupForEndpoint(ce) === "local"
-                                  ? "border-emerald-900 bg-emerald-50 text-emerald-950 dark:border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200"
-                                  : "border-sky-900 bg-sky-50 text-sky-950 dark:border-sky-200 dark:bg-sky-500/10 dark:text-sky-200"
+                                  ? "ui-badge-local"
+                                  : "ui-badge-remote"
                               }`}
                               title={ce.id}
                             >
                               <button
                                 type="button"
-                                class={`hover:underline ${
-                                  groupForEndpoint(ce) === "local"
-                                    ? "hover:text-emerald-950 dark:hover:text-emerald-200"
-                                    : "hover:text-sky-950 dark:hover:text-sky-200"
-                                }`}
+                                class="hover:underline ui-text"
                                 onClick={() => pulseEndpoints([e.id, ce.id], ce.id)}
                               >
                                 {ce.label}
                               </button>
                               {dir ? (
-                                <span class="rounded border border-zinc-400 bg-white px-1 text-[9px] font-black uppercase text-zinc-700 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-300">
-                                  {dir}
-                                </span>
+                                <span class="ui-pill-id text-[9px]">{dir}</span>
                               ) : null}
                               <button
                                 type="button"
-                                class={`rounded border px-1 text-[10px] font-black uppercase hover:bg-white dark:hover:bg-zinc-950 ${
+                                class={`px-1 py-0.5 text-[10px] font-black uppercase ${
                                   groupForEndpoint(ce) === "local"
-                                    ? "border-emerald-900 bg-emerald-200 text-emerald-950 dark:border-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-200"
-                                    : "border-sky-900 bg-sky-200 text-sky-950 dark:border-sky-200 dark:bg-sky-500/25 dark:text-sky-200"
+                                    ? "ui-wire-action-local"
+                                    : "ui-wire-action-remote"
                                 }`}
                                 onClick={() => void doDisconnect(e.id, ce.id)}
                                 title="Disconnect"
@@ -721,12 +704,12 @@ export function PeersCards({
                               return (
                                 <span
                                   key={`${fromId}->${toId}`}
-                                  class="inline-flex items-center gap-1 rounded border-2 border-emerald-900 bg-emerald-50 px-1 py-0.5 font-mono text-[11px] font-bold text-emerald-950 dark:border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200"
+                                  class="ui-emerald-chip gap-1 px-1 py-0.5 text-[11px]"
                                   title={`${fromId} -> ${toId}`}
                                 >
                                   <button
                                     type="button"
-                                    class="hover:underline"
+                                    class="hover:underline ui-text"
                                     onClick={() => pulseEndpoints([e.id, toId], toId)}
                                   >
                                     {toLabel}
@@ -734,7 +717,7 @@ export function PeersCards({
                                   <span class="font-black">→</span>
                                   <button
                                     type="button"
-                                    class="rounded border border-emerald-900 bg-emerald-200 px-1 text-[10px] font-black uppercase text-emerald-950 hover:bg-emerald-100 dark:border-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-200 dark:hover:bg-emerald-500/15"
+                                    class="ui-wire-action-local px-1 py-0.5 text-[10px] font-black uppercase"
                                     onClick={() => void doDisconnect(fromId, toId)}
                                   >
                                     x
@@ -749,23 +732,23 @@ export function PeersCards({
                               return (
                                 <span
                                   key={`${fromId}->${toId}`}
-                                  class="inline-flex items-center gap-1 rounded border-2 border-emerald-900 bg-emerald-50 px-1 py-0.5 font-mono text-[11px] font-bold text-emerald-950 dark:border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200"
+                                  class="ui-emerald-chip gap-1 px-1 py-0.5 text-[11px]"
                                   title={`${fromId} -> ${toId}`}
                                 >
                                   <button
                                     type="button"
-                                    class="hover:underline"
+                                    class="hover:underline ui-text"
                                     onClick={() => pulseEndpoints([e.id, fromId], fromId)}
                                   >
                                     {fromLabel}
                                   </button>
                                   <span class="font-black">→</span>
-                                  <span class="text-zinc-600 dark:text-zinc-400">
+                                  <span class="ui-text-muted">
                                     this
                                   </span>
                                   <button
                                     type="button"
-                                    class="rounded border border-emerald-900 bg-emerald-200 px-1 text-[10px] font-black uppercase text-emerald-950 hover:bg-emerald-100 dark:border-emerald-200 dark:bg-emerald-500/25 dark:text-emerald-200 dark:hover:bg-emerald-500/15"
+                                    class="ui-wire-action-local px-1 py-0.5 text-[10px] font-black uppercase"
                                     onClick={() => void doDisconnect(fromId, toId)}
                                   >
                                     x
@@ -777,15 +760,15 @@ export function PeersCards({
                         ) : null}
                         {connectedEndpoints.length === 0 &&
                         (e.kind !== "alsa_seq" || (alsaOut.length + alsaIn.length) === 0) ? (
-                          <span class="font-mono text-[11px] text-zinc-500">—</span>
+                          <span class="font-mono text-[11px] ui-text-subtle">—</span>
                         ) : null}
                       </div>
                     </div>
                   </div>
 
                   <div class="w-full max-w-[22rem]">
-                    <div class="border-2 border-zinc-900 bg-zinc-50 p-2 dark:border-zinc-100 dark:bg-zinc-950">
-                      <div class="mb-2 font-mono text-[10px] font-black uppercase text-zinc-600 dark:text-zinc-400">
+                    <div class="ui-panel-soft p-2">
+                      <div class="mb-2 font-mono text-[10px] font-black uppercase ui-text-muted">
                         Connect
                       </div>
                       <div class="flex flex-col gap-2">
@@ -812,7 +795,7 @@ export function PeersCards({
                             connect ↔
                           </Button>
                         </div>
-                        <div class="font-mono text-[10px] text-zinc-600 dark:text-zinc-400">
+                        <div class="font-mono text-[10px] ui-text-muted">
                           server decides ALSA aconnect vs router routing
                         </div>
                       </div>
@@ -825,7 +808,7 @@ export function PeersCards({
         })}
       </div>
 
-      <p class="font-mono text-[10px] text-zinc-500">
+      <p class="font-mono text-[10px] ui-text-subtle">
         Connected = has any router edge in or out (only for endpoints currently backed
         by a router peer) or an ALSA subscription (ALSA↔ALSA). IN/OUT LEDs light when
         the matched peer recv/sent counters increased since the previous poll.

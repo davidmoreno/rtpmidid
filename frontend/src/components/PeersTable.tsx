@@ -63,10 +63,10 @@ function Th({
   onClick: () => void;
 }) {
   return (
-    <th class="border-b-2 border-zinc-900 bg-zinc-200 px-2 py-2 text-left dark:border-zinc-100 dark:bg-zinc-800">
+    <th class="ui-th-sort">
       <button
         type="button"
-        class={`font-mono text-xs font-bold uppercase tracking-wide hover:underline ${active ? "text-amber-800 dark:text-amber-300" : ""}`}
+        class={`font-mono text-xs font-bold uppercase tracking-wide hover:underline ${active ? "ui-text-sort-active" : "ui-text"}`}
         onClick={onClick}
       >
         {label}
@@ -116,8 +116,8 @@ export function PeersTable({ peers, highlightPeerId }: Props) {
   };
 
   return (
-    <div class="overflow-x-auto overflow-y-visible">
-      <table class="w-full min-w-[56rem] border-collapse border-2 border-zinc-900 text-left dark:border-zinc-100">
+    <div class="ui-table-shell overflow-y-visible">
+      <table class="ui-table min-w-[56rem] text-left">
         <thead>
           <tr>
             <Th
@@ -162,10 +162,10 @@ export function PeersTable({ peers, highlightPeerId }: Props) {
               asc={sortAsc}
               onClick={() => toggle("send_n")}
             />
-            <th class="border-b-2 border-zinc-900 bg-zinc-200 px-2 py-2 font-mono text-xs font-bold uppercase dark:border-zinc-100 dark:bg-zinc-800">
+            <th class="ui-th-sort font-mono text-xs font-bold uppercase">
               → to
             </th>
-            <th class="border-b-2 border-zinc-900 bg-zinc-200 px-2 py-2 font-mono text-xs font-bold uppercase dark:border-zinc-100 dark:bg-zinc-800">
+            <th class="ui-th-sort font-mono text-xs font-bold uppercase">
               ← from
             </th>
             <Th
@@ -184,10 +184,8 @@ export function PeersTable({ peers, highlightPeerId }: Props) {
                 if (el) rowRefs.current.set(p.id, el);
                 else rowRefs.current.delete(p.id);
               }}
-              class={`border-b border-zinc-300 odd:bg-white even:bg-zinc-50 dark:border-zinc-700 dark:odd:bg-zinc-950 dark:even:bg-zinc-900/80 ${
-                highlightPeerId === p.id
-                  ? "ring-2 ring-inset ring-amber-500 dark:ring-amber-400"
-                  : ""
+              class={`ui-tr-zebra ${
+                highlightPeerId === p.id ? "ui-tr-highlight" : ""
               }`}
             >
               <td class="px-2 py-1.5 font-mono text-sm font-bold tabular-nums">
@@ -196,7 +194,7 @@ export function PeersTable({ peers, highlightPeerId }: Props) {
               <td class="max-w-[12rem] truncate px-2 py-1.5 font-mono text-sm">
                 {p.name || "—"}
               </td>
-              <td class="max-w-[10rem] truncate px-2 py-1.5 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+              <td class="max-w-[10rem] truncate px-2 py-1.5 font-mono text-xs ui-text-muted">
                 {p.type}
               </td>
               <td class="px-2 py-1.5 font-mono text-sm tabular-nums">{p.recv}</td>
@@ -220,10 +218,10 @@ export function PeersTable({ peers, highlightPeerId }: Props) {
           ))}
         </tbody>
       </table>
-      <p class="mt-2 font-mono text-[10px] text-zinc-500">
+      <p class="mt-2 font-mono text-[10px] ui-text-subtle">
         Events Σ = recv + sent (packet counters). Latency bar = sum of available
         last-sample latencies; hover for breakdown. Scale:{" "}
-        <code class="rounded bg-zinc-200 px-0.5 dark:bg-zinc-800">latencyScale.ts</code>.
+        <code class="ui-code">latencyScale.ts</code>.
       </p>
     </div>
   );

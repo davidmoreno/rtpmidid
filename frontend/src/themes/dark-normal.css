@@ -1,0 +1,114 @@
+[data-theme="dark-normal"] {
+  --color-page-bg: #0f172a;
+  --page-bg-image: none;
+
+  --color-fg: #f1f5f9;
+  --color-fg-muted: #94a3b8;
+  --color-fg-subtle: #64748b;
+  --color-fg-inverse: #0f172a;
+
+  --color-border: #334155;
+  --color-border-muted: #1e293b;
+
+  --color-surface: #1e293b;
+  --color-surface-2: #334155;
+  --color-surface-zebra-a: #0f172a;
+  --color-surface-zebra-b: #1e293b;
+  --color-surface-panel: #1e293b;
+
+  --color-input-bg: #0f172a;
+  --color-code-bg: #334155;
+
+  --color-accent: #d97706;
+  --color-accent-hover: #f59e0b;
+  --color-accent-fg: #0f172a;
+
+  --color-sort-active: #fbbf24;
+  --color-banner-warn-fg: #fbbf24;
+
+  --color-ring-highlight: #f59e0b;
+
+  --color-chip-bg: #334155;
+  --color-chip-hover: #475569;
+  --color-chip-border: #64748b;
+  --color-chip-fg: #f1f5f9;
+
+  --color-io-off-bg: #334155;
+  --color-io-off-border: #64748b;
+  --color-io-off-fg: #94a3b8;
+  --color-io-in-bg: #34d399;
+  --color-io-in-border: #6ee7b7;
+  --color-io-in-fg: #0f172a;
+  --shadow-io-in: 0 0 12px rgba(52, 211, 153, 0.5);
+  --color-io-out-bg: #fb923c;
+  --color-io-out-border: #fdba74;
+  --color-io-out-fg: #0f172a;
+  --shadow-io-out: 0 0 12px rgba(251, 146, 60, 0.5);
+
+  --color-badge-local-bg: rgba(16, 185, 129, 0.15);
+  --color-badge-local-border: #34d399;
+  --color-badge-local-fg: #6ee7b7;
+  --color-badge-local-hover-bg: rgba(16, 185, 129, 0.25);
+  --color-badge-remote-bg: rgba(59, 130, 246, 0.15);
+  --color-badge-remote-border: #60a5fa;
+  --color-badge-remote-fg: #93c5fd;
+  --color-badge-remote-hover-bg: rgba(59, 130, 246, 0.25);
+
+  --color-success-heading: #6ee7b7;
+  --color-warn-heading: #fbbf24;
+
+  --latency-track-bg: #334155;
+  --latency-track-border: #475569;
+  --latency-tier-0: #94a3b8;
+  --latency-tier-1: #34d399;
+  --latency-tier-2: #fbbf24;
+  --latency-tier-3: #f87171;
+  --latency-tick: rgba(241, 245, 249, 0.15);
+  --latency-value-fg: #f1f5f9;
+
+  --color-tooltip-bg: #1e293b;
+  --color-tooltip-border: #334155;
+  --color-tooltip-fg: #f1f5f9;
+  --shadow-tooltip: 0 4px 6px -1px rgb(0 0 0 / 0.3);
+
+  --color-tab-active-bg: #1e293b;
+  --color-tab-active-border: #334155;
+  --color-tab-active-fg: #f1f5f9;
+  --color-tab-inactive-fg: #94a3b8;
+  --color-tab-inactive-hover-bg: #334155;
+
+  --color-card-header-fg: #f1f5f9;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-full: 9999px;
+
+  --border-width: 1px;
+
+  --shadow-btn: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.2), 0 1px 2px -1px rgb(0 0 0 / 0.2);
+  --shadow-dropdown: 0 10px 15px -3px rgb(0 0 0 / 0.35);
+
+  --font-ui: ui-sans-serif, system-ui, sans-serif;
+
+  --color-header-border: #334155;
+
+  --color-mdns-row-hover: #1e293b;
+  --color-mdns-row-selected-bg: rgba(120, 53, 15, 0.4);
+  --color-mdns-row-selected-ring: #fbbf24;
+
+  --color-modal-backdrop: rgba(0, 0, 0, 0.55);
+  --color-modal-bg: #0f172a;
+  --shadow-modal: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+
+  --color-peer-pill-id-bg: #334155;
+  --color-peer-pill-id-border: #64748b;
+  --color-peer-pill-id-fg: #cbd5e1;
+
+  --color-accent-hot-bg: rgba(217, 119, 6, 0.35);
+  --color-accent-hot-border: #fbbf24;
+  --color-accent-hot-hover-bg: rgba(217, 119, 6, 0.5);
+
+  --ring-offset: #1e293b;
+}

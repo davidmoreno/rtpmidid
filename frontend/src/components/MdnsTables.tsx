@@ -52,18 +52,18 @@ function remoteGroupKey(g: MdnsRemoteGroup): string {
 
 function announcementTipContent(a: MdnsAnnouncementGroup) {
   return (
-    <div class="space-y-1 text-zinc-800 dark:text-zinc-100">
-      <div class="font-bold uppercase text-zinc-500 dark:text-zinc-400">
+    <div class="space-y-1 ui-text">
+      <div class="font-bold uppercase ui-text-subtle">
         Announcement
       </div>
       <div>
-        <span class="text-zinc-500">Name:</span> {a.name}
+        <span class="ui-text-subtle">Name:</span> {a.name}
       </div>
       <div>
-        <span class="text-zinc-500">Port:</span> {a.port}
+        <span class="ui-text-subtle">Port:</span> {a.port}
       </div>
       <div>
-        <span class="text-zinc-500">Merged rows:</span> <strong>{a.count}</strong>
+        <span class="ui-text-subtle">Merged rows:</span> <strong>{a.count}</strong>
       </div>
     </div>
   );
@@ -252,28 +252,28 @@ export function MdnsTables({
     <div class="space-y-6">
       <div class="grid gap-4 lg:grid-cols-2">
         <div>
-          <p class="mb-2 font-mono text-xs font-bold uppercase text-zinc-600 dark:text-zinc-400">
+          <p class="mb-2 font-mono text-xs font-bold uppercase ui-text-muted">
             mDNS status:{" "}
-            <span class="text-zinc-900 dark:text-zinc-100">{status}</span>
+            <span class="ui-text">{status}</span>
           </p>
           <h3 class="mb-1 font-mono text-xs font-bold uppercase">
             Local announcements
           </h3>
-          <p class="mb-1 font-mono text-[10px] text-zinc-500">
+          <p class="mb-1 font-mono text-[10px] ui-text-subtle">
             Grouped by name and port. Hover a row for merged count and details
             (fixed layer, not clipped).
           </p>
-          <div class="overflow-x-auto border-2 border-zinc-900 dark:border-zinc-100">
-            <table class="w-full border-collapse text-left font-mono text-xs">
+          <div class="ui-table-shell">
+            <table class="ui-table text-left font-mono text-xs">
               <thead>
-                <tr class="bg-zinc-200 dark:bg-zinc-800">
-                  <th class="border-b border-zinc-900 px-2 py-1 dark:border-zinc-100">
+                <tr>
+                  <th class="ui-th px-2 py-1">
                     Name
                   </th>
-                  <th class="border-b border-zinc-900 px-2 py-1 dark:border-zinc-100">
+                  <th class="ui-th px-2 py-1">
                     Port
                   </th>
-                  <th class="border-b border-zinc-900 px-2 py-1 dark:border-zinc-100">
+                  <th class="ui-th px-2 py-1">
                     #
                   </th>
                 </tr>
@@ -281,7 +281,7 @@ export function MdnsTables({
               <tbody>
                 {annGroups.length === 0 ? (
                   <tr>
-                    <td colSpan={3} class="px-2 py-2 text-zinc-500">
+                    <td colSpan={3} class="px-2 py-2 ui-text-subtle">
                       None
                     </td>
                   </tr>
@@ -289,7 +289,7 @@ export function MdnsTables({
                   annGroups.map((a) => (
                     <tr
                       key={`${a.name}-${String(a.port)}`}
-                      class="cursor-default border-b border-zinc-200 odd:bg-white even:bg-zinc-50 dark:border-zinc-700 dark:odd:bg-zinc-950 dark:even:bg-zinc-900/80"
+                      class="ui-tr-zebra cursor-default"
                       onMouseEnter={(e) =>
                         tt.show(e.currentTarget as HTMLElement, announcementTipContent(a))
                       }
@@ -309,22 +309,22 @@ export function MdnsTables({
           <h3 class="mb-1 font-mono text-xs font-bold uppercase">
             Discovered remotes
           </h3>
-          <p class="mb-1 font-mono text-[10px] text-zinc-500">
+          <p class="mb-1 font-mono text-[10px] ui-text-subtle">
             Grouped by service name and port. Click a row for resolved IPs and
             Connect (pick ALSA sequencer port or raw MIDI device from the daemon
             list).
           </p>
-          <div class="overflow-x-auto border-2 border-zinc-900 dark:border-zinc-100">
-            <table class="w-full border-collapse text-left font-mono text-xs">
+          <div class="ui-table-shell">
+            <table class="ui-table text-left font-mono text-xs">
               <thead>
-                <tr class="bg-zinc-200 dark:bg-zinc-800">
-                  <th class="border-b border-zinc-900 px-2 py-1 dark:border-zinc-100">
+                <tr>
+                  <th class="ui-th px-2 py-1">
                     Name
                   </th>
-                  <th class="border-b border-zinc-900 px-2 py-1 dark:border-zinc-100">
+                  <th class="ui-th px-2 py-1">
                     Port
                   </th>
-                  <th class="border-b border-zinc-900 px-2 py-1 dark:border-zinc-100">
+                  <th class="ui-th px-2 py-1">
                     IPs
                   </th>
                 </tr>
@@ -332,7 +332,7 @@ export function MdnsTables({
               <tbody>
                 {remoteGroups.length === 0 ? (
                   <tr>
-                    <td colSpan={3} class="px-2 py-2 text-zinc-500">
+                    <td colSpan={3} class="px-2 py-2 ui-text-subtle">
                       None
                     </td>
                   </tr>
@@ -346,10 +346,10 @@ export function MdnsTables({
                         role="button"
                         tabIndex={0}
                         aria-selected={sel}
-                        class={`cursor-pointer border-b border-zinc-200 dark:border-zinc-700 ${
+                        class={`cursor-pointer border-b border-[color:var(--color-border-muted)] ${
                           sel
-                            ? "bg-amber-100 ring-2 ring-inset ring-amber-700 hover:bg-amber-200 dark:bg-amber-950/50 dark:ring-amber-400 dark:hover:bg-amber-900/60"
-                            : "odd:bg-white even:bg-zinc-50 hover:bg-zinc-100 dark:odd:bg-zinc-950 dark:even:bg-zinc-900/80 dark:hover:bg-zinc-800/90"
+                            ? "ui-mdns-row-selected"
+                            : "ui-tr-zebra ui-mdns-row-hover"
                         }`}
                         onClick={() =>
                           setSelectedRemoteKey((k) => (k === rk ? null : rk))
@@ -378,24 +378,24 @@ export function MdnsTables({
       </div>
 
       {selectedRemote && (
-        <div class="border-2 border-zinc-900 bg-zinc-50 p-4 font-mono dark:border-zinc-100 dark:bg-zinc-900/50">
-          <h3 class="mb-3 text-sm font-bold uppercase text-zinc-800 dark:text-zinc-100">
+        <div class="ui-panel-soft p-4 font-mono">
+          <h3 class="mb-3 text-sm font-bold uppercase ui-text">
             Details — {selectedRemote.name}{" "}
-            <span class="text-zinc-500">· port {selectedRemote.port}</span>
+            <span class="ui-text-subtle">· port {selectedRemote.port}</span>
           </h3>
 
-          <div class="space-y-4 text-xs text-zinc-800 dark:text-zinc-100">
+          <div class="space-y-4 text-xs ui-text">
             <section>
-              <h4 class="mb-2 text-[11px] font-bold uppercase text-emerald-800 dark:text-emerald-300">
+              <h4 class="mb-2 text-[11px] font-bold uppercase ui-text-success-h">
                 Resolved IPs
               </h4>
-              <p class="mb-2 text-[10px] text-zinc-600 dark:text-zinc-400">
+              <p class="mb-2 text-[10px] ui-text-muted">
                 Connect lists ALSA sequencer ports and /dev/snd raw MIDI devices
                 from the host, creates a matching local peer, then adds an
                 RTP-MIDI client to this address.
               </p>
               {ipListForGroup(selectedRemote).length === 0 ? (
-                <p class="text-[10px] text-amber-800 dark:text-amber-300">
+                <p class="text-[10px] ui-banner-warn">
                   No resolved IP in status JSON. Use hostname connect below or
                   check daemon mDNS IP fields.
                 </p>
@@ -406,7 +406,7 @@ export function MdnsTables({
                     return (
                       <li
                         key={ip}
-                        class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 pb-2 last:border-0 dark:border-zinc-700"
+                        class="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--color-border-muted)] pb-2 last:border-0"
                       >
                         <span class="break-all font-mono text-[11px]">
                           <strong>{connectEndpoint(ip, selectedRemote.port)}</strong>
@@ -436,15 +436,15 @@ export function MdnsTables({
             </section>
 
             <section>
-              <h4 class="mb-2 text-[11px] font-bold uppercase text-amber-800 dark:text-amber-300">
+              <h4 class="mb-2 text-[11px] font-bold uppercase ui-text-warn-h">
                 Hostname (mDNS / DNS)
               </h4>
-              <p class="mb-2 text-[10px] text-zinc-600 dark:text-zinc-400">
+              <p class="mb-2 text-[10px] ui-text-muted">
                 Same as IP connect: choose an ALSA or raw MIDI endpoint from the
                 host list, then wire an RTP-MIDI client using this hostname.
               </p>
               {selectedRemote.addresses.length === 0 ? (
-                <p class="text-[10px] text-zinc-500">No mDNS hostnames in status.</p>
+                <p class="text-[10px] ui-text-subtle">No mDNS hostnames in status.</p>
               ) : (
                 <ul class="space-y-2">
                   {selectedRemote.addresses.map((h) => {
@@ -452,7 +452,7 @@ export function MdnsTables({
                     return (
                       <li
                         key={h}
-                        class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 pb-2 last:border-0 dark:border-zinc-700"
+                        class="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--color-border-muted)] pb-2 last:border-0"
                       >
                         <span class="break-all font-mono text-[11px]">{h}</span>
                         {onWireMdnsToLocal ? (
@@ -485,23 +485,23 @@ export function MdnsTables({
       {connectDialog && (
         <div
           role="presentation"
-          class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+          class="ui-modal-backdrop"
           onClick={() => !dialogSubmitting && setConnectDialog(null)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="mdns-wire-title"
-            class="max-h-[90vh] w-full max-w-lg overflow-y-auto border-2 border-zinc-900 bg-white p-4 shadow-xl dark:border-zinc-100 dark:bg-zinc-950"
+            class="ui-modal"
             onClick={(e) => e.stopPropagation()}
           >
             <h2
               id="mdns-wire-title"
-              class="font-mono text-sm font-bold uppercase text-zinc-900 dark:text-zinc-100"
+              class="font-mono text-sm font-bold uppercase ui-text"
             >
               Wire remote to local MIDI
             </h2>
-            <p class="mt-2 font-mono text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-300">
+            <p class="mt-2 font-mono text-[11px] leading-relaxed ui-text-muted">
               Remote service{" "}
               <strong>{connectDialog.serviceName}</strong>
               {" "}via{" "}
@@ -511,17 +511,17 @@ export function MdnsTables({
             </p>
 
             <div class="mt-4">
-              <label class="mb-2 block font-mono text-[10px] font-bold uppercase text-zinc-600 dark:text-zinc-400">
+              <label class="mb-2 block font-mono text-[10px] font-bold uppercase ui-text-muted">
                 Local endpoint
               </label>
               {midiLoading ? (
-                <p class="font-mono text-[10px] text-zinc-600 dark:text-zinc-400">
+                <p class="font-mono text-[10px] ui-text-muted">
                   Loading ALSA sequencer ports and raw MIDI devices…
                 </p>
               ) : (
                 <>
                   {(alsaListErr || rawListErr) && (
-                    <div class="mb-2 space-y-1 font-mono text-[10px] text-amber-800 dark:text-amber-300">
+                    <div class="mb-2 space-y-1 font-mono text-[10px] ui-banner-warn">
                       {alsaListErr ? (
                         <div>
                           ALSA list: <span class="break-all">{alsaListErr}</span>
@@ -536,17 +536,17 @@ export function MdnsTables({
                     </div>
                   )}
                   {!hasMidiEndpoints ? (
-                    <p class="font-mono text-[10px] text-amber-800 dark:text-amber-300">
+                    <p class="font-mono text-[10px] ui-banner-warn">
                       No ALSA sequencer ports or raw MIDI devices reported. Check
                       ALSA permissions, hardware, and{" "}
-                      <code class="rounded bg-zinc-200 px-0.5 dark:bg-zinc-800">
+                      <code class="ui-code">
                         /dev/snd/
                       </code>
                       .
                     </p>
                   ) : (
                     <select
-                      class="w-full border-2 border-zinc-900 bg-white px-2 py-1 font-mono text-[11px] dark:border-zinc-100 dark:bg-zinc-950"
+                      class="ui-select font-mono text-[11px]"
                       value={endpointChoice}
                       onInput={(e) =>
                         setEndpointChoice((e.target as HTMLSelectElement).value)

@@ -46,7 +46,7 @@ export function FixedTooltipPortal({ tip, onPanelEnter, onPanelLeave }: Props) {
     <div
       role="tooltip"
       data-fixed-tooltip="1"
-      class="fixed overflow-y-auto border-2 border-zinc-900 bg-white p-2 font-mono text-[10px] shadow-lg dark:border-zinc-100 dark:bg-zinc-900"
+      class="ui-tooltip-panel fixed"
       style={{
         left,
         top,

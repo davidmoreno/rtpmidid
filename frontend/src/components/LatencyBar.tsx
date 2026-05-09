@@ -13,15 +13,15 @@ import {
 function tierFillClass(t: LatencyColorTier): string {
   switch (t) {
     case "white":
-      return "bg-zinc-100 dark:bg-zinc-300";
+      return "ui-latency-tier-0";
     case "green":
-      return "bg-emerald-500 dark:bg-emerald-400";
+      return "ui-latency-tier-1";
     case "yellow":
-      return "bg-amber-400 dark:bg-amber-300";
+      return "ui-latency-tier-2";
     case "red":
-      return "bg-red-600 dark:bg-red-500";
+      return "ui-latency-tier-3";
     default:
-      return "bg-zinc-400";
+      return "ui-latency-tier-0";
   }
 }
 
@@ -46,9 +46,9 @@ export function LatencyTrack({
   const ticks = tickPositionsForStrip(compact);
 
   return (
-    <div class="relative h-2.5 w-full overflow-hidden border-2 border-zinc-900 bg-zinc-200 dark:border-zinc-100 dark:bg-zinc-800 h-[14px]">
+    <div class="ui-latency-track relative h-[14px]">
       <div
-        class={`absolute bottom-0 left-0 top-0 z-0 transition-[width] duration-200 ${tierFillClass(tier)}`}
+        class={`ui-latency-fill absolute bottom-0 left-0 top-0 z-0 transition-[width] duration-200 ${tierFillClass(tier)}`}
         style={{ width: `${pct}%` }}
       />
       <div
@@ -58,7 +58,7 @@ export function LatencyTrack({
         {ticks.map(({ ms: m, pct: p }) => (
           <div
             key={m}
-            class="absolute bottom-0 top-0 w-px bg-zinc-900/20 dark:bg-zinc-100/25"
+            class="ui-latency-tick absolute bottom-0 top-0 w-px"
             style={{ left: `${p}%` }}
           />
         ))}
@@ -98,7 +98,7 @@ export function LatencyHoverBar({
             <LatencyTrack ms={combinedMs} compact={compact} />
           </div>
           {showValue && (
-            <span class="w-[3.25rem] shrink-0 text-right font-bold tabular-nums text-zinc-800 dark:text-zinc-100">
+            <span class="ui-latency-value w-[3.25rem] shrink-0 text-right font-bold tabular-nums">
               {combinedMs === null ? "—" : formatMs(combinedMs)}
             </span>
           )}
@@ -160,24 +160,24 @@ export function ConnectionLatencyHoverCell({ row }: { row: ConnectionRow }) {
     v !== undefined && !Number.isNaN(v) ? formatMs(v) : "—";
 
   const detail = (
-    <div class="space-y-1 text-zinc-800 dark:text-zinc-100">
-      <div class="font-bold uppercase text-zinc-500 dark:text-zinc-400">
+    <div class="space-y-1 ui-text">
+      <div class="font-bold uppercase ui-text-subtle">
         Latency (maxima)
       </div>
       <div>
-        <span class="text-zinc-500">Int until:</span> {fmt(row.intUntilMax)}
+        <span class="ui-text-subtle">Int until:</span> {fmt(row.intUntilMax)}
       </div>
       <div>
-        <span class="text-zinc-500">Int send:</span> {fmt(row.intSendMax)}
+        <span class="ui-text-subtle">Int send:</span> {fmt(row.intSendMax)}
       </div>
       <div>
-        <span class="text-zinc-500">RTP last:</span> {fmt(row.rtpLastMax)}
+        <span class="ui-text-subtle">RTP last:</span> {fmt(row.rtpLastMax)}
       </div>
       <div>
-        <span class="text-zinc-500">RTP avg:</span> {fmt(row.rtpAvgMax)}
+        <span class="ui-text-subtle">RTP avg:</span> {fmt(row.rtpAvgMax)}
       </div>
-      <div class="border-t border-zinc-300 pt-1 dark:border-zinc-600">
-        <span class="text-zinc-500">Σ:</span>{" "}
+      <div class="border-t border-[color:var(--color-border-muted)] pt-1">
+        <span class="ui-text-subtle">Σ:</span>{" "}
         {combined === null ? "—" : formatMs(combined)}
       </div>
     </div>
@@ -195,24 +195,24 @@ export function PeerLatencyHoverCell({ peer }: { peer: RouterPeer }) {
   const ck = lastMs(peer.network);
 
   const detail = (
-    <div class="space-y-1 text-zinc-800 dark:text-zinc-100">
-      <div class="font-bold uppercase text-zinc-500 dark:text-zinc-400">
+    <div class="space-y-1 ui-text">
+      <div class="font-bold uppercase ui-text-subtle">
         Latency (last)
       </div>
       <div>
-        <span class="text-zinc-500">until→send_midi:</span>{" "}
+        <span class="ui-text-subtle">until→send_midi:</span>{" "}
         {u !== undefined ? formatMs(u) : "—"}
       </div>
       <div>
-        <span class="text-zinc-500">send_midi():</span>{" "}
+        <span class="ui-text-subtle">send_midi():</span>{" "}
         {sm !== undefined ? formatMs(sm) : "—"}
       </div>
       <div>
-        <span class="text-zinc-500">RTP CK:</span>{" "}
+        <span class="ui-text-subtle">RTP CK:</span>{" "}
         {ck !== undefined ? formatMs(ck) : "—"}
       </div>
-      <div class="border-t border-zinc-300 pt-1 dark:border-zinc-600">
-        <span class="text-zinc-500">Σ (shown parts):</span>{" "}
+      <div class="border-t border-[color:var(--color-border-muted)] pt-1">
+        <span class="ui-text-subtle">Σ (shown parts):</span>{" "}
         {combined === null ? "—" : formatMs(combined)}
       </div>
     </div>

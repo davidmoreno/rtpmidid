@@ -4,10 +4,29 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>rtpmidid</title>
+    <script>
+      (function () {
+        var k = "rtpmidid-ui-theme";
+        var ids = [
+          "light-brutalist",
+          "dark-brutalist",
+          "light-normal",
+          "dark-normal",
+          "light-cute-pastel",
+          "dark-cute-pastel",
+        ];
+        var t = null;
+        try {
+          t = localStorage.getItem(k);
+        } catch (e) {}
+        document.documentElement.dataset.theme =
+          t && ids.indexOf(t) >= 0 ? t : "light-brutalist";
+      })();
+    </script>
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body class="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-    <div id="root" class="min-h-screen"></div>
+  <body>
+    <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
   </body>
 </html>
