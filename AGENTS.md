@@ -533,6 +533,8 @@ The daemon exposes a Unix domain socket for runtime control and monitoring.
 | `router.create.local_alsa_peer` | Create ALSA sequencer peer | `{"name", "alsa_client"?, "alsa_port"?}` |
 | `mdns.remove` | Remove mDNS announcement | `{"name", "hostname"?, "port"}` |
 | `export.rawmidi` | Export raw MIDI device | `{"device": "...", ...}` |
+| `monitor.start` | Web UI MIDI monitor: tee router edges into a sink peer | `{"endpoint": "<same id as Devices tab / endpoint.connect>"}` → `{uuid, peer_id, target_peer_id}` |
+| `monitor.stop` | Tear down monitor session | `{"uuid": "<from monitor.start>"}` |
 | `{peer_id}.{cmd}` | Send command to specific peer | varies |
 
 ### Peer-Specific Commands
@@ -572,6 +574,17 @@ The control socket implementation is in `src/control_socket.cpp`:
 1. A **dedicated server thread** runs `poll()` on the listening Unix socket and all accepted client FDs (blocking I/O is OK here — it does not run on the epoll/MIDI poller thread).
 2. JSON commands are parsed and dispatched to the same handler table as before; `router.connect` / `router.disconnect` use `enqueue_*` so topology changes are serialized on the router thread.
 3. Responses are written on the control thread; `router->status_rows()` uses `shared_lock` on the peer map and is safe from that thread.
+
+### Web UI (HTTP / WebSocket)
+
+When `[web]` is enabled in the INI, the daemon serves static UI assets from `settings.web.root` (`src/web_server.cpp`):
+
+- **`/ws`** — JSON-RPC over WebSocket (same handler as the Unix control socket: `control_rpc_dispatch_line`).
+- **`/ws/monitor?uuid=…`** — binary WebSocket frames of raw MIDI bytes for an active monitor session created via `monitor.start`. Uses HTTP Basic auth when `[web]` username/password are set (same as `/ws`).
+
+The sink peer type is **`webui_midi_monitor_peer_t`** (`src/webui_midi_monitor_peer.cpp`). It duplicates router edges that already route into the chosen endpoint peer so MIDI appears at the monitor; traffic that reaches hardware **only** via ALSA subscriptions (`aconnect`) without a corresponding router edge will **not** show up.
+
+The SPA can open a fullscreen monitor via hash **`#monitor?uuid=…`** (`frontend/src/app.tsx`).
 
 ---
 

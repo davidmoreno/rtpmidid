@@ -20,6 +20,7 @@
 #include "control_rpc.hpp"
 #include "midirouter.hpp"
 #include "settings.hpp"
+#include "webui_midi_monitor_peer.hpp"
 #include "dm_json_generated.hpp"
 #include "dm_json_rpc.hpp"
 #include <rtpmidid/dm_json/runtime.hpp>
@@ -27,7 +28,12 @@
 #include <rtpmidid/mdns_rtpmidi.hpp>
 
 #include <cctype>
+#include <chrono>
+#include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <string>
+#include <thread>
 
 #include "third_party/httplib.h"
 
@@ -84,6 +90,26 @@ bool check_basic_auth(const httplib::Request &req, const std::string &user,
   return decoded.substr(0, colon) == user && decoded.substr(colon + 1) == pass;
 }
 
+/** Short hex preview for WebSocket binary/text debug logs (cap length). */
+std::string monitor_ws_hex_preview(const uint8_t *data, size_t len,
+                                  size_t max_bytes = 48) {
+  std::string out;
+  const size_t n = len < max_bytes ? len : max_bytes;
+  out.reserve(n * 3 + 32);
+  for (size_t i = 0; i < n; ++i) {
+    char buf[4];
+    std::snprintf(buf, sizeof(buf), "%02x%s", data[i],
+                  (i + 1 < n) ? " " : "");
+    out += buf;
+  }
+  if (len > max_bytes) {
+    char tail[64];
+    std::snprintf(tail, sizeof(tail), " … (total %zu bytes)", len);
+    out += tail;
+  }
+  return out;
+}
+
 bool auth_ws_first_frame(std::string_view msg, const std::string &user,
                          const std::string &pass) {
   dmjson::rpc::envelope_info_t env;
@@ -138,16 +164,61 @@ void web_server_t::thread_main() {
   const std::string user = settings.web.username;
   const std::string pass = settings.web.password;
   const bool need_auth = !user.empty() && !pass.empty();
+  const std::shared_ptr<midirouter_t> router_for_monitor = router;
 
   auto svr = std::make_unique<httplib::Server>();
   httplib::Server *const raw = svr.get();
   srv_.store(raw, std::memory_order_release);
 
+  svr->set_logger(
+      [](const httplib::Request &req, const httplib::Response &res) {
+        const char *path_or_target =
+            req.target.empty() ? req.path.c_str() : req.target.c_str();
+        INFO("HTTP {} {} — {} {}:{}", req.method, path_or_target, res.status,
+             req.remote_addr, req.remote_port);
+      });
+  svr->set_error_logger([](const httplib::Error &err,
+                           const httplib::Request *req) {
+    if (req != nullptr) {
+      WARNING("HTTP error {} {} {} — {}:{}", httplib::to_string(err),
+              req->method,
+              req->target.empty() ? req->path : req->target, req->remote_addr,
+              req->remote_port);
+    } else {
+      WARNING("HTTP error {}", httplib::to_string(err));
+    }
+  });
+
   svr->set_mount_point("/", root);
 
   svr->set_pre_routing_handler(
       [&](const httplib::Request &req, httplib::Response &res) {
-        if (req.path == "/ws") {
+        if (req.path == "/ws" || req.path == "/ws/monitor") {
+          /* Successful WS upgrades do not go through write_response(), so
+           * set_logger never sees HTTP 101 — log upgrade attempts here. */
+          const std::string uuid =
+              req.path == "/ws/monitor" ? req.get_param_value("uuid") : "";
+          const char *up = req.has_header("Upgrade")
+                               ? req.get_header_value("Upgrade").c_str()
+                               : "";
+          const char *conn = req.has_header("Connection")
+                                 ? req.get_header_value("Connection").c_str()
+                                 : "";
+          const char *wsver = req.has_header("Sec-WebSocket-Version")
+                                  ? req.get_header_value("Sec-WebSocket-Version")
+                                        .c_str()
+                                  : "";
+          const size_t key_len = req.has_header("Sec-WebSocket-Key")
+                                     ? req.get_header_value("Sec-WebSocket-Key")
+                                           .size()
+                                     : 0;
+          INFO("Web UI WS pre-route {} target={} from {}:{} "
+               "uuid={} Upgrade={} Connection={} Sec-WebSocket-Key_len={} "
+               "Sec-WebSocket-Version={} need_http_auth={}",
+               req.method,
+               req.target.empty() ? req.path : req.target, req.remote_addr,
+               req.remote_port, uuid.empty() ? std::string("-") : uuid, up,
+               conn, key_len, wsver, need_auth);
           return httplib::Server::HandlerResponse::Unhandled;
         }
         if (!need_auth) {
@@ -227,8 +298,113 @@ void web_server_t::thread_main() {
     }
   });
 
-  INFO("Web UI listening on http://{}:{}/ (WS /ws), root={}", listen, port,
-       root);
+  /* Binary MIDI stream for `monitor.start` sessions; query ?uuid=… */
+  svr->WebSocket("/ws/monitor", [&](const httplib::Request &req,
+                                    httplib::ws::WebSocket &ws) {
+    const std::string uuid_q = req.get_param_value("uuid");
+    INFO("Web UI WS /ws/monitor upgraded (handshake ok) from {}:{} uuid={}",
+         req.remote_addr, req.remote_port,
+         uuid_q.empty() ? std::string("-") : uuid_q);
+
+    bool authed = !need_auth || check_basic_auth(req, user, pass);
+    if (!authed) {
+      WARNING("Web UI WS /ws/monitor closing: HTTP Basic auth required "
+              "(check browser credentials for ws:// same origin) from {}:{}",
+              req.remote_addr, req.remote_port);
+      ws.close(httplib::ws::CloseStatus::PolicyViolation, "unauthorized");
+      return;
+    }
+    const std::string uuid = uuid_q;
+    if (uuid.empty()) {
+      WARNING("Web UI WS /ws/monitor closing: missing ?uuid= from {}:{}",
+              req.remote_addr, req.remote_port);
+      ws.close(httplib::ws::CloseStatus::InvalidPayload, "need ?uuid=");
+      return;
+    }
+    auto mon = monitor_registry_lookup(uuid);
+    if (!mon) {
+      WARNING(
+          "Web UI WS /ws/monitor closing: unknown monitor session uuid={} "
+          "(call monitor.start first, or session expired) from {}:{}",
+          uuid, req.remote_addr, req.remote_port);
+      ws.close(httplib::ws::CloseStatus::InvalidPayload, "unknown session");
+      return;
+    }
+
+    INFO("Web UI WS /ws/monitor streaming MIDI for uuid={} from {}:{} "
+         "(router pushes frames via sink; per-frame DEBUG)",
+         uuid, req.remote_addr, req.remote_port);
+
+    using namespace std::chrono_literals;
+    uint64_t monitor_ws_sent_bytes = 0;
+    uint64_t monitor_ws_recv_bytes = 0;
+    uint64_t monitor_ws_send_frames = 0;
+    uint64_t monitor_ws_recv_frames = 0;
+
+    /* One viewer per monitor session; router thread calls ws.send via sink. */
+    if (!mon->try_set_ws_binary_sink([&](const uint8_t *data, size_t len) {
+          const bool ok =
+              ws.send(reinterpret_cast<const char *>(data), len);
+          if (ok) {
+            monitor_ws_sent_bytes += len;
+            monitor_ws_send_frames += 1;
+            DEBUG("Web UI WS monitor uuid={} → client binary frame #{} {} "
+                  "bytes [{}]",
+                  uuid, monitor_ws_send_frames, len,
+                  monitor_ws_hex_preview(data, len));
+          }
+          return ok;
+        })) {
+      WARNING(
+          "Web UI WS /ws/monitor rejected second viewer uuid={} from {}:{} "
+          "(stop other tab or monitor.stop + monitor.start new session)",
+          uuid, req.remote_addr, req.remote_port);
+      ws.close(httplib::ws::CloseStatus::PolicyViolation,
+               "monitor viewer already connected");
+      return;
+    }
+
+    {
+      struct monitor_sink_guard_t {
+        std::shared_ptr<webui_midi_monitor_peer_t> peer;
+        ~monitor_sink_guard_t() {
+          if (peer)
+            peer->clear_ws_binary_sink();
+        }
+      } sink_guard{mon};
+
+      while (ws.is_open()) {
+        std::string msg;
+        const auto rr = ws.read(msg);
+        if (rr == httplib::ws::ReadResult::Fail) {
+          DEBUG(
+              "Web UI WS monitor uuid={} read finished (close/fail); sent {} "
+              "bytes in {} frames, recv {} bytes in {} frames",
+              uuid, monitor_ws_sent_bytes, monitor_ws_send_frames,
+              monitor_ws_recv_bytes, monitor_ws_recv_frames);
+          break;
+        }
+        monitor_ws_recv_bytes += msg.size();
+        monitor_ws_recv_frames += 1;
+        DEBUG(
+            "Web UI WS monitor uuid={} ← client {} frame #{} {} bytes [{}]",
+            uuid, rr == httplib::ws::ReadResult::Text ? "text" : "binary",
+            monitor_ws_recv_frames, msg.size(),
+            monitor_ws_hex_preview(reinterpret_cast<const uint8_t *>(msg.data()),
+                                   msg.size()));
+        std::this_thread::sleep_for(2ms);
+      }
+      INFO("Web UI WS /ws/monitor connection ended uuid={} from {}:{} "
+           "(sent {} bytes / {} frames, received {} bytes / {} ws frames)",
+           uuid, req.remote_addr, req.remote_port, monitor_ws_sent_bytes,
+           monitor_ws_send_frames, monitor_ws_recv_bytes, monitor_ws_recv_frames);
+    }
+    if (router_for_monitor)
+      monitor_session_stop(router_for_monitor, mon);
+  });
+
+  INFO("Web UI listening on http://{}:{}/ (WS /ws, /ws/monitor), root={}",
+       listen, port, root);
   const bool ok = svr->listen(listen.c_str(), port);
   if (!ok) {
     ERROR("Web UI failed to listen on {}:{} (root={})", listen, port, root);

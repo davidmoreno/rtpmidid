@@ -2,7 +2,12 @@ import type { MdnsRemote, RouterPeer } from "./model";
 import { groupMdnsRemotes } from "./model";
 import type { MidiAlsaSeqEntry, MidiRawmidiEntry } from "./midiEnumerate";
 
-export type EndpointKind = "alsa_seq" | "rawmidi" | "rtpmidi";
+export type EndpointKind =
+  | "alsa_seq"
+  | "rawmidi"
+  | "rtpmidi"
+  | "monitor"
+  | "peer";
 
 export type Endpoint = {
   /** Opaque id understood by server endpoint.connect/disconnect. */
@@ -24,6 +29,55 @@ export function endpointIdForRaw(device: string): string {
 
 export function endpointIdForMdns(name: string, port: number | string): string {
   return `mdns:${name}::${String(port)}`;
+}
+
+/** Matches daemon `parse_endpoint_id` (`peer:<id>`) for router.disconnect via endpoint.disconnect. */
+export function endpointIdForPeer(peerId: number): string {
+  return `peer:${peerId}`;
+}
+
+/**
+ * Synthetic endpoint for `webui_midi_monitor_peer_t` — not a hardware listing; used so device
+ * cards can show monitor tee edges in “connected to” (see endpointByPeerId in PeersCards).
+ */
+/**
+ * Display + disconnect id for any router peer not represented by a device row
+ * (see “connected to” on PeersCards).
+ */
+export function endpointFromRouterPeer(p: RouterPeer): Endpoint {
+  if (p.type === "webui_midi_monitor_peer_t") return endpointForWebUiMonitorPeer(p);
+  return {
+    id: endpointIdForPeer(p.id),
+    kind: "peer",
+    label: (p.name || "").trim() || `Peer #${p.id}`,
+    sub: p.type || "router peer",
+    peerId: p.id,
+  };
+}
+
+export function endpointForWebUiMonitorPeer(p: RouterPeer): Endpoint {
+  const raw = p.raw as Record<string, unknown>;
+  const uuid = typeof raw.monitor_uuid === "string" ? raw.monitor_uuid : "";
+  const shortUuid = uuid.length >= 8 ? uuid.slice(0, 8) : uuid;
+  let tgt: number | undefined;
+  const mt = raw.monitor_target_peer_id;
+  if (typeof mt === "number" && Number.isFinite(mt)) tgt = mt;
+  else if (typeof mt === "string") {
+    const n = Number(mt);
+    if (Number.isFinite(n)) tgt = n;
+  }
+  const tgtBit =
+    tgt !== undefined ? `tee → peer #${tgt}` : "tee";
+  return {
+    id: endpointIdForPeer(p.id),
+    kind: "monitor",
+    label: p.name.trim() || "Web MIDI monitor",
+    sub:
+      shortUuid !== ""
+        ? `${tgtBit} · ${shortUuid}…`
+        : `${tgtBit} · #${p.id}`,
+    peerId: p.id,
+  };
 }
 
 /** Numeric comparison for RTP-MIDI / mDNS ports (may be string or number in JSON). */
@@ -183,7 +237,13 @@ export function buildEndpoints(args: {
   }
 
   // Stable sort: kind then label then id.
-  const rank: Record<EndpointKind, number> = { rtpmidi: 0, alsa_seq: 1, rawmidi: 2 };
+  const rank: Record<EndpointKind, number> = {
+    rtpmidi: 0,
+    alsa_seq: 1,
+    rawmidi: 2,
+    monitor: 3,
+    peer: 4,
+  };
   out.sort((a, b) => {
     const ra = rank[a.kind];
     const rb = rank[b.kind];

@@ -122,6 +122,9 @@ struct router_peer_row_t {
   std::optional<std::string> connect_port;                               // [dm-json: omit_if_null]
   std::optional<listening_ports_t> listening;                            // [dm-json: omit_if_null]
   std::optional<std::string> error;                                      // [dm-json: omit_if_null]
+  /** Web UI MIDI monitor sink (`webui_midi_monitor_peer_t`). */
+  std::optional<std::string> monitor_uuid;                                // [dm-json: omit_if_null]
+  std::optional<uint64_t> monitor_target_peer_id;                         // [dm-json: omit_if_null]
 };
 
 // [dm-json]

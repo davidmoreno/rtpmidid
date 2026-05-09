@@ -26,6 +26,8 @@
 #include "midipeer.hpp"
 #include "settings.hpp"
 #include "stringpp.hpp"
+#include "webui_midi_monitor_peer.hpp"
+#include <random>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/mdns_rtpmidi.hpp>
 #include <regex>
@@ -149,6 +151,9 @@ static std::vector<rpc_help_entry_t> build_help_entries() {
       {"midi.listAlsaSeq", "List ALSA sequencer ports"},
       {"midi.listAlsaSubscriptions", "List ALSA sequencer subscriptions (aconnect links)"},
       {"midi.listRawMidi", "List raw MIDI devices"},
+      {"monitor.start",
+       "Start Web UI MIDI monitor for an endpoint id (tees router edges already feeding target)"},
+      {"monitor.stop", "Stop a monitor session by uuid"},
       {"help", "Return help text"},
   };
 }
@@ -341,6 +346,65 @@ static peer_id_t ensure_peer_for_endpoint(control_rpc_context_t &ctx,
   throw std::runtime_error("Unknown endpoint kind");
 }
 
+static std::string random_uuid_v4() {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<unsigned> dis(0, 255);
+  uint8_t b[16];
+  for (auto &x : b)
+    x = static_cast<uint8_t>(dis(gen));
+  b[6] = static_cast<uint8_t>((b[6] & 0x0F) | 0x40);
+  b[8] = static_cast<uint8_t>((b[8] & 0x3F) | 0x80);
+  static const char *const hex = "0123456789abcdef";
+  std::string u;
+  u.reserve(36);
+  for (int i = 0; i < 16; ++i) {
+    if (i == 4 || i == 6 || i == 8 || i == 10)
+      u += '-';
+    u += hex[b[i] >> 4];
+    u += hex[b[i] & 0xF];
+  }
+  return u;
+}
+
+/**
+ * Wire monitor sink so it receives the same MIDI as `target` peer:
+ * - Incoming to target: for each existing router edge `from -> target`, add
+ *   `from -> monitor` (duplicate packets destined for `target`).
+ * - Outgoing from target: add `target -> monitor` so anything `target` sends
+ *   to its destinations is also sent to the monitor (covers endpoints that act
+ *   as sources only — previously only incoming edges were teed, so keyboard /
+ *   RTP-export peers often had no matching edges).
+ */
+static void tee_monitor_edges(control_rpc_context_t &ctx, peer_id_t target,
+                              peer_id_t monitor_id,
+                              const std::shared_ptr<webui_midi_monitor_peer_t> &mon) {
+  const auto rows = router_rows_snapshot(ctx);
+  unsigned incoming_tees = 0;
+  for (const auto &r : rows) {
+    if (!r.id || !r.send_to)
+      continue;
+    const peer_id_t from = static_cast<peer_id_t>(*r.id);
+    if (from == monitor_id)
+      continue;
+    for (uint32_t to_raw : *r.send_to) {
+      const peer_id_t to = static_cast<peer_id_t>(to_raw);
+      if (to != target)
+        continue;
+      ctx.router->enqueue_connect(from, monitor_id);
+      incoming_tees++;
+      break;
+    }
+  }
+
+  ctx.router->enqueue_connect(target, monitor_id);
+
+  INFO("monitor.start tee target_peer={} monitor_peer={}: {} incoming duplicate "
+       "edge(s) (from→monitor when from→target existed); always added "
+       "outgoing target_peer→monitor_peer",
+       target, monitor_id, incoming_tees);
+}
+
 } // namespace
 
 std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_view line_in) {
@@ -512,6 +576,40 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
     }
     if (env.method == "midi.listRawMidi")
       return respond_rows(env, enumerate_rawmidi_devices());
+    if (env.method == "monitor.start") {
+      if (!ctx.router)
+        throw std::runtime_error("router not available");
+      auto p = parse_rpc_params<monitor_start_params_t>(params);
+      endpoint_id_t eid{};
+      if (!parse_endpoint_id(p.endpoint, eid))
+        throw std::runtime_error("Bad endpoint id");
+      const auto rows = router_rows_snapshot(ctx);
+      const peer_id_t target = ensure_peer_for_endpoint(ctx, eid, rows);
+      const std::string uuid = random_uuid_v4();
+      auto peer_base = make_webui_midi_monitor_peer(uuid, target);
+      auto mon =
+          std::dynamic_pointer_cast<webui_midi_monitor_peer_t>(peer_base);
+      if (!mon)
+        throw std::runtime_error("internal: monitor peer");
+      const peer_id_t mid = ctx.router->add_peer(peer_base);
+      monitor_registry_register(uuid, mon);
+      tee_monitor_edges(ctx, target, mid, mon);
+      monitor_start_result_t out{};
+      out.uuid = uuid;
+      out.peer_id = static_cast<uint64_t>(mid);
+      out.target_peer_id = static_cast<uint64_t>(target);
+      return respond(env, out);
+    }
+    if (env.method == "monitor.stop") {
+      if (!ctx.router)
+        throw std::runtime_error("router not available");
+      auto p = parse_rpc_params<monitor_stop_params_t>(params);
+      auto mon = monitor_registry_lookup(p.uuid);
+      if (!mon)
+        throw std::runtime_error("Unknown monitor session");
+      monitor_session_stop(ctx.router, mon);
+      return respond_ok(env);
+    }
     if (env.method == "help")
       return respond_rows(env, build_help_entries());
 

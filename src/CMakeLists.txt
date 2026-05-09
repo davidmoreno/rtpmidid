@@ -31,6 +31,7 @@ add_library(
   network_rtpmidi_listener.cpp
   network_rtpmidi_multi_listener.cpp
   network_rtpmidi_peer.cpp
+  webui_midi_monitor_peer.cpp
 )
 add_definitions(-D_REENTRANT)
 

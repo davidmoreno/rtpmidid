@@ -21,12 +21,37 @@ import { buildRecvFromMap } from "../model";
 import type { MidiAlsaSeqEntry, MidiRawmidiEntry } from "../midiEnumerate";
 import type { RpcClient } from "../rpc";
 import type { Endpoint } from "../endpoints";
-import { buildEndpoints, collectBridgeExportedEndpointIds } from "../endpoints";
+import {
+  buildEndpoints,
+  collectBridgeExportedEndpointIds,
+  endpointFromRouterPeer,
+  endpointIdForPeer,
+} from "../endpoints";
 import { Button } from "./Button";
+import { MidiMonitorModal } from "./MidiMonitorModal";
 import { PeerLatencyHoverCell, peerCombinedLatencyMs } from "./LatencyBar";
 
 type EndpointGroup = "local" | "remote";
 type SortKey = "activity" | "name" | "kind" | "connected";
+
+/** Router neighbour on a device card: prefer Devices-tab endpoint row, else router peer row. */
+function resolveNeighborEndpoint(
+  otherId: number,
+  endpointByPeerId: Map<number, Endpoint>,
+  byPeerId: Map<number, RouterPeer>,
+): Endpoint {
+  const ep = endpointByPeerId.get(otherId);
+  if (ep) return ep;
+  const rp = byPeerId.get(otherId);
+  if (rp) return endpointFromRouterPeer(rp);
+  return {
+    id: endpointIdForPeer(otherId),
+    kind: "peer",
+    label: `Peer #${otherId}`,
+    sub: "missing from router status",
+    peerId: otherId,
+  };
+}
 
 function groupForEndpoint(e: Endpoint): EndpointGroup {
   return e.kind === "rtpmidi" ? "remote" : "local";
@@ -549,6 +574,10 @@ export function PeersCards({
   const [connectDialogForId, setConnectDialogForId] = useState<string | null>(
     null,
   );
+  const [monitorFor, setMonitorFor] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
 
   const doConnect = async (from: string, to: string) => {
     try {
@@ -754,15 +783,24 @@ export function PeersCards({
           const inPeerIds = pid !== undefined ? (recvFrom.get(pid) ?? []) : [];
           const outSet = new Set(outPeerIds);
           const inSet = new Set(inPeerIds);
-          const connectedEndpoints = Array.from(new Set([...outPeerIds, ...inPeerIds]))
-            .map((x) => endpointByPeerId.get(x))
-            .filter((x): x is Endpoint => !!x)
-            .map((ce) => {
-              const otherPeerId = ce.peerId;
-              const hasOut = otherPeerId !== undefined ? outSet.has(otherPeerId) : false;
-              const hasIn = otherPeerId !== undefined ? inSet.has(otherPeerId) : false;
-              const dir = hasIn && hasOut ? "IN-OUT" : hasOut ? "OUT" : hasIn ? "IN" : "";
+          const connectedEndpoints = Array.from(
+            new Set([...outPeerIds, ...inPeerIds]),
+          )
+            .map((otherId) => {
+              const ce = resolveNeighborEndpoint(
+                otherId,
+                endpointByPeerId,
+                byPeerId,
+              );
+              const hasOut = outSet.has(otherId);
+              const hasIn = inSet.has(otherId);
+              const dir =
+                hasIn && hasOut ? "IN-OUT" : hasOut ? "OUT" : hasIn ? "IN" : "";
               return { ce, dir };
+            })
+            .sort((a, b) => {
+              const c = a.ce.label.localeCompare(b.ce.label);
+              return c !== 0 ? c : a.ce.id.localeCompare(b.ce.id);
             });
 
           const alsaOut =
@@ -1056,7 +1094,15 @@ export function PeersCards({
                       </div>
                     </div>
                   </div>
-                  <div class="flex shrink-0 justify-end md:pt-0">
+                  <div class="flex shrink-0 flex-col items-end justify-end gap-2 sm:flex-row md:pt-0">
+                    <Button
+                      type="button"
+                      onClick={() =>
+                        setMonitorFor({ id: e.id, label: e.label })
+                      }
+                    >
+                      Monitor
+                    </Button>
                     <Button
                       disabled={endpoints.length <= 1}
                       onClick={() => setConnectDialogForId(e.id)}
@@ -1087,6 +1133,16 @@ export function PeersCards({
           }}
         />
       )}
+
+      {monitorFor !== null ? (
+        <MidiMonitorModal
+          endpointId={monitorFor.id}
+          endpointLabel={monitorFor.label}
+          rpc={rpc}
+          onClose={() => setMonitorFor(null)}
+          onStatus={onStatus}
+        />
+      ) : null}
 
     </div>
   );

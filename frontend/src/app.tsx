@@ -33,6 +33,20 @@ import { MdnsTab } from "./tabs/MdnsTab";
 import { DevicesTab } from "./tabs/DevicesTab";
 import { PeersTab } from "./tabs/PeersTab";
 import { SettingsTab } from "./tabs/SettingsTab";
+import { MidiMonitorStandalone } from "./components/MidiMonitorStandalone";
+
+function parseMonitorUuidFromHash(): string | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  if (!raw.startsWith("monitor")) return null;
+  const q = raw.indexOf("?");
+  if (q === -1) return null;
+  const params = new URLSearchParams(raw.slice(q + 1));
+  const u = params.get("uuid");
+  return u && u.trim().length > 0 ? u.trim() : null;
+}
 
 const AUTO_TABS = new Set([
   "devices",
@@ -43,6 +57,9 @@ const AUTO_TABS = new Set([
 ]);
 
 export function App() {
+  const [monitorStandaloneUuid, setMonitorStandaloneUuid] = useState<
+    string | null
+  >(() => parseMonitorUuidFromHash());
   const [theme, setTheme] = useUiTheme();
   const [refreshIntervalMs, setRefreshIntervalMs] = useState(() =>
     typeof localStorage !== "undefined"
@@ -109,6 +126,9 @@ export function App() {
     }
   }, [rpc, tab]);
 
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+
   const onSelectPeerFromConnections = useCallback((id: number) => {
     setTab("peers");
     setHighlightPeerId(id);
@@ -134,12 +154,18 @@ export function App() {
   );
 
   useEffect(() => {
+    rpc.setOnReconnect(() => {
+      void refreshRef.current();
+    });
     rpc
       .connect()
-      .then(() => refresh())
+      .then(() => refreshRef.current())
       .catch((e) => setStatus(String(e)));
-    return () => rpc.disconnect();
-  }, []);
+    return () => {
+      rpc.setOnReconnect(null);
+      rpc.disconnect();
+    };
+  }, [rpc]);
 
   useEffect(() => {
     if (tab !== "devices") return;
@@ -395,6 +421,7 @@ export function App() {
   ];
 
   useEffect(() => {
+    if (monitorStandaloneUuid) return;
     const ids = new Set(tabs.map((t) => t.id));
     if (!ids.has(tab)) {
       setTab("devices");
@@ -404,11 +431,14 @@ export function App() {
     if (window.location.hash !== next) {
       window.location.hash = next;
     }
-  }, [tab, tabs]);
+  }, [tab, tabs, monitorStandaloneUuid]);
 
   useEffect(() => {
     const ids = new Set(tabs.map((t) => t.id));
     const onHash = () => {
+      const mu = parseMonitorUuidFromHash();
+      setMonitorStandaloneUuid(mu);
+      if (mu) return;
       const raw = window.location.hash;
       let h = raw.startsWith("#") ? raw.slice(1) : raw;
       if (h === "peer_cards") h = "devices";
@@ -418,6 +448,20 @@ export function App() {
     onHash();
     return () => window.removeEventListener("hashchange", onHash);
   }, [tabs]);
+
+  if (monitorStandaloneUuid) {
+    return (
+      <MidiMonitorStandalone
+        uuid={monitorStandaloneUuid}
+        rpc={rpc}
+        onStatus={setStatus}
+        onExit={() => {
+          setMonitorStandaloneUuid(null);
+          window.location.hash = "#devices";
+        }}
+      />
+    );
+  }
 
   return (
     <div class="ui-page">

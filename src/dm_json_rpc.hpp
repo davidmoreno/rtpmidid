@@ -168,4 +168,22 @@ struct endpoint_disconnect_params_t {
   std::string to;
 };
 
+// [dm-json]
+struct monitor_start_params_t {
+  /** Same endpoint id strings as `endpoint.connect` / Devices tab (`alsa:…`, `raw:…`, `mdns:…`). */
+  std::string endpoint;
+};
+
+// [dm-json]
+struct monitor_start_result_t {
+  std::string uuid;
+  uint64_t peer_id;
+  uint64_t target_peer_id;
+};
+
+// [dm-json]
+struct monitor_stop_params_t {
+  std::string uuid;
+};
+
 } // namespace rtpmididns
