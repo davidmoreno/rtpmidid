@@ -29,23 +29,21 @@ function SelectBadge({ e }: { e: Endpoint }) {
   );
 }
 
-function FancyEndpointSelect({
+function ConnectPeerDialog({
   selfId,
   endpoints,
-  value,
-  onChange,
+  onClose,
+  onConnect,
 }: {
   selfId: string;
   endpoints: Endpoint[];
-  value: string | null;
-  onChange: (id: string) => void;
+  onClose: () => void;
+  onConnect: (otherId: string) => void;
 }) {
   const [q, setQ] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
   const opts = useMemo(() => endpoints.filter((x) => x.id !== selfId), [endpoints, selfId]);
-  const selected = useMemo(
-    () => (value ? opts.find((x) => x.id === value) ?? null : null),
-    [opts, value],
-  );
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return opts;
@@ -54,64 +52,99 @@ function FancyEndpointSelect({
     );
   }, [opts, q]);
 
-  return (
-    <details class="group relative">
-      <summary class="ui-details-summary list-none cursor-pointer">
-        <span class="flex items-center justify-between gap-2">
-          <span class="min-w-0">
-            {selected ? (
-              <SelectBadge e={selected} />
-            ) : (
-              <span class="ui-text-muted">Choose endpoint…</span>
-            )}
-          </span>
-          <span class="font-black ui-text-muted">▾</span>
-        </span>
-      </summary>
+  useEffect(() => {
+    setQ("");
+    setSelectedId(null);
+  }, [selfId]);
 
-      <div class="ui-details-panel absolute z-50 mt-1 w-full">
-        <div class="ui-details-search-wrap">
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const selectedEp =
+    selectedId !== null ? opts.find((x) => x.id === selectedId) ?? null : null;
+
+  return (
+    <div
+      role="presentation"
+      class="ui-modal-backdrop"
+      onClick={() => onClose()}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="connect-peer-title"
+        class="ui-modal max-h-[min(90vh,36rem)]"
+        onClick={(ev) => ev.stopPropagation()}
+      >
+        <h2
+          id="connect-peer-title"
+          class="mb-3 font-mono text-sm font-bold uppercase ui-text"
+        >
+          Connect endpoint
+        </h2>
+        <p class="mb-3 font-mono text-[11px] leading-relaxed ui-text-muted">
+          Pick another endpoint to connect with{" "}
+          <strong class="ui-text">
+            {endpoints.find((x) => x.id === selfId)?.label ?? selfId}
+          </strong>
+          . ALSA vs router routing is chosen by the server.
+        </p>
+
+        <label class="mb-2 block font-mono text-[10px] font-bold uppercase ui-text-muted">
+          Search
           <input
             value={q}
             onInput={(e) => setQ((e.target as HTMLInputElement).value)}
-            placeholder="Search endpoints…"
-            class="ui-input mt-0 font-mono text-[11px] font-bold"
+            placeholder="Filter by name, kind, id…"
+            class="ui-input mt-1 font-mono text-[11px]"
+            autoFocus
           />
-        </div>
-        <div class="max-h-64 overflow-y-auto p-2">
+        </label>
+
+        <div class="max-h-[min(40vh,14rem)] overflow-y-auto rounded-[var(--radius-md)] border border-[color:var(--color-border)] p-2">
           {filtered.length ? (
             <div class="space-y-1">
-              {filtered.map((e) => {
-                const g = groupForEndpoint(e);
-                const cls =
-                  g === "local"
-                    ? "ui-endpoint-opt-local"
-                    : "ui-endpoint-opt-remote";
+              {filtered.map((ep) => {
+                const g = groupForEndpoint(ep);
+                const base =
+                  g === "local" ? "ui-endpoint-opt-local" : "ui-endpoint-opt-remote";
+                const sel = ep.id === selectedId;
                 return (
                   <button
                     type="button"
-                    key={e.id}
-                    class={`w-full rounded-[var(--radius-sm)] border-2 p-2 text-left font-mono ${cls}`}
-                    onClick={(ev) => {
-                      ev.preventDefault();
-                      onChange(e.id);
-                      // close details
-                      const d = (ev.currentTarget as HTMLElement).closest("details") as
-                        | HTMLDetailsElement
-                        | null;
-                      if (d) d.open = false;
-                      setQ("");
+                    key={ep.id}
+                    class={`w-full rounded-[var(--radius-sm)] border-2 p-2 text-left font-mono ${base} ${
+                      sel ? "ring-2 ring-[color:var(--color-ring-highlight)] ring-inset" : ""
+                    }`}
+                    onClick={() => {
+                      if (selectedId === ep.id) {
+                        onConnect(ep.id);
+                      } else {
+                        setSelectedId(ep.id);
+                      }
                     }}
-                    title={e.id}
+                    title={
+                      selectedId === ep.id
+                        ? `${ep.id} — click again to connect`
+                        : ep.id
+                    }
                   >
                     <div class="flex flex-wrap items-center justify-between gap-2">
                       <div class="min-w-0">
-                        <div class="truncate text-xs font-black">{e.label}</div>
-                        <div class="truncate text-[10px] font-bold opacity-80">{e.sub}</div>
+                        <div class="truncate text-xs font-black">{ep.label}</div>
+                        <div class="truncate text-[10px] font-bold opacity-80">{ep.sub}</div>
                       </div>
                       <div class="shrink-0 text-right">
-                        <div class="text-[10px] font-black uppercase">{e.kind}</div>
-                        <div class="text-[10px] opacity-80">{e.id}</div>
+                        <div class="text-[10px] font-black uppercase">{ep.kind}</div>
+                        <div class="text-[10px] opacity-80">{ep.id}</div>
                       </div>
                     </div>
                   </button>
@@ -119,11 +152,31 @@ function FancyEndpointSelect({
               })}
             </div>
           ) : (
-            <div class="font-mono text-[11px] ui-text-subtle">No matches.</div>
+            <div class="font-mono text-[11px] ui-text-subtle">No matching endpoints.</div>
           )}
         </div>
+
+        {selectedEp ? (
+          <p class="mt-2 font-mono text-[10px] ui-text-muted">
+            Selected: <SelectBadge e={selectedEp} />
+          </p>
+        ) : null}
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <Button type="button" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={selectedId === null}
+            onClick={() => {
+              if (selectedId !== null) onConnect(selectedId);
+            }}
+          >
+            Connect ↔
+          </Button>
+        </div>
       </div>
-    </details>
+    </div>
   );
 }
 
@@ -345,16 +398,9 @@ export function PeersCards({
     byPeerId,
   ]);
 
-  const [targetByEndpoint, setTargetByEndpoint] = useState<Map<string, string>>(
-    () => new Map(),
+  const [connectDialogForId, setConnectDialogForId] = useState<string | null>(
+    null,
   );
-
-  const getTarget = (fromId: string): string | null => {
-    const v = targetByEndpoint.get(fromId);
-    if (typeof v === "string" && v) return v;
-    const firstOther = endpoints.find((e) => e.id !== fromId);
-    return firstOther?.id ?? null;
-  };
 
   const doConnect = async (from: string, to: string) => {
     try {
@@ -554,8 +600,6 @@ export function PeersCards({
               ? subsRows.filter((r) => `alsa:${r.to_client}:${r.to_port}` === e.id)
               : [];
 
-          const targetId = getTarget(e.id);
-
           return (
             <div
               key={e.id}
@@ -608,7 +652,7 @@ export function PeersCards({
               </div>
 
               <div class="p-3">
-                <div class="grid gap-3 md:grid-cols-[1fr_auto]">
+                <div class="grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
                   <div class="space-y-2">
                     <div class="flex flex-wrap items-center gap-2 font-mono text-xs">
                       <span class="font-black uppercase ui-text-muted">
@@ -765,41 +809,13 @@ export function PeersCards({
                       </div>
                     </div>
                   </div>
-
-                  <div class="w-full max-w-[22rem]">
-                    <div class="ui-panel-soft p-2">
-                      <div class="mb-2 font-mono text-[10px] font-black uppercase ui-text-muted">
-                        Connect
-                      </div>
-                      <div class="flex flex-col gap-2">
-                        <FancyEndpointSelect
-                          selfId={e.id}
-                          endpoints={endpoints}
-                          value={targetId}
-                          onChange={(v) => {
-                            setTargetByEndpoint((prev) => {
-                              const n = new Map(prev);
-                              n.set(e.id, v);
-                              return n;
-                            });
-                          }}
-                        />
-                        <div class="flex flex-wrap gap-2">
-                          <Button
-                            disabled={targetId === null || targetId === e.id || endpoints.length <= 1}
-                            onClick={() => {
-                              if (!targetId) return;
-                              void doConnect(e.id, targetId);
-                            }}
-                          >
-                            connect ↔
-                          </Button>
-                        </div>
-                        <div class="font-mono text-[10px] ui-text-muted">
-                          server decides ALSA aconnect vs router routing
-                        </div>
-                      </div>
-                    </div>
+                  <div class="flex shrink-0 justify-end md:pt-0">
+                    <Button
+                      disabled={endpoints.length <= 1}
+                      onClick={() => setConnectDialogForId(e.id)}
+                    >
+                      Connect…
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -807,6 +823,19 @@ export function PeersCards({
           );
         })}
       </div>
+
+      {connectDialogForId !== null && (
+        <ConnectPeerDialog
+          selfId={connectDialogForId}
+          endpoints={endpoints}
+          onClose={() => setConnectDialogForId(null)}
+          onConnect={(otherId) => {
+            const from = connectDialogForId;
+            setConnectDialogForId(null);
+            void doConnect(from, otherId);
+          }}
+        />
+      )}
 
       <p class="font-mono text-[10px] ui-text-subtle">
         Connected = has any router edge in or out (only for endpoints currently backed
