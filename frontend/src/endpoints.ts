@@ -26,6 +26,57 @@ export function endpointIdForMdns(name: string, port: number | string): string {
   return `mdns:${name}::${String(port)}`;
 }
 
+/** Numeric comparison for RTP-MIDI / mDNS ports (may be string or number in JSON). */
+export function rtpPortsEqual(portA: number | string, portB: unknown): boolean {
+  const na =
+    typeof portA === "number"
+      ? portA
+      : Number(String(portA).trim());
+  const nb =
+    typeof portB === "number"
+      ? portB
+      : Number(String(portB ?? "").trim());
+  return Number.isFinite(na) && Number.isFinite(nb) && na === nb;
+}
+
+/**
+ * mDNS device rows that correspond to RTP listeners this daemon exports
+ * (`network_rtpmidi_listener_t` / `network_rtpmidi_multi_listener_t`).
+ */
+export function collectBridgeExportedEndpointIds(
+  peers: RouterPeer[],
+  mdnsRemotes: MdnsRemote[],
+): Set<string> {
+  const out = new Set<string>();
+  const groups = groupMdnsRemotes(mdnsRemotes);
+  for (const g of groups) {
+    const id = endpointIdForMdns(g.name, g.port);
+    const name = g.name.trim();
+    for (const p of peers) {
+      if (p.type === "network_rtpmidi_listener_t") {
+        const raw = peerRaw(p);
+        const pn = String(p.name ?? raw.name ?? "").trim();
+        if (pn !== name) continue;
+        if (rtpPortsEqual(g.port, raw.port)) {
+          out.add(id);
+          break;
+        }
+      } else if (p.type === "network_rtpmidi_multi_listener_t") {
+        const raw = peerRaw(p);
+        const pn = String(p.name ?? raw.name ?? "").trim();
+        if (pn !== name) continue;
+        const lp = raw.listening as Record<string, unknown> | undefined;
+        const cp = lp?.control_port;
+        if (rtpPortsEqual(g.port, cp)) {
+          out.add(id);
+          break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 function isNum(x: unknown): x is number {
   return typeof x === "number" && Number.isFinite(x);
 }

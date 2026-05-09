@@ -11,11 +11,17 @@ import {
   loadDeviceFavoriteIds,
   saveDeviceFavoriteIds,
 } from "../deviceFavorites";
+import {
+  loadDeviceHiddenIds,
+  loadShowHiddenDevices,
+  saveDeviceHiddenIds,
+  saveShowHiddenDevices,
+} from "../deviceHidden";
 import { buildRecvFromMap } from "../model";
 import type { MidiAlsaSeqEntry, MidiRawmidiEntry } from "../midiEnumerate";
 import type { RpcClient } from "../rpc";
 import type { Endpoint } from "../endpoints";
-import { buildEndpoints } from "../endpoints";
+import { buildEndpoints, collectBridgeExportedEndpointIds } from "../endpoints";
 import { Button } from "./Button";
 import { PeerLatencyHoverCell, peerCombinedLatencyMs } from "./LatencyBar";
 
@@ -351,6 +357,11 @@ export function PeersCards({
     [alsaSeq, rawmidi, mdnsRemotes, peers],
   );
 
+  const autoHiddenIds = useMemo(
+    () => collectBridgeExportedEndpointIds(peers, mdnsRemotes),
+    [peers, mdnsRemotes],
+  );
+
   const recvFrom = useMemo(() => buildRecvFromMap(peers), [peers]);
   const byPeerId = useMemo(() => new Map(peers.map((p) => [p.id, p])), [peers]);
 
@@ -440,6 +451,28 @@ export function PeersCards({
     });
   }, []);
 
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() =>
+    loadDeviceHiddenIds(),
+  );
+  const [showHidden, setShowHidden] = useState<boolean>(() =>
+    loadShowHiddenDevices(),
+  );
+
+  const toggleManualHidden = useCallback((id: string) => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      saveDeviceHiddenIds(next);
+      return next;
+    });
+  }, []);
+
+  const setShowHiddenPersist = useCallback((v: boolean) => {
+    setShowHidden(v);
+    saveShowHiddenDevices(v);
+  }, []);
+
   /* layoutEffect: apply spotlight in the same frame as DOM reorder so paint always shows it */
   useLayoutEffect(() => {
     const id = pendingFavoriteScrollRef.current;
@@ -471,6 +504,12 @@ export function PeersCards({
       const conn = e.peerId !== undefined ? (isPeerConnected.get(e.peerId) ?? false) : false;
       if (connectedOnly && !conn) return false;
       if (!matchesQuery(e, query)) return false;
+      if (
+        !showHidden &&
+        (hiddenIds.has(e.id) || autoHiddenIds.has(e.id))
+      ) {
+        return false;
+      }
       return true;
     });
 
@@ -494,7 +533,18 @@ export function PeersCards({
     isPeerConnected,
     byPeerId,
     favoriteIds,
+    showHidden,
+    hiddenIds,
+    autoHiddenIds,
   ]);
+
+  const hiddenEligibleCount = useMemo(
+    () =>
+      endpoints.filter(
+        (e) => hiddenIds.has(e.id) || autoHiddenIds.has(e.id),
+      ).length,
+    [endpoints, hiddenIds, autoHiddenIds],
+  );
 
   const [connectDialogForId, setConnectDialogForId] = useState<string | null>(
     null,
@@ -613,10 +663,22 @@ export function PeersCards({
               value={connectedOnly}
               onChange={setConnectedOnly}
             />
+            <Toggle
+              label="Show hidden"
+              value={showHidden}
+              onChange={setShowHiddenPersist}
+            />
             <span class="font-mono text-[10px] ui-text-muted">
               Showing{" "}
               <span class="font-black ui-text">{shown.length}</span>
               <span class="ui-text-subtle"> / {endpoints.length}</span> endpoints
+              {hiddenEligibleCount > 0 ? (
+                <span class="ui-text-subtle">
+                  {!showHidden
+                    ? ` · ${hiddenEligibleCount} hidden`
+                    : ` · ${hiddenEligibleCount} incl. hidden`}
+                </span>
+              ) : null}
             </span>
             <div class="ml-2 flex items-center gap-2">
               <span class="font-mono text-[11px] font-bold uppercase ui-text-muted">
@@ -665,6 +727,10 @@ export function PeersCards({
           const isSpotlight = spotlightIds.has(e.id);
           const spot = isSpotlight ? " ui-peer-card-spotlight" : "";
           const ring = highlightIds.has(e.id) ? " ui-tr-highlight" : "";
+          const isManualHidden = hiddenIds.has(e.id);
+          const isAutoHidden = autoHiddenIds.has(e.id);
+          const hiddenVisual =
+            showHidden && (isManualHidden || isAutoHidden);
           /* Avoid Tailwind bg-* / ui-shadow-card overriding .ui-peer-card-spotlight */
           const surf = isSpotlight
             ? ""
@@ -672,6 +738,9 @@ export function PeersCards({
               ? "bg-[color:var(--color-surface)]"
               : "bg-[color:var(--color-surface-zebra-b)]";
           const cardShadow = isSpotlight ? "" : "ui-shadow-card ";
+          const hiddenRing = hiddenVisual
+            ? " outline outline-1 outline-dashed outline-[color:var(--color-border)] opacity-[0.93]"
+            : "";
           const accentBorder =
             g === "local"
               ? conn
@@ -714,7 +783,7 @@ export function PeersCards({
                 if (el) cardRefs.current.set(e.id, el);
                 else cardRefs.current.delete(e.id);
               }}
-              class={`${isSpotlight ? "overflow-visible" : "overflow-hidden"} rounded-[var(--radius-md)] border-2 ${cardShadow}${surf} ${accentBorder}${spot}${ring}`}
+              class={`${isSpotlight ? "overflow-visible" : "overflow-hidden"} rounded-[var(--radius-md)] border-2 ${cardShadow}${surf} ${accentBorder}${spot}${ring}${hiddenRing}`}
             >
               <div class="ui-peer-card-head px-3 py-2">
                 <div class="flex flex-wrap items-start justify-between gap-3">
@@ -747,6 +816,33 @@ export function PeersCards({
                           <span aria-hidden>☆</span>
                         )}
                       </button>
+                      {isManualHidden && showHidden ? (
+                        <button
+                          type="button"
+                          class="flex h-8 shrink-0 items-center rounded-md border border-[color:var(--color-border)] px-2 font-mono text-[10px] font-black uppercase ui-text-muted transition-colors hover:bg-[color:var(--color-surface-2)] hover:ui-text"
+                          title="Remove from hidden list (stored in this browser)"
+                          onClick={(ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            toggleManualHidden(e.id);
+                          }}
+                        >
+                          Unhide
+                        </button>
+                      ) : !isManualHidden ? (
+                        <button
+                          type="button"
+                          class="flex h-8 shrink-0 items-center rounded-md border border-[color:var(--color-border)] px-2 font-mono text-[10px] font-black uppercase ui-text-muted transition-colors hover:bg-[color:var(--color-surface-2)] hover:ui-text"
+                          title="Hide from device list (stored in this browser)"
+                          onClick={(ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            toggleManualHidden(e.id);
+                          }}
+                        >
+                          Hide
+                        </button>
+                      ) : null}
                       <span class="min-w-0 truncate font-mono text-sm font-black ui-text">
                         {e.label}
                       </span>
@@ -758,6 +854,19 @@ export function PeersCards({
                       <span class="truncate font-mono text-[10px] font-bold uppercase tracking-wide ui-text-muted">
                         {e.kind}
                       </span>
+                      {isAutoHidden ? (
+                        <span
+                          class="rounded border border-[color:var(--color-border)] px-1 py-0.5 font-mono text-[9px] font-black uppercase ui-text-subtle"
+                          title="Matches an RTP listener exported by this rtpmidid; hidden by default"
+                        >
+                          bridge export
+                        </span>
+                      ) : null}
+                      {isManualHidden ? (
+                        <span class="rounded border border-[color:var(--color-border)] px-1 py-0.5 font-mono text-[9px] font-black uppercase ui-text-subtle">
+                          hidden
+                        </span>
+                      ) : null}
                       {pid !== undefined ? (
                         <span class="ui-peer-cap">
                           peer #{pid}
