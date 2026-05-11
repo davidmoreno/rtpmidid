@@ -17,6 +17,7 @@
  */
 
 #include "ini.hpp"
+#include "ini_graph.hpp"
 #include "settings.hpp"
 #include "stringpp.hpp"
 #include <fstream>
@@ -40,10 +41,117 @@ void load_ini(const std::string &filename) {
   while (std::getline(fd, line)) {
     reader.parse_line(line);
   }
+  reader.finish();
+  finalize_unified_ini_graph(settings, filename);
 }
 
 void IniReader::set_filename(const std::string &filename) {
   this->filename = filename;
+}
+
+void IniReader::finish() {
+  flush_unified_peer();
+  flush_unified_connect();
+  flush_bridge();
+}
+
+static std::string bridge_get(const std::unordered_map<std::string, std::string> &m,
+                              const std::string &k) {
+  auto it = m.find(k);
+  return it == m.end() ? std::string() : it->second;
+}
+
+void IniReader::flush_unified_peer() {
+  if (peer_id.empty() && peer_type.empty() && peer_params.empty())
+    return;
+  if (peer_id.empty() || peer_type.empty()) {
+    throw rtpmidid::ini_exception(filename, lineno,
+                                  "[peer]: id and type are required");
+  }
+  settings_t::ini_peer_template_t t;
+  t.id = std::move(peer_id);
+  t.type = std::move(peer_type);
+  t.params = std::move(peer_params);
+  settings->ini_peers.push_back(std::move(t));
+  peer_id.clear();
+  peer_type.clear();
+  peer_params.clear();
+}
+
+void IniReader::flush_unified_connect() {
+  if (connect_from_id.empty() && connect_to_id.empty())
+    return;
+  if (connect_from_id.empty() || connect_to_id.empty()) {
+    throw rtpmidid::ini_exception(filename, lineno,
+                                  "[connect]: from and to are required");
+  }
+  settings->ini_connects.push_back(
+      settings_t::ini_connect_t{connect_from_id, connect_to_id});
+  connect_from_id.clear();
+  connect_to_id.clear();
+}
+
+void IniReader::flush_bridge() {
+  if (bridge_local.empty() && bridge_remote.empty())
+    return;
+  const std::string li = bridge_get(bridge_local, "id");
+  const std::string lt = bridge_get(bridge_local, "type");
+  const std::string ri = bridge_get(bridge_remote, "id");
+  const std::string rt = bridge_get(bridge_remote, "type");
+  if (li.empty() || lt.empty() || ri.empty() || rt.empty()) {
+    throw rtpmidid::ini_exception(
+        filename, lineno,
+        "[bridge]: local.id, local.type, remote.id, remote.type are required");
+  }
+
+  auto peer_from_side = [&](const std::string &id, const std::string &type,
+                            const std::unordered_map<std::string, std::string> &m) {
+    settings_t::ini_peer_template_t p;
+    p.id = id;
+    p.type = type;
+    for (const auto &e : m) {
+      if (e.first != "id" && e.first != "type")
+        p.params.insert(e);
+    }
+    return p;
+  };
+
+  if (lt == "alsa_listener" && rt == "rtpmidi_connect") {
+    settings_t::connect_to_t ct;
+    ct.name = bridge_get(bridge_local, "name");
+    ct.hostname = bridge_get(bridge_remote, "hostname");
+    ct.port = bridge_get(bridge_remote, "port");
+    if (ct.port.empty())
+      ct.port = bridge_get(bridge_remote, "remote_udp_port");
+    ct.local_udp_port = bridge_get(bridge_remote, "local_udp_port");
+    settings->connect_to.push_back(std::move(ct));
+    bridge_local.clear();
+    bridge_remote.clear();
+    return;
+  }
+
+  if (lt == "rawmidi" && (rt == "rtpmidi_listen" || rt == "rtpmidi_connect")) {
+    settings->ini_peers.push_back(peer_from_side(li, lt, bridge_local));
+    settings->ini_peers.push_back(peer_from_side(ri, rt, bridge_remote));
+    settings->ini_connects.push_back({li, ri});
+    settings->ini_connects.push_back({ri, li});
+    bridge_local.clear();
+    bridge_remote.clear();
+    return;
+  }
+  if (rt == "rawmidi" && (lt == "rtpmidi_listen" || lt == "rtpmidi_connect")) {
+    settings->ini_peers.push_back(peer_from_side(ri, rt, bridge_remote));
+    settings->ini_peers.push_back(peer_from_side(li, lt, bridge_local));
+    settings->ini_connects.push_back({li, ri});
+    settings->ini_connects.push_back({ri, li});
+    bridge_local.clear();
+    bridge_remote.clear();
+    return;
+  }
+
+  throw rtpmidid::ini_exception(
+      filename, lineno,
+      "[bridge]: unsupported local.type={} remote.type={} combination", lt, rt);
 }
 
 void IniReader::parse_line(const std::string &origline) {
@@ -66,7 +174,10 @@ void IniReader::parse_line(const std::string &origline) {
     if (line[line.length() - 1] != ']') {
       throw rtpmidid::exception("Invalid section: {}", line);
     }
-    section = line.substr(1, line.length() - 2);
+    flush_unified_peer();
+    flush_unified_connect();
+    flush_bridge();
+    section = trim_copy(line.substr(1, line.length() - 2));
 
     // sections that are unique, can not be repeated
     if (section == "general") {
@@ -79,21 +190,19 @@ void IniReader::parse_line(const std::string &origline) {
       return;
     } else {
       // Sections that can be repeated
-      if (section == "rtpmidi_announce") {
-        settings->rtpmidi_announces.emplace_back();
-        rtpmidi_announce = settings->rtpmidi_announces.data() +
-                           settings->rtpmidi_announces.size() - 1;
-      } else if (section == "alsa_announce") {
-        settings->alsa_announces.emplace_back();
-        alsa_announce = settings->alsa_announces.data() +
-                        settings->alsa_announces.size() - 1;
-      } else if (section == "connect_to") {
-        settings->connect_to.emplace_back();
-        connect_to =
-            settings->connect_to.data() + settings->connect_to.size() - 1;
-      } else if (section == "rawmidi") {
-        settings->rawmidi.emplace_back();
-        rawmidi = settings->rawmidi.data() + settings->rawmidi.size() - 1;
+      if (section == "peer") {
+        peer_id.clear();
+        peer_type.clear();
+        peer_params.clear();
+        return;
+      } else if (section == "connect") {
+        connect_from_id.clear();
+        connect_to_id.clear();
+        return;
+      } else if (section == "bridge") {
+        bridge_local.clear();
+        bridge_remote.clear();
+        return;
       } else {
         throw rtpmidid::exception("Invalid section: {}", section);
       }
@@ -154,14 +263,6 @@ void IniReader::parse_line(const std::string &origline) {
     } else {
       throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
     }
-  } else if (section == "rtpmidi_announce") {
-    if (key == "name") {
-      rtpmidi_announce->name = value;
-    } else if (key == "port") {
-      rtpmidi_announce->port = value;
-    } else {
-      throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
-    }
   } else if (section == "rtpmidi_discover") {
     if (key == "enabled") {
       settings->rtpmidi_discover.enabled = value == "true";
@@ -169,24 +270,6 @@ void IniReader::parse_line(const std::string &origline) {
       settings->rtpmidi_discover.name_positive_regex = std::regex(value);
     } else if (key == "name_negative_regex") {
       settings->rtpmidi_discover.name_negative_regex = std::regex(value);
-    } else {
-      throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
-    }
-  } else if (section == "alsa_announce") {
-    if (key == "name") {
-      alsa_announce->name = value;
-    } else {
-      throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
-    }
-  } else if (section == "connect_to") {
-    if (key == "hostname") {
-      connect_to->hostname = value;
-    } else if (key == "port") {
-      connect_to->port = value;
-    } else if (key == "name") {
-      connect_to->name = value;
-    } else if (key == "local_udp_port") {
-      connect_to->local_udp_port = value;
     } else {
       throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
     }
@@ -220,17 +303,31 @@ void IniReader::parse_line(const std::string &origline) {
     } else {
       throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
     }
-  } else if (section == "rawmidi") {
-    if (key == "device") {
-      rawmidi->device = value;
-    } else if (key == "name") {
-      rawmidi->name = value;
-    } else if (key == "hostname") {
-      rawmidi->hostname = value;
-    } else if (key == "remote_udp_port") {
-      rawmidi->remote_udp_port = value;
-    } else if (key == "local_udp_port") {
-      rawmidi->local_udp_port = value;
+  } else if (section == "peer") {
+    if (key == "id") {
+      peer_id = value;
+    } else if (key == "type") {
+      peer_type = value;
+    } else {
+      peer_params[key] = value;
+    }
+  } else if (section == "connect") {
+    if (key == "from") {
+      connect_from_id = value;
+    } else if (key == "to") {
+      connect_to_id = value;
+    } else {
+      throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
+    }
+  } else if (section == "bridge") {
+    static const char local_p[] = "local.";
+    static const char remote_p[] = "remote.";
+    const std::size_t ll = sizeof(local_p) - 1;
+    const std::size_t lr = sizeof(remote_p) - 1;
+    if (key.size() > ll && key.compare(0, ll, local_p) == 0) {
+      bridge_local[key.substr(ll)] = value;
+    } else if (key.size() > lr && key.compare(0, lr, remote_p) == 0) {
+      bridge_remote[key.substr(lr)] = value;
     } else {
       throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
     }

@@ -21,6 +21,9 @@
 #include "rtpmidid/logger.hpp"
 #include <optional>
 #include <regex>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace rtpmididns {
 
@@ -86,6 +89,19 @@ struct settings_t {
 
   std::vector<rawmidi_t> rawmidi;
 
+  /** Unified INI `[peer]` / `[connect]` / `[bridge]` before `finalize_unified_ini_graph`. */
+  struct ini_peer_template_t {
+    std::string id;
+    std::string type;
+    std::unordered_map<std::string, std::string> params;
+  };
+  struct ini_connect_t {
+    std::string from_id;
+    std::string to_id;
+  };
+  std::vector<ini_peer_template_t> ini_peers;
+  std::vector<ini_connect_t> ini_connects;
+
   /** Web UI: HTTP static + WebSocket JSON-RPC (see [web] in ini). */
   struct web_t {
     bool enabled = true;
@@ -138,7 +154,9 @@ VECTOR_FORMATTER(rtpmididns::settings_t::connect_to_t);
 BASIC_FORMATTER(rtpmididns::settings_t::web_t, "web_t[enabled={}, {}:{} root={}]",
                 v.enabled, v.listen, v.port, v.root);
 BASIC_FORMATTER(rtpmididns::settings_t,
-                "settings_t[{}, {}, {}, {}, {}, {}, {}, {}, {}, {}]", v.alsa_name,
-                v.alsa_network, v.control_filename, v.log_level,
+                "settings_t[{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, ini_peers={}, "
+                "ini_connects={}]",
+                v.alsa_name, v.alsa_network, v.control_filename, v.log_level,
                 v.rtpmidi_announces, v.rtpmidi_discover, v.alsa_announces,
-                v.connect_to, v.alsa_hw_auto_export, v.web);
+                v.connect_to, v.alsa_hw_auto_export, v.web, v.ini_peers.size(),
+                v.ini_connects.size());

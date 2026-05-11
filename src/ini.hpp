@@ -19,6 +19,7 @@
 
 #include "settings.hpp"
 #include <string>
+#include <unordered_map>
 
 namespace rtpmididns {
 void load_ini(const std::string &filename);
@@ -31,17 +32,26 @@ class IniReader {
   std::string value;
   int lineno = 0;
 
-  // Currently open sections, as they can appear many times
-  settings_t::rtpmidi_announce_t *rtpmidi_announce = nullptr;
-  settings_t::alsa_announce_t *alsa_announce = nullptr;
-  settings_t::connect_to_t *connect_to = nullptr;
-  settings_t::rawmidi_t *rawmidi = nullptr;
+  // [peer] / [connect] / [bridge] accumulators (flushed on section change / finish)
+  std::string peer_id;
+  std::string peer_type;
+  std::unordered_map<std::string, std::string> peer_params;
+  std::string connect_from_id;
+  std::string connect_to_id;
+  std::unordered_map<std::string, std::string> bridge_local;
+  std::unordered_map<std::string, std::string> bridge_remote;
+
+  void flush_unified_peer();
+  void flush_unified_connect();
+  void flush_bridge();
 
 public:
   IniReader(settings_t *settings) : settings(settings) {}
 
   void set_filename(const std::string &filename);
   void parse_line(const std::string &line);
+  /** Call after last parse_line (e.g. end of file). */
+  void finish();
 };
 
 } // namespace rtpmididns

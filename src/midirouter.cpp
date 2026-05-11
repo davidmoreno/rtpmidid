@@ -364,12 +364,10 @@ void midirouter_t::router_thread_loop() {
   while (router_running.load()) {
     rtpmidid::routing_request_t request;
     bool processed = false;
-    int requests_processed = 0;
-    
+
     // Process all available requests
     while (routing_queue.dequeue(request)) {
       processed = true;
-      requests_processed++;
       
       switch (request.command) {
       case rtpmidid::routing_command_e::SEND_MIDI: {

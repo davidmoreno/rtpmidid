@@ -146,35 +146,17 @@ default, here as reference:
 alsa_name=rtpmidid
 control=/var/run/rtpmidid/control.sock
 
-## All announce sections and connect_to can appear several times.
-
-# RTPMIDI announcement requires a firewall rule to allow incoming
-# connections on port 5004. If you want to not have an rtpmidi_announce
-# section, comment it out or delete it.
-# This creates an announced rtpmidi endpoint, and any connection
-# will create a new ALSA port.
-[rtpmidi_announce]
+# Repeatable: [peer], [connect], [bridge] — see default.ini and AGENTS.md
+[peer]
+id=announce_main
+type=listen_rtpmidi
 name={{hostname}}
 port=5004
 
-# Alsa announcement requires no firewall as it creates random
-# ports for each connection. If you want to not have an alsa_announce
-# section, comment it out or delete it.
-[alsa_announce]
-# Name for the ALSA connection so that when a conneciton is made, an rtpmidi
-# is announced.
+[peer]
+id=alsa_net_export
+type=listen_alsa_network
 name=Network Export
-
-# and now some fixed connections
-# [connect_to]
-# hostname=192.168.1.33
-# port=5004
-# name=DeepMind12D
-
-# [connect_to]
-# hostname=192.168.1.210
-# # default port is 5004
-# name=midid
 ```
 
 ## Install and Build

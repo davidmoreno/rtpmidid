@@ -45,7 +45,7 @@ The `default.ini` file is mounted from `./config/default.ini` into the container
 
 ### Key Configuration Options
 
-- **Port 5004**: Default RTP MIDI port (configured in `[rtpmidi_announce]` section)
+- **Port 5004**: Default RTP MIDI port (configured on the `listen_rtpmidi` `[peer]` in INI, or `--port`)
 - **UDP Port Range**: The application can use ports 5004-5100+ for connections
 - **ALSA Name**: Set in `[general]` section as `alsa_name`
 - **Control Socket**: Configured in `[general]` section as `control`
@@ -137,7 +137,7 @@ If MIDI devices aren't accessible:
 
 If port 5004 is already in use:
 1. Edit `config/default.ini` to use a different port
-2. Update the `[rtpmidi_announce]` section
+2. Update the `listen_rtpmidi` `[peer]` block (`port=`) or use `--port`
 3. Restart the container
 
 ## Stopping and Cleaning Up

@@ -422,18 +422,28 @@ control=/var/run/rtpmidid/control.sock  # Control socket path
 log_level=info               # debug|info|warning|error
 ```
 
-**[rtpmidi_announce]** (can appear multiple times)
+**[peer]** (repeatable) — stable `id=` and `type=`; factory types need no `[connect]` at startup.
+
+- `type=listen_rtpmidi` → RTP-MIDI multi-listener + mDNS announce (`name`, `port`).
+- `type=listen_alsa_network` → ALSA “Network Export” multi-listener (`name`).
+- Bridge leg types (`rawmidi`, `rtpmidi_listen`, `rtpmidi_connect`, `alsa_listener`) are used with `[connect]` and/or `[bridge]`; see `default.ini` and `src/ini_graph.cpp` (lowering to `rawmidi_t` / `connect_to_t` / announce vectors).
+
 ```ini
-[rtpmidi_announce]
-name={{hostname}}            # Service name ({{hostname}} = system hostname)
-port=5004                    # UDP port for RTP-MIDI
+[peer]
+id=announce_main
+type=listen_rtpmidi
+name={{hostname}}
+port=5004
+
+[peer]
+id=alsa_net_export
+type=listen_alsa_network
+name=Network Export
 ```
 
-**[alsa_announce]** (can appear multiple times)
-```ini
-[alsa_announce]
-name=Network Export          # ALSA port name for exporting
-```
+**[connect]** (repeatable) — `from=<peer id>` `to=<peer id>` (directed). Full-duplex raw MIDI ↔ RTP uses two opposite lines.
+
+**[bridge]** (repeatable) — `local.*` / `remote.*` keys (`local.id`, `local.type`, …); expands to peer rows + connects (or appends `connect_to_t` for `alsa_listener` + `rtpmidi_connect`).
 
 **[rtpmidi_discover]**
 ```ini
@@ -441,15 +451,6 @@ name=Network Export          # ALSA port name for exporting
 enabled=true                 # Enable mDNS discovery
 name_positive_regex=.*       # Accept services matching this
 name_negative_regex=^$       # Reject services matching this (checked first)
-```
-
-**[connect_to]** (can appear multiple times)
-```ini
-[connect_to]
-hostname=192.168.1.33
-port=5004                    # Default: 5004
-name=DeepMind12D
-local_udp_port=5010          # Optional: specific local port
 ```
 
 **[alsa_hw_auto_export]**
@@ -460,33 +461,23 @@ name_negative_regex=(System|Timer|Announce)
 type=hardware                # hardware|software|all|none
 ```
 
-**[rawmidi]** (can appear multiple times)
-```ini
-[rawmidi]
-name=MIDI Device
-device=/dev/snd/midiC4D0
-local_udp_port=5104
-# For client mode:
-# hostname=remote.host
-# remote_udp_port=5004
-```
-
 ### Settings Structure
 
-Settings are parsed into `settings_t` (`src/settings.hpp`):
+Settings are parsed into `settings_t` (`src/settings.hpp`). Unified `[peer]` / `[connect]` / `[bridge]` populate `ini_peers` / `ini_connects` during parse; `load_ini()` then runs `finalize_unified_ini_graph()` which fills `rtpmidi_announces`, `alsa_announces`, `connect_to`, and `rawmidi` for `main.cpp`.
 
 ```cpp
 struct settings_t {
     std::string alsa_name;
     std::string control_filename;
     rtpmidid::logger_level_t log_level;
-    
+
     std::vector<rtpmidi_announce_t> rtpmidi_announces;
     rtpmidi_discover_t rtpmidi_discover;
     std::vector<alsa_announce_t> alsa_announces;
     std::vector<connect_to_t> connect_to;
     alsa_hw_auto_export_t alsa_hw_auto_export;
     std::vector<rawmidi_t> rawmidi;
+    // transient until finalize: ini_peer_template_t, ini_connect_t vectors
 };
 ```
 
