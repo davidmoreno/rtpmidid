@@ -23,6 +23,7 @@
 #include "signal.hpp"
 #include "stats.hpp"
 #include <arpa/inet.h>
+#include <memory>
 #include <string>
 
 namespace rtpmidid {
@@ -41,7 +42,7 @@ public:
       : ::rtpmidid::exception("Bad MIDI packet: {}", what) {}
 };
 
-class rtppeer_t {
+class rtppeer_t : public std::enable_shared_from_this<rtppeer_t> {
   NON_COPYABLE_NOR_MOVABLE(rtppeer_t)
 public:
   // Commands, the id is the same chars as the name

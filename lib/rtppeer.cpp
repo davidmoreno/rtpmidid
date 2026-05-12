@@ -858,6 +858,17 @@ void rtppeer_t::parse_journal_chapter_N(uint8_t channel,
   }
 }
 void rtppeer_t::disconnect() {
+  // Keep ourselves alive across send_goodbye(): it fires status_change_event,
+  // whose rtpserverpeer slot calls rtpserver_t::remove_peer(), which erases
+  // the owning rtpserverpeer_t from a vector and drops the last
+  // shared_ptr<rtppeer_t>. Without this local, the reset() below would
+  // run on freed memory.
+  //
+  // weak_from_this().lock() returns nullptr when this instance isn't owned
+  // by a shared_ptr (rtpclient_t embeds rtppeer_t by value; tests construct
+  // it on the stack). In that case no external owner exists to drop us
+  // mid-call, so the UAF can't occur and proceeding without self is safe.
+  auto self = weak_from_this().lock();
   if (status & MIDI_CONNECTED) {
     send_goodbye(MIDI_PORT);
   }
