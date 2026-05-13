@@ -467,21 +467,32 @@ void midirouter_t::router_thread_loop() {
 }
 
 bool midirouter_t::enqueue_send_midi(peer_id_t from, const mididata_t &data) {
+  return enqueue_send_midi(from, 0, data);
+}
+
+bool midirouter_t::enqueue_send_midi(peer_id_t from, peer_id_t to,
+                                     const mididata_t &data) {
   // If router thread is not running, process synchronously (for tests)
   if (!router_running.load()) {
-    send_midi(from, data);
+    if (to == 0) {
+      send_midi(from, data);
+    } else {
+      send_midi(from, to, data);
+    }
     return true;
   }
-  
+
   rtpmidid::routing_request_t request;
   request.command = rtpmidid::routing_command_e::SEND_MIDI;
   request.from_peer_id = from;
-  request.to_peer_id = 0; // Broadcast
+  request.to_peer_id = to;
   request.data.assign(data.position, data.position + data.remaining());
 
   const bool enqueued = routing_queue.enqueue(std::move(request));
   if (!enqueued) {
-    WARNING("[MIDI_FLOW] Router: Routing queue full, dropping MIDI packet from peer {}", from);
+    WARNING("[MIDI_FLOW] Router: Routing queue full, dropping MIDI packet from "
+            "peer {} (to_peer_id={})",
+            from, to);
     return false;
   }
   router_wakeup.notify_one();

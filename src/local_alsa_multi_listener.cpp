@@ -136,9 +136,16 @@ void local_alsa_multi_listener_t::alsaseq_event(snd_seq_event_t *event) {
     return;
   }
   rtpmidid::io_bytes_writer_static<1024> writer;
+  const midipeer_id_t dest_network_peer = peerI->second;
   alsatrans_decoder.ev_to_mididata_f(
       event, writer, [&](const mididata_t &mididata) {
-        enqueue_to_router(mididata);
+        if (!router) {
+          WARNING("[MIDI_FLOW] peer {}: No router, cannot forward ALSA MIDI",
+                  peer_id);
+          return;
+        }
+        // Directed send: multi-listener has no broadcast send_to from RTP peers.
+        router->enqueue_send_midi(peer_id, dest_network_peer, mididata);
       });
 }
 

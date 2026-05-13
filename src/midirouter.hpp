@@ -91,6 +91,8 @@ public:
   
   // Thread-safe enqueue methods (non-blocking)
   bool enqueue_send_midi(peer_id_t from, const mididata_t &data);
+  /** Route MIDI from @a from to a single peer @a to ( @a to == 0 delegates to broadcast). */
+  bool enqueue_send_midi(peer_id_t from, peer_id_t to, const mididata_t &data);
   bool enqueue_connect(peer_id_t from, peer_id_t to);
   bool enqueue_disconnect(peer_id_t from, peer_id_t to);
   bool enqueue_remove_peer(peer_id_t peer_id);
