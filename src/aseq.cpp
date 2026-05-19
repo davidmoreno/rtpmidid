@@ -199,7 +199,7 @@ void aseq_t::read_ready() {
         unsubscribe_event[other->port](port_t(me->client, me->port));
       }
     } break;
-    // case SND_SEQ_EVENT_NOTE:
+    case SND_SEQ_EVENT_NOTE:
     case SND_SEQ_EVENT_CLOCK:
     case SND_SEQ_EVENT_START:
     case SND_SEQ_EVENT_CONTINUE:
@@ -214,10 +214,28 @@ void aseq_t::read_ready() {
     case SND_SEQ_EVENT_SYSEX:
     case SND_SEQ_EVENT_QFRAME:
     case SND_SEQ_EVENT_SENSING: {
-      auto myport = ev->dest.port;
+      const bool dest_is_us = ev->dest.client == client_id;
+      const bool dest_is_subscribers =
+          ev->dest.client == SND_SEQ_ADDRESS_SUBSCRIBERS;
+      if (!dest_is_us && !dest_is_subscribers) {
+        WARNING_RATE_LIMIT(
+            10,
+            "ALSA MIDI event for foreign dest {}:{} (this client {}), ignored",
+            ev->dest.client, ev->dest.port, client_id);
+        break;
+      }
+      const auto myport = ev->dest.port;
       auto me = midi_event.find(myport);
-      if (me != midi_event.end())
+      if (me != midi_event.end()) {
         me->second(ev);
+      } else {
+        WARNING_RATE_LIMIT(
+            10,
+            "ALSA MIDI on unhandled dest port {} (type {}, src {}:{}), {} "
+            "handler(s) registered",
+            myport, format_as(static_cast<snd_seq_event_type>(ev->type)),
+            ev->source.client, ev->source.port, midi_event.size());
+      }
     } break;
     case SND_SEQ_EVENT_PORT_START: {
       auto name = get_client_name(&ev->data.addr);

@@ -50,8 +50,13 @@ public:
                     int subscribe_from_client = -1,
                     int subscribe_from_port = -1);
   ~local_alsa_peer_t() override;
+  void on_router_attached() override;
   router_peer_row_t status() const override;
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   const char *get_type() const override { return "local_alsa_peer_t"; }
+
+private:
+  bool alsa_input_attached_ = false;
+  void attach_alsa_input();
 };
 } // namespace rtpmididns

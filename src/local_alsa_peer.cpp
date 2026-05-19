@@ -34,6 +34,20 @@ local_alsa_peer_t::local_alsa_peer_t(const std::string &name_,
   port = seq->create_port(name);
   INFO("Created alsapeer {}, port {}", name, port);
 
+  if (subscribe_from_client >= 0 && subscribe_from_port >= 0 &&
+      subscribe_from_client <= 255 && subscribe_from_port <= 255) {
+    subscribe_src_client_ = subscribe_from_client;
+    subscribe_src_port_ = subscribe_from_port;
+  }
+}
+
+void local_alsa_peer_t::on_router_attached() { attach_alsa_input(); }
+
+void local_alsa_peer_t::attach_alsa_input() {
+  if (alsa_input_attached_)
+    return;
+  alsa_input_attached_ = true;
+
   midi_connection = seq->midi_event[port].connect([this](snd_seq_event *ev) {
     DEBUG("[MIDI_FLOW] local_alsa_peer {}: MIDI event received from ALSA, type={}, port={}",
           peer_id, ev->type, port);
@@ -43,25 +57,22 @@ local_alsa_peer_t::local_alsa_peer_t(const std::string &name_,
                                       [this](const mididata_t &mididata) {
                                         DEBUG("[MIDI_FLOW] local_alsa_peer {}: Decoded MIDI, size={} bytes, enqueueing to router",
                                               peer_id, mididata.size());
-                                        // Enqueue to router (non-blocking)
                                         enqueue_to_router(mididata);
                                       });
   });
 
-  if (subscribe_from_client >= 0 && subscribe_from_port >= 0 &&
-      subscribe_from_client <= 255 && subscribe_from_port <= 255) {
-    subscribe_src_client_ = subscribe_from_client;
-    subscribe_src_port_ = subscribe_from_port;
+  if (subscribe_src_client_ >= 0 && subscribe_src_port_ >= 0 &&
+      !alsa_source_subscription_) {
     try {
       alsa_source_subscription_ = seq->connect(
-          aseq_t::port_t(static_cast<uint8_t>(subscribe_from_client),
-                         static_cast<uint8_t>(subscribe_from_port)),
+          aseq_t::port_t(static_cast<uint8_t>(subscribe_src_client_),
+                         static_cast<uint8_t>(subscribe_src_port_)),
           aseq_t::port_t(seq->client_id, port));
-      INFO("ALSA subscribe {}:{} -> rtpmidid {}:{} ({})", subscribe_from_client,
-           subscribe_from_port, seq->client_id, port, name);
+      INFO("ALSA subscribe {}:{} -> rtpmidid {}:{} ({})", subscribe_src_client_,
+           subscribe_src_port_, seq->client_id, port, name);
     } catch (const std::exception &e) {
-      WARNING("ALSA subscribe {}:{} failed for peer {}: {}", subscribe_from_client,
-              subscribe_from_port, name, e.what());
+      WARNING("ALSA subscribe {}:{} failed for peer {}: {}", subscribe_src_client_,
+              subscribe_src_port_, name, e.what());
     }
   }
 }
@@ -118,7 +129,8 @@ router_peer_row_t local_alsa_peer_t::status() const {
   router_peer_row_t row;
   row.name = name;
   row.port = port;
-  if (subscribe_src_client_ >= 0 && subscribe_src_port_ >= 0) {
+  if (alsa_source_subscription_ && subscribe_src_client_ >= 0 &&
+      subscribe_src_port_ >= 0) {
     alsa_subscribe_from_t s;
     s.client = subscribe_src_client_;
     s.port = subscribe_src_port_;

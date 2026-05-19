@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <algorithm>
 #include <string>
 #include <thread>
 
@@ -129,13 +130,92 @@ bool auth_ws_first_frame(std::string_view msg, const std::string &user,
 
 } // namespace
 
+web_server_t::ws_shutdown_registration::ws_shutdown_registration(
+    web_server_t &server, std::function<void()> close_fn)
+    : server_(&server) {
+  slot_ = std::make_shared<ws_shutdown_slot_t>();
+  slot_->close = std::move(close_fn);
+  server.register_ws_shutdown(slot_);
+}
+
+web_server_t::ws_shutdown_registration::~ws_shutdown_registration() {
+  if (server_ != nullptr && slot_) {
+    server_->unregister_ws_shutdown(slot_.get());
+  }
+}
+
+web_server_t::ws_shutdown_registration::ws_shutdown_registration(
+    ws_shutdown_registration &&other) noexcept
+    : server_(other.server_), slot_(std::move(other.slot_)) {
+  other.server_ = nullptr;
+}
+
+web_server_t::ws_shutdown_registration &
+web_server_t::ws_shutdown_registration::operator=(
+    ws_shutdown_registration &&other) noexcept {
+  if (this != &other) {
+    if (server_ != nullptr && slot_) {
+      server_->unregister_ws_shutdown(slot_.get());
+    }
+    server_ = other.server_;
+    slot_ = std::move(other.slot_);
+    other.server_ = nullptr;
+  }
+  return *this;
+}
+
+void web_server_t::register_ws_shutdown(
+    std::shared_ptr<ws_shutdown_slot_t> slot) {
+  std::lock_guard<std::mutex> lock(active_ws_mutex_);
+  active_ws_.push_back(std::move(slot));
+}
+
+void web_server_t::unregister_ws_shutdown(const ws_shutdown_slot_t *slot) {
+  std::lock_guard<std::mutex> lock(active_ws_mutex_);
+  active_ws_.erase(
+      std::remove_if(active_ws_.begin(), active_ws_.end(),
+                     [slot](const std::shared_ptr<ws_shutdown_slot_t> &s) {
+                       return s.get() == slot;
+                     }),
+      active_ws_.end());
+}
+
+void web_server_t::close_all_active_ws() {
+  std::vector<std::function<void()>> closers;
+  {
+    std::lock_guard<std::mutex> lock(active_ws_mutex_);
+    closers.reserve(active_ws_.size());
+    for (const auto &slot : active_ws_) {
+      if (slot && slot->close) {
+        closers.push_back(slot->close);
+      }
+    }
+  }
+  for (auto &close_fn : closers) {
+    close_fn();
+  }
+}
+
 void web_server_t::stop() {
+  if (!thread_.joinable()) {
+    return;
+  }
+
+  shutting_down_.store(true, std::memory_order_release);
+  close_all_active_ws();
+
   httplib::Server *p = srv_.load(std::memory_order_acquire);
   if (p != nullptr) {
     p->stop();
   }
   if (thread_.joinable()) {
     thread_.join();
+  }
+
+  shutting_down_.store(false, std::memory_order_release);
+  {
+    std::lock_guard<std::mutex> lock(active_ws_mutex_);
+    active_ws_.clear();
   }
 }
 
@@ -236,11 +316,18 @@ void web_server_t::thread_main() {
         return httplib::Server::HandlerResponse::Handled;
       });
 
-  svr->WebSocket("/ws", [&](const httplib::Request &req, httplib::ws::WebSocket &ws) {
+  svr->WebSocket("/ws", [this, need_auth, user, pass](const httplib::Request &req,
+                                                      httplib::ws::WebSocket &ws) {
     control_rpc_context_t ctx{router, aseq, mdns};
     bool authed = !need_auth || check_basic_auth(req, user, pass);
 
-    while (ws.is_open()) {
+    ws_shutdown_registration ws_reg(*this, [&ws]() {
+      if (ws.is_open()) {
+        ws.close(httplib::ws::CloseStatus::GoingAway, "server shutdown");
+      }
+    });
+
+    while (ws.is_open() && !is_shutting_down()) {
       std::string msg;
       const auto rr = ws.read(msg);
       if (rr == httplib::ws::ReadResult::Fail) {
@@ -302,7 +389,8 @@ void web_server_t::thread_main() {
   });
 
   /* Binary MIDI stream for `monitor.start` sessions; query ?uuid=… */
-  svr->WebSocket("/ws/monitor", [&](const httplib::Request &req,
+  svr->WebSocket("/ws/monitor", [this, router_for_monitor, need_auth, user, pass](
+                                    const httplib::Request &req,
                                     httplib::ws::WebSocket &ws) {
     const std::string uuid_q = req.get_param_value("uuid");
     INFO("Web UI WS /ws/monitor upgraded (handshake ok) from {}:{} uuid={}",
@@ -337,6 +425,12 @@ void web_server_t::thread_main() {
     INFO("Web UI WS /ws/monitor streaming MIDI for uuid={} from {}:{} "
          "(router pushes frames via sink; per-frame DEBUG)",
          uuid, req.remote_addr, req.remote_port);
+
+    ws_shutdown_registration ws_reg(*this, [&ws]() {
+      if (ws.is_open()) {
+        ws.close(httplib::ws::CloseStatus::GoingAway, "server shutdown");
+      }
+    });
 
     using namespace std::chrono_literals;
     uint64_t monitor_ws_sent_bytes = 0;
@@ -376,7 +470,7 @@ void web_server_t::thread_main() {
         }
       } sink_guard{mon};
 
-      while (ws.is_open()) {
+      while (ws.is_open() && !is_shutting_down()) {
         std::string msg;
         const auto rr = ws.read(msg);
         if (rr == httplib::ws::ReadResult::Fail) {
@@ -385,6 +479,9 @@ void web_server_t::thread_main() {
               "bytes in {} frames, recv {} bytes in {} frames",
               uuid, monitor_ws_sent_bytes, monitor_ws_send_frames,
               monitor_ws_recv_bytes, monitor_ws_recv_frames);
+          break;
+        }
+        if (is_shutting_down()) {
           break;
         }
         monitor_ws_recv_bytes += msg.size();

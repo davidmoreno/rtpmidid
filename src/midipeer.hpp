@@ -130,6 +130,9 @@ public:
                                     std::string &out_error);
 
   virtual const char *get_type() const = 0;
+
+  /** Called from midirouter_t::add_peer after peer_id and router are assigned. */
+  virtual void on_router_attached() {}
 };
 } // namespace rtpmididns
 

@@ -70,6 +70,8 @@ uint32_t midirouter_t::add_peer(std::shared_ptr<midipeer_t> peer) {
           peer_id, router_running.load());
   }
 
+  peer->on_router_attached();
+
   return peer_id;
 }
 

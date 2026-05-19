@@ -270,7 +270,9 @@ find_peer_for_alsa(const std::vector<router_peer_row_t> &rows, int client,
       continue;
     if (r.alsa_subscribe_from->client == client &&
         r.alsa_subscribe_from->port == port) {
-      return static_cast<peer_id_t>(r.id.value_or(0));
+      const auto id = static_cast<peer_id_t>(r.id.value_or(0));
+      if (id != 0)
+        return id;
     }
   }
   return std::nullopt;
