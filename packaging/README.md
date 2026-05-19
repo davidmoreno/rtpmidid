@@ -92,6 +92,8 @@ RUN apt-get update && apt-get install -y \
     pandoc \
     git \
     ninja-build \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd -m -s /bin/bash builder
 COPY ../build.sh /usr/local/bin/rtpmidid-build.sh
@@ -120,6 +122,8 @@ RUN dnf install -y \
     pandoc \
     git \
     systemd-rpm-macros \
+    nodejs \
+    npm \
     && dnf clean all
 RUN useradd -m -s /bin/bash builder
 COPY ../build-rpm.sh /usr/local/bin/rtpmidid-build-rpm.sh

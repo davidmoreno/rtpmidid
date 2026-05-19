@@ -16,6 +16,8 @@ BuildRequires:  alsa-lib-devel
 BuildRequires:  python3
 BuildRequires:  pandoc
 BuildRequires:  git
+BuildRequires:  nodejs
+BuildRequires:  npm
 BuildRequires:  systemd-rpm-macros
 
 Requires:       python3
@@ -89,6 +91,7 @@ chmod +x %{buildroot}%{_bindir}/rtpmidid-cli
 %attr(0755, root, root) %{_bindir}/rtpmidid-cli
 %{_unitdir}/rtpmidid.service
 %config(noreplace) %{_sysconfdir}/rtpmidid/default.ini
+%{_datadir}/rtpmidid/web
 %{_mandir}/man1/rtpmidid.1*
 %{_mandir}/man1/rtpmidid-cli.1*
 %{_docdir}/rtpmidid/README.md

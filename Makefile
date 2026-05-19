@@ -90,6 +90,10 @@ RTPMIDID_ARGS := --ini default.ini --port ${PORT} --name devel --control /tmp/rt
 
 .PHONY: frontend
 frontend:
+	@command -v npm >/dev/null 2>&1 || { \
+		echo "npm not found; install nodejs and npm (Debian Build-Depends or packaging Docker image)"; \
+		exit 1; \
+	}
 	cd frontend && (npm ci 2>/dev/null || npm install) && npm run build
 
 .PHONY: run run-valgrind run-gdb

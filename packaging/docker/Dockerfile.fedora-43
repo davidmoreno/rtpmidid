@@ -12,6 +12,8 @@ RUN dnf install -y \
     pandoc \
     git \
     systemd-rpm-macros \
+    nodejs \
+    npm \
     && dnf clean all
 
 # Create a non-root user for building

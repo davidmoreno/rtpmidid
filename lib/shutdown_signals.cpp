@@ -26,7 +26,10 @@ static void fill_shutdown_sigset(sigset_t *set) {
 static void async_signal_handler(int sig) {
   if (g_shutdown_eventfd >= 0) {
     const uint64_t one = 1;
-    (void)::write(g_shutdown_eventfd, &one, sizeof one);
+    if (::write(g_shutdown_eventfd, &one, sizeof one) !=
+        static_cast<ssize_t>(sizeof one)) {
+      // Best-effort wake from signal handler; nothing async-signal-safe to do.
+    }
   }
   static volatile sig_atomic_t fired = 0;
   if (fired != 0) {
