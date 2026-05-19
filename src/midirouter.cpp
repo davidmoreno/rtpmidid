@@ -20,6 +20,7 @@
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "rtpmidid/logger.hpp"
+#include "rtpmidid/shutdown_signals.hpp"
 #include "rtpmidid/threading_types.hpp"
 #include <chrono>
 #include <set>
@@ -330,13 +331,29 @@ void midirouter_t::event(peer_id_t from, midipeer_event_e event) {
   }
 }
 
-void midirouter_t::clear() {
-  std::unique_lock<std::shared_mutex> lock(peers_mutex);
-  for (auto &peer : peers) {
-    peer.second.peer->router = nullptr;
+std::vector<peer_id_t> midirouter_t::peer_ids() const {
+  std::shared_lock<std::shared_mutex> lock(peers_mutex);
+  std::vector<peer_id_t> ids;
+  ids.reserve(peers.size());
+  for (const auto &p : peers) {
+    ids.push_back(p.first);
   }
-  peers.clear();
+  return ids;
 }
+
+void midirouter_t::remove_all_peers() {
+  for (;;) {
+    auto ids = peer_ids();
+    if (ids.empty()) {
+      break;
+    }
+    for (auto id : ids) {
+      remove_peer(id);
+    }
+  }
+}
+
+void midirouter_t::clear() { remove_all_peers(); }
 
 void midirouter_t::start_router_thread() {
   if (router_running.load()) {
@@ -359,7 +376,9 @@ void midirouter_t::stop_router_thread() {
 
 void midirouter_t::router_thread_loop() {
   using namespace std::chrono_literals;
-  
+
+  rtpmidid::block_shutdown_signals();
+
   DEBUG("[MIDI_FLOW] Router: Router thread started");
   while (router_running.load()) {
     rtpmidid::routing_request_t request;

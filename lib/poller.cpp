@@ -251,8 +251,13 @@ void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
     nfds =
         epoll_wait(private_data->epollfd, events.data(), MAX_EVENTS, wait_ms);
 
-    if (nfds == -1)
-      ERROR("epoll_wait failed: {}", strerror(errno));
+    if (nfds == -1) {
+      if (errno == EINTR) {
+        // Signal delivered to this thread; shutdown eventfd may be readable next.
+      } else {
+        ERROR("epoll_wait failed: {}", strerror(errno));
+      }
+    }
   }
   assert(nfds <= MAX_EVENTS);
 

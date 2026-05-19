@@ -18,6 +18,7 @@
 #include "control_socket.hpp"
 #include "control_rpc.hpp"
 #include "settings.hpp"
+#include <rtpmidid/shutdown_signals.hpp>
 #include <algorithm>
 #include <cerrno>
 #include <cstddef>
@@ -101,7 +102,9 @@ control_socket_t::control_socket_t() {
   }
 }
 
-rtpmididns::control_socket_t::~control_socket_t() noexcept {
+rtpmididns::control_socket_t::~control_socket_t() noexcept { stop(); }
+
+void control_socket_t::stop() {
   server_running_.store(false, std::memory_order_release);
   if (server_thread_.joinable()) {
     if (socket >= 0) {
@@ -121,6 +124,8 @@ void control_socket_t::server_thread_main() {
   if (listen_fd < 0) {
     return;
   }
+
+  rtpmidid::block_shutdown_signals();
 
 #if !defined(_WIN32)
   (void)::signal(SIGPIPE, SIG_IGN);

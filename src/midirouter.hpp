@@ -121,8 +121,14 @@ public:
   // From one peer to all connected others
   void event(peer_id_t from, midipeer_event_e event);
 
+  /** Snapshot of all peer ids (thread-safe). */
+  std::vector<peer_id_t> peer_ids() const;
+
+  /** Remove every peer via remove_peer() (disconnects, goodbyes, thread stop). */
+  void remove_all_peers();
+
   // To force clear the peers and avoid the cyclic references of peers that keep
-  // the router.
+  // the router. Prefer remove_all_peers() for shutdown.
   void clear();
 
   std::vector<router_peer_row_t> status_rows() const;

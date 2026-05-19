@@ -29,23 +29,25 @@
 #include "rtpmidid/dns_resolver.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "rtpmidid/poller.hpp"
+#include "rtpmidid/shutdown_signals.hpp"
 #include "rtpmidiremotehandler.hpp"
 #include "settings.hpp"
 #include <chrono>
+#include <cstdint>
+#include <cstring>
 #include <cxxabi.h>
 #include <execinfo.h>
 #include <functional>
 #include <signal.h>
+#include <sys/eventfd.h>
 #include <unistd.h>
 #include <sstream>
+#include <vector>
 
 namespace rtpmididns {
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 } // namespace rtpmididns
-
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-static bool exiting = false;
 
 void print_stacktrace() {
   void *array[50];
@@ -114,23 +116,6 @@ void sigabrt_f(int sig) {
   raise(sig);
 }
 
-void sigterm_f(int) {
-  if (exiting) {
-    exit(1);
-  }
-  exiting = true;
-  INFO("SIGTERM received. Closing.");
-  rtpmidid::poller.close();
-}
-void sigint_f(int) {
-  if (exiting) {
-    exit(1);
-  }
-  exiting = true;
-  INFO("SIGINT received. Closing.");
-  rtpmidid::poller.close();
-}
-
 class main_t {
 protected:
   std::shared_ptr<rtpmididns::midirouter_t> router;
@@ -193,16 +178,44 @@ public:
   }
 
   void close() {
+    INFO("Shutting down: stopping web server");
     web.stop();
+
+    INFO("Shutting down: stopping DNS resolver");
     rtpmidid::dns_resolver_shutdown();
-    // Stop all threads
+
+    INFO("Shutting down: stopping control socket");
+    control.stop();
+
+    INFO("Shutting down: dropping rtpmidi remote handler");
+    rtpmidi_remote_handler.reset();
+
+    INFO("Shutting down: dropping hw auto-announce");
+    hwautoannounce.reset();
+
     if (router) {
-      router->for_each_peer(std::function<void(rtpmididns::midipeer_t*)>([](rtpmididns::midipeer_t *peer) {
-        peer->stop_thread();
-      }));
+      INFO("Shutting down: stopping peer threads");
+      router->for_each_peer(
+          std::function<void(rtpmididns::midipeer_t *)>([](rtpmididns::midipeer_t *peer) {
+            INFO("Shutting down: stopping peer thread {}", peer->peer_id);
+            peer->stop_thread();
+          }));
+
+      INFO("Shutting down: stopping router thread");
       router->stop_router_thread();
+
+      INFO("Shutting down: removing all peers");
+      router->remove_all_peers();
     }
-    rtpmididns::mdns = nullptr; 
+
+    INFO("Shutting down: stopping mDNS");
+    rtpmididns::mdns.reset();
+
+    INFO("Shutting down: closing ALSA sequencer");
+    aseq.reset();
+
+    INFO("Shutting down: releasing router");
+    router.reset();
   }
 
 protected:
@@ -263,12 +276,38 @@ int main(int argc, char **argv) {
     rtpmidid::logger2.set_log_level(rtpmididns::settings.log_level);
   }
 
-  std::optional<rtpmididns::HwAutoAnnounce> hwautoannounce;
+  // Worker threads must not handle SIGINT/SIGTERM; only main does.
+  rtpmidid::block_shutdown_signals();
 
-  signal(SIGINT, sigint_f);
-  signal(SIGTERM, sigterm_f);
-  signal(SIGABRT, sigabrt_f);
+  struct sigaction sa_abrt {};
+  sa_abrt.sa_handler = sigabrt_f;
+  sigemptyset(&sa_abrt.sa_mask);
+  sa_abrt.sa_flags = 0;
+  (void)sigaction(SIGABRT, &sa_abrt, nullptr);
   signal(SIGPIPE, SIG_IGN);
+
+  int shutdown_eventfd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+  if (shutdown_eventfd < 0) {
+    ERROR("Could not create shutdown eventfd: {}", strerror(errno));
+    return 1;
+  }
+
+  rtpmidid::install_shutdown_signal_handlers(shutdown_eventfd);
+
+  rtpmidid::poller_t::listener_t shutdown_listener;
+  try {
+    shutdown_listener = rtpmidid::poller.add_fd_in(shutdown_eventfd, [](int fd) {
+      INFO("Shutdown signal received.");
+      uint64_t n = 0;
+      while (read(fd, &n, sizeof n) == static_cast<ssize_t>(sizeof n)) {
+      }
+      rtpmidid::poller.close();
+    });
+  } catch (const std::exception &e) {
+    ERROR("Could not register shutdown eventfd: {}", e.what());
+    ::close(shutdown_eventfd);
+    return 1;
+  }
 
   main_t maindata;
 
@@ -285,6 +324,9 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  // Deliver SIGINT/SIGTERM to the main thread only (workers inherit blocked mask).
+  rtpmidid::unblock_shutdown_signals();
+
   // MAIN RUN
   try {
     INFO("Waiting for connections.");
@@ -297,6 +339,12 @@ int main(int argc, char **argv) {
   } catch (...) {
     ERROR("Unhandled exception!");
     print_stacktrace();
+  }
+
+  shutdown_listener.stop();
+  if (shutdown_eventfd >= 0) {
+    ::close(shutdown_eventfd);
+    shutdown_eventfd = -1;
   }
 
   maindata.close();

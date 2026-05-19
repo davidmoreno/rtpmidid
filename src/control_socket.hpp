@@ -50,6 +50,9 @@ public:
   control_socket_t();
   ~control_socket_t() noexcept;
 
+  /** Stop the server thread and close the listening socket (idempotent). */
+  void stop();
+
   std::string parse_command(const std::string &command);
 };
 } // namespace rtpmididns

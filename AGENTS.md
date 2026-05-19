@@ -171,7 +171,13 @@ void close();
 
 ### Signal Handling
 
-The daemon handles `SIGINT` and `SIGTERM` by calling `rtpmidid::poller.close()`, which causes `is_open()` to return false and the main loop to exit gracefully.
+`SIGINT` and `SIGTERM` use an async-signal-safe path: a tiny handler only `write()`s to a dedicated **shutdown eventfd** registered on the poller. The poller callback (main thread) logs and calls `rtpmidid::poller.close()`, which exits the `while (poller.is_open())` loop in `main.cpp`.
+
+Before any worker threads start, `main()` calls `rtpmidid::block_shutdown_signals()` so `SIGINT`/`SIGTERM` are masked in router, peer, DNS, control, web, and logger threads. After `setup()`, the main thread calls `unblock_shutdown_signals()` so only the poller thread receives shutdown signals. A second signal re-raises the default handler (`exit`).
+
+Shutdown order in `main_t::close()` (after the poller loop): web server → DNS resolver → control socket → remote handler → hw auto-announce → stop peer threads → stop router thread → `remove_all_peers()` (RTP goodbyes, mDNS unannounce) → mDNS → ALSA → router.
+
+Implementation: [`include/rtpmidid/shutdown_signals.hpp`](include/rtpmidid/shutdown_signals.hpp), [`lib/shutdown_signals.cpp`](lib/shutdown_signals.cpp), [`src/main.cpp`](src/main.cpp).
 
 ### Performance Considerations
 

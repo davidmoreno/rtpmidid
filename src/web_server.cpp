@@ -26,6 +26,7 @@
 #include <rtpmidid/dm_json/runtime.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/mdns_rtpmidi.hpp>
+#include <rtpmidid/shutdown_signals.hpp>
 
 #include <cctype>
 #include <chrono>
@@ -158,6 +159,8 @@ void web_server_t::start() {
 }
 
 void web_server_t::thread_main() {
+  rtpmidid::block_shutdown_signals();
+
   const std::string root = settings.web.root;
   const std::string listen = settings.web.listen;
   const int port = settings.web.port;

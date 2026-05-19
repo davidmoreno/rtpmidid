@@ -20,6 +20,7 @@
 #include "midirouter.hpp"
 #include "mididata.hpp"
 #include "dm_json_generated.hpp"
+#include "rtpmidid/shutdown_signals.hpp"
 #include "rtpmidid/stats.hpp"
 #include "rtpmidid/threading_types.hpp"
 #include <chrono>
@@ -93,6 +94,8 @@ void midipeer_t::stop_thread() {
 
 void midipeer_t::peer_thread_loop() {
   using namespace std::chrono_literals;
+
+  rtpmidid::block_shutdown_signals();
 
   try {
     DEBUG("[MIDI_FLOW] peer {}: Peer thread loop started", peer_id);

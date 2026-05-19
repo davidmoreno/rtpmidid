@@ -18,6 +18,7 @@
  */
 
 #include <rtpmidid/logger.hpp>
+#include <rtpmidid/shutdown_signals.hpp>
 #include <algorithm>
 #include <rtpmidid/exceptions.hpp>
 #include <chrono>
@@ -116,6 +117,9 @@ void logger_t::stop_log_thread() {
 
 void logger_t::log_thread_loop() {
   using namespace std::chrono_literals;
+
+  block_shutdown_signals();
+
   std::vector<log_message_t> batch;
   batch.reserve(32); // Batch up to 32 messages
   

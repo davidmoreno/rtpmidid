@@ -4,6 +4,7 @@
 #include <rtpmidid/dns_resolver.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/poller.hpp>
+#include <rtpmidid/shutdown_signals.hpp>
 #include <cerrno>
 #include <cstring>
 #include <memory>
@@ -53,6 +54,8 @@ void dns_resolver_t::ensure_started() {
 }
 
 void dns_resolver_t::worker_loop() {
+  block_shutdown_signals();
+
   for (;;) {
     job_t job;
     {
