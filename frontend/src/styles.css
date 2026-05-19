@@ -24,6 +24,11 @@
     font-family: var(--font-ui);
   }
 
+  /* Centered content column; header bar can span full viewport width outside this. */
+  .ui-page-inner {
+    @apply mx-auto max-w-7xl px-4;
+  }
+
   .ui-text {
     color: var(--color-fg);
   }
@@ -52,9 +57,24 @@
   }
 
   .ui-header-bar {
-    border-bottom: calc(var(--border-width) * 2) solid var(--color-header-border);
     background-color: var(--color-header-bg, transparent);
     background-image: var(--header-bg-image, none);
+  }
+
+  /* Non-brutalist: rule only under the centered content column. */
+  .ui-header-bar .ui-page-inner {
+    border-bottom: calc(var(--border-width) * 2) solid var(--color-header-border);
+  }
+
+  /* Brutalist: hi-vis bar and rule span the full viewport. */
+  [data-theme="light-brutalist"] .ui-header-bar,
+  [data-theme="dark-brutalist"] .ui-header-bar {
+    border-bottom: calc(var(--border-width) * 2) solid var(--color-header-border);
+  }
+
+  [data-theme="light-brutalist"] .ui-header-bar .ui-page-inner,
+  [data-theme="dark-brutalist"] .ui-header-bar .ui-page-inner {
+    border-bottom: none;
   }
 
   .ui-banner-warn {

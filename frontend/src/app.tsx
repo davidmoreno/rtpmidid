@@ -465,8 +465,8 @@ export function App() {
 
   return (
     <div class="ui-page">
-      <div class="mx-auto max-w-7xl p-4">
-        <header class="ui-header-bar mb-6 flex flex-wrap items-end justify-between gap-4 pb-4">
+      <header class="ui-header-bar mb-6">
+        <div class="ui-page-inner flex flex-wrap items-end justify-between gap-4 pb-4 pt-4">
           <div>
             <h1 class="font-mono text-2xl font-black uppercase tracking-tight ui-text">
               rtpmidid
@@ -494,7 +494,9 @@ export function App() {
               </p>
             )}
           </div>
-        </header>
+        </div>
+      </header>
+      <div class="ui-page-inner p-4 pt-0">
         <p class="mb-4 font-mono text-xs ui-banner-warn">{status}</p>
         <Tabs tabs={tabs} active={tab} onChange={setTab} />
       </div>
