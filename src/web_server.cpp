@@ -412,7 +412,12 @@ void web_server_t::thread_main() {
       ws.close(httplib::ws::CloseStatus::InvalidPayload, "need ?uuid=");
       return;
     }
-    auto mon = monitor_registry_lookup(uuid);
+    std::shared_ptr<webui_midi_monitor_peer_t> mon;
+    for (int attempt = 0; attempt < 40 && !mon; ++attempt) {
+      mon = monitor_registry_lookup(uuid);
+      if (!mon && attempt < 39)
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    }
     if (!mon) {
       WARNING(
           "Web UI WS /ws/monitor closing: unknown monitor session uuid={} "
@@ -495,12 +500,11 @@ void web_server_t::thread_main() {
         std::this_thread::sleep_for(2ms);
       }
       INFO("Web UI WS /ws/monitor connection ended uuid={} from {}:{} "
-           "(sent {} bytes / {} frames, received {} bytes / {} ws frames)",
+           "(sent {} bytes / {} frames, received {} bytes / {} ws frames); "
+           "session stays active until monitor.stop",
            uuid, req.remote_addr, req.remote_port, monitor_ws_sent_bytes,
            monitor_ws_send_frames, monitor_ws_recv_bytes, monitor_ws_recv_frames);
     }
-    if (router_for_monitor)
-      monitor_session_stop(router_for_monitor, mon);
   });
 
   INFO("Web UI listening on http://{}:{}/ (WS /ws, /ws/monitor), root={}",

@@ -15,7 +15,7 @@ namespace rtpmididns {
 namespace {
 
 std::mutex registry_mtx;
-std::unordered_map<std::string, std::weak_ptr<webui_midi_monitor_peer_t>> registry;
+std::unordered_map<std::string, std::shared_ptr<webui_midi_monitor_peer_t>> registry;
 
 std::string hex_prefix(const uint8_t *data, size_t len, size_t max_bytes = 24) {
   std::string out;
@@ -158,7 +158,12 @@ monitor_registry_lookup(const std::string &uuid) {
   auto it = registry.find(uuid);
   if (it == registry.end())
     return nullptr;
-  return it->second.lock();
+  const auto &peer = it->second;
+  if (!peer || peer->peer_id == 0) {
+    registry.erase(it);
+    return nullptr;
+  }
+  return peer;
 }
 
 void monitor_session_stop(const std::shared_ptr<midirouter_t> &router,

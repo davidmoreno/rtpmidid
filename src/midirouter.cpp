@@ -19,6 +19,7 @@
 #include "midirouter.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
+#include "webui_midi_monitor_peer.hpp"
 #include "rtpmidid/logger.hpp"
 #include "rtpmidid/shutdown_signals.hpp"
 #include "rtpmidid/threading_types.hpp"
@@ -145,6 +146,10 @@ void midirouter_t::remove_peer(peer_id_t peer_id) {
 
   // Stop the peer's thread before removing (must be done while holding lock to prevent race)
   auto peer_ptr = toremove->second.peer;
+  if (auto mon = std::dynamic_pointer_cast<webui_midi_monitor_peer_t>(peer_ptr)) {
+    mon->clear_ws_binary_sink();
+    monitor_registry_unregister(mon->session_uuid());
+  }
   lock.unlock(); // Release lock before stopping thread (thread might need to access router)
   
   // Stop peer thread (this is safe because we still have the shared_ptr)

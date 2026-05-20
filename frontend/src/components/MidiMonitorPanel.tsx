@@ -39,9 +39,13 @@ export function MidiMonitorPanel({
   useEffect(() => {
     let cancelled = false;
     let socket: WebSocket | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let retryAttempt = 0;
+    const maxRetries = 8;
 
     const attachHandlers = (ws: WebSocket) => {
       ws.onopen = () => {
+        retryAttempt = 0;
         console.info("[rtpmidid:monitor] WebSocket open", monitorWebSocketUrl(uuid));
         onConnRef.current?.(true);
       };
@@ -57,8 +61,28 @@ export function MidiMonitorPanel({
           ev.wasClean,
         );
         onConnRef.current?.(false);
-        if (!cancelled)
-          onEndedRef.current?.();
+        const retriableUnknown =
+          ev.code === 1007 &&
+          (ev.reason.includes("unknown session") ||
+            ev.reason.includes("need ?uuid="));
+        if (!cancelled && retriableUnknown && retryAttempt < maxRetries) {
+          retryAttempt += 1;
+          const delayMs = 50 * retryAttempt;
+          console.info(
+            "[rtpmidid:monitor] retrying connection in",
+            delayMs,
+            "ms (attempt",
+            retryAttempt,
+            "of",
+            maxRetries,
+            ")",
+          );
+          retryTimer = window.setTimeout(() => {
+            if (!cancelled) openSocket();
+          }, delayMs);
+          return;
+        }
+        if (!cancelled) onEndedRef.current?.();
       };
       ws.onerror = () => {
         console.warn(
@@ -104,6 +128,7 @@ export function MidiMonitorPanel({
 
     return () => {
       cancelled = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
       socket?.close();
       wsRef.current = null;
     };
