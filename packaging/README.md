@@ -26,8 +26,11 @@ make deb DISTRO=ubuntu-24.04 ARCH=arm64
 # Build all Debian packages
 make deb-all
 
-# Build RPM packages for Fedora 43
-make rpm DISTRO=fedora-43 ARCH=x86_64
+# Build RPM packages (defaults to Fedora 44 / x86_64)
+make rpm
+
+# Or explicitly:
+make rpm DISTRO=fedora-44 ARCH=x86_64
 
 # Build all RPM packages
 make rpm-all
@@ -46,6 +49,7 @@ make all
 
 ### Fedora (RPM packages)
 
+- `fedora-44` - Fedora 44 (default for `make rpm`)
 - `fedora-43` - Fedora 43
 
 ## Supported Architectures

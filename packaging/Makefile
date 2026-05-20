@@ -10,7 +10,11 @@ RELEASES_DIR ?= $(PACKAGING_DIR)/dist
 DEB_DISTROS := debian-trixie ubuntu-24.04 ubuntu-25.10
 
 # Available distributions (Fedora/RPM)
-RPM_DISTROS := fedora-43
+RPM_DISTROS := fedora-44 fedora-43
+
+# Default RPM build (when `make rpm` without DISTRO= fedora-*)
+RPM_DISTRO ?= fedora-44
+RPM_ARCH ?= x86_64
 
 # All distributions
 DISTROS := $(DEB_DISTROS) $(RPM_DISTROS)
@@ -69,7 +73,7 @@ help:
 	@echo "Examples:"
 	@echo "  make deb"
 	@echo "  make deb DISTRO=ubuntu-24.04 ARCH=arm64"
-	@echo "  make rpm DISTRO=fedora-43 ARCH=x86_64"
+	@echo "  make rpm DISTRO=fedora-44 ARCH=x86_64"
 	@echo "  make deb-all"
 	@echo "  make rpm-all"
 	@echo "  make all"
@@ -200,12 +204,12 @@ _deb-internal:
 	echo "Package built successfully: $(RELEASES_DIR)/$(DISTRO)/$(ARCH)/"
 
 # RPM-specific targets
-# Default to fedora-43/x86_64 if DISTRO is not set or is a DEB distro
+# Default to $(RPM_DISTRO)/$(RPM_ARCH) if DISTRO is unset or is a DEB distro
 rpm:
 	@if [ -z "$(DISTRO)" ] || echo "$(DEB_DISTROS)" | grep -q "$(DISTRO)"; then \
-		$(MAKE) rpm-fedora-43-x86_64; \
+		$(MAKE) rpm-$(RPM_DISTRO)-$(RPM_ARCH); \
 	else \
-		rpm_arch=$(if $(filter $(DEB_ARCHES),$(ARCH)),x86_64,$(or $(ARCH),x86_64)); \
+		rpm_arch=$(if $(filter $(DEB_ARCHES),$(ARCH)),$(RPM_ARCH),$(or $(ARCH),$(RPM_ARCH))); \
 		$(MAKE) rpm-$(DISTRO)-$$rpm_arch; \
 	fi
 
