@@ -213,10 +213,12 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
       });
   arguments.emplace_back( //
       "--version",        //
-      "Show version", [](const std::string &value) {
-        std::print("rtpmidid version {}/2\n", VERSION);
+      "Show version",
+      [](const std::string &) {
+        std::print("rtpmidid version {}\n", VERSION);
         exit(0);
-      });
+      },
+      false);
   arguments.emplace_back( //
       "--help",           //
       "Show this help",

@@ -20,6 +20,12 @@ endif
 ifeq ($(DESTDIR),)
     DESTDIR := ""
 endif
+# Absolute prefix on the target system (no DESTDIR; for paths written into config files).
+ifeq ($(findstring /,$(PREFIX)),/)
+INSTALL_PREFIX := $(PREFIX)
+else
+INSTALL_PREFIX := /$(PREFIX)
+endif
 
 
 .PHONY: help
@@ -169,15 +175,15 @@ ETC=$(DESTDIR)$(SYSCONFDIR)
 install-rtpmidid: build man frontend
 	mkdir -p $(USR)/bin/
 	cp build/src/rtpmidid $(USR)/bin/
-	mkdir -p $(USR)/share/rtpmidid/web
-	cp -a frontend/dist/. $(USR)/share/rtpmidid/web/
+	mkdir -p $(USR)/share/rtpmidid/html
+	cp -a frontend/dist/. $(USR)/share/rtpmidid/html/
 	cd cli && make compile
 	cp build/rtpmidid-cli $(USR)/bin/rtpmidid-cli
 	mkdir -p $(ETC)/systemd/system/
 	cp debian/rtpmidid.service $(ETC)/systemd/system/
 	mkdir -p $(ETC)/rtpmidid/
 	cp default.ini $(ETC)/rtpmidid/
-	perl -0pi -e 's|^root=frontend/dist$$|root=$(USR)/share/rtpmidid/web|m' $(ETC)/rtpmidid/default.ini || true
+	perl -0pi -e 's|^root=frontend/dist$$|root=$(INSTALL_PREFIX)/share/rtpmidid/html|m' $(ETC)/rtpmidid/default.ini || true
 	mkdir -p $(USR)/share/doc/rtpmidid/
 	cp README.md $(USR)/share/doc/rtpmidid/
 	cp LICENSE-daemon.txt $(USR)/share/doc/rtpmidid/LICENSE.txt

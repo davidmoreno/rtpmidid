@@ -91,7 +91,7 @@ chmod +x %{buildroot}%{_bindir}/rtpmidid-cli
 %attr(0755, root, root) %{_bindir}/rtpmidid-cli
 %{_unitdir}/rtpmidid.service
 %config(noreplace) %{_sysconfdir}/rtpmidid/default.ini
-%{_datadir}/rtpmidid/web
+%{_datadir}/rtpmidid/html
 %{_mandir}/man1/rtpmidid.1*
 %{_mandir}/man1/rtpmidid-cli.1*
 %{_docdir}/rtpmidid/README.md
