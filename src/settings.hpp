@@ -48,7 +48,11 @@ struct settings_t {
 
   struct connect_to_t {
     std::string hostname;
-    std::string port;
+    // Default to the standard RTP-MIDI control port (IANA: 5004). Without a
+    // default, an INI [connect_to] block missing `port=` left this empty,
+    // making getaddrinfo() resolve the endpoint to port 0; sendto() then
+    // failed EINVAL forever with no recovery path.
+    std::string port = "5004";
     std::string name;
     std::string local_udp_port;
   };
