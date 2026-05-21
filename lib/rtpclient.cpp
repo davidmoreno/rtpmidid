@@ -146,6 +146,21 @@ void rtpclient_t::state_resolve_next_ip_port() {
   if (resolve_next_dns_sockaddress_list_I !=
       resolve_next_dns_sockaddress_list.end()) {
     control_address = (*resolve_next_dns_sockaddress_list_I).dup();
+
+    // Guard: a resolved entry with destination port 0 means the endpoint
+    // had no port (getaddrinfo with service=NULL/""), or the resolver
+    // returned a malformed entry. Sending to :0 is permanently broken
+    // (kernel returns EINVAL on every sendto), so refuse and advance to
+    // the next resolved entry instead of letting the rtpclient_t enter a
+    // permanent retry loop.
+    if (control_address.port() == 0) {
+      ERROR("Refusing endpoint {} - destination port is 0 (missing or "
+            "invalid port in [connect_to] config)",
+            control_address.to_string());
+      handle_event(ResolveFailed);
+      return;
+    }
+
     midi_address =
         network_address_list_t(control_address.ip(),
                                std::to_string(control_address.port() + 1))
