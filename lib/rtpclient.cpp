@@ -177,8 +177,66 @@ void rtpclient_t::state_resolve_next_ip_port() {
 }
 
 void rtpclient_t::state_connect_control() {
-  // Any, but could force the initial control port here
-  control_peer.open(network_address_list_t("::", local_base_port_str));
+  // Defensive: if a previous cycle (CK-timeout reconnect, etc.) left either
+  // peer bound, close them before re-allocating. Without this, the kernel
+  // could hand us the same ephemeral control port as last cycle, and our own
+  // surviving midi_peer would then hold control_port+1 — a false collision.
+  control_peer.close();
+  midi_peer.close();
+
+  // Speculatively bind both control_peer and midi_peer here, BEFORE telling
+  // the remote peer about us via IN. RTP-MIDI convention is
+  // midi_port = control_port + 1. The kernel's ephemeral allocator can give
+  // us a control_port whose +1 is owned by another process; retry with a
+  // fresh ephemeral pair up to MAX_PAIR_RETRIES.
+  //
+  // Retry only when local_base_port_str == "0" (ephemeral). A fixed user-
+  // configured local_udp_port that collides on +1 is a config error — fail
+  // with a clear message after one attempt.
+  static constexpr int MAX_PAIR_RETRIES = 5;
+  const bool ephemeral = (local_base_port_str == "0");
+  const int max_attempts = ephemeral ? MAX_PAIR_RETRIES : 1;
+
+  bool pair_acquired = false;
+  for (int attempt = 0; attempt < max_attempts; attempt++) {
+    control_peer.open(network_address_list_t("::", local_base_port_str));
+    if (!control_peer.is_open()) {
+      ERROR("Could not open control socket (attempt {}/{}): {}:{}",
+            attempt + 1, max_attempts,
+            resolve_next_dns_endpoint.hostname,
+            resolve_next_dns_endpoint.port);
+      continue;
+    }
+    local_base_port = control_peer.get_address().port();
+
+    midi_peer.open(
+        network_address_list_t("::", std::to_string(local_base_port + 1)));
+    if (midi_peer.is_open()) {
+      pair_acquired = true;
+      break;
+    }
+
+    if (ephemeral) {
+      WARNING("Acquired control port {} but midi port {} is unavailable "
+              "(likely owned by another process); retrying with a fresh "
+              "ephemeral pair (attempt {}/{})",
+              local_base_port, local_base_port + 1, attempt + 1, max_attempts);
+    } else {
+      ERROR("Could not bind midi port {} (configured local_udp_port={}); "
+            "pick a different port where both (port, port+1) are free.",
+            local_base_port + 1, local_base_port_str);
+    }
+    control_peer.close();
+  }
+
+  if (!pair_acquired) {
+    ERROR("Could not allocate adjacent control/midi port pair after {} "
+          "attempt(s); last tried control={} midi={}",
+          max_attempts, local_base_port, local_base_port + 1);
+    handle_event(ConnectFailed);
+    return;
+  }
+
   control_on_read_connection = control_peer.on_read.connect(
       [this](const packet_t &packet, const network_address_t &) {
         DEBUG("Data ready for control!");
@@ -186,18 +244,13 @@ void rtpclient_t::state_connect_control() {
         this->peer.data_ready(std::move(data), rtppeer_t::CONTROL_PORT);
       });
 
-  if (!control_peer.is_open()) {
-    ERROR("Could not connect {}:{} to control port",
-          resolve_next_dns_endpoint.hostname, resolve_next_dns_endpoint.port);
-    handle_event(ConnectFailed);
-    return;
-  }
-  local_base_port = control_peer.get_address().port();
-
   control_connected_event_connection =
       peer.status_change_event.connect([this](rtppeer_t::status_e status) {
         control_connected_event_connection.disconnect();
         if (status != rtppeer_t::CONTROL_CONNECTED) {
+          // Speculatively-bound midi_peer is still open here — release it
+          // before bouncing back to ResolveNextIpPort.
+          midi_peer.close();
           handle_event(ConnectFailed);
           return;
         }
@@ -211,6 +264,9 @@ void rtpclient_t::state_connect_control() {
   timer = poller.add_timer_event(connect_timeout, [this] {
     ERROR("Timeout connecting to control port");
     control_connected_event_connection.disconnect();
+    // Speculatively-bound midi_peer is still open here — release it
+    // before bouncing back to ResolveNextIpPort.
+    midi_peer.close();
     handle_event(ConnectFailed);
   });
 
@@ -219,12 +275,12 @@ void rtpclient_t::state_connect_control() {
 
 void rtpclient_t::state_connect_midi() {
   timer.disable();
-  midi_peer.open(
-      network_address_list_t("::", std::to_string(local_base_port + 1)));
 
+  // midi_peer was already opened in state_connect_control to guarantee the
+  // control+midi port pair is contiguous and both ports are bindable. Sanity
+  // guard in case the state machine is somehow re-entered out of order.
   if (!midi_peer.is_open()) {
-    ERROR("Could not connect {}:{} to midi port", midi_address.ip(),
-          midi_address.port() + 1);
+    ERROR("Internal: midi_peer should be open from state_connect_control");
     handle_event(ConnectFailed);
     return;
   }
@@ -262,6 +318,10 @@ void rtpclient_t::state_disconnect_control() {
   timer.disable();
   peer.send_goodbye(rtppeer_t::CONTROL_PORT);
   control_peer.close();
+  // With speculative midi_peer binding in state_connect_control, midi_peer is
+  // open by the time we reach this state via the ConnectMidi failure path.
+  // Without this close it stays bound for up to reconnect_timeout.
+  midi_peer.close();
   handle_event(ConnectFailed);
 }
 
