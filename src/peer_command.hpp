@@ -12,7 +12,6 @@
 
 #include "rtpmidid/reply_channel.hpp"
 #include "rtpmidid/threading_types.hpp"
-#include <functional>
 #include <variant>
 
 namespace rtpmididns {
@@ -21,40 +20,24 @@ class midipeer_t;
 
 namespace peer_cmd {
 
-/** MIDI packet inbound to this peer (delivered by the router). */
+/** MIDI packet inbound to this peer (delivered by the router). HIGH priority. */
 struct process_midi_t {
   rtpmidid::midi_packet_t packet;
 };
 
-/** MIDI packet that this peer wants to send back to the router. */
-struct send_to_router_t {
-  rtpmidid::midi_packet_t packet;
-};
-
-/**
- * Run an arbitrary action on the peer thread (e.g. status snapshot, latency
- * read). Optional reply slot for read-back.
- */
-struct run_task_t {
-  std::function<void(midipeer_t &)> task;
+/** Snapshot the peer's internal latency stats. LOW priority. */
+struct query_internal_latency_stats_t {
   rtpmidid::reply_slot_t reply;
 };
 
-/**
- * Read state on the peer thread; result delivered as `std::any` into
- * `reply.channel`.
- */
-struct query_t {
-  std::function<std::any(midipeer_t &)> query;
-  rtpmidid::reply_slot_t reply;
-};
-
+/** Wake the loop so it observes `thread_running_ == false`. */
 struct shutdown_t {};
 
 } // namespace peer_cmd
 
 using peer_command_t =
-    std::variant<peer_cmd::process_midi_t, peer_cmd::send_to_router_t,
-                 peer_cmd::run_task_t, peer_cmd::query_t, peer_cmd::shutdown_t>;
+    std::variant<peer_cmd::process_midi_t,
+                 peer_cmd::query_internal_latency_stats_t,
+                 peer_cmd::shutdown_t>;
 
 } // namespace rtpmididns

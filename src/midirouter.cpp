@@ -23,6 +23,7 @@
 #include "rtpmidid/shutdown_signals.hpp"
 #include "webui_midi_monitor_peer.hpp"
 #include <chrono>
+#include <unordered_map>
 #include <variant>
 
 namespace rtpmididns {
@@ -63,19 +64,45 @@ bool midirouter_t::enqueue(router_command_t &&cmd,
   return true;
 }
 
-void midirouter_t::post_signal(std::function<void(midirouter_t &)> task) {
-  if (!task)
-    return;
+void midirouter_t::post_signal_peer_added(peer_id_t peer_id) {
   if (sync_mode()) {
-    task(*this);
+    peer_added_event(peer_id);
     return;
   }
-  router_cmd::fire_signal_t cmd{std::move(task)};
-  enqueue(router_command_t{std::move(cmd)}, rtpmidid::queue_priority_e::NORMAL);
+  enqueue(router_command_t{router_cmd::signal_peer_added_t{peer_id}},
+          rtpmidid::queue_priority_e::NORMAL);
 }
 
-void midirouter_t::submit_run(rtpmidid::queue_priority_e prio,
-                              std::function<void(midirouter_t &)> task) {
+void midirouter_t::post_signal_connected(peer_id_t from, peer_id_t to) {
+  if (sync_mode()) {
+    connected_event(from, to);
+    return;
+  }
+  enqueue(router_command_t{router_cmd::signal_connected_t{from, to}},
+          rtpmidid::queue_priority_e::NORMAL);
+}
+
+void midirouter_t::post_signal_disconnected(peer_id_t from, peer_id_t to) {
+  if (sync_mode()) {
+    disconnected_event(from, to);
+    return;
+  }
+  enqueue(router_command_t{router_cmd::signal_disconnected_t{from, to}},
+          rtpmidid::queue_priority_e::NORMAL);
+}
+
+void midirouter_t::post_signal_peer_event(peer_id_t peer_id,
+                                          midipeer_event_e evt) {
+  if (sync_mode()) {
+    peer_event(peer_id, evt);
+    return;
+  }
+  enqueue(router_command_t{router_cmd::signal_peer_event_t{peer_id, evt}},
+          rtpmidid::queue_priority_e::NORMAL);
+}
+
+void midirouter_t::dispatch_for_each_peer(
+    std::function<void(midirouter_t &)> task) {
   if (!task)
     return;
   if (sync_mode() || on_router_thread()) {
@@ -84,15 +111,16 @@ void midirouter_t::submit_run(rtpmidid::queue_priority_e prio,
   }
   auto channel = std::make_shared<rtpmidid::reply_channel_t>();
   const uint64_t id = channel->next_id();
-  router_cmd::run_task_t cmd;
+  router_cmd::for_each_peer_t cmd;
   cmd.task = std::move(task);
   cmd.reply = rtpmidid::reply_slot_t{channel, id};
-  if (!enqueue(router_command_t{std::move(cmd)}, prio)) {
+  if (!enqueue(router_command_t{std::move(cmd)},
+               rtpmidid::queue_priority_e::LOW)) {
     return;
   }
   auto env = channel->wait(id, kReplyTimeout);
   if (!env.error.empty()) {
-    WARNING("submit_run: reply error '{}'", env.error);
+    WARNING("for_each_peer: reply error '{}'", env.error);
   }
 }
 
@@ -126,7 +154,7 @@ peer_id_t midirouter_t::add_peer_impl(std::shared_ptr<midipeer_t> peer) {
 
   peer->on_router_attached();
 
-  post_signal([pid](midirouter_t &r) { r.peer_added_event(pid); });
+  post_signal_peer_added(pid);
   return pid;
 }
 
@@ -146,7 +174,8 @@ void midirouter_t::remove_peer_impl(peer_id_t peer_id) {
   }
 
   auto peer_ptr = toremove->second.peer;
-  if (auto mon = std::dynamic_pointer_cast<webui_midi_monitor_peer_t>(peer_ptr)) {
+  if (auto mon =
+          std::dynamic_pointer_cast<webui_midi_monitor_peer_t>(peer_ptr)) {
     mon->clear_ws_binary_sink();
     monitor_registry_unregister(mon->session_uuid());
   }
@@ -200,6 +229,13 @@ void midirouter_t::remove_peer_impl(peer_id_t peer_id) {
   removing_peers_.erase(peer_id);
 }
 
+void midirouter_t::remove_all_peers_impl() {
+  while (!peers_.empty()) {
+    const auto id = peers_.begin()->first;
+    remove_peer_impl(id);
+  }
+}
+
 void midirouter_t::connect_impl(peer_id_t from, peer_id_t to) {
   auto from_it = peers_.find(from);
   auto to_it = peers_.find(to);
@@ -222,7 +258,7 @@ void midirouter_t::connect_impl(peer_id_t from, peer_id_t to) {
   to_peer.peer->event(midipeer_event_e::CONNECTED_ROUTER, from);
 
   INFO("Connect {} -> {}", from, to);
-  post_signal([from, to](midirouter_t &r) { r.connected_event(from, to); });
+  post_signal_connected(from, to);
 }
 
 void midirouter_t::disconnect_impl(peer_id_t from, peer_id_t to) {
@@ -243,8 +279,7 @@ void midirouter_t::disconnect_impl(peer_id_t from, peer_id_t to) {
       from_peer.peer->event(midipeer_event_e::DISCONNECTED_ROUTER, to);
       to_peer.peer->event(midipeer_event_e::DISCONNECTED_ROUTER, from);
       INFO("Disconnect {} -> {}", from, to);
-      post_signal(
-          [from, to](midirouter_t &r) { r.disconnected_event(from, to); });
+      post_signal_disconnected(from, to);
       return;
     }
   }
@@ -282,33 +317,71 @@ void midirouter_t::send_midi_inline(peer_id_t from, peer_id_t to,
   }
 }
 
-void midirouter_t::event_impl(peer_id_t from, peer_id_t to,
-                              midipeer_event_e evt) {
+void midirouter_t::event_directed_impl(peer_id_t from, peer_id_t to,
+                                       midipeer_event_e evt) {
   auto peer_it = peers_.find(to);
   if (peer_it == peers_.end())
     return;
   peer_it->second.peer->event(evt, from);
-  post_signal([to, evt](midirouter_t &r) { r.peer_event(to, evt); });
+  post_signal_peer_event(to, evt);
 }
 
 void midirouter_t::event_broadcast_impl(peer_id_t from, midipeer_event_e evt) {
   auto peer_it = peers_.find(from);
   if (peer_it == peers_.end())
     return;
-  post_signal([from, evt](midirouter_t &r) { r.peer_event(from, evt); });
+  post_signal_peer_event(from, evt);
   for (auto to_id : peer_it->second.send_to) {
     auto topeer_it = peers_.find(to_id);
     if (topeer_it == peers_.end())
       continue;
     topeer_it->second.peer->event(evt, from);
-    const auto to = to_id;
-    post_signal([to, evt](midirouter_t &r) { r.peer_event(to, evt); });
+    post_signal_peer_event(to_id, evt);
   }
 }
 
-std::vector<router_peer_row_t> midirouter_t::status_rows_impl() const {
+std::vector<router_peer_row_t> midirouter_t::status_rows_impl() {
   std::vector<router_peer_row_t> routerdata;
   routerdata.reserve(peers_.size());
+
+  // --- Phase 1: dispatch all latency queries in parallel ---
+  // Each peer has its own thread + queue, so issuing one query per peer up
+  // front lets them compute their stats concurrently while we wait.
+  auto channel = std::make_shared<rtpmidid::reply_channel_t>();
+  std::vector<std::pair<peer_id_t, uint64_t>> pending;
+  pending.reserve(peers_.size());
+
+  for (const auto &kv : peers_) {
+    auto &peer = kv.second.peer;
+    if (!peer)
+      continue;
+    const uint64_t id = channel->next_id();
+    if (peer->request_internal_latency_stats(channel, id)) {
+      pending.emplace_back(kv.first, id);
+    }
+  }
+
+  // --- Phase 2: collect replies under a shared deadline ---
+  std::unordered_map<peer_id_t, internal_latency_ms_t> latency_by_id;
+  const auto deadline =
+      std::chrono::steady_clock::now() + kStatusLatencyBudget;
+  for (const auto &p : pending) {
+    auto remaining = deadline - std::chrono::steady_clock::now();
+    if (remaining <= std::chrono::milliseconds(0))
+      break;
+    auto env = channel->wait(
+        p.second,
+        std::chrono::duration_cast<std::chrono::milliseconds>(remaining));
+    if (!env.error.empty())
+      continue;
+    try {
+      latency_by_id.emplace(
+          p.first, std::any_cast<internal_latency_ms_t>(env.value));
+    } catch (const std::bad_any_cast &) {
+    }
+  }
+
+  // --- Phase 3: build rows (status() is a virtual called inline) ---
   for (const auto &kv : peers_) {
     try {
       auto row = kv.second.peer->status();
@@ -319,7 +392,11 @@ std::vector<router_peer_row_t> midirouter_t::status_rows_impl() const {
       st.recv = static_cast<uint64_t>(kv.second.peer->packets_recv.load());
       st.sent = static_cast<uint64_t>(kv.second.peer->packets_sent.load());
       row.stats = st;
-      row.internal_latency_ms = kv.second.peer->internal_latency_stats();
+
+      auto it = latency_by_id.find(kv.first);
+      if (it != latency_by_id.end()) {
+        row.internal_latency_ms = it->second;
+      }
       routerdata.push_back(std::move(row));
     } catch (const std::exception &exc) {
       router_peer_row_t row{};
@@ -378,6 +455,20 @@ void midirouter_t::handle(router_cmd::remove_peer_t &cmd) {
   remove_peer_impl(cmd.id);
 }
 
+void midirouter_t::handle(router_cmd::remove_all_peers_t &cmd) {
+  rtpmidid::reply_envelope_t env;
+  env.id = cmd.reply.id;
+  try {
+    remove_all_peers_impl();
+  } catch (const std::exception &exc) {
+    env.error = exc.what();
+  } catch (...) {
+    env.error = "unknown exception in remove_all_peers";
+  }
+  if (cmd.reply.channel)
+    cmd.reply.channel->post(std::move(env));
+}
+
 void midirouter_t::handle(router_cmd::connect_t &cmd) {
   connect_impl(cmd.from, cmd.to);
 }
@@ -386,26 +477,107 @@ void midirouter_t::handle(router_cmd::disconnect_t &cmd) {
   disconnect_impl(cmd.from, cmd.to);
 }
 
-void midirouter_t::handle(router_cmd::event_t &cmd) {
-  if (cmd.to == 0)
-    event_broadcast_impl(cmd.from, cmd.evt);
-  else
-    event_impl(cmd.from, cmd.to, cmd.evt);
+void midirouter_t::handle(router_cmd::event_directed_t &cmd) {
+  event_directed_impl(cmd.from, cmd.to, cmd.evt);
 }
 
-void midirouter_t::handle(router_cmd::fire_signal_t &cmd) {
-  if (cmd.task) {
-    try {
-      cmd.task(*this);
-    } catch (const std::exception &exc) {
-      ERROR("Exception in router signal listener: {}", exc.what());
-    } catch (...) {
-      ERROR("Unknown exception in router signal listener");
-    }
+void midirouter_t::handle(router_cmd::event_broadcast_t &cmd) {
+  event_broadcast_impl(cmd.from, cmd.evt);
+}
+
+void midirouter_t::handle(router_cmd::signal_peer_added_t &cmd) {
+  try {
+    peer_added_event(cmd.peer_id);
+  } catch (const std::exception &exc) {
+    ERROR("signal_peer_added listener: {}", exc.what());
   }
 }
 
-void midirouter_t::handle(router_cmd::run_task_t &cmd) {
+void midirouter_t::handle(router_cmd::signal_connected_t &cmd) {
+  try {
+    connected_event(cmd.from, cmd.to);
+  } catch (const std::exception &exc) {
+    ERROR("signal_connected listener: {}", exc.what());
+  }
+}
+
+void midirouter_t::handle(router_cmd::signal_disconnected_t &cmd) {
+  try {
+    disconnected_event(cmd.from, cmd.to);
+  } catch (const std::exception &exc) {
+    ERROR("signal_disconnected listener: {}", exc.what());
+  }
+}
+
+void midirouter_t::handle(router_cmd::signal_peer_event_t &cmd) {
+  try {
+    peer_event(cmd.peer_id, cmd.evt);
+  } catch (const std::exception &exc) {
+    ERROR("signal_peer_event listener: {}", exc.what());
+  }
+}
+
+void midirouter_t::handle(router_cmd::query_peer_count_t &cmd) {
+  rtpmidid::reply_envelope_t env;
+  env.id = cmd.reply.id;
+  env.value = std::any(peers_.size());
+  if (cmd.reply.channel)
+    cmd.reply.channel->post(std::move(env));
+}
+
+void midirouter_t::handle(router_cmd::query_peer_ids_t &cmd) {
+  rtpmidid::reply_envelope_t env;
+  env.id = cmd.reply.id;
+  std::vector<peer_id_t> ids;
+  ids.reserve(peers_.size());
+  for (const auto &p : peers_)
+    ids.push_back(p.first);
+  env.value = std::any(std::move(ids));
+  if (cmd.reply.channel)
+    cmd.reply.channel->post(std::move(env));
+}
+
+void midirouter_t::handle(router_cmd::query_send_targets_t &cmd) {
+  rtpmidid::reply_envelope_t env;
+  env.id = cmd.reply.id;
+  std::vector<peer_id_t> targets;
+  auto it = peers_.find(cmd.from);
+  if (it != peers_.end()) {
+    targets = it->second.send_to;
+  }
+  env.value = std::any(std::move(targets));
+  if (cmd.reply.channel)
+    cmd.reply.channel->post(std::move(env));
+}
+
+void midirouter_t::handle(router_cmd::query_get_peer_t &cmd) {
+  rtpmidid::reply_envelope_t env;
+  env.id = cmd.reply.id;
+  std::shared_ptr<midipeer_t> peer;
+  auto it = peers_.find(cmd.peer_id);
+  if (it != peers_.end()) {
+    peer = it->second.peer;
+  }
+  env.value = std::any(std::move(peer));
+  if (cmd.reply.channel)
+    cmd.reply.channel->post(std::move(env));
+}
+
+void midirouter_t::handle(router_cmd::query_status_rows_t &cmd) {
+  rtpmidid::reply_envelope_t env;
+  env.id = cmd.reply.id;
+  try {
+    env.value = std::any(status_rows_impl());
+  } catch (const std::exception &exc) {
+    env.error = exc.what();
+  } catch (...) {
+    env.error = "unknown exception in status_rows";
+  }
+  if (cmd.reply.channel)
+    cmd.reply.channel->post(std::move(env));
+}
+
+void midirouter_t::handle(router_cmd::for_each_peer_t &cmd) {
   rtpmidid::reply_envelope_t env;
   env.id = cmd.reply.id;
   try {
@@ -414,22 +586,31 @@ void midirouter_t::handle(router_cmd::run_task_t &cmd) {
   } catch (const std::exception &exc) {
     env.error = exc.what();
   } catch (...) {
-    env.error = "unknown exception in run_task";
+    env.error = "unknown exception in for_each_peer";
   }
   if (cmd.reply.channel)
     cmd.reply.channel->post(std::move(env));
 }
 
-void midirouter_t::handle(router_cmd::query_t &cmd) {
+void midirouter_t::handle(router_cmd::peer_connection_loop_t &cmd) {
   rtpmidid::reply_envelope_t env;
   env.id = cmd.reply.id;
   try {
-    if (cmd.query)
-      env.value = cmd.query(*this);
+    auto it = peers_.find(cmd.peer_id);
+    if (it == peers_.end()) {
+      WARNING("peer_connection_loop: unknown peer {}!", cmd.peer_id);
+    } else {
+      const auto send_to = it->second.send_to;
+      for (auto to : send_to) {
+        auto it2 = peers_.find(to);
+        if (it2 != peers_.end() && cmd.func)
+          cmd.func(it2->second.peer);
+      }
+    }
   } catch (const std::exception &exc) {
     env.error = exc.what();
   } catch (...) {
-    env.error = "unknown exception in query";
+    env.error = "unknown exception in peer_connection_loop";
   }
   if (cmd.reply.channel)
     cmd.reply.channel->post(std::move(env));
@@ -481,7 +662,6 @@ void midirouter_t::start_router_thread() {
 void midirouter_t::stop_router_thread() {
   if (!router_running_.exchange(false))
     return;
-  // Wake the loop and let it drain.
   enqueue(router_command_t{router_cmd::shutdown_t{}},
           rtpmidid::queue_priority_e::NORMAL);
   router_wakeup_.notify_all();
@@ -587,10 +767,10 @@ void midirouter_t::send_midi(peer_id_t from, peer_id_t to,
 
 void midirouter_t::event(peer_id_t from, peer_id_t to, midipeer_event_e evt) {
   if (sync_mode() || on_router_thread()) {
-    event_impl(from, to, evt);
+    event_directed_impl(from, to, evt);
     return;
   }
-  router_cmd::event_t cmd{from, to, evt};
+  router_cmd::event_directed_t cmd{from, to, evt};
   enqueue(router_command_t{std::move(cmd)}, rtpmidid::queue_priority_e::NORMAL);
 }
 
@@ -599,35 +779,38 @@ void midirouter_t::event(peer_id_t from, midipeer_event_e evt) {
     event_broadcast_impl(from, evt);
     return;
   }
-  router_cmd::event_t cmd{from, 0, evt};
+  router_cmd::event_broadcast_t cmd{from, evt};
   enqueue(router_command_t{std::move(cmd)}, rtpmidid::queue_priority_e::NORMAL);
 }
 
 void midirouter_t::remove_all_peers() {
   if (sync_mode() || on_router_thread()) {
-    while (!peers_.empty()) {
-      const auto id = peers_.begin()->first;
-      remove_peer_impl(id);
-    }
+    remove_all_peers_impl();
     return;
   }
-  submit_run(rtpmidid::queue_priority_e::NORMAL,
-             [](midirouter_t &router) {
-               while (!router.peers_.empty()) {
-                 const auto id = router.peers_.begin()->first;
-                 router.remove_peer_impl(id);
-               }
-             });
+  auto channel = std::make_shared<rtpmidid::reply_channel_t>();
+  const uint64_t id = channel->next_id();
+  router_cmd::remove_all_peers_t cmd;
+  cmd.reply = rtpmidid::reply_slot_t{channel, id};
+  if (!enqueue(router_command_t{std::move(cmd)},
+               rtpmidid::queue_priority_e::NORMAL)) {
+    return;
+  }
+  auto env = channel->wait(id, kReplyTimeout);
+  if (!env.error.empty()) {
+    WARNING("remove_all_peers: reply error '{}'", env.error);
+  }
 }
 
 void midirouter_t::clear() { remove_all_peers(); }
 
 // ===========================================================================
-// Read API
+// Read API — typed query messages
 // ===========================================================================
 
 std::shared_ptr<midipeer_t> midirouter_t::get_peer_by_id(peer_id_t peer_id) {
-  return submit_query<std::shared_ptr<midipeer_t>>(
+  return dispatch_query<std::shared_ptr<midipeer_t>>(
+      router_cmd::query_get_peer_t{peer_id, {}},
       rtpmidid::queue_priority_e::LOW,
       [peer_id](midirouter_t &r) -> std::shared_ptr<midipeer_t> {
         auto it = r.peers_.find(peer_id);
@@ -638,61 +821,72 @@ std::shared_ptr<midipeer_t> midirouter_t::get_peer_by_id(peer_id_t peer_id) {
 }
 
 size_t midirouter_t::peer_count() const {
-  return const_cast<midirouter_t *>(this)->submit_query<size_t>(
-      rtpmidid::queue_priority_e::LOW,
+  return dispatch_query<size_t>(
+      router_cmd::query_peer_count_t{}, rtpmidid::queue_priority_e::LOW,
       [](midirouter_t &r) -> size_t { return r.peers_.size(); });
 }
 
 std::vector<peer_id_t> midirouter_t::peer_ids() const {
-  return const_cast<midirouter_t *>(this)
-      ->submit_query<std::vector<peer_id_t>>(
-          rtpmidid::queue_priority_e::LOW,
-          [](midirouter_t &r) -> std::vector<peer_id_t> {
-            std::vector<peer_id_t> ids;
-            ids.reserve(r.peers_.size());
-            for (const auto &p : r.peers_)
-              ids.push_back(p.first);
-            return ids;
-          });
+  return dispatch_query<std::vector<peer_id_t>>(
+      router_cmd::query_peer_ids_t{}, rtpmidid::queue_priority_e::LOW,
+      [](midirouter_t &r) -> std::vector<peer_id_t> {
+        std::vector<peer_id_t> ids;
+        ids.reserve(r.peers_.size());
+        for (const auto &p : r.peers_)
+          ids.push_back(p.first);
+        return ids;
+      });
 }
 
-std::vector<peer_id_t>
-midirouter_t::send_targets_for(peer_id_t from) const {
-  return const_cast<midirouter_t *>(this)
-      ->submit_query<std::vector<peer_id_t>>(
-          rtpmidid::queue_priority_e::LOW,
-          [from](midirouter_t &r) -> std::vector<peer_id_t> {
-            auto it = r.peers_.find(from);
-            if (it == r.peers_.end())
-              return {};
-            return it->second.send_to;
-          });
+std::vector<peer_id_t> midirouter_t::send_targets_for(peer_id_t from) const {
+  return dispatch_query<std::vector<peer_id_t>>(
+      router_cmd::query_send_targets_t{from, {}},
+      rtpmidid::queue_priority_e::LOW,
+      [from](midirouter_t &r) -> std::vector<peer_id_t> {
+        auto it = r.peers_.find(from);
+        if (it == r.peers_.end())
+          return {};
+        return it->second.send_to;
+      });
 }
 
 std::vector<router_peer_row_t> midirouter_t::status_rows() const {
-  return const_cast<midirouter_t *>(this)
-      ->submit_query<std::vector<router_peer_row_t>>(
-          rtpmidid::queue_priority_e::LOW,
-          [](midirouter_t &r) { return r.status_rows_impl(); });
+  return dispatch_query<std::vector<router_peer_row_t>>(
+      router_cmd::query_status_rows_t{}, rtpmidid::queue_priority_e::LOW,
+      [](midirouter_t &r) { return r.status_rows_impl(); });
 }
 
 void midirouter_t::peer_connection_loop(
     peer_id_t peer_id,
     std::function<void(std::shared_ptr<midipeer_t>)> func) {
-  submit_run(rtpmidid::queue_priority_e::LOW,
-             [peer_id, func](midirouter_t &r) {
-               auto it = r.peers_.find(peer_id);
-               if (it == r.peers_.end()) {
-                 WARNING("peer_connection_loop: unknown peer {}!", peer_id);
-                 return;
-               }
-               const auto send_to = it->second.send_to;
-               for (auto to : send_to) {
-                 auto it2 = r.peers_.find(to);
-                 if (it2 != r.peers_.end())
-                   func(it2->second.peer);
-               }
-             });
+  if (sync_mode() || on_router_thread()) {
+    auto it = peers_.find(peer_id);
+    if (it == peers_.end()) {
+      WARNING("peer_connection_loop: unknown peer {}!", peer_id);
+      return;
+    }
+    const auto send_to = it->second.send_to;
+    for (auto to : send_to) {
+      auto it2 = peers_.find(to);
+      if (it2 != peers_.end())
+        func(it2->second.peer);
+    }
+    return;
+  }
+  auto channel = std::make_shared<rtpmidid::reply_channel_t>();
+  const uint64_t id = channel->next_id();
+  router_cmd::peer_connection_loop_t cmd;
+  cmd.peer_id = peer_id;
+  cmd.func = std::move(func);
+  cmd.reply = rtpmidid::reply_slot_t{channel, id};
+  if (!enqueue(router_command_t{std::move(cmd)},
+               rtpmidid::queue_priority_e::LOW)) {
+    return;
+  }
+  auto env = channel->wait(id, kReplyTimeout);
+  if (!env.error.empty()) {
+    WARNING("peer_connection_loop: reply error '{}'", env.error);
+  }
 }
 
 // ===========================================================================

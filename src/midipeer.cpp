@@ -141,39 +141,15 @@ void midipeer_t::handle(peer_cmd::process_midi_t &cmd) {
   process_midi_packet(cmd.packet);
 }
 
-void midipeer_t::handle(peer_cmd::send_to_router_t &cmd) {
-  if (!router)
-    return;
-  mididata_t mididata(const_cast<uint8_t *>(cmd.packet.data.data()),
-                      static_cast<uint32_t>(cmd.packet.data.size()));
-  router->send_midi(peer_id, mididata);
-}
-
-void midipeer_t::handle(peer_cmd::run_task_t &cmd) {
+void midipeer_t::handle(peer_cmd::query_internal_latency_stats_t &cmd) {
   rtpmidid::reply_envelope_t env;
   env.id = cmd.reply.id;
   try {
-    if (cmd.task)
-      cmd.task(*this);
+    env.value = std::any(internal_latency_stats_impl());
   } catch (const std::exception &exc) {
     env.error = exc.what();
   } catch (...) {
-    env.error = "unknown exception in peer run_task";
-  }
-  if (cmd.reply.channel)
-    cmd.reply.channel->post(std::move(env));
-}
-
-void midipeer_t::handle(peer_cmd::query_t &cmd) {
-  rtpmidid::reply_envelope_t env;
-  env.id = cmd.reply.id;
-  try {
-    if (cmd.query)
-      env.value = cmd.query(*this);
-  } catch (const std::exception &exc) {
-    env.error = exc.what();
-  } catch (...) {
-    env.error = "unknown exception in peer query";
+    env.error = "unknown exception in query_internal_latency_stats";
   }
   if (cmd.reply.channel)
     cmd.reply.channel->post(std::move(env));
@@ -268,8 +244,51 @@ internal_latency_ms_t midipeer_t::internal_latency_stats_impl() const {
 }
 
 internal_latency_ms_t midipeer_t::internal_latency_stats() const {
-  return submit_peer_query<internal_latency_ms_t>(
-      [](midipeer_t &p) { return p.internal_latency_stats_impl(); });
+  if (peer_sync_mode() || on_peer_thread()) {
+    return internal_latency_stats_impl();
+  }
+  auto channel = std::make_shared<rtpmidid::reply_channel_t>();
+  const uint64_t id = channel->next_id();
+  if (!const_cast<midipeer_t *>(this)->request_internal_latency_stats(channel,
+                                                                      id)) {
+    return {};
+  }
+  auto env = channel->wait(id, std::chrono::milliseconds(2000));
+  if (!env.error.empty()) {
+    return {};
+  }
+  try {
+    return std::any_cast<internal_latency_ms_t>(env.value);
+  } catch (const std::bad_any_cast &) {
+    return {};
+  }
+}
+
+bool midipeer_t::request_internal_latency_stats(
+    std::shared_ptr<rtpmidid::reply_channel_t> channel, uint64_t id) {
+  if (!channel)
+    return false;
+  if (peer_sync_mode() || on_peer_thread()) {
+    rtpmidid::reply_envelope_t env;
+    env.id = id;
+    try {
+      env.value = std::any(internal_latency_stats_impl());
+    } catch (const std::exception &exc) {
+      env.error = exc.what();
+    } catch (...) {
+      env.error = "unknown exception in request_internal_latency_stats";
+    }
+    channel->post(std::move(env));
+    return true;
+  }
+  peer_cmd::query_internal_latency_stats_t cmd;
+  cmd.reply = rtpmidid::reply_slot_t{std::move(channel), id};
+  if (!peer_queue_.enqueue(peer_command_t{std::move(cmd)},
+                           rtpmidid::queue_priority_e::LOW)) {
+    return false;
+  }
+  thread_wakeup_.notify_one();
+  return true;
 }
 
 } // namespace rtpmididns

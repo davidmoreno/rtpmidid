@@ -31,7 +31,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
-#include <functional>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -79,13 +78,17 @@ namespace rtpmididns {
  *
  * Each peer owns a single thread that drains a three-priority queue:
  *  - HIGH:   inbound MIDI packets (`peer_cmd::process_midi_t`).
- *  - NORMAL: control tasks (`peer_cmd::run_task_t`, `peer_cmd::shutdown_t`).
- *  - LOW:    state queries (`peer_cmd::query_t`, e.g. latency snapshot).
+ *  - NORMAL: lifecycle (`peer_cmd::shutdown_t`).
+ *  - LOW:    state queries (`peer_cmd::query_internal_latency_stats_t`).
  *
  * The thread is the sole owner of mutable peer state, so `internal_*_stats_`
- * is touched without a mutex. Reads from other threads enqueue a `query_t`
- * and wait on a `reply_channel_t`. When the peer thread is not running
+ * is touched without a mutex. Reads from other threads enqueue a typed
+ * query and wait on a `reply_channel_t`. When the peer thread is not running
  * (tests / setup) the call short-circuits to direct execution.
+ *
+ * The router uses `request_internal_latency_stats(channel, id)` to send all
+ * peer queries in parallel and then collect the replies in
+ * `midirouter_t::status_rows_impl()`.
  */
 class midipeer_t : public std::enable_shared_from_this<midipeer_t> {
   NON_COPYABLE_NOR_MOVABLE(midipeer_t);
@@ -119,19 +122,11 @@ protected:
 
   // --- Variant dispatch (peer thread) ---
   void handle(peer_cmd::process_midi_t &cmd);
-  void handle(peer_cmd::send_to_router_t &cmd);
-  void handle(peer_cmd::run_task_t &cmd);
-  void handle(peer_cmd::query_t &cmd);
+  void handle(peer_cmd::query_internal_latency_stats_t &cmd);
   void handle(peer_cmd::shutdown_t &cmd);
 
   bool on_peer_thread() const;
   bool peer_sync_mode() const { return !thread_running_.load(); }
-
-  /** Submit a typed read to the peer thread and block on the reply. */
-  template <typename T>
-  T submit_peer_query(std::function<T(midipeer_t &)> q,
-                      rtpmidid::queue_priority_e prio =
-                          rtpmidid::queue_priority_e::LOW) const;
 
 public:
   std::shared_ptr<midirouter_t> router;
@@ -147,6 +142,18 @@ public:
 
   /** Latest latency snapshot. Goes through the peer queue when not on the peer thread. */
   internal_latency_ms_t internal_latency_stats() const;
+
+  /**
+   * Asynchronously request a latency-stats snapshot. The peer thread (or this
+   * thread, in sync mode) will post a `reply_envelope_t{id, std::any(internal_latency_ms_t), ""}`
+   * to @a channel. Used by `midirouter_t::status_rows_impl()` to dispatch all
+   * per-peer queries in parallel.
+   *
+   * @return true if the query was scheduled (or executed inline); false if the
+   *         peer queue rejected it.
+   */
+  bool request_internal_latency_stats(
+      std::shared_ptr<rtpmidid::reply_channel_t> channel, uint64_t id);
 
   /**
    * Queue an inbound MIDI packet (HIGH priority). Producer: typically the
@@ -173,34 +180,6 @@ public:
   /** Called from midirouter_t::add_peer after peer_id and router are assigned. */
   virtual void on_router_attached() {}
 };
-
-template <typename T>
-T midipeer_t::submit_peer_query(std::function<T(midipeer_t &)> q,
-                                rtpmidid::queue_priority_e prio) const {
-  if (peer_sync_mode() || on_peer_thread()) {
-    return q(const_cast<midipeer_t &>(*this));
-  }
-  auto channel = std::make_shared<rtpmidid::reply_channel_t>();
-  const uint64_t id = channel->next_id();
-  peer_cmd::query_t cmd;
-  cmd.query = [q = std::move(q)](midipeer_t &p) -> std::any {
-    return std::any(q(p));
-  };
-  cmd.reply = rtpmidid::reply_slot_t{channel, id};
-  if (!peer_queue_.enqueue(peer_command_t{std::move(cmd)}, prio)) {
-    return T{};
-  }
-  thread_wakeup_.notify_one();
-  auto env = channel->wait(id, std::chrono::milliseconds(2000));
-  if (!env.error.empty()) {
-    return T{};
-  }
-  try {
-    return std::any_cast<T>(env.value);
-  } catch (const std::bad_any_cast &) {
-    return T{};
-  }
-}
 
 } // namespace rtpmididns
 

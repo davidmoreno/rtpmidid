@@ -35,9 +35,8 @@ namespace rtpmidid {
 /**
  * @short MIDI packet for queue transport.
  *
- * Owned MIDI bytes plus the source peer id; carried inside
- * `router_command_t::send_midi_t` and the peer queue's `process_midi_t` /
- * `send_to_router_t` alternatives.
+ * Owned MIDI bytes plus the source peer id; carried inside the peer queue's
+ * `process_midi_t` alternative.
  */
 struct midi_packet_t {
   uint32_t from_peer_id;
