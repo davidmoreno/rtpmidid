@@ -66,6 +66,8 @@ struct rtp_peer_status_t {
 struct alsa_subscribe_from_t {
   int32_t client;
   int32_t port;
+  std::string client_name;
+  std::string port_name;
 };
 
 // [dm-json]

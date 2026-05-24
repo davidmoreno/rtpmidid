@@ -22,6 +22,7 @@
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/utils.hpp"
 #include "rtpmidid/lockfree_queue.hpp"
+#include "rtpmidid/signal.hpp"
 #include "rtpmidid/threading_types.hpp"
 #include <atomic>
 #include <condition_variable>
@@ -132,6 +133,12 @@ public:
   void clear();
 
   std::vector<router_peer_row_t> status_rows() const;
+
+  /** Router topology / lifecycle (e.g. connection persistence). Deferred to poller thread. */
+  rtpmidid::signal_t<peer_id_t, peer_id_t> connected_event;
+  rtpmidid::signal_t<peer_id_t, peer_id_t> disconnected_event;
+  rtpmidid::signal_t<peer_id_t> peer_added_event;
+  rtpmidid::signal_t<peer_id_t, midipeer_event_e> peer_event;
 
   // For the given type of the for_each, by default midipeer_t.
   template <typename T = midipeer_t>

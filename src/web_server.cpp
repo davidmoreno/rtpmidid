@@ -318,7 +318,7 @@ void web_server_t::thread_main() {
 
   svr->WebSocket("/ws", [this, need_auth, user, pass](const httplib::Request &req,
                                                       httplib::ws::WebSocket &ws) {
-    control_rpc_context_t ctx{router, aseq, mdns};
+    control_rpc_context_t ctx{router, aseq, mdns, connection_db};
     bool authed = !need_auth || check_basic_auth(req, user, pass);
 
     ws_shutdown_registration ws_reg(*this, [&ws]() {

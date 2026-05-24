@@ -116,6 +116,7 @@ else()
 endif()
 if(NOT LIBS_ONLY)
   pkg_check_modules(ALSA REQUIRED alsa)
+  pkg_check_modules(SQLITE3 REQUIRED sqlite3)
 endif(NOT LIBS_ONLY)
 
 

@@ -25,6 +25,7 @@ class mdns_rtpmidi_t;
 namespace rtpmididns {
 class midirouter_t;
 class aseq_t;
+class connection_db_manager_t;
 
 class web_server_t {
   NON_COPYABLE_NOR_MOVABLE(web_server_t)
@@ -66,6 +67,7 @@ public:
   std::shared_ptr<midirouter_t> router;
   std::shared_ptr<aseq_t> aseq;
   std::shared_ptr<rtpmidid::mdns_rtpmidi_t> mdns;
+  std::shared_ptr<connection_db_manager_t> connection_db;
 
   web_server_t() = default;
   ~web_server_t();

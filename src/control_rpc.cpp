@@ -17,6 +17,7 @@
  */
 #include "control_rpc.hpp"
 #include "aseq.hpp"
+#include "connection_db.hpp"
 #include "dm_json_generated.hpp"
 #include "dm_json_rpc.hpp"
 #include "dm_json_status.hpp"
@@ -27,6 +28,7 @@
 #include "settings.hpp"
 #include "stringpp.hpp"
 #include "webui_midi_monitor_peer.hpp"
+#include <algorithm>
 #include <random>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/mdns_rtpmidi.hpp>
@@ -154,6 +156,10 @@ static std::vector<rpc_help_entry_t> build_help_entries() {
       {"monitor.start",
        "Start Web UI MIDI monitor for an endpoint id (tees router edges already feeding target)"},
       {"monitor.stop", "Stop a monitor session by uuid"},
+      {"connections.list", "List persisted connection pairs from the database"},
+      {"connections.add",
+       "Add a persisted connection (side_a/side_b: endpoint id or stable id)"},
+      {"connections.remove", "Remove a persisted connection pair from the database"},
       {"help", "Return help text"},
   };
 }
@@ -378,6 +384,111 @@ static std::string random_uuid_v4() {
  *   as sources only — previously only incoming edges were teed, so keyboard /
  *   RTP-export peers often had no matching edges).
  */
+static std::string escape_stable_component(std::string s) {
+  for (char &c : s) {
+    if (c == ':')
+      c = '|';
+  }
+  return s;
+}
+
+static std::string build_stable_id(std::string prefix,
+                                   const std::vector<std::string> &parts) {
+  std::string out = std::move(prefix);
+  for (const auto &p : parts) {
+    out += ':';
+    out += escape_stable_component(p);
+  }
+  return out;
+}
+
+static bool is_alsa_numeric_endpoint(std::string_view s) {
+  if (!std::startswith(s, "alsa:"))
+    return false;
+  const auto rest = s.substr(5);
+  const auto pos = rest.find(':');
+  if (pos == std::string::npos)
+    return false;
+  const auto is_digits = [](std::string_view x) {
+    return !x.empty() &&
+           std::all_of(x.begin(), x.end(),
+                       [](char c) { return c >= '0' && c <= '9'; });
+  };
+  return is_digits(rest.substr(0, pos)) && is_digits(rest.substr(pos + 1));
+}
+
+static std::optional<std::string>
+resolve_side_to_stable_id(control_rpc_context_t &ctx, const std::string &side,
+                          const std::vector<router_peer_row_t> &rows) {
+  endpoint_id_t eid{};
+  if (parse_endpoint_id(side, eid)) {
+    if (eid.kind == endpoint_kind_e::PEER) {
+      for (const auto &r : rows) {
+        if (!r.id || static_cast<uint64_t>(*r.id) != eid.peer_id)
+          continue;
+        const auto sid = compute_stable_id(r);
+        if (!sid)
+          throw std::runtime_error(
+              FMT::format("Peer {} has no stable id yet", eid.peer_id));
+        return sid;
+      }
+      throw std::runtime_error(FMT::format("Unknown peer {}", eid.peer_id));
+    }
+    if (eid.kind == endpoint_kind_e::ALSA) {
+      if (!ctx.aseq)
+        throw std::runtime_error("ALSA sequencer not available");
+      const auto cn = ctx.aseq->get_client_name_by_id(eid.client);
+      const auto pn = ctx.aseq->get_port_name(eid.client, eid.port);
+      if (cn.empty() || pn.empty())
+        throw std::runtime_error("Could not resolve ALSA client/port names");
+      return build_stable_id("alsa", {cn, pn});
+    }
+    if (eid.kind == endpoint_kind_e::RAW) {
+      if (eid.device.empty())
+        throw std::runtime_error("Empty raw MIDI device");
+      return build_stable_id("rawmidi", {eid.device});
+    }
+    if (eid.kind == endpoint_kind_e::MDNS) {
+      const auto hp =
+          mdns_resolve_to_hostport(ctx.mdns, eid.mdns_name, eid.mdns_port);
+      if (hp.first.empty() || eid.mdns_name.empty())
+        throw std::runtime_error("Could not resolve mDNS service");
+      return build_stable_id("rtpmidi", {hp.first, eid.mdns_name});
+    }
+    if (eid.kind == endpoint_kind_e::HOST) {
+      const auto found = find_peer_for_host(rows, eid.hostname, eid.hostport);
+      if (found && *found != 0) {
+        for (const auto &r : rows) {
+          if (r.id && static_cast<peer_id_t>(*r.id) == *found) {
+            const auto sid = compute_stable_id(r);
+            if (sid)
+              return sid;
+            break;
+          }
+        }
+      }
+      if (eid.hostname.empty())
+        throw std::runtime_error("Empty hostname");
+      return build_stable_id("rtpmidi", {eid.hostname, eid.hostname});
+    }
+    throw std::runtime_error("Unknown endpoint kind");
+  }
+
+  if (!is_alsa_numeric_endpoint(side) &&
+      (std::startswith(side, "alsa:") || std::startswith(side, "rawmidi:") ||
+       std::startswith(side, "rtpmidi:") ||
+       std::startswith(side, "rtpmidi_in:") ||
+       std::startswith(side, "rtpmidi_server:") ||
+       std::startswith(side, "alsa_listener:") ||
+       std::startswith(side, "rtpmidi_multi:") ||
+       std::startswith(side, "alsa_multi:"))) {
+    return side;
+  }
+
+  throw std::runtime_error(
+      FMT::format("Could not resolve stable id for side '{}'", side));
+}
+
 static void tee_monitor_edges(control_rpc_context_t &ctx, peer_id_t target,
                               peer_id_t monitor_id,
                               const std::shared_ptr<webui_midi_monitor_peer_t> &mon) {
@@ -610,6 +721,57 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       if (!mon)
         throw std::runtime_error("Unknown monitor session");
       monitor_session_stop(ctx.router, mon);
+      return respond_ok(env);
+    }
+    if (env.method == "connections.list") {
+      connections_list_result_t out{};
+      if (!ctx.connection_db) {
+        return respond(env, out);
+      }
+      out.enabled = 1;
+      const auto rows = router_rows_snapshot(ctx);
+      for (const auto &p : ctx.connection_db->database().get_connections()) {
+        persisted_connection_row_t row;
+        row.side_a = p.side_a;
+        row.side_b = p.side_b;
+        const auto pa = find_peer_id_for_stable_id(rows, p.side_a);
+        const auto pb = find_peer_id_for_stable_id(rows, p.side_b);
+        if (pa) {
+          row.active_a = 1;
+          row.peer_a = static_cast<uint64_t>(*pa);
+        }
+        if (pb) {
+          row.active_b = 1;
+          row.peer_b = static_cast<uint64_t>(*pb);
+        }
+        out.connections.push_back(std::move(row));
+      }
+      return respond(env, out);
+    }
+    if (env.method == "connections.add") {
+      if (!ctx.connection_db)
+        throw std::runtime_error("Connection database is not enabled");
+      auto p = parse_rpc_params<connections_mutate_params_t>(params);
+      const auto rows = router_rows_snapshot(ctx);
+      const auto sa = resolve_side_to_stable_id(ctx, p.side_a, rows);
+      const auto sb = resolve_side_to_stable_id(ctx, p.side_b, rows);
+      if (!sa || !sb)
+        throw std::runtime_error("Could not resolve stable ids");
+      if (*sa == *sb)
+        throw std::runtime_error("Both sides resolve to the same stable id");
+      ctx.connection_db->record_stable_pair(*sa, *sb);
+      return respond_ok(env);
+    }
+    if (env.method == "connections.remove") {
+      if (!ctx.connection_db)
+        throw std::runtime_error("Connection database is not enabled");
+      auto p = parse_rpc_params<connections_mutate_params_t>(params);
+      const auto rows = router_rows_snapshot(ctx);
+      const auto sa = resolve_side_to_stable_id(ctx, p.side_a, rows);
+      const auto sb = resolve_side_to_stable_id(ctx, p.side_b, rows);
+      if (!sa || !sb)
+        throw std::runtime_error("Could not resolve stable ids");
+      ctx.connection_db->remove_stable_pair(*sa, *sb);
       return respond_ok(env);
     }
     if (env.method == "help")

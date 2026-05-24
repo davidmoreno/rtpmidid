@@ -136,12 +136,16 @@ type Props = {
   /** Pulse ring + scroll after mDNS Connect (matches `ConnectionRow.id`). */
   highlightConnectionRowId?: string | null;
   onSelectPeer?: (id: number) => void;
+  dbEnabled?: boolean;
+  onRemoveSaved?: (sideA: string, sideB: string) => void;
 };
 
 export function ConnectionsTable({
   rows,
   highlightConnectionRowId,
   onSelectPeer,
+  dbEnabled = false,
+  onRemoveSaved,
 }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("traffic");
   const [sortAsc, setSortAsc] = useState(false);
@@ -247,6 +251,11 @@ export function ConnectionsTable({
               asc={sortAsc}
               onClick={() => toggle("lat")}
             />
+            {dbEnabled ? (
+              <th class="ui-th-sort w-12 font-mono text-xs font-bold uppercase">
+                DB
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -272,6 +281,14 @@ export function ConnectionsTable({
               </td>
               <td class="whitespace-nowrap px-2 py-1.5 font-mono text-xs">
                 {r.kindLabel}
+                {r.persisted ? (
+                  <span
+                    class="ml-1 rounded px-1 py-0.5 text-[9px] font-black uppercase ui-text-subtle"
+                    title="Stored in connection database"
+                  >
+                    saved
+                  </span>
+                ) : null}
               </td>
               <td class="whitespace-nowrap px-2 py-1.5 font-mono text-sm font-bold">
                 {r.direction}
@@ -285,15 +302,27 @@ export function ConnectionsTable({
               <td class="max-w-[28rem] px-2 py-1.5 font-mono text-[11px] leading-snug ui-text">
                 <span class="inline-flex flex-wrap items-center gap-1">
                   {r.participantPeers.map((pp, i) => (
-                    <span key={pp.id} class="inline-flex items-center gap-1">
+                    <span
+                      key={`${pp.id}-${pp.name}-${i}`}
+                      class="inline-flex items-center gap-1"
+                    >
                       {i > 0 ? <span class="ui-text-subtle">·</span> : null}
-                      <button
-                        type="button"
-                        class="ui-chip-link font-mono text-[11px]"
-                        onClick={() => onSelectPeer?.(pp.id)}
-                      >
-                        #{pp.id} {pp.name}
-                      </button>
+                      {pp.unavailable || pp.id === 0 ? (
+                        <span
+                          class="font-mono text-[11px] ui-text-subtle opacity-60"
+                          title="Endpoint not available right now"
+                        >
+                          {pp.name}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          class="ui-chip-link font-mono text-[11px]"
+                          onClick={() => onSelectPeer?.(pp.id)}
+                        >
+                          #{pp.id} {pp.name}
+                        </button>
+                      )}
                     </span>
                   ))}
                   {r.participantNote && (
@@ -309,6 +338,25 @@ export function ConnectionsTable({
               <td class="relative min-w-[10rem] overflow-visible px-1 py-1 align-top">
                 <ConnectionLatencyHoverCell row={r} />
               </td>
+              {dbEnabled ? (
+                <td class="px-2 py-1.5 align-top">
+                  {r.canRemoveFromDb &&
+                  r.persistedSideA &&
+                  r.persistedSideB &&
+                  onRemoveSaved ? (
+                    <button
+                      type="button"
+                      class="flex h-7 w-7 items-center justify-center rounded-full border-2 border-[color:var(--color-border)] font-mono text-sm font-bold ui-text hover:bg-[color:var(--color-surface-elevated)]"
+                      title="Remove from saved connections"
+                      onClick={() =>
+                        onRemoveSaved(r.persistedSideA!, r.persistedSideB!)
+                      }
+                    >
+                      −
+                    </button>
+                  ) : null}
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>

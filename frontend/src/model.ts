@@ -317,7 +317,12 @@ export function rtpClientConnectionSummary(peerRow: Record<string, unknown>): st
 
 export type ConnectionKind = "router" | "rtp_server" | "rtp_link";
 
-export type ConnectionParticipant = { id: number; name: string };
+export type ConnectionParticipant = {
+  id: number;
+  name: string;
+  /** Side not present as a router peer right now (saved pair only). */
+  unavailable?: boolean;
+};
 
 export type ConnectionRow = {
   id: string;
@@ -346,6 +351,12 @@ export type ConnectionRow = {
   sentSum: number;
   /** Present when this row merges A→B and B→A. */
   bidirectional?: boolean;
+  /** Stored in the connection database. */
+  persisted?: boolean;
+  /** Show remove-from-database control. */
+  canRemoveFromDb?: boolean;
+  persistedSideA?: string;
+  persistedSideB?: string;
 };
 
 function pairKeyUnordered(a: number, b: number): string {

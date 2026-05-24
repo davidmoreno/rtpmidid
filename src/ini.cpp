@@ -184,6 +184,8 @@ void IniReader::parse_line(const std::string &origline) {
       return;
     } else if (section == "web") {
       return;
+    } else if (section == "database") {
+      return;
     } else if (section == "alsa_hw_auto_export") {
       return;
     } else if (section == "rtpmidi_discover") {
@@ -260,6 +262,12 @@ void IniReader::parse_line(const std::string &origline) {
       settings->web.username = value;
     } else if (key == "password") {
       settings->web.password = value;
+    } else {
+      throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
+    }
+  } else if (section == "database") {
+    if (key == "path") {
+      settings->database.path = value;
     } else {
       throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
     }

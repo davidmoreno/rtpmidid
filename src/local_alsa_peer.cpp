@@ -134,6 +134,8 @@ router_peer_row_t local_alsa_peer_t::status() const {
     alsa_subscribe_from_t s;
     s.client = subscribe_src_client_;
     s.port = subscribe_src_port_;
+    s.client_name = seq->get_client_name_by_id(subscribe_src_client_);
+    s.port_name = seq->get_port_name(subscribe_src_client_, subscribe_src_port_);
     row.alsa_subscribe_from = s;
   }
   return row;

@@ -62,6 +62,9 @@ def split_type_name(line: str) -> Optional[Tuple[str, str]]:
     if not line.endswith(";"):
         return None
     line = line[:-1].strip()
+    # Default member initializers (e.g. int32_t enabled = 0) are not part of the type/name.
+    if "=" in line:
+        line = line.split("=", 1)[0].strip()
     if not line or line.startswith("public:") or line.startswith("private:") or line.startswith("protected:"):
         return None
     m = re.match(r"^(.+)\s+([A-Za-z_]\w*)\s*$", line)

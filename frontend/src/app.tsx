@@ -34,6 +34,10 @@ import { DevicesTab } from "./tabs/DevicesTab";
 import { PeersTab } from "./tabs/PeersTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 import { MidiMonitorStandalone } from "./components/MidiMonitorStandalone";
+import {
+  parseConnectionsListResult,
+  type PersistedConnectionRow,
+} from "./persistedConnections";
 
 function parseMonitorUuidFromHash(): string | null {
   if (typeof window === "undefined") return null;
@@ -86,6 +90,10 @@ export function App() {
   const [alsaSeq, setAlsaSeq] = useState<MidiAlsaSeqEntry[]>([]);
   const [rawmidi, setRawmidi] = useState<MidiRawmidiEntry[]>([]);
   const [alsaSubs, setAlsaSubs] = useState<unknown[]>([]);
+  const [savedConnections, setSavedConnections] = useState<
+    PersistedConnectionRow[]
+  >([]);
+  const [connectionsDbEnabled, setConnectionsDbEnabled] = useState(false);
 
   const rpc = useMemo(
     () =>
@@ -98,6 +106,17 @@ export function App() {
 
   const refreshInFlightRef = useRef(false);
 
+  const loadConnectionsDb = useCallback(async () => {
+    try {
+      const raw = await rpc.call("connections.list", {});
+      const parsed = parseConnectionsListResult(raw);
+      setConnectionsDbEnabled(parsed.enabled);
+      setSavedConnections(parsed.connections ?? []);
+    } catch (e) {
+      console.debug("connections.list failed", e);
+    }
+  }, [rpc]);
+
   const refresh = useCallback(async () => {
     if (refreshInFlightRef.current) return;
     refreshInFlightRef.current = true;
@@ -105,7 +124,7 @@ export function App() {
       const r = (await rpc.call("status", {})) as StatusResult;
       setData(r);
       setLastRefresh(new Date());
-      if (tab === "devices") {
+      if (tab === "devices" || tab === "connections") {
         try {
           const [rAlsa, rRaw, rSubs] = await Promise.all([
             rpc.call("midi.listAlsaSeq", {}),
@@ -119,12 +138,13 @@ export function App() {
           console.debug("midi list refresh failed", e);
         }
       }
+      await loadConnectionsDb();
     } catch (e) {
       setStatus(String(e));
     } finally {
       refreshInFlightRef.current = false;
     }
-  }, [rpc, tab]);
+  }, [rpc, tab, loadConnectionsDb]);
 
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
@@ -168,9 +188,15 @@ export function App() {
   }, [rpc]);
 
   useEffect(() => {
-    if (tab !== "devices") return;
+    if (tab !== "devices" && tab !== "connections") return;
     void refresh();
   }, [tab, refresh]);
+
+  /** Load saved pairs when opening Connections (refresh may have been skipped while in-flight). */
+  useEffect(() => {
+    if (tab !== "connections" || lastRefresh === null) return;
+    void loadConnectionsDb();
+  }, [tab, lastRefresh, loadConnectionsDb]);
 
   useEffect(() => {
     if (!AUTO_TABS.has(tab) || refreshIntervalMs <= 0) return undefined;
@@ -354,9 +380,18 @@ export function App() {
         <ConnectionsTab
           refreshIntervalMs={refreshIntervalMs}
           lastRefresh={lastRefresh}
-          connections={connections}
+          liveConnections={connections}
+          savedConnections={savedConnections}
+          dbEnabled={connectionsDbEnabled}
           highlightConnectionRowId={highlightConnectionRowId}
           onSelectPeer={onSelectPeerFromConnections}
+          rpc={rpc}
+          peers={peers}
+          mdnsRemotes={mdnsParsed.remotes}
+          alsaSeq={alsaSeq}
+          rawmidi={rawmidi}
+          onAfterAction={refresh}
+          onStatus={setStatus}
         />
       ),
     },

@@ -186,4 +186,26 @@ struct monitor_stop_params_t {
   std::string uuid;
 };
 
+// [dm-json]
+struct persisted_connection_row_t {
+  std::string side_a;
+  std::string side_b;
+  int32_t active_a = 0;
+  int32_t active_b = 0;
+  std::optional<uint64_t> peer_a; // [dm-json: omit_if_null]
+  std::optional<uint64_t> peer_b; // [dm-json: omit_if_null]
+};
+
+// [dm-json]
+struct connections_list_result_t {
+  int32_t enabled = 0;
+  std::vector<persisted_connection_row_t> connections;
+};
+
+// [dm-json]
+struct connections_mutate_params_t {
+  std::string side_a;
+  std::string side_b;
+};
+
 } // namespace rtpmididns

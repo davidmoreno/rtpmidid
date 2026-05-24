@@ -18,6 +18,7 @@
 
 #include "argv.hpp"
 #include "aseq.hpp"
+#include "connection_db.hpp"
 #include "control_socket.hpp"
 #include "web_server.hpp"
 #include "factory.hpp"
@@ -35,6 +36,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <cxxabi.h>
 #include <execinfo.h>
 #include <functional>
@@ -124,6 +126,7 @@ protected:
   rtpmididns::control_socket_t control;
   std::optional<rtpmididns::rtpmidi_remote_handler_t> rtpmidi_remote_handler;
   rtpmididns::web_server_t web;
+  std::shared_ptr<rtpmididns::connection_db_manager_t> connection_db;
 
 public:
   // I want setup inside a try catch (and survive it), so I need a setup method
@@ -145,13 +148,28 @@ public:
     setup_rawmidi_peers();
 
     hwautoannounce.emplace(aseq, router);
-    
+
+    if (!rtpmididns::settings.database.path.empty()) {
+      auto db = std::make_unique<rtpmididns::connection_db_t>(
+          rtpmididns::settings.database.path);
+      if (db->is_open()) {
+        connection_db = std::make_shared<rtpmididns::connection_db_manager_t>(
+            router, std::move(db));
+        connection_db->attach();
+        control.connection_db = connection_db;
+      }
+    }
+
     // Setup threading infrastructure
     setup_threading();
+
+    if (connection_db)
+      connection_db->check_reconnects_for_all();
 
     web.router = router;
     web.aseq = aseq;
     web.mdns = rtpmididns::mdns;
+    web.connection_db = connection_db;
     web.start();
   }
   

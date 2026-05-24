@@ -113,6 +113,12 @@ struct settings_t {
     std::string password;
   };
   web_t web;
+
+  /** Persisted router connections (see [database] in ini). Empty path disables. */
+  struct database_t {
+    std::string path;
+  };
+  database_t database;
 };
 
 extern settings_t settings; // NOLINT

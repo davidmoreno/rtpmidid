@@ -30,6 +30,8 @@ class mdns_rtpmidi_t;
 }
 
 namespace rtpmididns {
+class connection_db_manager_t;
+
 class control_socket_t {
   NON_COPYABLE_NOR_MOVABLE(control_socket_t)
 
@@ -46,6 +48,7 @@ public:
   std::shared_ptr<midirouter_t> router = nullptr;
   std::shared_ptr<aseq_t> aseq = nullptr;
   std::shared_ptr<rtpmidid::mdns_rtpmidi_t> mdns = nullptr;
+  std::shared_ptr<connection_db_manager_t> connection_db;
 
   control_socket_t();
   ~control_socket_t() noexcept;

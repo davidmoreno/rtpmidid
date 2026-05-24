@@ -21,12 +21,24 @@
 #include "midipeer.hpp"
 #include "webui_midi_monitor_peer.hpp"
 #include "rtpmidid/logger.hpp"
+#include "rtpmidid/poller.hpp"
 #include "rtpmidid/shutdown_signals.hpp"
 #include "rtpmidid/threading_types.hpp"
 #include <chrono>
 #include <set>
 
 namespace rtpmididns {
+
+namespace {
+
+/** Run after the current peers_mutex critical section (avoids EDEADLK on nested locks). */
+void defer_router_callback(std::function<void()> fn) {
+  if (!fn)
+    return;
+  rtpmidid::poller.call_later(std::move(fn));
+}
+
+} // namespace
 
 midirouter_t::midirouter_t() {}
 midirouter_t::~midirouter_t() {
@@ -72,6 +84,10 @@ uint32_t midirouter_t::add_peer(std::shared_ptr<midipeer_t> peer) {
   }
 
   peer->on_router_attached();
+
+  defer_router_callback([self = shared_from_this(), peer_id]() {
+    self->peer_added_event(peer_id);
+  });
 
   return peer_id;
 }
@@ -268,6 +284,10 @@ void midirouter_t::connect(peer_id_t from, peer_id_t to) {
   to_peer.peer->event(midipeer_event_e::CONNECTED_ROUTER, from);
 
   INFO("Connect {} -> {}", from, to);
+
+  defer_router_callback([self = shared_from_this(), from, to]() {
+    self->connected_event(from, to);
+  });
 }
 
 void midirouter_t::disconnect(peer_id_t from, peer_id_t to) {
@@ -288,6 +308,9 @@ void midirouter_t::disconnect(peer_id_t from, peer_id_t to) {
       from_peer.peer->event(midipeer_event_e::DISCONNECTED_ROUTER, to);
       to_peer.peer->event(midipeer_event_e::DISCONNECTED_ROUTER, from);
       INFO("Disconnect {} -> {}", from, to);
+      defer_router_callback([self = shared_from_this(), from, to]() {
+        self->disconnected_event(from, to);
+      });
       return;
     }
   }
@@ -323,6 +346,9 @@ void midirouter_t::event(peer_id_t from, peer_id_t to, midipeer_event_e event) {
   if (peer_it == peers.end())
     return;
   peer_it->second.peer->event(event, from);
+  defer_router_callback([self = shared_from_this(), to, event]() {
+    self->peer_event(to, event);
+  });
 }
 
 void midirouter_t::event(peer_id_t from, midipeer_event_e event) {
@@ -330,11 +356,18 @@ void midirouter_t::event(peer_id_t from, midipeer_event_e event) {
   auto peer_it = peers.find(from);
   if (peer_it == peers.end())
     return;
+  defer_router_callback([self = shared_from_this(), from, event]() {
+    self->peer_event(from, event);
+  });
   for (auto &to_id : peer_it->second.send_to) {
     auto topeer_it = peers.find(to_id);
     if (topeer_it == peers.end())
       continue;
     topeer_it->second.peer->event(event, from);
+    const auto to = to_id;
+    defer_router_callback([self = shared_from_this(), to, event]() {
+      self->peer_event(to, event);
+    });
   }
 }
 

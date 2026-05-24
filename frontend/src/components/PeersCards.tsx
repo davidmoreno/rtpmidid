@@ -27,12 +27,21 @@ import {
   endpointFromRouterPeer,
   endpointIdForPeer,
 } from "../endpoints";
+import {
+  compareEndpointsForDevicesSort,
+  groupForEndpoint,
+  type EndpointGroup,
+  type EndpointSortKey,
+} from "../endpointPickerUtils";
 import { Button } from "./Button";
+import {
+  EndpointPickerDialog,
+  EndpointSelectBadge,
+} from "./EndpointPickerDialog";
 import { MidiMonitorModal } from "./MidiMonitorModal";
 import { PeerLatencyHoverCell, peerCombinedLatencyMs } from "./LatencyBar";
 
-type EndpointGroup = "local" | "remote";
-type SortKey = "activity" | "name" | "kind" | "connected";
+type SortKey = EndpointSortKey;
 
 /** Router neighbour on a device card: prefer Devices-tab endpoint row, else router peer row. */
 function resolveNeighborEndpoint(
@@ -51,240 +60,6 @@ function resolveNeighborEndpoint(
     sub: "missing from router status",
     peerId: otherId,
   };
-}
-
-function groupForEndpoint(e: Endpoint): EndpointGroup {
-  return e.kind === "rtpmidi" ? "remote" : "local";
-}
-
-function endpointActivity(
-  e: Endpoint,
-  byPeerId: Map<number, RouterPeer>,
-): number {
-  if (e.peerId === undefined) return -1;
-  const p = byPeerId.get(e.peerId);
-  return p ? p.recv + p.sent : -1;
-}
-
-/** Same ordering as the Devices card grid: favorites first, then current Sort mode. */
-function compareEndpointsForDevicesSort(
-  a: Endpoint,
-  b: Endpoint,
-  sortKey: SortKey,
-  favoriteIds: Set<string>,
-  isPeerConnected: Map<number, boolean>,
-  byPeerId: Map<number, RouterPeer>,
-): number {
-  const fa = favoriteIds.has(a.id) ? 1 : 0;
-  const fb = favoriteIds.has(b.id) ? 1 : 0;
-  if (fa !== fb) return fb - fa;
-
-  const activity = (e: Endpoint) => endpointActivity(e, byPeerId);
-  const connFlag = (e: Endpoint): number =>
-    e.peerId !== undefined && (isPeerConnected.get(e.peerId) ?? false) ? 1 : 0;
-
-  if (sortKey === "name") {
-    const c = a.label.localeCompare(b.label);
-    return c !== 0 ? c : a.id.localeCompare(b.id);
-  }
-  if (sortKey === "kind") {
-    const ca = groupForEndpoint(a);
-    const cb = groupForEndpoint(b);
-    if (ca !== cb) return ca === "remote" ? -1 : 1;
-    const c = a.kind.localeCompare(b.kind);
-    return c !== 0 ? c : a.label.localeCompare(b.label);
-  }
-  if (sortKey === "connected") {
-    const da = connFlag(a);
-    const db = connFlag(b);
-    if (da !== db) return db - da;
-    return activity(b) - activity(a);
-  }
-  return activity(b) - activity(a) || a.label.localeCompare(b.label);
-}
-
-function SelectBadge({ e }: { e: Endpoint }) {
-  const g = groupForEndpoint(e);
-  const cls =
-    g === "local"
-      ? "ui-badge-local inline-flex items-center gap-1 rounded px-1 py-0.5 font-mono text-[11px] font-bold"
-      : "ui-badge-remote inline-flex items-center gap-1 rounded px-1 py-0.5 font-mono text-[11px] font-bold";
-  return (
-    <span class={cls}>
-      <span class="max-w-[12rem] truncate">{e.label}</span>
-      <span class="text-[9px] font-black uppercase opacity-80">{e.kind}</span>
-    </span>
-  );
-}
-
-function ConnectPeerDialog({
-  selfId,
-  endpoints,
-  favoriteIds,
-  sortKey,
-  isPeerConnected,
-  byPeerId,
-  onClose,
-  onConnect,
-}: {
-  selfId: string;
-  endpoints: Endpoint[];
-  favoriteIds: Set<string>;
-  sortKey: SortKey;
-  isPeerConnected: Map<number, boolean>;
-  byPeerId: Map<number, RouterPeer>;
-  onClose: () => void;
-  onConnect: (otherId: string) => void;
-}) {
-  const [q, setQ] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  const opts = useMemo(() => endpoints.filter((x) => x.id !== selfId), [endpoints, selfId]);
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    const base = !s
-      ? opts
-      : opts.filter((e) =>
-          [e.label, e.sub, e.kind, e.id].join(" ").toLowerCase().includes(s),
-        );
-    return [...base].sort((a, b) =>
-      compareEndpointsForDevicesSort(
-        a,
-        b,
-        sortKey,
-        favoriteIds,
-        isPeerConnected,
-        byPeerId,
-      ),
-    );
-  }, [opts, q, favoriteIds, sortKey, isPeerConnected, byPeerId]);
-
-  useEffect(() => {
-    setQ("");
-    setSelectedId(null);
-  }, [selfId]);
-
-  useEffect(() => {
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") {
-        ev.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const selectedEp =
-    selectedId !== null ? opts.find((x) => x.id === selectedId) ?? null : null;
-
-  return (
-    <div
-      role="presentation"
-      class="ui-modal-backdrop"
-      onClick={() => onClose()}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="connect-peer-title"
-        class="ui-modal max-h-[min(90vh,36rem)]"
-        onClick={(ev) => ev.stopPropagation()}
-      >
-        <h2
-          id="connect-peer-title"
-          class="mb-3 font-mono text-sm font-bold uppercase ui-text"
-        >
-          Connect endpoint
-        </h2>
-        <p class="mb-3 font-mono text-[11px] leading-relaxed ui-text-muted">
-          Pick another endpoint to connect with{" "}
-          <strong class="ui-text">
-            {endpoints.find((x) => x.id === selfId)?.label ?? selfId}
-          </strong>
-          . ALSA vs router routing is chosen by the server.
-        </p>
-
-        <label class="mb-2 block font-mono text-[10px] font-bold uppercase ui-text-muted">
-          Search
-          <input
-            value={q}
-            onInput={(e) => setQ((e.target as HTMLInputElement).value)}
-            placeholder="Filter by name, kind, id…"
-            class="ui-input mt-1 font-mono text-[11px]"
-            autoFocus
-          />
-        </label>
-
-        <div class="max-h-[min(40vh,14rem)] overflow-y-auto rounded-[var(--radius-md)] border border-[color:var(--color-border)] p-2">
-          {filtered.length ? (
-            <div class="space-y-1">
-              {filtered.map((ep) => {
-                const g = groupForEndpoint(ep);
-                const base =
-                  g === "local" ? "ui-endpoint-opt-local" : "ui-endpoint-opt-remote";
-                const sel = ep.id === selectedId;
-                return (
-                  <button
-                    type="button"
-                    key={ep.id}
-                    class={`w-full rounded-[var(--radius-sm)] border-2 p-2 text-left font-mono ${base} ${
-                      sel ? "ring-2 ring-[color:var(--color-ring-highlight)] ring-inset" : ""
-                    }`}
-                    onClick={() => {
-                      if (selectedId === ep.id) {
-                        onConnect(ep.id);
-                      } else {
-                        setSelectedId(ep.id);
-                      }
-                    }}
-                    title={
-                      selectedId === ep.id
-                        ? `${ep.id} — click again to connect`
-                        : ep.id
-                    }
-                  >
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                      <div class="min-w-0">
-                        <div class="truncate text-xs font-black">{ep.label}</div>
-                        <div class="truncate text-[10px] font-bold opacity-80">{ep.sub}</div>
-                      </div>
-                      <div class="shrink-0 text-right">
-                        <div class="text-[10px] font-black uppercase">{ep.kind}</div>
-                        <div class="text-[10px] opacity-80">{ep.id}</div>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <div class="font-mono text-[11px] ui-text-subtle">No matching endpoints.</div>
-          )}
-        </div>
-
-        {selectedEp ? (
-          <p class="mt-2 font-mono text-[10px] ui-text-muted">
-            Selected: <SelectBadge e={selectedEp} />
-          </p>
-        ) : null}
-
-        <div class="mt-4 flex flex-wrap gap-2">
-          <Button type="button" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            disabled={selectedId === null}
-            onClick={() => {
-              if (selectedId !== null) onConnect(selectedId);
-            }}
-          >
-            Connect ↔
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function matchesQuery(e: Endpoint, q: string): boolean {
@@ -1118,15 +893,28 @@ export function PeersCards({
       </div>
 
       {connectDialogForId !== null && (
-        <ConnectPeerDialog
-          selfId={connectDialogForId}
+        <EndpointPickerDialog
+          title="Connect endpoint"
+          description={
+            <>
+              Pick another endpoint to connect with{" "}
+              <strong class="ui-text">
+                {endpoints.find((x) => x.id === connectDialogForId)?.label ??
+                  connectDialogForId}
+              </strong>
+              . ALSA vs router routing is chosen by the server.
+            </>
+          }
           endpoints={endpoints}
+          excludeIds={[connectDialogForId]}
           favoriteIds={favoriteIds}
           sortKey={sortKey}
           isPeerConnected={isPeerConnected}
           byPeerId={byPeerId}
+          confirmLabel="Connect ↔"
+          confirmOnSecondClick
           onClose={() => setConnectDialogForId(null)}
-          onConnect={(otherId) => {
+          onConfirm={(otherId) => {
             const from = connectDialogForId;
             setConnectDialogForId(null);
             void doConnect(from, otherId);

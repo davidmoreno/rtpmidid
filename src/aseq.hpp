@@ -119,6 +119,10 @@ public:
 
   void read_ready();
   std::string get_client_name(snd_seq_addr_t *addr);
+  /** ALSA client (device) name by numeric client id. */
+  std::string get_client_name_by_id(int client) const;
+  /** ALSA port name by client and port id. */
+  std::string get_port_name(int client, int port) const;
   aseq_t::client_type_e get_client_type(snd_seq_addr_t *addr);
 
   uint8_t create_port(const std::string &name, bool do_export = true);

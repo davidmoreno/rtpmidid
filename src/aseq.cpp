@@ -336,6 +336,30 @@ std::string aseq_t::get_client_name(snd_seq_addr_t *addr) {
   return FMT::format("{}-{}", client_name, port_name);
 }
 
+std::string aseq_t::get_client_name_by_id(int client) const {
+  snd_seq_client_info_t *client_info = nullptr;
+  snd_seq_client_info_malloc(&client_info);
+  if (snd_seq_get_any_client_info(seq, client, client_info) < 0) {
+    snd_seq_client_info_free(client_info);
+    return {};
+  }
+  std::string name = snd_seq_client_info_get_name(client_info);
+  snd_seq_client_info_free(client_info);
+  return name;
+}
+
+std::string aseq_t::get_port_name(int client, int port) const {
+  snd_seq_port_info_t *port_info = nullptr;
+  snd_seq_port_info_malloc(&port_info);
+  if (snd_seq_get_any_port_info(seq, client, port, port_info) < 0) {
+    snd_seq_port_info_free(port_info);
+    return {};
+  }
+  std::string name = snd_seq_port_info_get_name(port_info);
+  snd_seq_port_info_free(port_info);
+  return name;
+}
+
 aseq_t::client_type_e get_type_by_seq_type(int type) {
   // Known types so far.. may be increased later? Dont know how to make it more
   // future proof. If change here, quite probably will be incompatible changes

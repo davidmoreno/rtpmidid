@@ -33,6 +33,7 @@ add_library(
   network_rtpmidi_multi_listener.cpp
   network_rtpmidi_peer.cpp
   webui_midi_monitor_peer.cpp
+  connection_db.cpp
 )
 add_definitions(-D_REENTRANT)
 
@@ -67,6 +68,10 @@ if(ENABLE_PCH)
 endif()
 
 target_link_libraries(rtpmidid2-daemon rtpmidid-static)
+
+target_link_libraries(rtpmidid2-static PUBLIC ${SQLITE3_LIBRARIES})
+target_include_directories(rtpmidid2-static PUBLIC ${SQLITE3_INCLUDE_DIRS})
+target_compile_options(rtpmidid2-static PUBLIC ${SQLITE3_CFLAGS_OTHER})
 
 # Add -rdynamic for stacktrace symbol resolution
 set_target_properties(rtpmidid2-daemon PROPERTIES 
