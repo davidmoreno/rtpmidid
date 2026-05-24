@@ -172,7 +172,8 @@ install: install-rtpmidid install-librtpmidid0 install-librtpmidid0-dev
 USR=$(DESTDIR)$(PREFIX)
 ETC=$(DESTDIR)$(SYSCONFDIR)
 
-install-rtpmidid: build man frontend
+install-rtpmidid: build man
+	@if [ ! -f frontend/dist/index.html ]; then $(MAKE) frontend; fi
 	mkdir -p $(USR)/bin/
 	cp build/src/rtpmidid $(USR)/bin/
 	mkdir -p $(USR)/share/rtpmidid/html

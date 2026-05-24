@@ -4,6 +4,18 @@ set -e
 # This script runs inside the Docker container to build the RPM package
 # The source code is mounted at /source
 
+export HOME=/tmp/rtpmidid-home
+mkdir -p "$HOME"
+
+mkdir -p /output
+if ! touch /output/.writetest 2>/dev/null; then
+    echo "ERROR: /output is not writable (uid=$(id -u) gid=$(id -g))."
+    echo "       Run packaging make as the same user that owns the output mount,"
+    echo "       or fix permissions on the host output directory."
+    exit 1
+fi
+rm -f /output/.writetest
+
 # Create a writable copy of the source
 BUILD_PARENT=/tmp/rtpmidid-build
 BUILD_DIR=$BUILD_PARENT/rtpmidid
@@ -24,10 +36,10 @@ cd $BUILD_DIR
 VERSION=$(git describe --match "v[0-9]*" --tags --abbrev=5 HEAD 2>/dev/null | sed 's/^v//g' | sed 's/-/~/g' || echo "0.0.0")
 
 # Create rpmbuild directory structure
-mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+mkdir -p "$HOME/rpmbuild"/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
 
 # Create source tarball
-tar czf ~/rpmbuild/SOURCES/rtpmidid-${VERSION}.tar.gz \
+tar czf "$HOME/rpmbuild/SOURCES/rtpmidid-${VERSION}.tar.gz" \
     --exclude='.git' \
     --exclude='build' \
     --exclude='packaging/dist' \
@@ -38,22 +50,27 @@ tar czf ~/rpmbuild/SOURCES/rtpmidid-${VERSION}.tar.gz \
     .
 
 # Copy spec file
-cp packaging/rpm/rtpmidid.spec ~/rpmbuild/SPECS/
+cp packaging/rpm/rtpmidid.spec "$HOME/rpmbuild/SPECS/"
 
 # Build the RPM
-cd ~/rpmbuild/SPECS
+cd "$HOME/rpmbuild/SPECS"
 # Replace version in spec file
 sed -i "s/^Version:.*/Version:        ${VERSION}/" rtpmidid.spec
 rpmbuild -ba rtpmidid.spec
 
 # Copy RPM files to /output for extraction
-mkdir -p /output
-cp -a ~/rpmbuild/RPMS/*/*.rpm /output/ 2>/dev/null || true
-cp -a ~/rpmbuild/SRPMS/*.rpm /output/ 2>/dev/null || true
+rpm_count=0
+shopt -s nullglob
+for rpm in "$HOME/rpmbuild/RPMS"/*/*.rpm "$HOME/rpmbuild/SRPMS"/*.rpm; do
+    cp -v "$rpm" /output/
+    rpm_count=$((rpm_count + 1))
+done
+shopt -u nullglob
 
-# List what we found
-echo "Built packages:"
-ls -la /output/ 2>/dev/null || echo "No packages found in /output"
+if [ "$rpm_count" -eq 0 ]; then
+    echo "ERROR: No .rpm files found under $HOME/rpmbuild"
+    exit 1
+fi
 
-# Ensure proper permissions
-chown -R builder:builder /output 2>/dev/null || true
+echo "Built packages in /output:"
+ls -la /output/

@@ -1,8 +1,8 @@
-rtpmidid (26.01~30~g7e917) stable; urgency=medium
+rtpmidid (26.01~34~gc7f67) stable; urgency=medium
 
   * Development version. Check `git log`.
 
- -- David Moreno <dmoreno@coralbits.com>  Wed, 20 May 2026 00:09:24 +0200
+ -- David Moreno <dmoreno@coralbits.com>  Sun, 24 May 2026 13:45:54 +0200
 
 rtpmidid (26.01) stable; urgency=medium
 

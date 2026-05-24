@@ -1,0 +1,13 @@
+# Reproducible native build of rtpmidid web UI (Parcel). Used for all package
+# architectures; npm must run on the host CPU, not under QEMU for armhf/arm64.
+FROM node:22-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY build-frontend.sh /usr/local/bin/rtpmidid-build-frontend.sh
+RUN chmod +x /usr/local/bin/rtpmidid-build-frontend.sh
+
+WORKDIR /frontend
+ENTRYPOINT ["/usr/local/bin/rtpmidid-build-frontend.sh"]

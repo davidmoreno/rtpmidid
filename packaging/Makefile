@@ -7,7 +7,7 @@ ARCH ?= amd64
 RELEASES_DIR ?= $(PACKAGING_DIR)/dist
 
 # Available distributions (Debian/Ubuntu)
-DEB_DISTROS := debian-trixie ubuntu-24.04 ubuntu-25.10
+DEB_DISTROS := debian-bookworm debian-trixie ubuntu-24.04 ubuntu-25.10
 
 # Available distributions (Fedora/RPM)
 RPM_DISTROS := fedora-44 fedora-43
@@ -53,7 +53,28 @@ BUILD_SCRIPT = $(if $(filter yes,$(call is_rpm)),/usr/local/bin/rtpmidid-build-r
 SOURCE_DIR = $(shell dirname $(shell pwd))
 PACKAGING_DIR = $(shell pwd)
 
-.PHONY: help deb deb-all deb-% rpm rpm-all rpm-% all _collect-publish
+# Docker platform matching the host CPU (for npm/Parcel; not the package ARCH)
+UNAME_M := $(shell uname -m 2>/dev/null || echo unknown)
+ifeq ($(UNAME_M),x86_64)
+HOST_DOCKER_PLATFORM := linux/amd64
+else ifeq ($(UNAME_M),aarch64)
+HOST_DOCKER_PLATFORM := linux/arm64
+else ifeq ($(UNAME_M),armv7l)
+HOST_DOCKER_PLATFORM := linux/arm/v7
+else ifeq ($(UNAME_M),riscv64)
+HOST_DOCKER_PLATFORM := linux/riscv64
+else
+HOST_DOCKER_PLATFORM := linux/amd64
+endif
+
+FRONTEND_IMAGE = rtpmidid-frontend-builder
+FRONTEND_DOCKERFILE = docker/Dockerfile.frontend
+
+# Match container user to the host user so bind-mounted /output is writable
+CONTAINER_UID := $(shell id -u)
+CONTAINER_GID := $(shell id -g)
+
+.PHONY: help deb deb-all deb-% rpm rpm-all rpm-% all _collect-publish frontend-assets
 
 help:
 	@echo "Docker Package Builder (Debian/Ubuntu and Fedora)"
@@ -64,6 +85,7 @@ help:
 	@echo "  make deb-all  # Build all Debian packages"
 	@echo "  make rpm-all   # Build all RPM packages"
 	@echo "  make all       # Build all packages"
+	@echo "  make frontend-assets  # Build web UI on host CPU (Docker)"
 	@echo ""
 	@echo "Debian/Ubuntu distributions: $(DEB_DISTROS)"
 	@echo "Fedora distributions: $(RPM_DISTROS)"
@@ -77,6 +99,19 @@ help:
 	@echo "  make deb-all"
 	@echo "  make rpm-all"
 	@echo "  make all"
+
+# Build web UI with native-arch Docker (required before cross-arch deb/rpm)
+frontend-assets:
+	@echo "Building web UI assets on host platform $(HOST_DOCKER_PLATFORM)..."
+	@docker build \
+		--platform $(HOST_DOCKER_PLATFORM) \
+		--tag $(FRONTEND_IMAGE) \
+		--file $(PACKAGING_DIR)/$(FRONTEND_DOCKERFILE) \
+		$(PACKAGING_DIR)/
+	@docker run --rm \
+		--platform $(HOST_DOCKER_PLATFORM) \
+		-v $(SOURCE_DIR)/frontend:/frontend:z \
+		$(FRONTEND_IMAGE)
 
 # Default target - build for default distro/arch
 deb: deb-$(DISTRO)-$(ARCH)
@@ -128,6 +163,7 @@ _deb-internal:
 			exit 1; \
 		fi; \
 	fi
+	@$(MAKE) -f $(PACKAGING_DIR)/Makefile frontend-assets
 	@platform=$(call get_platform); \
 	if [ -z "$$platform" ]; then \
 		echo "Error: Unknown architecture $(ARCH)"; \
@@ -156,27 +192,20 @@ _deb-internal:
 			$(PACKAGING_DIR)/ \
 	); \
 	\
-	# Create output directory for packages \
-	mkdir -p /tmp/rtpmidid-output-$(DISTRO)-$(ARCH); \
+	# Fresh output dir owned by the invoking user (see CONTAINER_UID/GID) \
+	output_dir=/tmp/rtpmidid-output-$(DISTRO)-$(ARCH); \
+	rm -rf "$$output_dir"; \
+	mkdir -p "$$output_dir"; \
 	\
 	# Run container to build package \
 	# Mount source with :z flag for SELinux compatibility \
 	docker run --rm \
 		--platform $$platform \
+		--user $(CONTAINER_UID):$(CONTAINER_GID) \
 		-v $(SOURCE_DIR):/source:z \
-		-v /tmp/rtpmidid-output-$(DISTRO)-$(ARCH):/output:z \
-		-u builder \
+		-v "$$output_dir":/output:z \
 		$(IMAGE_NAME) \
-		$(BUILD_SCRIPT) || \
-	( \
-		echo "Trying with root user..."; \
-		docker run --rm \
-			--platform $$platform \
-			-v $(SOURCE_DIR):/source:z \
-			-v /tmp/rtpmidid-output-$(DISTRO)-$(ARCH):/output:z \
-			$(IMAGE_NAME) \
-			$(BUILD_SCRIPT) \
-	); \
+		$(BUILD_SCRIPT); \
 	\
 	# Copy package files to dist directory \
 	if [ -d /tmp/rtpmidid-output-$(DISTRO)-$(ARCH) ]; then \
@@ -232,6 +261,7 @@ rpm-%:
 _rpm-internal:
 	@echo "Building RPM package for $(DISTRO) on $(ARCH)..."
 	@mkdir -p $(RELEASES_DIR)/$(DISTRO)/$(ARCH)
+	@$(MAKE) -f $(PACKAGING_DIR)/Makefile frontend-assets
 	@platform=$(call get_platform); \
 	if [ -z "$$platform" ]; then \
 		echo "Error: Unknown architecture $(ARCH)"; \
@@ -258,26 +288,19 @@ _rpm-internal:
 			$(PACKAGING_DIR)/ \
 	); \
 	\
-	# Create output directory for packages \
-	mkdir -p /tmp/rtpmidid-output-$(DISTRO)-$(ARCH); \
+	# Fresh output dir owned by the invoking user (see CONTAINER_UID/GID) \
+	output_dir=/tmp/rtpmidid-output-$(DISTRO)-$(ARCH); \
+	rm -rf "$$output_dir"; \
+	mkdir -p "$$output_dir"; \
 	\
 	# Run container to build package \
 	docker run --rm \
 		--platform $$platform \
+		--user $(CONTAINER_UID):$(CONTAINER_GID) \
 		-v $(SOURCE_DIR):/source:z \
-		-v /tmp/rtpmidid-output-$(DISTRO)-$(ARCH):/output:z \
-		-u builder \
+		-v "$$output_dir":/output:z \
 		$(IMAGE_NAME) \
-		$(BUILD_SCRIPT) || \
-	( \
-		echo "Trying with root user..."; \
-		docker run --rm \
-			--platform $$platform \
-			-v $(SOURCE_DIR):/source:z \
-			-v /tmp/rtpmidid-output-$(DISTRO)-$(ARCH):/output:z \
-			$(IMAGE_NAME) \
-			$(BUILD_SCRIPT) \
-	); \
+		$(BUILD_SCRIPT); \
 	\
 	# Copy .rpm files to dist directory \
 	if [ -d /tmp/rtpmidid-output-$(DISTRO)-$(ARCH) ]; then \

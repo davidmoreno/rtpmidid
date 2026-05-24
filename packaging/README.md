@@ -43,6 +43,7 @@ make all
 
 ### Debian/Ubuntu (DEB packages)
 
+- `debian-bookworm` - Debian 12 (Bookworm)
 - `debian-trixie` - Debian Trixie
 - `ubuntu-24.04` - Ubuntu 24.04 LTS
 - `ubuntu-25.10` - Ubuntu 25.10
@@ -91,6 +92,7 @@ RUN apt-get update && apt-get install -y \
     debhelper-compat \
     libavahi-client-dev \
     libasound2-dev \
+    libfmt-dev \
     python3 \
     cmake \
     pandoc \
@@ -135,7 +137,27 @@ RUN chmod +x /usr/local/bin/rtpmidid-build-rpm.sh
 WORKDIR /build
 ```
 
+## Web UI assets
+
+The Parcel/npm build must run on the **host CPU**, not inside QEMU when packaging
+`armhf` or `arm64`. Before each `deb` or `rpm` build, the packaging Makefile runs
+`frontend-assets`, which uses `docker/Dockerfile.frontend` on the native Docker
+platform (`linux/amd64` on x86_64, etc.) and writes `frontend/dist/` into the
+source tree. The package build then installs those files without running npm in the
+target-architecture container.
+
+To rebuild only the web UI:
+
+```bash
+make -C packaging frontend-assets
+```
+
 ## Requirements
 
 - Docker (with buildx support recommended for multi-arch builds)
 - QEMU emulation (automatically handled by Docker for cross-arch builds)
+
+Package builds run the container as your host user (`id -u` / `id -g`) so artifacts
+can be written to `/tmp/rtpmidid-output-*` without a root fallback. The build
+script checks `/output` is writable before compiling. Run `make deb` from
+`packaging/` as the same user you want to own the output files.
