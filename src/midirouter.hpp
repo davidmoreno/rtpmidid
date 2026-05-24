@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2026 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,19 +19,20 @@
 #pragma once
 #include "dm_json_status.hpp"
 #include "midipeer.hpp"
+#include "router_command.hpp"
 #include "rtpmidid/iobytes.hpp"
-#include "rtpmidid/utils.hpp"
-#include "rtpmidid/lockfree_queue.hpp"
+#include "rtpmidid/priority_mpsc_queue.hpp"
+#include "rtpmidid/reply_channel.hpp"
 #include "rtpmidid/signal.hpp"
-#include "rtpmidid/threading_types.hpp"
+#include "rtpmidid/utils.hpp"
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <set>
-#include <shared_mutex>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -40,59 +41,87 @@ namespace rtpmididns {
 class mididata_t;
 class midipeer_t;
 
-using peer_id_t = uint32_t;
-
 struct peerconnection_t {
   uint32_t id = 0;
   std::shared_ptr<midipeer_t> peer;
   std::vector<peer_id_t> send_to{};
 };
 
+/**
+ * @short Actor-style MIDI router.
+ *
+ * Every public method that mutates or reads router state is dispatched onto
+ * the router thread through a three-level priority queue (HIGH = MIDI,
+ * NORMAL = topology / signals, LOW = read snapshots). The router thread is
+ * the sole owner of `peers_` and friends, so no mutex is required.
+ *
+ * Reads block via per-call `reply_channel_t` instances. When the calling
+ * thread already is the router thread (e.g. from a signal listener) or the
+ * router thread is not running (tests), the call short-circuits to a direct
+ * inline execution.
+ */
 class midirouter_t : public std::enable_shared_from_this<midirouter_t> {
   NON_COPYABLE_NOR_MOVABLE(midirouter_t)
 
-private:
-  static constexpr size_t ROUTING_QUEUE_SIZE = 4096;
-  rtpmidid::mpsc_queue<rtpmidid::routing_request_t, ROUTING_QUEUE_SIZE> routing_queue;
-  
-  // Router thread management
-  std::thread router_thread;
-  std::atomic<bool> router_running{false};
-  std::condition_variable router_wakeup;
-  std::mutex router_mutex;
-  
-  // Thread-safe peer map access
-  mutable std::shared_mutex peers_mutex;
-  
-  // Track peers being removed to avoid recursive removal
-  std::set<peer_id_t> removing_peers;
-  std::mutex removing_peers_mutex;
-  
-  // Function to enqueue MIDI to destination peer (set by peer threads)
-  std::function<void(peer_id_t, const rtpmidid::midi_packet_t&)> peer_enqueue_fn;
-
-  // Router thread main loop
-  void router_thread_loop();
-
 public:
-  peer_id_t max_id = 1;
-  std::unordered_map<uint32_t, peerconnection_t> peers;
   midirouter_t();
   ~midirouter_t();
-  
-  // Thread-safe methods (can be called from any thread)
+
   void start_router_thread();
   void stop_router_thread();
-  
-  // Set function to enqueue MIDI to peer threads
-  void set_peer_enqueue_function(
-      std::function<void(peer_id_t, const rtpmidid::midi_packet_t&)> fn) {
-    peer_enqueue_fn = std::move(fn);
+
+  /** True once `start_router_thread()` has launched the worker. */
+  bool is_running() const { return router_running_.load(); }
+
+  // --- Mutating API (signatures preserved) ---
+
+  /** Add `peer` to the router. Returns the assigned peer id. */
+  peer_id_t add_peer(std::shared_ptr<midipeer_t> peer);
+  void remove_peer(peer_id_t peer_id);
+  void connect(peer_id_t from, peer_id_t to);
+  void disconnect(peer_id_t from, peer_id_t to);
+
+  /** Send MIDI from `from` to all connected destinations. HIGH priority. */
+  void send_midi(peer_id_t from, const mididata_t &data);
+  /** Send MIDI from `from` to a single peer `to`. HIGH priority. */
+  void send_midi(peer_id_t from, peer_id_t to, const mididata_t &data);
+
+  /** Fire a peer-to-peer event. */
+  void event(peer_id_t from, peer_id_t to, midipeer_event_e evt);
+  /** Broadcast a peer event to all connected destinations. */
+  void event(peer_id_t from, midipeer_event_e evt);
+
+  void remove_all_peers();
+  /** Force-clear peers (alias for remove_all_peers). */
+  void clear();
+
+  // --- Read API (signatures preserved) ---
+
+  std::shared_ptr<midipeer_t> get_peer_by_id(peer_id_t peer_id);
+  size_t peer_count() const;
+  std::vector<peer_id_t> peer_ids() const;
+  std::vector<peer_id_t> send_targets_for(peer_id_t from) const;
+  std::vector<router_peer_row_t> status_rows() const;
+
+  void peer_connection_loop(peer_id_t peer_id,
+                            std::function<void(std::shared_ptr<midipeer_t>)>);
+
+  /** Iterate peers (downcast to T). Lambda runs on the router thread. */
+  template <typename T = midipeer_t>
+  void for_each_peer(const std::function<void(T *)> &f) {
+    submit_run(rtpmidid::queue_priority_e::LOW,
+               [&f](midirouter_t &router) {
+                 for (auto &kv : router.peers_) {
+                   auto t = dynamic_cast<T *>(kv.second.peer.get());
+                   if (t)
+                     f(t);
+                 }
+               });
   }
-  
-  // Thread-safe enqueue methods (non-blocking)
+
+  // --- Backwards-compatible enqueue_* aliases (always go through queue) ---
+
   bool enqueue_send_midi(peer_id_t from, const mididata_t &data);
-  /** Route MIDI from @a from to a single peer @a to ( @a to == 0 delegates to broadcast). */
   bool enqueue_send_midi(peer_id_t from, peer_id_t to, const mididata_t &data);
   bool enqueue_connect(peer_id_t from, peer_id_t to);
   bool enqueue_disconnect(peer_id_t from, peer_id_t to);
@@ -100,54 +129,112 @@ public:
   bool enqueue_event(peer_id_t from, peer_id_t to, midipeer_event_e evt);
   bool enqueue_event(peer_id_t from, midipeer_event_e evt);
 
-  peer_id_t add_peer(std::shared_ptr<midipeer_t>);
-  std::shared_ptr<midipeer_t> get_peer_by_id(peer_id_t peer_id);
-  peerconnection_t *get_peerdata_by_id(peer_id_t peer_id);
+  // --- Test / shutdown helpers ---
 
-  /** Thread-safe peer map size (use instead of `peers.size()` from other threads). */
-  size_t peer_count() const;
-  /** Thread-safe copy of `send_to` for `from` (empty if unknown). */
-  std::vector<peer_id_t> send_targets_for(peer_id_t from) const;
+  /** Drain the queue once on the calling thread (for deterministic tests). */
+  void drain_for_tests();
 
-  void remove_peer(peer_id_t);
-  void connect(peer_id_t from, peer_id_t to);
-  void disconnect(peer_id_t from, peer_id_t to);
-  void peer_connection_loop(peer_id_t peer_id,
-                            std::function<void(std::shared_ptr<midipeer_t>)>);
+  // --- Signals (now fired on the router thread via fire_signal_t tasks) ---
 
-  void send_midi(peer_id_t from, const mididata_t &data);
-  void send_midi(peer_id_t from, peer_id_t to, const mididata_t &data);
-  // Specific from one peer to another
-  void event(peer_id_t from, peer_id_t to, midipeer_event_e event);
-  // From one peer to all connected others
-  void event(peer_id_t from, midipeer_event_e event);
-
-  /** Snapshot of all peer ids (thread-safe). */
-  std::vector<peer_id_t> peer_ids() const;
-
-  /** Remove every peer via remove_peer() (disconnects, goodbyes, thread stop). */
-  void remove_all_peers();
-
-  // To force clear the peers and avoid the cyclic references of peers that keep
-  // the router. Prefer remove_all_peers() for shutdown.
-  void clear();
-
-  std::vector<router_peer_row_t> status_rows() const;
-
-  /** Router topology / lifecycle (e.g. connection persistence). Deferred to poller thread. */
   rtpmidid::signal_t<peer_id_t, peer_id_t> connected_event;
   rtpmidid::signal_t<peer_id_t, peer_id_t> disconnected_event;
   rtpmidid::signal_t<peer_id_t> peer_added_event;
   rtpmidid::signal_t<peer_id_t, midipeer_event_e> peer_event;
 
-  // For the given type of the for_each, by default midipeer_t.
-  template <typename T = midipeer_t>
-  void for_each_peer(const std::function<void(T *)> &f) {
-    for (auto &[peer_id, peer] : peers) {
-      auto t = dynamic_cast<T *>(peer.peer.get());
-      if (t)
-        f(t);
-    }
-  };
+private:
+  // --- Router-thread-owned state ---
+
+  peer_id_t max_id_{1};
+  std::unordered_map<peer_id_t, peerconnection_t> peers_;
+  std::set<peer_id_t> removing_peers_;
+
+  // --- Threading / queue ---
+
+  rtpmidid::priority_mpsc_queue<router_command_t,
+                                /* HighSize  */ 4096,
+                                /* NormalSize*/ 256,
+                                /* LowSize   */ 64>
+      queue_;
+
+  std::thread router_thread_;
+  std::atomic<bool> router_running_{false};
+  std::condition_variable router_wakeup_;
+  std::mutex wakeup_mutex_;
+  std::atomic<std::thread::id> router_thread_id_{};
+
+  // --- Internal dispatch ---
+
+  void router_thread_loop();
+  void handle(router_cmd::send_midi_t &cmd);
+  void handle(router_cmd::add_peer_t &cmd);
+  void handle(router_cmd::remove_peer_t &cmd);
+  void handle(router_cmd::connect_t &cmd);
+  void handle(router_cmd::disconnect_t &cmd);
+  void handle(router_cmd::event_t &cmd);
+  void handle(router_cmd::fire_signal_t &cmd);
+  void handle(router_cmd::run_task_t &cmd);
+  void handle(router_cmd::query_t &cmd);
+  void handle(router_cmd::shutdown_t &cmd);
+
+  // --- Inline implementations (run on router thread, no locks) ---
+
+  peer_id_t add_peer_impl(std::shared_ptr<midipeer_t> peer);
+  void remove_peer_impl(peer_id_t id);
+  void connect_impl(peer_id_t from, peer_id_t to);
+  void disconnect_impl(peer_id_t from, peer_id_t to);
+  void send_midi_inline(peer_id_t from, peer_id_t to, const uint8_t *data,
+                        size_t size);
+  void event_impl(peer_id_t from, peer_id_t to, midipeer_event_e evt);
+  void event_broadcast_impl(peer_id_t from, midipeer_event_e evt);
+  std::vector<router_peer_row_t> status_rows_impl() const;
+
+  // --- Helpers ---
+
+  bool on_router_thread() const;
+  bool sync_mode() const;
+  bool enqueue(router_command_t &&cmd, rtpmidid::queue_priority_e prio);
+
+  /**
+   * Fire a router signal. In sync mode (or when called on the router thread
+   * with the queue empty path) runs the lambda inline; otherwise enqueues a
+   * `fire_signal_t` so listeners run after the current handler.
+   */
+  void post_signal(std::function<void(midirouter_t &)> task);
+
+  template <typename T>
+  T submit_query(rtpmidid::queue_priority_e prio,
+                 std::function<T(midirouter_t &)> q);
+  void submit_run(rtpmidid::queue_priority_e prio,
+                  std::function<void(midirouter_t &)> task);
+
+  static constexpr std::chrono::milliseconds kReplyTimeout{5000};
 };
+
+template <typename T>
+T midirouter_t::submit_query(rtpmidid::queue_priority_e prio,
+                             std::function<T(midirouter_t &)> q) {
+  if (sync_mode() || on_router_thread()) {
+    return q(*this);
+  }
+  auto channel = std::make_shared<rtpmidid::reply_channel_t>();
+  const uint64_t id = channel->next_id();
+  router_cmd::query_t cmd;
+  cmd.query = [q = std::move(q)](midirouter_t &r) -> std::any {
+    return std::any(q(r));
+  };
+  cmd.reply = rtpmidid::reply_slot_t{channel, id};
+  if (!enqueue(router_command_t{std::move(cmd)}, prio)) {
+    return T{};
+  }
+  auto env = channel->wait(id, kReplyTimeout);
+  if (!env.error.empty()) {
+    return T{};
+  }
+  try {
+    return std::any_cast<T>(env.value);
+  } catch (const std::bad_any_cast &) {
+    return T{};
+  }
+}
+
 } // namespace rtpmididns

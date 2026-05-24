@@ -174,24 +174,17 @@ public:
   }
   
   void setup_threading() {
-    // Set up router's peer enqueue function
-    router->set_peer_enqueue_function([this](rtpmididns::peer_id_t peer_id, 
-                                              const rtpmidid::midi_packet_t &packet) {
-      auto peer = router->get_peer_by_id(peer_id);
-      if (peer) {
-        peer->enqueue_midi_packet(packet);
-      }
-    });
-    
-    // Start router thread
+    // Start router thread first; once running, add_peer auto-starts each peer's
+    // thread, but we still need to start the threads of peers that were added
+    // during synchronous setup (before the router thread existed).
     router->start_router_thread();
-    
-    // Start all peer threads
+
     DEBUG("[MIDI_FLOW] Main: Starting all peer threads");
-    router->for_each_peer(std::function<void(rtpmididns::midipeer_t*)>([](rtpmididns::midipeer_t *peer) {
-      DEBUG("[MIDI_FLOW] Main: Starting thread for peer {}", peer->peer_id);
-      peer->start_thread();
-    }));
+    router->for_each_peer(std::function<void(rtpmididns::midipeer_t *)>(
+        [](rtpmididns::midipeer_t *peer) {
+          DEBUG("[MIDI_FLOW] Main: Starting thread for peer {}", peer->peer_id);
+          peer->start_thread();
+        }));
     DEBUG("[MIDI_FLOW] Main: All peer threads started");
   }
 

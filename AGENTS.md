@@ -110,8 +110,8 @@ The daemon is **multi-threaded** with a **Linux epoll** main loop (`rtpmidid::po
 | Thread | Role | Key files |
 |--------|------|-----------|
 | **Main / poller** | `epoll_wait`; UDP (`MSG_DONTWAIT`), ALSA sequencer FD, Avahi watches, DNS `eventfd`, `call_later` | `lib/poller.cpp`, `src/main.cpp` |
-| **Router** | Consumes `midirouter_t::routing_queue`; dispatches `SEND_MIDI` to peer input queues | `src/midirouter.cpp` |
-| **Per peer** | One `std::thread` per `midipeer_t`; runs `send_midi()` (ALSA / network) | `src/midipeer.cpp` |
+| **Router** | Sole owner of the peers map; drains `priority_mpsc_queue<router_command_t>` (HIGH MIDI / NORMAL ctrl + signals / LOW reads) and dispatches via `std::visit` | `src/midirouter.cpp` |
+| **Per peer** | One `std::thread` per `midipeer_t`; drains its own `priority_mpsc_queue<peer_command_t>`; runs `send_midi()` (ALSA / network) plus state queries | `src/midipeer.cpp` |
 | **DNS worker** | Blocking `getaddrinfo`; wakes poller via `eventfd` | `lib/dns_resolver.cpp`, `include/rtpmidid/dns_resolver.hpp` |
 | **Control socket** | Dedicated thread; `poll()` + blocking `accept`/`recv`/`write` on Unix socket | `src/control_socket.cpp` |
 | **Logger** | Drains lock-free log queue | `lib/logger.cpp` |
@@ -120,9 +120,13 @@ Shutdown: `main_t::close()` calls `rtpmidid::dns_resolver_shutdown()` **before**
 
 ### Queues and locking
 
-- **`routing_queue`** (`midirouter.hpp`): `rtpmidid::mpsc_queue` (bounded ring + producer mutex) consumed only on the router thread; `enqueue_*` is safe from poller and all peer threads.
-- **Per-peer `input_queue`**: true SPSC — producer is the router thread only (`peer_enqueue_fn` → `enqueue_midi_packet`).
-- **`peers` map**: `std::shared_mutex` for reads/writes; topology changes from the control socket go through `enqueue_connect` / `enqueue_disconnect` / `enqueue_remove_peer` so they run on the router thread.
+The router and every peer are **actor-style**: each owns a thread, a three-priority queue (`rtpmidid::priority_mpsc_queue`), and exclusive access to its mutable state. There is no `peers_mutex` and no `internal_latency_mutex_` — every state read/write is dispatched onto the owning thread via the queue, so no locking is needed.
+
+- **Router queue** (`midirouter.hpp`): `priority_mpsc_queue<router_command_t, 4096, 256, 64>` carrying a `std::variant` of per-kind structs (`send_midi_t`, `connect_t`, `add_peer_t`, `query_t`, `fire_signal_t`, …). The router thread drains HIGH first (MIDI), then NORMAL (topology + signals), then LOW (read snapshots).
+- **Peer queue** (`midipeer.hpp`): `priority_mpsc_queue<peer_command_t, 1024, 64, 16>` of `process_midi_t` / `send_to_router_t` (HIGH), `run_task_t` / `shutdown_t` (NORMAL), `query_t` (LOW). Producers are the router thread (MIDI) and any other thread issuing queries.
+- **Reads** (`status_rows`, `peer_count`, `peer_ids`, `internal_latency_stats`, …): keep their original synchronous signatures but internally enqueue a `query_t` carrying a `reply_slot_t { shared_ptr<reply_channel_t>, id }` and block on `reply_channel_t::wait(id)`. Replies for other ids stay in the channel for later waiters.
+- **Signals** (`connected_event`, `disconnected_event`, `peer_added_event`, `peer_event`): fired via `fire_signal_t` tasks enqueued onto the router queue so listeners run on the router thread *after* the current handler — replacing the old `defer_router_callback` / `poller.call_later` hop.
+- **Self-deadlock guard**: every public method short-circuits to direct execution when called from the owning thread (thread-local `g_current_router_thread` / `g_current_peer_thread`) or in synchronous mode (no thread running, used by tests).
 
 ### Poller Implementation
 
@@ -230,7 +234,8 @@ The following areas of the codebase may need review for performance-critical use
    - Use `ERROR_ONCE()` or `WARNING_RATE_LIMIT()` to reduce I/O
 
 4. **JSON status generation** (`src/midirouter.cpp`, `src/dm_json_status.hpp`)
-   - `midirouter_t::status_rows()` builds typed `router_peer_row_t` vectors; serialization uses **dm-json** (`to_json` / generated code) on the control / WebSocket threads only (not hot path)
+   - `midirouter_t::status_rows()` enqueues a LOW-priority `query_t` on the router queue and blocks the caller on a `reply_channel_t` while the router thread builds the typed `router_peer_row_t` vector. Serialization (dm-json) then runs on the calling control/WebSocket thread, not the hot path.
+   - For each peer, `internal_latency_stats()` performs its own per-peer queue round-trip (LOW priority on the peer queue), so a status snapshot is `O(N peers)` queue hops. Acceptable for the control plane; not for the MIDI hot path.
 
 5. **ALSA sequencer output** (`src/local_alsa_peer.cpp`)
    - Uses one `snd_seq_drain_output()` per `send_midi()` batch (after all `snd_seq_event_output` calls) to reduce syscalls; may still block that peer’s thread only
@@ -251,13 +256,18 @@ The central hub that manages all peers and routes MIDI data between them.
 
 **Key methods:**
 ```cpp
+// All methods are thread-safe; internally they enqueue a router_command_t
+// onto the priority queue and (for read APIs) block on a reply_channel_t.
 peer_id_t add_peer(std::shared_ptr<midipeer_t> peer);
 void remove_peer(peer_id_t id);
 void connect(peer_id_t from, peer_id_t to);
 void disconnect(peer_id_t from, peer_id_t to);
-void send_midi(peer_id_t from, const mididata_t& data);
-std::vector<router_peer_row_t> status_rows(); // Typed status for control socket / WS
-// Thread-safe when router thread is running (used from peer / poller threads):
+void send_midi(peer_id_t from, const mididata_t& data);          // HIGH priority
+void send_midi(peer_id_t from, peer_id_t to, const mididata_t&); // HIGH priority
+std::vector<router_peer_row_t> status_rows() const;
+size_t peer_count() const;
+std::vector<peer_id_t> peer_ids() const;
+// Backwards-compatible aliases that simply call the methods above:
 bool enqueue_send_midi(peer_id_t from, const mididata_t& data);
 bool enqueue_connect(peer_id_t from, peer_id_t to);
 bool enqueue_disconnect(peer_id_t from, peer_id_t to);
@@ -275,13 +285,16 @@ Abstract base class for all MIDI peers. Each peer has:
 
 **Virtual interface:**
 ```cpp
-virtual void fill_peer_status_row(router_peer_row_t& row) = 0;      // Typed status fragment
-virtual void send_midi(midipeer_id_t from, const mididata_t&) = 0; // Receive MIDI
-virtual void event(midipeer_event_e event, midipeer_id_t from);    // Connection events
+virtual router_peer_row_t status() const = 0;                       // Typed status fragment
+virtual void send_midi(midipeer_id_t from, const mididata_t&) = 0;  // Receive MIDI (called from peer thread)
+virtual void event(midipeer_event_e event, midipeer_id_t from);     // Connection events
 virtual bool control_peer_command(std::string_view cmd, std::string_view params_json,
                                   dmjson::writer_t& out, std::string& err); // Control commands
-virtual const char* get_type() const = 0;                          // Type identifier string
+virtual const char* get_type() const = 0;                           // Type identifier string
+virtual void on_router_attached() {}                                // Hook after add_peer
 ```
+
+The base class also provides `internal_latency_stats()` (queue-based read), `enqueue_midi_packet()` (HIGH-priority enqueue from any thread), and `enqueue_to_router()` (forward outbound MIDI back to the router).
 
 **Events:**
 - `CONNECTED_ROUTER` / `DISCONNECTED_ROUTER`: Router-level connection changes
@@ -570,7 +583,7 @@ The control socket implementation is in `src/control_socket.cpp`:
 
 1. A **dedicated server thread** runs `poll()` on the listening Unix socket and all accepted client FDs (blocking I/O is OK here — it does not run on the epoll/MIDI poller thread).
 2. JSON commands are parsed and dispatched to the same handler table as before; `router.connect` / `router.disconnect` use `enqueue_*` so topology changes are serialized on the router thread.
-3. Responses are written on the control thread; `router->status_rows()` uses `shared_lock` on the peer map and is safe from that thread.
+3. Responses are written on the control thread; `router->status_rows()` enqueues a LOW-priority `query_t` onto the router queue and blocks on a `reply_channel_t` until the router thread services it — no shared lock required.
 
 ### Web UI (HTTP / WebSocket)
 
