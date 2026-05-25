@@ -20,19 +20,17 @@
 #include "dm_json_status.hpp"
 #include "midipeer.hpp"
 #include "router_command.hpp"
+#include "rtpmidid/blocking_priority_queue.hpp"
 #include "rtpmidid/iobytes.hpp"
-#include "rtpmidid/priority_mpsc_queue.hpp"
 #include "rtpmidid/reply_channel.hpp"
 #include "rtpmidid/signal.hpp"
 #include "rtpmidid/utils.hpp"
 #include <any>
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <set>
 #include <thread>
 #include <unordered_map>
@@ -149,16 +147,14 @@ private:
 
   // --- Threading / queue ---
 
-  rtpmidid::priority_mpsc_queue<router_command_t,
-                                /* HighSize  */ 4096,
-                                /* NormalSize*/ 256,
-                                /* LowSize   */ 64>
+  rtpmidid::blocking_priority_queue<router_command_t,
+                                    /* HighSize  */ 4096,
+                                    /* NormalSize*/ 256,
+                                    /* LowSize   */ 64>
       queue_;
 
   std::thread router_thread_;
   std::atomic<bool> router_running_{false};
-  std::condition_variable router_wakeup_;
-  std::mutex wakeup_mutex_;
 
   // --- Internal dispatch (one per variant alternative) ---
 

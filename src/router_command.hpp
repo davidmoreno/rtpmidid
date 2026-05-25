@@ -150,7 +150,7 @@ struct peer_connection_loop_t {
 // Lifecycle
 // ===========================================================================
 
-/** Wake the router loop so it observes `router_running == false`. */
+/** Tell the router thread to exit (handler flips `router_running_`). */
 struct shutdown_t {};
 
 } // namespace router_cmd

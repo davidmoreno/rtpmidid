@@ -13,6 +13,11 @@ target_link_libraries(test_poller rtpmidid-shared -pthread)
 target_link_libraries(test_poller ${FMT_LIBRARIES})
 add_test(NAME test_poller COMMAND test_poller)
 
+add_executable(test_blocking_priority_queue test_blocking_priority_queue.cpp)
+target_link_libraries(test_blocking_priority_queue rtpmidid-shared -pthread)
+target_link_libraries(test_blocking_priority_queue ${FMT_LIBRARIES})
+add_test(NAME test_blocking_priority_queue COMMAND test_blocking_priority_queue)
+
 
 add_executable(test_misc test_misc.cpp test_utils.cpp)
 target_link_libraries(test_misc rtpmidid-shared -pthread)

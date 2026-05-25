@@ -19,9 +19,9 @@
 
 #include "dm_json_status.hpp"
 #include "peer_command.hpp"
+#include "rtpmidid/blocking_priority_queue.hpp"
 #include "rtpmidid/formatterhelper.hpp"
 #include "rtpmidid/logger.hpp"
-#include "rtpmidid/priority_mpsc_queue.hpp"
 #include "rtpmidid/reply_channel.hpp"
 #include "rtpmidid/stats.hpp"
 #include "rtpmidid/threading_types.hpp"
@@ -29,11 +29,9 @@
 #include <rtpmidid/dm_json/runtime.hpp>
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <cstdint>
 #include <limits>
 #include <memory>
-#include <mutex>
 #include <string_view>
 #include <thread>
 
@@ -96,15 +94,13 @@ class midipeer_t : public std::enable_shared_from_this<midipeer_t> {
 protected:
   std::thread peer_thread_;
   std::atomic<bool> thread_running_{false};
-  mutable std::mutex thread_mutex_;
-  mutable std::condition_variable thread_wakeup_;
 
   static constexpr size_t HIGH_QUEUE_SIZE = 1024;
   static constexpr size_t NORMAL_QUEUE_SIZE = 64;
   static constexpr size_t LOW_QUEUE_SIZE = 16;
 
-  mutable rtpmidid::priority_mpsc_queue<peer_command_t, HIGH_QUEUE_SIZE,
-                                        NORMAL_QUEUE_SIZE, LOW_QUEUE_SIZE>
+  mutable rtpmidid::blocking_priority_queue<peer_command_t, HIGH_QUEUE_SIZE,
+                                            NORMAL_QUEUE_SIZE, LOW_QUEUE_SIZE>
       peer_queue_;
 
   void peer_thread_loop();

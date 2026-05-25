@@ -30,7 +30,7 @@ struct query_internal_latency_stats_t {
   rtpmidid::reply_slot_t reply;
 };
 
-/** Wake the loop so it observes `thread_running_ == false`. */
+/** Tell the peer thread to exit (handler flips `thread_running_`). */
 struct shutdown_t {};
 
 } // namespace peer_cmd

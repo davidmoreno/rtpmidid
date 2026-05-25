@@ -86,44 +86,37 @@ void midipeer_t::start_thread() {
 }
 
 void midipeer_t::stop_thread() {
-  if (!thread_running_.exchange(false)) {
+  if (!thread_running_.load()) {
     return;
   }
-  // Post a SHUTDOWN at NORMAL priority to wake the loop.
-  peer_queue_.enqueue(peer_command_t{peer_cmd::shutdown_t{}},
-                      rtpmidid::queue_priority_e::NORMAL);
-  thread_wakeup_.notify_all();
+  // Message-driven shutdown: handler flips thread_running_ on the peer
+  // thread; the loop then exits and drains. Falls back to direct flag
+  // flip + wake() only if the queue happens to be full.
+  if (!peer_queue_.enqueue(peer_command_t{peer_cmd::shutdown_t{}},
+                           rtpmidid::queue_priority_e::NORMAL)) {
+    thread_running_.store(false);
+    peer_queue_.wake();
+  }
   if (peer_thread_.joinable()) {
     peer_thread_.join();
   }
 }
 
 void midipeer_t::peer_thread_loop() {
-  using namespace std::chrono_literals;
   rtpmidid::block_shutdown_signals();
   g_current_peer_thread = this;
 
   try {
+    peer_command_t cmd;
     while (thread_running_.load()) {
-      bool processed = false;
-      peer_command_t cmd;
-      while (peer_queue_.dequeue(cmd)) {
-        processed = true;
+      if (peer_queue_.wait_dequeue(cmd))
         std::visit([this](auto &c) { this->handle(c); }, cmd);
-      }
-      if (!processed) {
-        std::unique_lock<std::mutex> lk(thread_mutex_);
-        thread_wakeup_.wait_for(lk, 10ms, [this] {
-          return !thread_running_.load() || !peer_queue_.empty();
-        });
-      }
+      // wait_dequeue returned false → heartbeat; re-check thread_running_
     }
 
     // Drain so reply channels never deadlock.
-    peer_command_t cmd;
-    while (peer_queue_.dequeue(cmd)) {
+    while (peer_queue_.try_dequeue(cmd))
       std::visit([this](auto &c) { this->handle(c); }, cmd);
-    }
   } catch (const std::exception &e) {
     ERROR("peer {}: exception in peer thread loop: {}", peer_id, e.what());
   } catch (...) {
@@ -156,7 +149,7 @@ void midipeer_t::handle(peer_cmd::query_internal_latency_stats_t &cmd) {
 }
 
 void midipeer_t::handle(peer_cmd::shutdown_t & /*cmd*/) {
-  // Just used as a wakeup; the loop checks thread_running_ each iteration.
+  thread_running_.store(false);
 }
 
 // ===========================================================================
@@ -203,7 +196,6 @@ bool midipeer_t::enqueue_midi_packet(const rtpmidid::midi_packet_t &packet) {
     WARNING_RATE_LIMIT(5, "peer {}: input queue full, dropping MIDI", peer_id);
     return false;
   }
-  thread_wakeup_.notify_one();
   return true;
 }
 
@@ -287,7 +279,6 @@ bool midipeer_t::request_internal_latency_stats(
                            rtpmidid::queue_priority_e::LOW)) {
     return false;
   }
-  thread_wakeup_.notify_one();
   return true;
 }
 

@@ -54,13 +54,11 @@ bool midirouter_t::sync_mode() const { return !router_running_.load(); }
 
 bool midirouter_t::enqueue(router_command_t &&cmd,
                            rtpmidid::queue_priority_e prio) {
-  const bool ok = queue_.enqueue(std::move(cmd), prio);
-  if (!ok) {
+  if (!queue_.enqueue(std::move(cmd), prio)) {
     WARNING("Router queue full, dropping command (priority={})",
             static_cast<int>(prio));
     return false;
   }
-  router_wakeup_.notify_one();
   return true;
 }
 
@@ -617,7 +615,7 @@ void midirouter_t::handle(router_cmd::peer_connection_loop_t &cmd) {
 }
 
 void midirouter_t::handle(router_cmd::shutdown_t & /*cmd*/) {
-  // Just used as a wakeup; the loop checks router_running_ each iteration.
+  router_running_.store(false);
 }
 
 // ===========================================================================
@@ -625,30 +623,19 @@ void midirouter_t::handle(router_cmd::shutdown_t & /*cmd*/) {
 // ===========================================================================
 
 void midirouter_t::router_thread_loop() {
-  using namespace std::chrono_literals;
   rtpmidid::block_shutdown_signals();
   g_current_router_thread = this;
 
+  router_command_t cmd;
   while (router_running_.load()) {
-    bool processed = false;
-    router_command_t cmd;
-    while (queue_.dequeue(cmd)) {
-      processed = true;
+    if (queue_.wait_dequeue(cmd))
       std::visit([this](auto &c) { this->handle(c); }, cmd);
-    }
-    if (!processed) {
-      std::unique_lock<std::mutex> lk(wakeup_mutex_);
-      router_wakeup_.wait_for(lk, 10ms, [this] {
-        return !router_running_.load() || !queue_.empty();
-      });
-    }
+    // wait_dequeue returned false → heartbeat timeout; re-check router_running_
   }
 
   // Drain remaining commands so reply channels never deadlock.
-  router_command_t cmd;
-  while (queue_.dequeue(cmd)) {
+  while (queue_.try_dequeue(cmd))
     std::visit([this](auto &c) { this->handle(c); }, cmd);
-  }
 
   g_current_router_thread = nullptr;
 }
@@ -660,18 +647,25 @@ void midirouter_t::start_router_thread() {
 }
 
 void midirouter_t::stop_router_thread() {
-  if (!router_running_.exchange(false))
+  if (!router_running_.load())
     return;
-  enqueue(router_command_t{router_cmd::shutdown_t{}},
-          rtpmidid::queue_priority_e::NORMAL);
-  router_wakeup_.notify_all();
+  // Message-driven shutdown: the handler flips router_running_ on the
+  // router thread, then the loop exits and drains. wake() is a safety
+  // net for the (rare) case where the queue is full and the enqueue
+  // fails — the consumer still re-checks router_running_ on its next
+  // heartbeat.
+  if (!enqueue(router_command_t{router_cmd::shutdown_t{}},
+               rtpmidid::queue_priority_e::NORMAL)) {
+    router_running_.store(false);
+    queue_.wake();
+  }
   if (router_thread_.joinable())
     router_thread_.join();
 }
 
 void midirouter_t::drain_for_tests() {
   router_command_t cmd;
-  while (queue_.dequeue(cmd)) {
+  while (queue_.try_dequeue(cmd)) {
     std::visit([this](auto &c) { this->handle(c); }, cmd);
   }
 }
