@@ -12,6 +12,8 @@ type Props = {
   alsaSeq: MidiAlsaSeqEntry[];
   rawmidi: MidiRawmidiEntry[];
   alsaSubs: unknown[];
+  /** Endpoint id to scroll into view + highlight (driven by Connections click). */
+  highlightEndpointId?: string | null;
   rpc: RpcClient;
   onAfterAction: () => Promise<void> | void;
   onStatus: (msg: string) => void;
@@ -25,6 +27,7 @@ export function DevicesTab({
   alsaSeq,
   rawmidi,
   alsaSubs,
+  highlightEndpointId,
   rpc,
   onAfterAction,
   onStatus,
@@ -41,6 +44,7 @@ export function DevicesTab({
         alsaSeq={alsaSeq}
         rawmidi={rawmidi}
         alsaSubs={alsaSubs}
+        highlightEndpointId={highlightEndpointId}
         rpc={rpc}
         onAfterAction={onAfterAction}
         onStatus={onStatus}

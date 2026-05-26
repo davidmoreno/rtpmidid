@@ -90,6 +90,10 @@ struct alsa_subscription_row_t {
   int32_t to_port;
   std::string from_label;
   std::string to_label;
+  std::string from_client_name;
+  std::string from_port_name;
+  std::string to_client_name;
+  std::string to_port_name;
 };
 
 // [dm-json]

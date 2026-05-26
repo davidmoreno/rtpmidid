@@ -729,24 +729,34 @@ std::vector<alsa_subscription_row_t> aseq_t::enumerate_subscriptions() {
   std::vector<alsa_subscription_row_t> out;
   std::unordered_set<std::string> seen;
 
-  auto portLabel = [this](const snd_seq_addr_t &addr) -> std::string {
+  // Resolves an ALSA address to (client_name, port_name) plus a pretty label.
+  // The names are exposed separately so the UI can build stable ids like
+  // `alsa:<client_name>:<port_name>` without re-querying the daemon.
+  struct port_names_t {
+    std::string client_name;
+    std::string port_name;
+    std::string label;
+  };
+  auto portNames = [this](const snd_seq_addr_t &addr) -> port_names_t {
     snd_seq_client_info_t *client_info = nullptr;
     snd_seq_port_info_t *port_info = nullptr;
     snd_seq_client_info_malloc(&client_info);
     snd_seq_port_info_malloc(&port_info);
-    std::string label;
+    port_names_t out;
     if (snd_seq_get_any_client_info(seq, addr.client, client_info) >= 0 &&
         snd_seq_get_any_port_info(seq, addr.client, addr.port, port_info) >= 0) {
       const char *cn = snd_seq_client_info_get_name(client_info);
       const char *pn = snd_seq_port_info_get_name(port_info);
-      label = FMT::format("{}:{} · {} / {}", addr.client, addr.port,
-                          cn ? cn : "?", pn ? pn : "?");
+      out.client_name = cn ? cn : "";
+      out.port_name = pn ? pn : "";
+      out.label = FMT::format("{}:{} · {} / {}", addr.client, addr.port,
+                              cn ? cn : "?", pn ? pn : "?");
     } else {
-      label = FMT::format("{}:{}", addr.client, addr.port);
+      out.label = FMT::format("{}:{}", addr.client, addr.port);
     }
     snd_seq_client_info_free(client_info);
     snd_seq_port_info_free(port_info);
-    return label;
+    return out;
   };
 
   snd_seq_client_info_t *cinfo = nullptr;
@@ -802,8 +812,14 @@ std::vector<alsa_subscription_row_t> aseq_t::enumerate_subscriptions() {
           row.from_port = rt->port;
           row.to_client = addr->client;
           row.to_port = addr->port;
-          row.from_label = portLabel(*rt);
-          row.to_label = portLabel(*addr);
+          const auto from_names = portNames(*rt);
+          const auto to_names = portNames(*addr);
+          row.from_label = from_names.label;
+          row.to_label = to_names.label;
+          row.from_client_name = from_names.client_name;
+          row.from_port_name = from_names.port_name;
+          row.to_client_name = to_names.client_name;
+          row.to_port_name = to_names.port_name;
           out.push_back(std::move(row));
           snd_seq_query_subscribe_set_index(
               subs, snd_seq_query_subscribe_get_index(subs) + 1);

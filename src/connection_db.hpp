@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include "aseq.hpp"
 #include "dm_json_status.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
@@ -87,6 +88,9 @@ public:
   ~connection_db_manager_t() = default;
 
   void attach();
+  /** Wire ALSA-side auto-reconnect: aconnect saved pure-ALSA pairs when both
+   *  ports are available. Hooks aseq->added_port_announcement. */
+  void attach_aseq(std::shared_ptr<aseq_t> aseq);
   void check_reconnects_for_all();
 
   connection_db_t &database() { return *db_; }
@@ -99,12 +103,16 @@ public:
 private:
   std::shared_ptr<midirouter_t> router_;
   std::unique_ptr<connection_db_t> db_;
+  std::shared_ptr<aseq_t> aseq_;
   std::mutex state_mutex_;
 
   rtpmidid::connection_t<peer_id_t, peer_id_t> connected_connection_;
   rtpmidid::connection_t<peer_id_t, peer_id_t> disconnected_connection_;
   rtpmidid::connection_t<peer_id_t> peer_added_connection_;
   rtpmidid::connection_t<peer_id_t, midipeer_event_e> peer_event_connection_;
+  rtpmidid::connection_t<const std::string &, aseq_t::client_type_e,
+                         const aseq_t::port_t &>
+      aseq_port_added_connection_;
 
   struct pending_pair_t {
     peer_id_t a = 0;
@@ -118,6 +126,9 @@ private:
   void try_record_pair(peer_id_t a, peer_id_t b);
   void try_finalize_pending_for(peer_id_t peer_id);
   void try_auto_connect_peer(peer_id_t peer_id);
+  /** Sweep all saved pairs and aconnect any pure-ALSA pair whose both ports
+   *  are now present (no-op otherwise). */
+  void try_auto_aconnect_all_alsa_pairs();
 
   void on_connected(peer_id_t from, peer_id_t to);
   void on_disconnected(peer_id_t from, peer_id_t to);

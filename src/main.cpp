@@ -156,6 +156,7 @@ public:
         connection_db = std::make_shared<rtpmididns::connection_db_manager_t>(
             router, std::move(db));
         connection_db->attach();
+        connection_db->attach_aseq(aseq);
         control.connection_db = connection_db;
       }
     }

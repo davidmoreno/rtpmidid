@@ -80,12 +80,19 @@ export function App() {
     if (h === "peer_cards") h = "devices";
     return h || "devices";
   });
-  const [highlightPeerId, setHighlightPeerId] = useState<number | null>(null);
+  /* Kept null - the Connections page now opens the Devices tab instead of
+     Peers, so there's no caller that highlights a router peer. The PeersTab
+     prop is left in place because the table component still consumes it. */
+  const [highlightPeerId] = useState<number | null>(null);
   const highlightClearTimer = useRef<number | undefined>(undefined);
   const [highlightConnectionRowId, setHighlightConnectionRowId] = useState<
     string | null
   >(null);
   const connectionHighlightClearTimer = useRef<number | undefined>(undefined);
+  const [highlightEndpointId, setHighlightEndpointId] = useState<string | null>(
+    null,
+  );
+  const endpointHighlightClearTimer = useRef<number | undefined>(undefined);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [alsaSeq, setAlsaSeq] = useState<MidiAlsaSeqEntry[]>([]);
   const [rawmidi, setRawmidi] = useState<MidiRawmidiEntry[]>([]);
@@ -149,15 +156,17 @@ export function App() {
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
 
-  const onSelectPeerFromConnections = useCallback((id: number) => {
-    setTab("peers");
-    setHighlightPeerId(id);
-    if (highlightClearTimer.current !== undefined) {
-      window.clearTimeout(highlightClearTimer.current);
+  /* Jump to Devices and pulse the matching card. The endpoint id format
+     matches the endpoint cards in PeersCards (alsa:c:p / peer:N / mdns:Name::Port). */
+  const onOpenEndpointInDevices = useCallback((endpointId: string) => {
+    setTab("devices");
+    setHighlightEndpointId(endpointId);
+    if (endpointHighlightClearTimer.current !== undefined) {
+      window.clearTimeout(endpointHighlightClearTimer.current);
     }
-    highlightClearTimer.current = window.setTimeout(() => {
-      setHighlightPeerId(null);
-      highlightClearTimer.current = undefined;
+    endpointHighlightClearTimer.current = window.setTimeout(() => {
+      setHighlightEndpointId(null);
+      endpointHighlightClearTimer.current = undefined;
     }, 3000);
   }, []);
 
@@ -168,6 +177,9 @@ export function App() {
       }
       if (connectionHighlightClearTimer.current !== undefined) {
         window.clearTimeout(connectionHighlightClearTimer.current);
+      }
+      if (endpointHighlightClearTimer.current !== undefined) {
+        window.clearTimeout(endpointHighlightClearTimer.current);
       }
     },
     [],
@@ -367,6 +379,7 @@ export function App() {
           alsaSeq={alsaSeq}
           rawmidi={rawmidi}
           alsaSubs={alsaSubs}
+          highlightEndpointId={highlightEndpointId}
           rpc={rpc}
           onAfterAction={refresh}
           onStatus={setStatus}
@@ -382,9 +395,10 @@ export function App() {
           lastRefresh={lastRefresh}
           liveConnections={connections}
           savedConnections={savedConnections}
+          alsaSubs={alsaSubs}
           dbEnabled={connectionsDbEnabled}
           highlightConnectionRowId={highlightConnectionRowId}
-          onSelectPeer={onSelectPeerFromConnections}
+          onOpenInDevices={onOpenEndpointInDevices}
           rpc={rpc}
           peers={peers}
           mdnsRemotes={mdnsParsed.remotes}

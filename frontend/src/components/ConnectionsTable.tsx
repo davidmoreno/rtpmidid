@@ -1,42 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { ConnectionRow } from "../model";
+import type { ConnectionEndpointRef, ConnectionRow } from "../model";
 import {
   connectionCombinedLatencyMs,
   ConnectionLatencyHoverCell,
 } from "./LatencyBar";
 
 type SortKey =
-  | "kind"
-  | "dir"
-  | "n"
+  | "type"
+  | "from"
   | "traffic"
-  | "lat"
-  | "summary";
+  | "lat";
 
 type Snap = {
-  traffic: number;
   recvSum: number;
   sentSum: number;
-  lat?: number;
-  intUntil?: number;
-  intSend?: number;
-  rtpLast?: number;
-  rtpAvg?: number;
 };
 
 function snapRow(r: ConnectionRow): Snap {
   return {
-    traffic: r.trafficTotal,
     recvSum: r.recvSum,
     sentSum: r.sentSum,
-    lat: connectionCombinedLatencyMs(r) ?? undefined,
-    intUntil: r.intUntilMax,
-    intSend: r.intSendMax,
-    rtpLast: r.rtpLastMax,
-    rtpAvg: r.rtpAvgMax,
   };
 }
-
 
 function sortConnections(
   rows: ConnectionRow[],
@@ -48,18 +33,14 @@ function sortConnections(
     v === undefined || Number.isNaN(v) ? -1 : v;
   const val = (r: ConnectionRow): number | string => {
     switch (key) {
-      case "kind":
-        return r.kindLabel.toLowerCase();
-      case "dir":
-        return r.direction;
-      case "n":
-        return r.nParticipants;
+      case "type":
+        return r.type;
+      case "from":
+        return (r.from.label || "").toLowerCase();
       case "traffic":
         return r.trafficTotal;
       case "lat":
         return numOr(connectionCombinedLatencyMs(r) ?? undefined);
-      case "summary":
-        return r.summary.toLowerCase();
       default:
         return 0;
     }
@@ -68,11 +49,15 @@ function sortConnections(
     const va = val(a);
     const vb = val(b);
     if (typeof va === "string" && typeof vb === "string") {
-      return va < vb ? -dir : va > vb ? dir : 0;
+      const c = va < vb ? -dir : va > vb ? dir : 0;
+      if (c !== 0) return c;
+      /* Stable secondary sort by id keeps row order deterministic between polls. */
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     }
     const na = Number(va);
     const nb = Number(vb);
-    return na < nb ? -dir : na > nb ? dir : 0;
+    if (na !== nb) return na < nb ? -dir : dir;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 }
 
@@ -116,13 +101,13 @@ function DirectionCircles({
       aria-label={`Packet direction indicators for connection ${rowId}`}
     >
       <span
-        title="Inbound: packets_recv increased since previous poll (stays lit each poll while increasing)"
+        title="Inbound: packets_recv increased recently (stays lit for one refresh interval)"
         class={`ui-io flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold leading-none ease-out transition-[background-color,border-color,color,box-shadow] duration-[500ms] ${recvActive ? "ui-io-in-on" : ""}`}
       >
         ←
       </span>
       <span
-        title="Outbound: packets_sent increased since previous poll (stays lit each poll while increasing)"
+        title="Outbound: packets_sent increased recently (stays lit for one refresh interval)"
         class={`ui-io flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold leading-none ease-out transition-[background-color,border-color,color,box-shadow] duration-[500ms] ${sentActive ? "ui-io-out-on" : ""}`}
       >
         →
@@ -131,26 +116,217 @@ function DirectionCircles({
   );
 }
 
+function TypeBadge({ type }: { type: ConnectionRow["type"] }) {
+  const isAlsa = type === "alsaseq";
+  return (
+    <span
+      class={`inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-wide ${
+        isAlsa
+          ? "ui-badge-local border-[color:var(--color-badge-local-border)]"
+          : "ui-badge-remote border-[color:var(--color-badge-remote-border)]"
+      }`}
+      title={
+        isAlsa
+          ? "Pure ALSA-seq aconnect subscription (not routed through midirouter)"
+          : "midirouter edge (routed in-process between peers)"
+      }
+    >
+      {isAlsa ? "ALSASEQ" : "MIDIROUTER"}
+    </span>
+  );
+}
+
+function EndpointPill({
+  side,
+  onOpen,
+}: {
+  side: ConnectionEndpointRef;
+  onOpen?: (endpointId: string) => void;
+}) {
+  const peerTag =
+    side.peerId !== undefined && side.peerId !== 0 ? `#${side.peerId}` : "";
+  const inner = (
+    <>
+      <span class="truncate font-mono text-[12px] font-bold ui-text">
+        {side.label || "—"}
+      </span>
+      {peerTag ? (
+        <span class="ui-pill-id ml-1 shrink-0 text-[9px]">{peerTag}</span>
+      ) : null}
+    </>
+  );
+  const baseCls =
+    "inline-flex max-w-full items-center gap-1 truncate rounded border-2 px-1.5 py-0.5";
+  if (side.unavailable || !onOpen) {
+    return (
+      <span
+        class={`${baseCls} border-[color:var(--color-border)] opacity-75`}
+        title={
+          side.unavailable
+            ? "Endpoint not present right now"
+            : "Endpoint cannot be focused"
+        }
+      >
+        {inner}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      class={`${baseCls} ui-chip-link border-[color:var(--color-border)] hover:bg-[color:var(--color-surface-elevated)]`}
+      title={`Open in Devices: ${side.endpointId}`}
+      onClick={() => onOpen(side.endpointId)}
+    >
+      {inner}
+    </button>
+  );
+}
+
+function ConnectionCell({
+  row,
+  onOpen,
+}: {
+  row: ConnectionRow;
+  onOpen?: (endpointId: string) => void;
+}) {
+  const arrow = row.bidirectional ? "↔" : "→";
+  return (
+    <div class="flex w-full min-w-0 items-center gap-2">
+      <div class="min-w-0 flex-1">
+        <EndpointPill side={row.from} onOpen={onOpen} />
+      </div>
+      <span
+        class="shrink-0 font-mono text-base font-black ui-text"
+        title={row.bidirectional ? "Bidirectional" : "One-way"}
+      >
+        {arrow}
+      </span>
+      <div class="min-w-0 flex-1">
+        <EndpointPill side={row.to} onOpen={onOpen} />
+      </div>
+    </div>
+  );
+}
+
+/** Star button matching the favourites pattern used in PeersCards:
+ *  ★ (highlighted) = saved, click to remove;
+ *  ☆ (outline)    = not saved, click to add;
+ *  ☆ (dimmed)     = cannot be saved (tooltip explains why).
+ */
+function DbStarCell({
+  row,
+  dbEnabled,
+  onAdd,
+  onRemove,
+}: {
+  row: ConnectionRow;
+  dbEnabled: boolean;
+  onAdd?: (row: ConnectionRow) => void;
+  onRemove?: (row: ConnectionRow) => void;
+}) {
+  if (!dbEnabled) return <td class="px-2 py-1.5 align-middle"></td>;
+
+  const saved =
+    !!row.canRemoveFromDb &&
+    !!row.persistedSideA &&
+    !!row.persistedSideB &&
+    !!onRemove;
+  const canAdd = !saved && !!row.canAddToDb && !!onAdd;
+  const disabled = !saved && !canAdd;
+
+  const btnCls =
+    "flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-mono text-xl leading-none outline-none transition-all duration-200 ease-out focus-visible:ring-2 focus-visible:ring-[color:var(--color-ring-highlight)]";
+
+  if (disabled) {
+    return (
+      <td class="px-2 py-1.5 align-middle">
+        <span
+          class={`${btnCls} cursor-not-allowed ui-text-subtle opacity-50`}
+          title={
+            row.cannotSaveReason ??
+            "This connection cannot be saved (no stable identity)."
+          }
+          aria-label="Not saveable"
+          aria-disabled
+        >
+          ☆
+        </span>
+      </td>
+    );
+  }
+
+  const handler = saved
+    ? () => onRemove!(row)
+    : () => onAdd!(row);
+  const title = saved
+    ? "Remove from saved connections"
+    : "Save this connection to the database";
+  const aria = saved
+    ? "Remove from saved connections"
+    : "Save this connection to the database";
+
+  return (
+    <td class="px-2 py-1.5 align-middle">
+      <button
+        type="button"
+        class={`${btnCls} cursor-pointer ui-text-muted hover:scale-110 hover:bg-[color:var(--color-surface-2)] hover:text-[color:var(--color-ring-highlight)] hover:shadow-[0_0_0_1px_color-mix(in_srgb,var(--color-ring-highlight)_35%,transparent)] active:scale-95`}
+        aria-label={aria}
+        aria-pressed={saved}
+        title={title}
+        onClick={(ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          handler();
+        }}
+      >
+        {saved ? (
+          <span
+            class="text-[color:var(--color-ring-highlight)] drop-shadow-[0_1px_3px_color-mix(in_srgb,var(--color-ring-highlight)_45%,transparent)]"
+            aria-hidden
+          >
+            ★
+          </span>
+        ) : (
+          <span aria-hidden>☆</span>
+        )}
+      </button>
+    </td>
+  );
+}
+
 type Props = {
   rows: ConnectionRow[];
   /** Pulse ring + scroll after mDNS Connect (matches `ConnectionRow.id`). */
   highlightConnectionRowId?: string | null;
-  onSelectPeer?: (id: number) => void;
+  /** Navigate to Devices tab and highlight a card by endpoint id (alsa:c:p / peer:N / mdns:...). */
+  onOpenInDevices?: (endpointId: string) => void;
   dbEnabled?: boolean;
-  onRemoveSaved?: (sideA: string, sideB: string) => void;
+  /** Save this connection in the SQLite db. */
+  onAddToDb?: (row: ConnectionRow) => void;
+  /** Remove this connection from the SQLite db (uses persistedSideA/B). */
+  onRemoveFromDb?: (row: ConnectionRow) => void;
+  /** Status refresh interval (ms); controls how long the I/O highlight stays lit. */
+  refreshIntervalMs: number;
 };
 
 export function ConnectionsTable({
   rows,
   highlightConnectionRowId,
-  onSelectPeer,
+  onOpenInDevices,
   dbEnabled = false,
-  onRemoveSaved,
+  onAddToDb,
+  onRemoveFromDb,
+  refreshIntervalMs,
 }: Props) {
-  const [sortKey, setSortKey] = useState<SortKey>("traffic");
-  const [sortAsc, setSortAsc] = useState(false);
-  const [recvPulse, setRecvPulse] = useState<Set<string>>(() => new Set());
-  const [sentPulse, setSentPulse] = useState<Set<string>>(() => new Set());
+  const [sortKey, setSortKey] = useState<SortKey>("from");
+  const [sortAsc, setSortAsc] = useState(true);
+  const [, setTick] = useState(0);
+  /* expireAt timestamps (performance.now() + refreshIntervalMs) so a single
+     increase keeps the I/O circle lit for one full refresh interval - much
+     more readable than the previous "lit only between consecutive polls". */
+  const recvLitUntilRef = useRef<Map<string, number>>(new Map());
+  const sentLitUntilRef = useRef<Map<string, number>>(new Map());
   const prevMapRef = useRef<Map<string, Snap> | null>(null);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
@@ -169,43 +345,87 @@ export function ConnectionsTable({
     el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [highlightConnectionRowId, sorted]);
 
+  /* Update the pulse-expire maps when a new snapshot arrives. We don't depend
+     on the previous snapshot resampling the same row to keep it lit - the
+     lit window is anchored to the most recent observed increase. */
   useEffect(() => {
-    const nextMap = new Map<string, Snap>();
-    for (const r of rows) nextMap.set(r.id, snapRow(r));
-
+    const nextSnap = new Map<string, Snap>();
+    for (const r of rows) nextSnap.set(r.id, snapRow(r));
     const prev = prevMapRef.current;
-    prevMapRef.current = nextMap;
-
+    prevMapRef.current = nextSnap;
     if (!prev) return;
-
-    const nextRecvPulse = new Set<string>();
-    const nextSentPulse = new Set<string>();
-
+    const now = performance.now();
+    const litWindow = Math.max(250, refreshIntervalMs);
+    let changed = false;
     for (const r of rows) {
       const cur = snapRow(r);
       const was = prev.get(r.id);
       if (!was) continue;
-      if (cur.recvSum > was.recvSum) nextRecvPulse.add(r.id);
-      if (cur.sentSum > was.sentSum) nextSentPulse.add(r.id);
+      if (cur.recvSum > was.recvSum) {
+        recvLitUntilRef.current.set(r.id, now + litWindow);
+        changed = true;
+      }
+      if (cur.sentSum > was.sentSum) {
+        sentLitUntilRef.current.set(r.id, now + litWindow);
+        changed = true;
+      }
     }
+    if (changed) setTick((t) => t + 1);
+  }, [rows, refreshIntervalMs]);
 
-    setRecvPulse(nextRecvPulse);
-    setSentPulse(nextSentPulse);
-  }, [rows]);
+  /* Ticker drops expired entries so the circle visibly clears even when the
+     server has nothing new to send for a while. */
+  useEffect(() => {
+    let stopped = false;
+    const tickInterval = Math.max(150, Math.floor(refreshIntervalMs / 4));
+    const handle = window.setInterval(() => {
+      if (stopped) return;
+      const now = performance.now();
+      let changed = false;
+      for (const [k, t] of Array.from(recvLitUntilRef.current.entries())) {
+        if (t <= now) {
+          recvLitUntilRef.current.delete(k);
+          changed = true;
+        }
+      }
+      for (const [k, t] of Array.from(sentLitUntilRef.current.entries())) {
+        if (t <= now) {
+          sentLitUntilRef.current.delete(k);
+          changed = true;
+        }
+      }
+      if (changed) setTick((x) => x + 1);
+    }, tickInterval);
+    return () => {
+      stopped = true;
+      window.clearInterval(handle);
+    };
+  }, [refreshIntervalMs]);
 
   const toggle = (k: SortKey) => {
     if (sortKey === k) setSortAsc(!sortAsc);
     else {
       setSortKey(k);
-      setSortAsc(k === "kind" || k === "summary" || k === "dir");
+      /* Text columns default ascending, numeric default descending. */
+      setSortAsc(k === "type" || k === "from");
     }
   };
+
+  const now = performance.now();
 
   return (
     <div class="ui-table-shell overflow-y-visible">
       <table class="ui-table min-w-[52rem] text-left">
         <thead>
           <tr>
+            {dbEnabled ? (
+              <th
+                class="ui-th-sort w-10 text-left font-mono text-xs font-bold uppercase"
+                title="Save connections to the database (★ = saved, ☆ = save, dim ☆ = cannot save)"
+              >
+                ★
+              </th>
+            ) : null}
             <th class="ui-th-sort text-left font-mono text-xs font-bold uppercase">
               #
             </th>
@@ -213,32 +433,17 @@ export function ConnectionsTable({
               I/O
             </th>
             <Th
-              label="Kind"
-              active={sortKey === "kind"}
+              label="Type"
+              active={sortKey === "type"}
               asc={sortAsc}
-              onClick={() => toggle("kind")}
+              onClick={() => toggle("type")}
             />
             <Th
-              label="Dir"
-              active={sortKey === "dir"}
+              label="Connection"
+              active={sortKey === "from"}
               asc={sortAsc}
-              onClick={() => toggle("dir")}
+              onClick={() => toggle("from")}
             />
-            <Th
-              label="#P"
-              active={sortKey === "n"}
-              asc={sortAsc}
-              onClick={() => toggle("n")}
-            />
-            <Th
-              label="Summary"
-              active={sortKey === "summary"}
-              asc={sortAsc}
-              onClick={() => toggle("summary")}
-            />
-            <th class="ui-th-sort font-mono text-xs font-bold uppercase">
-              Participants
-            </th>
             <Th
               label="Traffic Σ"
               active={sortKey === "traffic"}
@@ -251,123 +456,64 @@ export function ConnectionsTable({
               asc={sortAsc}
               onClick={() => toggle("lat")}
             />
-            {dbEnabled ? (
-              <th class="ui-th-sort w-12 font-mono text-xs font-bold uppercase">
-                DB
-              </th>
-            ) : null}
           </tr>
         </thead>
         <tbody>
-          {sorted.map((r, idx) => (
-            <tr
-              key={r.id}
-              ref={(el) => {
-                if (el) rowRefs.current.set(r.id, el);
-                else rowRefs.current.delete(r.id);
-              }}
-              class={`ui-tr-zebra ${highlightConnectionRowId === r.id ? "ui-tr-highlight" : ""
-                }`}
-            >
-              <td class="px-2 py-1.5 font-mono text-sm font-bold tabular-nums ui-text">
-                {idx + 1}
-              </td>
-              <td class="px-1 py-1 align-middle">
-                <DirectionCircles
-                  rowId={r.id}
-                  recvActive={recvPulse.has(r.id)}
-                  sentActive={sentPulse.has(r.id)}
+          {sorted.map((r, idx) => {
+            const recvLit = (recvLitUntilRef.current.get(r.id) ?? 0) > now;
+            const sentLit = (sentLitUntilRef.current.get(r.id) ?? 0) > now;
+            return (
+              <tr
+                key={r.id}
+                ref={(el) => {
+                  if (el) rowRefs.current.set(r.id, el);
+                  else rowRefs.current.delete(r.id);
+                }}
+                class={`ui-tr-zebra ${highlightConnectionRowId === r.id ? "ui-tr-highlight" : ""}`}
+              >
+                <DbStarCell
+                  row={r}
+                  dbEnabled={dbEnabled}
+                  onAdd={onAddToDb}
+                  onRemove={onRemoveFromDb}
                 />
-              </td>
-              <td class="whitespace-nowrap px-2 py-1.5 font-mono text-xs">
-                {r.kindLabel}
-                {r.persisted ? (
-                  <span
-                    class="ml-1 rounded px-1 py-0.5 text-[9px] font-black uppercase ui-text-subtle"
-                    title="Stored in connection database"
-                  >
-                    saved
-                  </span>
-                ) : null}
-              </td>
-              <td class="whitespace-nowrap px-2 py-1.5 font-mono text-sm font-bold">
-                {r.direction}
-              </td>
-              <td class="px-2 py-1.5 font-mono text-sm tabular-nums">
-                {r.nParticipants}
-              </td>
-              <td class="max-w-[14rem] truncate px-2 py-1.5 font-mono text-xs">
-                {r.summary}
-              </td>
-              <td class="max-w-[28rem] px-2 py-1.5 font-mono text-[11px] leading-snug ui-text">
-                <span class="inline-flex flex-wrap items-center gap-1">
-                  {r.participantPeers.map((pp, i) => (
-                    <span
-                      key={`${pp.id}-${pp.name}-${i}`}
-                      class="inline-flex items-center gap-1"
-                    >
-                      {i > 0 ? <span class="ui-text-subtle">·</span> : null}
-                      {pp.unavailable || pp.id === 0 ? (
-                        <span
-                          class="font-mono text-[11px] ui-text-subtle opacity-60"
-                          title="Endpoint not available right now"
-                        >
-                          {pp.name}
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          class="ui-chip-link font-mono text-[11px]"
-                          onClick={() => onSelectPeer?.(pp.id)}
-                        >
-                          #{pp.id} {pp.name}
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                  {r.participantNote && (
-                    <span class="ui-text-muted">
-                      {r.participantNote}
-                    </span>
-                  )}
-                </span>
-              </td>
-              <td class="px-2 py-1.5 font-mono text-sm font-semibold tabular-nums">
-                {r.trafficTotal}
-              </td>
-              <td class="relative min-w-[10rem] overflow-visible px-1 py-1 align-top">
-                <ConnectionLatencyHoverCell row={r} />
-              </td>
-              {dbEnabled ? (
-                <td class="px-2 py-1.5 align-top">
-                  {r.canRemoveFromDb &&
-                  r.persistedSideA &&
-                  r.persistedSideB &&
-                  onRemoveSaved ? (
-                    <button
-                      type="button"
-                      class="flex h-7 w-7 items-center justify-center rounded-full border-2 border-[color:var(--color-border)] font-mono text-sm font-bold ui-text hover:bg-[color:var(--color-surface-elevated)]"
-                      title="Remove from saved connections"
-                      onClick={() =>
-                        onRemoveSaved(r.persistedSideA!, r.persistedSideB!)
-                      }
-                    >
-                      −
-                    </button>
-                  ) : null}
+                <td class="px-2 py-1.5 font-mono text-sm font-bold tabular-nums ui-text">
+                  {idx + 1}
                 </td>
-              ) : null}
-            </tr>
-          ))}
+                <td class="px-1 py-1 align-middle">
+                  <DirectionCircles
+                    rowId={r.id}
+                    recvActive={recvLit}
+                    sentActive={sentLit}
+                  />
+                </td>
+                <td class="whitespace-nowrap px-2 py-1.5 align-middle">
+                  <TypeBadge type={r.type} />
+                </td>
+                <td class="max-w-[40rem] px-2 py-1.5 align-middle">
+                  <ConnectionCell row={r} onOpen={onOpenInDevices} />
+                </td>
+                <td class="px-2 py-1.5 font-mono text-sm font-semibold tabular-nums">
+                  {r.trafficTotal}
+                </td>
+                <td class="relative min-w-[10rem] overflow-visible px-1 py-1 align-top">
+                  <ConnectionLatencyHoverCell row={r} />
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       <p class="mt-2 font-mono text-[10px] ui-text-subtle">
-        # = row order in this table. I/O: ← green / → orange mean recv or sent totals
-        increased vs the previous poll; they clear on the next poll if there was no
-        increase (header selector sets poll rate). Opposite router edges A→B
-        and B→A are merged (Dir <span class="font-bold">↔</span>, one row).
-        Router Traffic Σ = sum of packets_sent. RTP: recv/sent on that
-        peer. Click a peer chip to open Peers and highlight it.
+        <span class="font-bold">★</span> = saved in DB (click to remove),
+        <span class="font-bold"> ☆</span> = click to save,
+        <span class="font-bold"> dim ☆</span> = cannot be saved (hover for
+        reason). # = row order in this table. I/O: ← / → stay lit for one
+        full refresh interval after the corresponding packet counter
+        increases. Type: <span class="font-bold">MIDIROUTER</span> = router
+        edge, <span class="font-bold">ALSASEQ</span> = pure aconnect link.
+        Bidi rows merge A→B and B→A. Click an endpoint to open the matching
+        card on the Devices tab.
       </p>
     </div>
   );

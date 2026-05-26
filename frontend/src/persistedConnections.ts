@@ -1,4 +1,9 @@
-import type { ConnectionParticipant, ConnectionRow, RouterPeer } from "./model";
+import type {
+  ConnectionEndpointRef,
+  ConnectionParticipant,
+  ConnectionRow,
+  RouterPeer,
+} from "./model";
 import { formatStableIdLabel } from "./persistedConnectionsFormat";
 
 export type { formatStableIdLabel } from "./persistedConnectionsFormat";
@@ -84,11 +89,26 @@ function participantForSide(
 }
 
 function savedMatchesLiveRow(row: ConnectionRow, saved: PersistedConnectionRow): boolean {
+  /* Router rows: match by router peer ids when both sides resolve to a peer. */
   const pa = saved.peer_a;
   const pb = saved.peer_b;
-  if (pa === undefined || pb === undefined) return false;
-  const ids = row.participantRouterIds;
-  return ids.includes(pa) && ids.includes(pb);
+  if (pa !== undefined && pb !== undefined) {
+    const ids = row.participantRouterIds;
+    if (ids.includes(pa) && ids.includes(pb)) return true;
+  }
+  /* Stable-id match: covers alsaseq rows (no router peer) and router rows
+     whose live peers also expose a stable id. The db stores unordered pairs. */
+  const fromStable = row.from.stableId;
+  const toStable = row.to.stableId;
+  if (fromStable && toStable) {
+    if (
+      (fromStable === saved.side_a && toStable === saved.side_b) ||
+      (fromStable === saved.side_b && toStable === saved.side_a)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function annotateLiveParticipants(
@@ -132,12 +152,39 @@ function buildSavedOnlyRow(
   const routerIds = [saved.peer_a, saved.peer_b].filter(
     (x): x is number => x !== undefined && Number.isFinite(x),
   );
+  const sideRef = (
+    stable: string,
+    peerId: number | undefined,
+    active: boolean | undefined,
+    label: string,
+  ): ConnectionEndpointRef => ({
+    endpointId:
+      active && peerId !== undefined && Number.isFinite(peerId)
+        ? `peer:${peerId}`
+        : stable,
+    label,
+    peerId:
+      active && peerId !== undefined && Number.isFinite(peerId)
+        ? peerId
+        : undefined,
+    stableId: stable,
+    unavailable: !active,
+  });
+  /* "midirouter" vs "alsaseq" classification: every alsa stable id starts with
+     `alsa:` (escape rules of compute_stable_id), so a pair where BOTH sides
+     are alsa stable ids is a pure aconnect pair. Any other combination came
+     from the router on a previous run, so render it as midirouter. */
+  const isAlsa = saved.side_a.startsWith("alsa:") &&
+                 saved.side_b.startsWith("alsa:");
   return {
     id: `saved:${saved.side_a}:${saved.side_b}`,
     kind: "router",
+    type: isAlsa ? "alsaseq" : "midirouter",
     kindLabel: "Saved",
     summary: `${labelA} ↔ ${labelB}`,
     direction: "↔",
+    from: sideRef(saved.side_a, saved.peer_a, saved.active_a, labelA),
+    to: sideRef(saved.side_b, saved.peer_b, saved.active_b, labelB),
     participantPeers: parts,
     participantRouterIds: routerIds,
     nParticipants: 2,
@@ -149,6 +196,44 @@ function buildSavedOnlyRow(
     canRemoveFromDb: true,
     persistedSideA: saved.side_a,
     persistedSideB: saved.side_b,
+  };
+}
+
+function classifyLiveRow(
+  row: ConnectionRow,
+  persisted: boolean,
+): {
+  canAddToDb?: boolean;
+  cannotSaveReason?: string;
+} {
+  if (persisted) return {};
+  const fromStable = row.from.stableId;
+  const toStable = row.to.stableId;
+  if (fromStable && toStable && fromStable !== toStable) {
+    return { canAddToDb: true };
+  }
+  /* A side without a stable id is something the db cannot durably address
+     (e.g. webui_midi_monitor_peer_t sink, router peers added at runtime that
+     have not been named, transient RTP peers without name/host yet). Show the
+     empty-circle indicator with the explanation below. */
+  if (!fromStable && !toStable) {
+    return {
+      cannotSaveReason:
+        "Neither endpoint has a stable identity; cannot persist this pair.",
+    };
+  }
+  if (!fromStable) {
+    return {
+      cannotSaveReason: `"${row.from.label}" has no stable identity (e.g. monitor sink or unnamed peer); cannot persist this pair.`,
+    };
+  }
+  if (!toStable) {
+    return {
+      cannotSaveReason: `"${row.to.label}" has no stable identity (e.g. monitor sink or unnamed peer); cannot persist this pair.`,
+    };
+  }
+  return {
+    cannotSaveReason: "Both endpoints share the same stable identity.",
   };
 }
 
@@ -169,12 +254,18 @@ export function mergeConnectionsWithPersisted(
         ...row,
         persisted: true,
         canRemoveFromDb: true,
+        canAddToDb: false,
+        cannotSaveReason: undefined,
         persistedSideA: hit.side_a,
         persistedSideB: hit.side_b,
         participantPeers: annotateLiveParticipants(row, hit, peers),
       });
     } else {
-      out.push(row);
+      const cls = classifyLiveRow(row, false);
+      out.push({
+        ...row,
+        ...cls,
+      });
     }
   }
 
@@ -185,4 +276,12 @@ export function mergeConnectionsWithPersisted(
   }
 
   return out;
+}
+
+/**
+ * When the SQLite db is disabled, callers still want every live row to carry
+ * the empty-circle/explanation for the DB column - apply the same
+ * classification but never claim a row is persisted. */
+export function annotateLiveOnly(live: ConnectionRow[]): ConnectionRow[] {
+  return live.map((row) => ({ ...row, ...classifyLiveRow(row, false) }));
 }

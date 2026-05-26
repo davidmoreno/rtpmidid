@@ -315,7 +315,9 @@ export function rtpClientConnectionSummary(peerRow: Record<string, unknown>): st
   return peerObj ? rtpRemoteLabel(peerObj) : "—";
 }
 
-export type ConnectionKind = "router" | "rtp_server" | "rtp_link";
+export type ConnectionKind = "router";
+/** High-level category shown as the Type badge in the Connections table. */
+export type ConnectionType = "midirouter" | "alsaseq";
 
 export type ConnectionParticipant = {
   id: number;
@@ -324,13 +326,44 @@ export type ConnectionParticipant = {
   unavailable?: boolean;
 };
 
+/**
+ * One side of a Connection row (used to render the dominant "from <-> to" cell
+ * and to drive the Save/Remove DB column).
+ *
+ * `endpointId` is the same id the daemon understands for endpoint.connect /
+ * endpoint.disconnect / monitor.start (e.g. `peer:5`, `alsa:128:0`,
+ * `mdns:Name::5004`). It is also the card id used by DevicesTab so clicking a
+ * side from the Connections page can scroll + highlight the matching device
+ * card.
+ *
+ * `stableId` is the SQLite stable id (e.g. `alsa:<client_name>:<port_name>`).
+ * It is filled when the side could be resolved at row-build time so the
+ * Connections page can match against persisted pairs and offer the "+" / "-"
+ * DB button without a server round-trip.
+ */
+export type ConnectionEndpointRef = {
+  endpointId: string;
+  label: string;
+  /** Router peer id when this side is a materialised router peer. */
+  peerId?: number;
+  /** Stable id for SQLite persistence; absent when the side has no stable identity. */
+  stableId?: string;
+  /** True when this side is referenced but not currently materialised (saved-only). */
+  unavailable?: boolean;
+};
+
 export type ConnectionRow = {
   id: string;
   kind: ConnectionKind;
+  /** Top-level Type badge shown in the table. */
+  type: ConnectionType;
   kindLabel: string;
   summary: string;
   /** Display direction: → one-way, ↔ merged A↔B router pair, · hub, → RTP link. */
   direction: string;
+  /** Dominant "from -> to" cell sides. */
+  from: ConnectionEndpointRef;
+  to: ConnectionEndpointRef;
   /** Router peers that can be focused from the table (click). */
   participantPeers: ConnectionParticipant[];
   /** Extra non-router text (e.g. RTP remote labels). */
@@ -355,9 +388,132 @@ export type ConnectionRow = {
   persisted?: boolean;
   /** Show remove-from-database control. */
   canRemoveFromDb?: boolean;
+  /** True when both sides are resolvable AND not already persisted. */
+  canAddToDb?: boolean;
+  /** Tooltip explaining why the row cannot be saved (when !persisted && !canAddToDb). */
+  cannotSaveReason?: string;
   persistedSideA?: string;
   persistedSideB?: string;
 };
+
+/** Stable id helper for an ALSA-seq endpoint (`alsa:<client_name>:<port_name>`).
+ *  Mirrors the daemon's `compute_stable_id` for `local_alsa_peer_t` and the
+ *  alsa stable id produced by `resolve_side_to_stable_id` in control_rpc.cpp.
+ *  Returns undefined when either name is empty.
+ */
+export function alsaStableIdFromNames(
+  clientName: string,
+  portName: string,
+): string | undefined {
+  if (!clientName || !portName) return undefined;
+  const esc = (s: string) => s.replace(/:/g, "|");
+  return `alsa:${esc(clientName)}:${esc(portName)}`;
+}
+
+/** Compute the stable id for a router peer mirroring `compute_stable_id` in
+ *  src/connection_db.cpp. Used to decide if a row is saveable without going
+ *  through the daemon. Returns undefined only for peers with no stable
+ *  identity at all (e.g. `webui_midi_monitor_peer_t`, or peers without a name
+ *  and no structural identifier yet).
+ */
+export function peerStableId(peer: RouterPeer): string | undefined {
+  const esc = (s: string) => s.replace(/:/g, "|");
+  const make = (prefix: string, parts: string[]): string | undefined => {
+    if (parts.some((p) => !p)) return undefined;
+    return prefix + ":" + parts.map(esc).join(":");
+  };
+  const raw = peer.raw as Record<string, unknown>;
+  const peerName = (peer.name || String(raw.name ?? "")).trim();
+  /* `network_address_t::hostname()` formats unresolved sockaddrs as the
+     literal string "null"; treat that as empty. */
+  const realHost = (h: string) => (h && h !== "null" ? h : "");
+
+  switch (peer.type) {
+    case "local_alsa_peer_t": {
+      const asf = raw.alsa_subscribe_from as
+        | { client_name?: string; port_name?: string }
+        | undefined;
+      if (asf && asf.client_name && asf.port_name) {
+        const sid = make("alsa", [asf.client_name, asf.port_name]);
+        if (sid) return sid;
+      }
+      if (peerName) return make("alsa_local", [peerName]);
+      return undefined;
+    }
+    case "local_rawmidi_peer_t": {
+      const dev = String(raw.device ?? "");
+      if (dev) return make("rawmidi", [dev]);
+      if (peerName) return make("rawmidi_named", [peerName]);
+      return undefined;
+    }
+    case "network_rtpmidi_client_t": {
+      let hostname = realHost(String(raw.connect_hostname ?? "").trim());
+      let svc = "";
+      const p = raw.peer as Record<string, unknown> | undefined;
+      if (!hostname && p) {
+        const rem = p.remote as Record<string, unknown> | undefined;
+        if (rem) hostname = realHost(String(rem.hostname ?? "").trim());
+      }
+      if (p) {
+        const rem = p.remote as Record<string, unknown> | undefined;
+        if (rem) svc = String(rem.name ?? "").trim();
+      }
+      if (!svc) svc = peerName;
+      if (hostname && svc) return make("rtpmidi", [hostname, svc]);
+      if (peerName) return make("rtpmidi_client_named", [peerName]);
+      return undefined;
+    }
+    case "network_rtpmidi_peer_t": {
+      const p = raw.peer as Record<string, unknown> | undefined;
+      const rem = p
+        ? (p.remote as Record<string, unknown> | undefined)
+        : undefined;
+      const h = realHost(String(rem?.hostname ?? "").trim());
+      const n = String(rem?.name ?? "").trim();
+      if (h && n) return make("rtpmidi_in", [h, n]);
+      if (peerName) return make("rtpmidi_in_named", [peerName]);
+      return undefined;
+    }
+    case "network_rtpmidi_listener_t": {
+      if (peerName) return make("rtpmidi_server", [peerName]);
+      return undefined;
+    }
+    case "local_alsa_listener_t": {
+      if (!peerName) return undefined;
+      const pos = peerName.indexOf(" <-> ");
+      if (pos >= 0) {
+        const remote = peerName.substring(pos + 5);
+        if (remote) return make("alsa_listener", [remote]);
+      }
+      return make("alsa_listener_named", [peerName]);
+    }
+    case "network_rtpmidi_multi_listener_t": {
+      const listening = raw.listening as { name?: string } | undefined;
+      const n =
+        listening?.name && listening.name.length > 0
+          ? listening.name
+          : peerName;
+      if (n) return make("rtpmidi_multi", [n]);
+      return undefined;
+    }
+    case "local_alsa_multi_listener_t": {
+      if (peerName) return make("alsa_multi", [peerName]);
+      return undefined;
+    }
+    /* Explicitly unsaveable: session-bound sink created by monitor.start with a
+       uuid that changes every connection. */
+    case "webui_midi_monitor_peer_t":
+      return undefined;
+    default: {
+      /* Generic fallback: address by configured name with a short type-derived
+         prefix so unknown peer types remain saveable. */
+      if (!peer.type || !peerName) return undefined;
+      let prefix = peer.type;
+      if (prefix.endsWith("_t")) prefix = prefix.slice(0, -2);
+      return make(prefix, [peerName]);
+    }
+  }
+}
 
 function pairKeyUnordered(a: number, b: number): string {
   return a < b ? `${a}:${b}` : `${b}:${a}`;
@@ -368,6 +524,12 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
   const out: ConnectionRow[] = [];
 
   const peerLabel = (pr: RouterPeer): string => pr.name.trim() || `#${pr.id}`;
+  const peerRef = (pr: RouterPeer): ConnectionEndpointRef => ({
+    endpointId: `peer:${pr.id}`,
+    label: peerLabel(pr),
+    peerId: pr.id,
+    stableId: peerStableId(pr),
+  });
 
   const pushRouterRow = (
     parts: RouterPeer[],
@@ -377,6 +539,8 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
       summary: string;
       participantRouterIds: number[];
       nParticipants: number;
+      from: ConnectionEndpointRef;
+      to: ConnectionEndpointRef;
     },
   ) => {
     const triples: LatencyTriple[] = [];
@@ -397,9 +561,12 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
     out.push({
       id: opts.id,
       kind: "router",
+      type: "midirouter",
       kindLabel: opts.bidirectional ? "Router bidi" : "Router",
       summary: opts.summary,
       direction,
+      from: opts.from,
+      to: opts.to,
       participantPeers,
       participantRouterIds: opts.participantRouterIds,
       nParticipants: opts.nParticipants,
@@ -447,6 +614,8 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
             summary: `${peerLabel(pLo)} ↔ ${peerLabel(pHi)}`,
             participantRouterIds: [lo, hi],
             nParticipants: 2,
+            from: peerRef(pLo),
+            to: peerRef(pHi),
           });
         }
         continue;
@@ -457,6 +626,14 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
 
       const toPeer = byId.get(tid);
       const parts = toPeer ? [p, toPeer] : [p];
+      const toRef: ConnectionEndpointRef = toPeer
+        ? peerRef(toPeer)
+        : {
+            endpointId: `peer:${tid}`,
+            label: `#${tid}`,
+            peerId: tid,
+            unavailable: true,
+          };
       pushRouterRow(parts, {
         id: `route:${from}->${tid}`,
         bidirectional: false,
@@ -465,80 +642,250 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
           : `${peerLabel(p)} → #${tid}`,
         participantRouterIds: toPeer ? [from, tid] : [from, tid],
         nParticipants: toPeer ? 2 : 1,
+        from: peerRef(p),
+        to: toRef,
       });
     }
   }
 
-  for (const p of peers) {
+  /* Note: previous versions also emitted aggregate "rtp_server" and "rtp_link"
+     rows here. Those describe a single peer's outgoing/incoming RTP state
+     (e.g. "server X has remotes A, B, C") rather than a saveable router edge
+     between two endpoints. They are already visualised per-card in the
+     Devices tab, and their synthetic "to" side (the remote summary string)
+     has no stable id so they always rendered with the disabled circle. We
+     drop them here to keep the Connections table focused on actual edges. */
+
+  return out;
+}
+
+export type AlsaSubscriptionRaw = {
+  from_client: number;
+  from_port: number;
+  to_client: number;
+  to_port: number;
+  from_label?: string;
+  to_label?: string;
+  from_client_name?: string;
+  from_port_name?: string;
+  to_client_name?: string;
+  to_port_name?: string;
+};
+
+export function parseAlsaSubscriptions(raw: unknown): AlsaSubscriptionRaw[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AlsaSubscriptionRaw[] = [];
+  for (const x of raw) {
+    if (!x || typeof x !== "object") continue;
+    const o = x as Record<string, unknown>;
+    const fc = Number(o.from_client);
+    const fp = Number(o.from_port);
+    const tc = Number(o.to_client);
+    const tp = Number(o.to_port);
     if (
-      p.type !== "network_rtpmidi_listener_t" &&
-      p.type !== "network_rtpmidi_multi_listener_t"
-    ) {
+      !Number.isFinite(fc) ||
+      !Number.isFinite(fp) ||
+      !Number.isFinite(tc) ||
+      !Number.isFinite(tp)
+    )
       continue;
-    }
-    const subs = (p.raw.peers as unknown[] | undefined) ?? [];
-    const subLabels = subs.map((x) =>
-      rtpRemoteLabel(x as Record<string, unknown>),
-    );
-    const triples = collectRtpTriples(p.raw);
-    const rl = minMaxField(triples, "last");
-    const ra = minMaxField(triples, "average");
-    const intU = spanLast([p], (x) => x.internal?.until?.last);
-    const intS = spanLast([p], (x) => x.internal?.sendMidi?.last);
-    const hubName = p.name || String(p.raw.name ?? "");
-    const subPart = subLabels.length ? ` · ${subLabels.join(" · ")}` : "";
     out.push({
-      id: `rtp_srv:${p.id}`,
-      kind: "rtp_server",
-      kindLabel: "RTP server",
-      summary: `${p.id}: ${hubName}`,
-      direction: "·",
-      participantPeers: [{ id: p.id, name: hubName || "—" }],
-      participantNote: subPart ? `(hub)${subPart}` : "(hub)",
-      participantRouterIds: [p.id],
-      nParticipants: 1 + subLabels.length,
-      intUntilMax: intU.max,
-      intSendMax: intS.max,
-      rtpLastMax: rl.max,
-      rtpAvgMax: ra.max,
-      trafficTotal: p.recv + p.sent,
-      recvSum: p.recv,
-      sentSum: p.sent,
+      from_client: fc,
+      from_port: fp,
+      to_client: tc,
+      to_port: tp,
+      from_label: typeof o.from_label === "string" ? o.from_label : undefined,
+      to_label: typeof o.to_label === "string" ? o.to_label : undefined,
+      from_client_name:
+        typeof o.from_client_name === "string" ? o.from_client_name : undefined,
+      from_port_name:
+        typeof o.from_port_name === "string" ? o.from_port_name : undefined,
+      to_client_name:
+        typeof o.to_client_name === "string" ? o.to_client_name : undefined,
+      to_port_name:
+        typeof o.to_port_name === "string" ? o.to_port_name : undefined,
     });
   }
+  return out;
+}
 
+/**
+ * Build Connection rows from ALSA-seq aconnect subscriptions.
+ *
+ * - Opposite directed pairs (A->B and B->A) are merged into one bidi row.
+ * - Sides expose `endpointId = alsa:<c>:<p>` (matches Devices tab card ids and
+ *   the daemon's `endpoint.connect` parsing) and `stableId =
+ *   alsa:<client_name>:<port_name>` (matches `compute_stable_id` in
+ *   `connection_db.cpp`, so saved-pair matching is purely client-side).
+ * - `peerId` is set when the ALSA port also backs a router peer
+ *   (`local_alsa_peer_t.alsa_subscribe_from`); this lets the click-through
+ *   land on the right Devices card even when a router peer wraps the port.
+ */
+export function buildAlsaSubscriptionConnections(
+  subs: AlsaSubscriptionRaw[],
+  peers: RouterPeer[],
+): ConnectionRow[] {
+  const peerByAlsa = new Map<string, RouterPeer>();
   for (const p of peers) {
-    if (
-      p.type !== "network_rtpmidi_client_t" &&
-      p.type !== "network_rtpmidi_peer_t"
-    ) {
-      continue;
+    if (p.type !== "local_alsa_peer_t") continue;
+    const raw = p.raw as Record<string, unknown>;
+    const asf = raw.alsa_subscribe_from as
+      | { client?: unknown; port?: unknown }
+      | undefined;
+    if (!asf) continue;
+    const c = Number(asf.client);
+    const pt = Number(asf.port);
+    if (!Number.isFinite(c) || !Number.isFinite(pt)) continue;
+    peerByAlsa.set(`${c}:${pt}`, p);
+  }
+
+  const sideRef = (
+    client: number,
+    port: number,
+    labelHint: string | undefined,
+    clientName: string | undefined,
+    portName: string | undefined,
+  ): ConnectionEndpointRef => {
+    const endpointId = `alsa:${client}:${port}`;
+    const matchedPeer = peerByAlsa.get(`${client}:${port}`);
+    const cn = clientName ?? "";
+    const pn = portName ?? "";
+    const label =
+      cn && pn
+        ? `${cn} · ${pn}`
+        : labelHint
+          ? labelHint
+          : `${client}:${port}`;
+    return {
+      endpointId,
+      label,
+      peerId: matchedPeer?.id,
+      stableId: alsaStableIdFromNames(cn, pn),
+    };
+  };
+
+  /** Stable key independent of direction so A->B and B->A collapse. */
+  const undirectedKey = (
+    fc: number,
+    fp: number,
+    tc: number,
+    tp: number,
+  ): string => {
+    const a = `${fc}:${fp}`;
+    const b = `${tc}:${tp}`;
+    return a < b ? `${a}|${b}` : `${b}|${a}`;
+  };
+
+  const directedKey = (
+    fc: number,
+    fp: number,
+    tc: number,
+    tp: number,
+  ): string => `${fc}:${fp}->${tc}:${tp}`;
+
+  const directedSet = new Set<string>();
+  for (const s of subs) {
+    directedSet.add(directedKey(s.from_client, s.from_port, s.to_client, s.to_port));
+  }
+
+  /* Cache (client, port) -> labels so two passes (sub list scan, side lookup)
+     don't both walk the whole `subs` array per row. */
+  type Names = { clientName?: string; portName?: string; labelHint?: string };
+  const namesByAddr = new Map<string, Names>();
+  for (const s of subs) {
+    const fk = `${s.from_client}:${s.from_port}`;
+    if (!namesByAddr.has(fk)) {
+      namesByAddr.set(fk, {
+        clientName: s.from_client_name,
+        portName: s.from_port_name,
+        labelHint: s.from_label,
+      });
     }
-    const triples = collectRtpTriples(p.raw);
-    const rl = minMaxField(triples, "last");
-    const ra = minMaxField(triples, "average");
-    const intU = spanLast([p], (x) => x.internal?.until?.last);
-    const intS = spanLast([p], (x) => x.internal?.sendMidi?.last);
-    const rem = rtpClientConnectionSummary(p.raw);
-    const kindLabel =
-      p.type === "network_rtpmidi_client_t" ? "RTP client" : "RTP peer";
+    const tk = `${s.to_client}:${s.to_port}`;
+    if (!namesByAddr.has(tk)) {
+      namesByAddr.set(tk, {
+        clientName: s.to_client_name,
+        portName: s.to_port_name,
+        labelHint: s.to_label,
+      });
+    }
+  }
+  const lookupNames = (client: number, port: number): Names =>
+    namesByAddr.get(`${client}:${port}`) ?? {};
+
+  /* Stable iteration order so the table doesn't reshuffle between polls. */
+  const sorted = [...subs].sort((a, b) => {
+    if (a.from_client !== b.from_client) return a.from_client - b.from_client;
+    if (a.from_port !== b.from_port) return a.from_port - b.from_port;
+    if (a.to_client !== b.to_client) return a.to_client - b.to_client;
+    return a.to_port - b.to_port;
+  });
+
+  const seenUndirected = new Set<string>();
+  const out: ConnectionRow[] = [];
+  for (const s of sorted) {
+    const undir = undirectedKey(
+      s.from_client,
+      s.from_port,
+      s.to_client,
+      s.to_port,
+    );
+    if (seenUndirected.has(undir)) continue;
+    seenUndirected.add(undir);
+
+    const reverseKey = directedKey(
+      s.to_client,
+      s.to_port,
+      s.from_client,
+      s.from_port,
+    );
+    const bidi = directedSet.has(reverseKey);
+
+    /* For bidi rows, orient "low" address as `from` so the label is stable
+       regardless of which direction the daemon listed first. For one-way rows
+       keep the original direction so the arrow matches reality. */
+    const fwdLow =
+      `${s.from_client}:${s.from_port}` < `${s.to_client}:${s.to_port}`;
+    const useFromOrigin = !bidi || fwdLow;
+    const fromClient = useFromOrigin ? s.from_client : s.to_client;
+    const fromPort = useFromOrigin ? s.from_port : s.to_port;
+    const toClient = useFromOrigin ? s.to_client : s.from_client;
+    const toPort = useFromOrigin ? s.to_port : s.from_port;
+
+    const fromNames = lookupNames(fromClient, fromPort);
+    const toNames = lookupNames(toClient, toPort);
+
+    const fromSide = sideRef(
+      fromClient,
+      fromPort,
+      fromNames.labelHint,
+      fromNames.clientName,
+      fromNames.portName,
+    );
+    const toSide = sideRef(
+      toClient,
+      toPort,
+      toNames.labelHint,
+      toNames.clientName,
+      toNames.portName,
+    );
+
     out.push({
-      id: `rtp_link:${p.id}`,
-      kind: "rtp_link",
-      kindLabel,
-      summary: rem,
-      direction: "→",
-      participantPeers: [{ id: p.id, name: p.name || "—" }],
-      participantNote: ` · ${rem}`,
-      participantRouterIds: [p.id],
+      id: `alsa_sub:${undir}${bidi ? ":bidi" : ""}`,
+      kind: "router",
+      type: "alsaseq",
+      kindLabel: bidi ? "ALSA bidi" : "ALSA",
+      summary: `${fromSide.label} ${bidi ? "↔" : "→"} ${toSide.label}`,
+      direction: bidi ? "↔" : "→",
+      from: fromSide,
+      to: toSide,
+      participantPeers: [],
+      participantRouterIds: [],
       nParticipants: 2,
-      intUntilMax: intU.max,
-      intSendMax: intS.max,
-      rtpLastMax: rl.max,
-      rtpAvgMax: ra.max,
-      trafficTotal: p.recv + p.sent,
-      recvSum: p.recv,
-      sentSum: p.sent,
+      trafficTotal: 0,
+      recvSum: 0,
+      sentSum: 0,
+      bidirectional: bidi || undefined,
     });
   }
 

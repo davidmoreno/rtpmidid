@@ -125,6 +125,8 @@ type Props = {
   alsaSeq: MidiAlsaSeqEntry[];
   rawmidi: MidiRawmidiEntry[];
   alsaSubs: unknown[];
+  /** When set, scroll to the matching card and apply the highlight ring. */
+  highlightEndpointId?: string | null;
   rpc: RpcClient;
   onAfterAction: () => Promise<void> | void;
   onStatus: (msg: string) => void;
@@ -136,6 +138,7 @@ export function PeersCards({
   alsaSeq,
   rawmidi,
   alsaSubs,
+  highlightEndpointId,
   rpc,
   onAfterAction,
   onStatus,
@@ -235,6 +238,37 @@ export function PeersCards({
       requestAnimationFrame(() => requestAnimationFrame(scroll));
     }
   };
+
+  /* When the parent sets highlightEndpointId (e.g. user clicked a chip on the
+     Connections page), reuse the favouriting spotlight effect: same 200ms
+     scroll delay + 1s visible burst (background+shadow change is what makes it
+     pop). Cleared automatically; the parent's setTimeout is purely a debounce
+     guard so consecutive clicks don't queue up. */
+  const externalSpotlightTimers = useRef<{
+    scroll?: number;
+    clear?: number;
+  }>({});
+  useEffect(() => {
+    if (!highlightEndpointId) return;
+    /* Same visual treatment as toggling a favourite: setSpotlightIds is the
+       background+shadow swap that really makes the card pop (just adding the
+       `ui-tr-highlight` ring is too subtle to notice when the tab changes). */
+    setSpotlightIds(new Set([highlightEndpointId]));
+    const t = externalSpotlightTimers.current;
+    if (t.scroll !== undefined) window.clearTimeout(t.scroll);
+    if (t.clear !== undefined) window.clearTimeout(t.clear);
+    t.scroll = window.setTimeout(() => {
+      const el = cardRefs.current.get(highlightEndpointId);
+      el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, 200);
+    t.clear = window.setTimeout(() => {
+      setSpotlightIds(new Set());
+    }, 200 + 1000);
+    return () => {
+      if (t.scroll !== undefined) window.clearTimeout(t.scroll);
+      if (t.clear !== undefined) window.clearTimeout(t.clear);
+    };
+  }, [highlightEndpointId]);
 
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() =>
     loadDeviceFavoriteIds(),
