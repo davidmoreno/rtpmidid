@@ -244,7 +244,7 @@ go under `tests/` and are wired into `make test`.
 |---|-------|--------|
 | 1 | Naming & shared abstractions | ☑ Completed |
 | 2 | Identity grammar (`key=value`) | ☑ Completed |
-| 3 | Query matching | ☐ Not started |
+| 3 | Query matching | ☑ Completed |
 | 4 | Device registry | ☐ Not started |
 | 5 | Persisted connections v2 (directed + query) | ☐ Not started |
 | 6 | Control + Web UI | ☐ Not started |
@@ -314,7 +314,7 @@ by the existing test suite (no behavior change ⇒ tests stay green).
   canonicalization; escaping of `: , = [ ]`; bracketed fields preserved.
 
 ### Phase 3 — Query matching
-**Status:** ☐ Not started
+**Status:** ☑ Completed
 
 * `query_t::matches(const device_identity_t&)` — partial match; bracketed fields ignored for
   matching but retained for storage. `find_all_matching(query, devices)`.

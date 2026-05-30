@@ -22,6 +22,7 @@ add_library(
   midipeer.cpp
   peer_kind.cpp
   device_identity.cpp
+  device_query.cpp
   peer_device.cpp
   peer_export.cpp
   peer_import.cpp

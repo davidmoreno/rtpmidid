@@ -51,6 +51,15 @@ add_test(NAME test_signals COMMAND test_signals)
 
 
 #
+# Device query matching (Phase 3)
+#
+
+add_executable(test_device_query test_device_query.cpp test_utils.cpp)
+target_link_libraries(test_device_query rtpmidid-shared rtpmidid2-static -pthread)
+target_link_libraries(test_device_query ${FMT_LIBRARIES})
+add_test(NAME test_device_query COMMAND test_device_query)
+
+#
 # Device identity grammar (Phase 2)
 #
 
