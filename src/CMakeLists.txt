@@ -26,6 +26,7 @@ add_library(
   device_query.cpp
   device_db.cpp
   device_registry.cpp
+  connection_restore.cpp
   peer_device.cpp
   peer_export.cpp
   peer_import.cpp

@@ -1,24 +1,11 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
  * Copyright (C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 #pragma once
 
 #include "aseq.hpp"
+#include "device_identity.hpp"
 #include "dm_json_status.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
@@ -27,6 +14,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -43,20 +31,31 @@ struct sqlite3_deleter {
 
 using sqlite3_db = std::unique_ptr<sqlite3, sqlite3_deleter>;
 
-/** Stable endpoint key for a peer status row (nullopt if not yet known). */
-std::optional<std::string> compute_stable_id(const router_peer_row_t &row);
+enum class connection_direction_e { a2b, b2a, both };
 
-/** Find a router peer id whose stable id matches @a stable_id (current status snapshot). */
-std::optional<peer_id_t>
-find_peer_id_for_stable_id(const std::vector<router_peer_row_t> &rows,
-                           const std::string &stable_id);
+connection_direction_e connection_direction_from_wire(std::string_view wire);
+const char *connection_direction_to_wire(connection_direction_e direction);
 
+struct stored_connection_t {
+  std::string side_a;
+  std::string side_b;
+  connection_direction_e direction = connection_direction_e::both;
+  bool enabled = true;
+};
+
+/** Legacy row without direction metadata. */
 struct connection_pair_t {
   std::string side_a;
   std::string side_b;
 };
 
-/** SQLite persistence for router connection edges. */
+/** Stable endpoint key for a peer status row (legacy positional id). */
+std::optional<std::string> compute_stable_id(const router_peer_row_t &row);
+
+std::optional<peer_id_t>
+find_peer_id_for_stable_id(const std::vector<router_peer_row_t> &rows,
+                           const std::string &stable_id);
+
 class connection_db_t {
   NON_COPYABLE_NOR_MOVABLE(connection_db_t)
 
@@ -66,19 +65,27 @@ public:
 
   bool is_open() const { return db_ != nullptr; }
 
-  void record_connection(const std::string &side_a, const std::string &side_b);
+  void save_connection(const stored_connection_t &connection);
   void remove_connection(const std::string &side_a, const std::string &side_b);
+  bool set_enabled(const std::string &side_a, const std::string &side_b,
+                   bool enabled);
+  std::vector<stored_connection_t> list_connections() const;
+
+  /** Legacy API: stores direction=both with sorted sides. */
+  void record_connection(const std::string &side_a, const std::string &side_b);
   std::vector<connection_pair_t> get_connections() const;
 
 private:
   sqlite3_db db_;
   mutable std::mutex mutex_;
 
+  void migrate_schema();
   static std::pair<std::string, std::string> normalize_sides(std::string a,
                                                              std::string b);
 };
 
-/** Hooks router events to persist and restore connections from the database. */
+struct online_device_t;
+
 class connection_db_manager_t {
   NON_COPYABLE_NOR_MOVABLE(connection_db_manager_t)
 
@@ -88,15 +95,12 @@ public:
   ~connection_db_manager_t() = default;
 
   void attach();
-  /** Wire ALSA-side auto-reconnect: aconnect saved pure-ALSA pairs when both
-   *  ports are available. Hooks aseq->added_port_announcement. */
   void attach_aseq(std::shared_ptr<aseq_t> aseq);
   void check_reconnects_for_all();
 
   connection_db_t &database() { return *db_; }
   const connection_db_t &database() const { return *db_; }
 
-  /** Persist a stable-id pair and attempt router auto-connect for matching peers. */
   void record_stable_pair(const std::string &side_a, const std::string &side_b);
   void remove_stable_pair(const std::string &side_a, const std::string &side_b);
 
@@ -120,14 +124,14 @@ private:
   };
   std::vector<pending_pair_t> pending_records_;
 
+  std::vector<online_device_t> collect_online_devices() const;
   std::optional<std::string> stable_id_for_peer(peer_id_t peer_id) const;
-  std::optional<peer_id_t> find_peer_by_stable_id(const std::string &stable_id) const;
+  std::optional<device_identity_t>
+  device_identity_for_peer(peer_id_t peer_id) const;
 
-  void try_record_pair(peer_id_t a, peer_id_t b);
+  void apply_saved_connections();
+  void try_record_pair(peer_id_t from, peer_id_t to);
   void try_finalize_pending_for(peer_id_t peer_id);
-  void try_auto_connect_peer(peer_id_t peer_id);
-  /** Sweep all saved pairs and aconnect any pure-ALSA pair whose both ports
-   *  are now present (no-op otherwise). */
   void try_auto_aconnect_all_alsa_pairs();
 
   void on_connected(peer_id_t from, peer_id_t to);

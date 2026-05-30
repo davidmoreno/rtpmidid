@@ -1,22 +1,9 @@
 /**
- * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * Phase 5: connection_db v2 + directed restore manager.
  */
-
 #include "connection_db.hpp"
+#include "connection_restore.hpp"
+#include "device_identity_from_peer.hpp"
 #include "aseq.hpp"
 #include "peer_device_alsa_seq.hpp"
 #include "peer_device_rawmidi.hpp"
@@ -45,10 +32,6 @@ std::string unescape_stable_component(std::string s) {
   return s;
 }
 
-/** Decode `alsa:<client_name>:<port_name>` (with `|` -> `:` unescaping) into the
- *  raw client/port name pair. Returns nullopt for any other prefix or malformed
- *  ids. The stable id format is produced by `compute_stable_id` for
- *  `peer_device_alsa_seq_t` and `resolve_side_to_stable_id` for `alsa:<c>:<p>`. */
 std::optional<std::pair<std::string, std::string>>
 parse_alsa_stable_id(const std::string &stable_id) {
   static const std::string kPrefix = "alsa:";
@@ -64,8 +47,34 @@ parse_alsa_stable_id(const std::string &stable_id) {
                         unescape_stable_component(rest.substr(pos + 1)));
 }
 
-bool is_alsa_stable_id(const std::string &stable_id) {
-  return parse_alsa_stable_id(stable_id).has_value();
+std::optional<std::pair<std::string, std::string>>
+parse_alsa_seq_identity(const std::string &identity_key) {
+  const auto id = device_identity_t::parse(identity_key);
+  if (!id || id->type_prefix != "alsa_seq")
+    return std::nullopt;
+  std::optional<std::string> client;
+  std::optional<std::string> port;
+  for (const auto &f : id->fields) {
+    if (f.key == "client")
+      client = f.value;
+    else if (f.key == "port")
+      port = f.value;
+  }
+  if (!client || !port)
+    return std::nullopt;
+  return std::make_pair(*client, *port);
+}
+
+bool is_direct_alsa_side(const std::string &side) {
+  return parse_alsa_stable_id(side).has_value() ||
+         parse_alsa_seq_identity(side).has_value();
+}
+
+std::optional<std::pair<std::string, std::string>>
+alsa_side_names(const std::string &side) {
+  if (auto legacy = parse_alsa_stable_id(side))
+    return legacy;
+  return parse_alsa_seq_identity(side);
 }
 
 std::optional<aseq_t::port_t>
@@ -91,7 +100,37 @@ bool alsa_is_already_connected(aseq_t &aseq, const aseq_t::port_t &from,
   return found;
 }
 
+connection_direction_e merge_direction(connection_direction_e existing,
+                                       connection_direction_e incoming) {
+  if (existing == incoming)
+    return existing;
+  if (existing == connection_direction_e::both ||
+      incoming == connection_direction_e::both)
+    return connection_direction_e::both;
+  return connection_direction_e::both;
+}
+
 } // namespace
+
+connection_direction_e connection_direction_from_wire(std::string_view wire) {
+  if (wire == "a2b")
+    return connection_direction_e::a2b;
+  if (wire == "b2a")
+    return connection_direction_e::b2a;
+  return connection_direction_e::both;
+}
+
+const char *connection_direction_to_wire(connection_direction_e direction) {
+  switch (direction) {
+  case connection_direction_e::a2b:
+    return "a2b";
+  case connection_direction_e::b2a:
+    return "b2a";
+  case connection_direction_e::both:
+    return "both";
+  }
+  return "both";
+}
 
 std::optional<std::string> compute_stable_id(const router_peer_row_t &row) {
   const auto kind = peer_kind_from_wire_type(row.type.value_or(""));
@@ -139,6 +178,9 @@ find_peer_id_for_stable_id(const std::vector<router_peer_row_t> &rows,
     const auto sid = compute_stable_id(row);
     if (sid && *sid == stable_id && row.id)
       return static_cast<peer_id_t>(*row.id);
+    const auto did = compute_device_identity(row);
+    if (did && did->serialize() == stable_id && row.id)
+      return static_cast<peer_id_t>(*row.id);
   }
   return std::nullopt;
 }
@@ -148,6 +190,40 @@ connection_db_t::normalize_sides(std::string a, std::string b) {
   if (b < a)
     std::swap(a, b);
   return {std::move(a), std::move(b)};
+}
+
+void connection_db_t::migrate_schema() {
+  if (!db_)
+    return;
+
+  const char *create =
+      "CREATE TABLE IF NOT EXISTS connections ("
+      "  side_a TEXT NOT NULL,"
+      "  side_b TEXT NOT NULL,"
+      "  direction TEXT NOT NULL DEFAULT 'both',"
+      "  enabled INTEGER NOT NULL DEFAULT 1,"
+      "  PRIMARY KEY (side_a, side_b)"
+      ");";
+
+  char *errmsg = nullptr;
+  if (sqlite3_exec(db_.get(), create, nullptr, nullptr, &errmsg) != SQLITE_OK) {
+    ERROR("connection_db: schema init failed: {}",
+          errmsg ? errmsg : "unknown error");
+    sqlite3_free(errmsg);
+    db_.reset();
+    return;
+  }
+
+  const char *alters[] = {
+      "ALTER TABLE connections ADD COLUMN direction TEXT NOT NULL DEFAULT 'both';",
+      "ALTER TABLE connections ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1;",
+  };
+  for (const char *sql : alters) {
+    if (sqlite3_exec(db_.get(), sql, nullptr, nullptr, &errmsg) != SQLITE_OK) {
+      sqlite3_free(errmsg);
+      errmsg = nullptr;
+    }
+  }
 }
 
 connection_db_t::connection_db_t(std::string path) {
@@ -163,50 +239,61 @@ connection_db_t::connection_db_t(std::string path) {
     return;
   }
   db_.reset(raw);
-
-  const char *schema =
-      "CREATE TABLE IF NOT EXISTS connections ("
-      "  side_a TEXT NOT NULL,"
-      "  side_b TEXT NOT NULL,"
-      "  PRIMARY KEY (side_a, side_b)"
-      ");";
-
-  char *errmsg = nullptr;
-  if (sqlite3_exec(db_.get(), schema, nullptr, nullptr, &errmsg) != SQLITE_OK) {
-    ERROR("connection_db: schema init failed: {}",
-          errmsg ? errmsg : "unknown error");
-    sqlite3_free(errmsg);
-    db_.reset();
+  migrate_schema();
+  if (!db_)
     return;
-  }
 
   INFO("connection_db: opened {}", path);
 }
 
-void connection_db_t::record_connection(const std::string &side_a,
-                                        const std::string &side_b) {
-  if (!db_)
+void connection_db_t::save_connection(const stored_connection_t &connection) {
+  if (!db_ || connection.side_a.empty() || connection.side_b.empty())
     return;
 
-  auto sides = normalize_sides(side_a, side_b);
-  std::lock_guard<std::mutex> lock(mutex_);
+  stored_connection_t merged = connection;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    sqlite3_stmt *find = nullptr;
+    const char *find_sql =
+        "SELECT direction, enabled FROM connections WHERE side_a = ? AND side_b = ?;";
+    if (sqlite3_prepare_v2(db_.get(), find_sql, -1, &find, nullptr) == SQLITE_OK) {
+      sqlite3_bind_text(find, 1, connection.side_a.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_text(find, 2, connection.side_b.c_str(), -1, SQLITE_TRANSIENT);
+      if (sqlite3_step(find) == SQLITE_ROW) {
+        const char *dir =
+            reinterpret_cast<const char *>(sqlite3_column_text(find, 0));
+        merged.direction =
+            merge_direction(connection_direction_from_wire(dir ? dir : "both"),
+                            connection.direction);
+        merged.enabled =
+            sqlite3_column_int(find, 1) != 0 && connection.enabled;
+      }
+      sqlite3_finalize(find);
+    }
+  }
 
+  std::lock_guard<std::mutex> lock(mutex_);
   sqlite3_stmt *stmt = nullptr;
   const char *sql =
-      "INSERT OR REPLACE INTO connections (side_a, side_b) VALUES (?, ?);";
+      "INSERT OR REPLACE INTO connections (side_a, side_b, direction, enabled) "
+      "VALUES (?, ?, ?, ?);";
   if (sqlite3_prepare_v2(db_.get(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
-    ERROR("connection_db: prepare insert failed: {}", sqlite3_errmsg(db_.get()));
+    ERROR("connection_db: prepare save failed: {}", sqlite3_errmsg(db_.get()));
     return;
   }
 
-  sqlite3_bind_text(stmt, 1, sides.first.c_str(), -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 2, sides.second.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 1, merged.side_a.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 2, merged.side_b.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 3, connection_direction_to_wire(merged.direction), -1,
+                    SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 4, merged.enabled ? 1 : 0);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
-    ERROR("connection_db: insert failed: {}", sqlite3_errmsg(db_.get()));
+    ERROR("connection_db: save failed: {}", sqlite3_errmsg(db_.get()));
   } else {
-    INFO("connection_db: stored in database {} <-> {}", sides.first,
-         sides.second);
+    INFO("connection_db: stored {} {} -> {} (enabled={})",
+         connection_direction_to_wire(merged.direction), merged.side_a,
+         merged.side_b, merged.enabled ? 1 : 0);
   }
   sqlite3_finalize(stmt);
 }
@@ -216,9 +303,7 @@ void connection_db_t::remove_connection(const std::string &side_a,
   if (!db_)
     return;
 
-  auto sides = normalize_sides(side_a, side_b);
   std::lock_guard<std::mutex> lock(mutex_);
-
   sqlite3_stmt *stmt = nullptr;
   const char *sql = "DELETE FROM connections WHERE side_a = ? AND side_b = ?;";
   if (sqlite3_prepare_v2(db_.get(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -226,45 +311,88 @@ void connection_db_t::remove_connection(const std::string &side_a,
     return;
   }
 
-  sqlite3_bind_text(stmt, 1, sides.first.c_str(), -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 2, sides.second.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 1, side_a.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 2, side_b.c_str(), -1, SQLITE_TRANSIENT);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     ERROR("connection_db: delete failed: {}", sqlite3_errmsg(db_.get()));
   } else if (sqlite3_changes(db_.get()) > 0) {
-    INFO("connection_db: deleted from database {} <-> {}", sides.first,
-         sides.second);
-  } else {
-    INFO("connection_db: delete had no matching row for {} <-> {}",
-         sides.first, sides.second);
+    INFO("connection_db: deleted {} -> {}", side_a, side_b);
   }
   sqlite3_finalize(stmt);
 }
 
-std::vector<connection_pair_t> connection_db_t::get_connections() const {
-  std::vector<connection_pair_t> out;
+bool connection_db_t::set_enabled(const std::string &side_a,
+                                    const std::string &side_b, bool enabled) {
+  if (!db_)
+    return false;
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql =
+      "UPDATE connections SET enabled = ? WHERE side_a = ? AND side_b = ?;";
+  if (sqlite3_prepare_v2(db_.get(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    ERROR("connection_db: prepare enable failed: {}", sqlite3_errmsg(db_.get()));
+    return false;
+  }
+
+  sqlite3_bind_int(stmt, 1, enabled ? 1 : 0);
+  sqlite3_bind_text(stmt, 2, side_a.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 3, side_b.c_str(), -1, SQLITE_TRANSIENT);
+
+  const bool ok = sqlite3_step(stmt) == SQLITE_DONE &&
+                  sqlite3_changes(db_.get()) > 0;
+  sqlite3_finalize(stmt);
+  return ok;
+}
+
+std::vector<stored_connection_t> connection_db_t::list_connections() const {
+  std::vector<stored_connection_t> out;
   if (!db_)
     return out;
 
   std::lock_guard<std::mutex> lock(mutex_);
-
   sqlite3_stmt *stmt = nullptr;
-  const char *sql = "SELECT side_a, side_b FROM connections;";
+  const char *sql =
+      "SELECT side_a, side_b, direction, enabled FROM connections;";
   if (sqlite3_prepare_v2(db_.get(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
     ERROR("connection_db: prepare select failed: {}", sqlite3_errmsg(db_.get()));
     return out;
   }
 
   while (sqlite3_step(stmt) == SQLITE_ROW) {
-    connection_pair_t pair;
+    stored_connection_t row;
     if (const char *a = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0)))
-      pair.side_a = a;
+      row.side_a = a;
     if (const char *b = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1)))
-      pair.side_b = b;
-    if (!pair.side_a.empty() && !pair.side_b.empty())
-      out.push_back(std::move(pair));
+      row.side_b = b;
+    if (const char *dir =
+            reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2)))
+      row.direction = connection_direction_from_wire(dir);
+    row.enabled = sqlite3_column_int(stmt, 3) != 0;
+    if (!row.side_a.empty() && !row.side_b.empty())
+      out.push_back(std::move(row));
   }
   sqlite3_finalize(stmt);
+  return out;
+}
+
+void connection_db_t::record_connection(const std::string &side_a,
+                                          const std::string &side_b) {
+  const auto sides = normalize_sides(side_a, side_b);
+  stored_connection_t row;
+  row.side_a = sides.first;
+  row.side_b = sides.second;
+  row.direction = connection_direction_e::both;
+  row.enabled = true;
+  save_connection(row);
+}
+
+std::vector<connection_pair_t> connection_db_t::get_connections() const {
+  std::vector<connection_pair_t> out;
+  for (const auto &row : list_connections()) {
+    out.push_back(connection_pair_t{row.side_a, row.side_b});
+  }
   return out;
 }
 
@@ -300,9 +428,29 @@ void connection_db_manager_t::attach_aseq(std::shared_ptr<aseq_t> aseq) {
   aseq_port_added_connection_ = aseq_->added_port_announcement.connect(
       [this](const std::string & /*name*/, aseq_t::client_type_e /*type*/,
              const aseq_t::port_t & /*port*/) {
-        // Any new external ALSA port might be one half of a saved pair.
         try_auto_aconnect_all_alsa_pairs();
       });
+}
+
+std::vector<online_device_t>
+connection_db_manager_t::collect_online_devices() const {
+  std::vector<online_device_t> out;
+  if (!router_)
+    return out;
+
+  for (const auto &row : router_->status_rows()) {
+    if (!row.id)
+      continue;
+    const auto identity = compute_device_identity(row);
+    if (!identity)
+      continue;
+    online_device_t device;
+    device.peer_id = static_cast<peer_id_t>(*row.id);
+    device.identity = *identity;
+    device.legacy_stable_id = compute_stable_id(row);
+    out.push_back(std::move(device));
+  }
+  return out;
 }
 
 std::optional<std::string>
@@ -315,34 +463,58 @@ connection_db_manager_t::stable_id_for_peer(peer_id_t peer_id) const {
   return std::nullopt;
 }
 
-std::optional<peer_id_t>
-connection_db_manager_t::find_peer_by_stable_id(const std::string &stable_id) const {
+std::optional<device_identity_t>
+connection_db_manager_t::device_identity_for_peer(peer_id_t peer_id) const {
   if (!router_)
     return std::nullopt;
   for (const auto &row : router_->status_rows()) {
-    const auto sid = compute_stable_id(row);
-    if (sid && *sid == stable_id && row.id)
-      return static_cast<peer_id_t>(*row.id);
+    if (row.id && static_cast<peer_id_t>(*row.id) == peer_id)
+      return compute_device_identity(row);
   }
   return std::nullopt;
 }
 
-void connection_db_manager_t::try_record_pair(peer_id_t a, peer_id_t b) {
+void connection_db_manager_t::apply_saved_connections() {
+  if (!db_ || !db_->is_open() || !router_)
+    return;
+
+  const auto online = collect_online_devices();
+  const auto saved = db_->list_connections();
+  const auto actions = plan_connection_restore(
+      saved, online, [this](peer_id_t from, peer_id_t to) {
+        const auto targets = router_->send_targets_for(from);
+        return std::find(targets.begin(), targets.end(), to) != targets.end();
+      });
+
+  for (const auto &action : actions) {
+    INFO("connection_db: restoring directed edge peer {} -> {}", action.from,
+         action.to);
+    router_->enqueue_connect(action.from, action.to);
+  }
+}
+
+void connection_db_manager_t::try_record_pair(peer_id_t from, peer_id_t to) {
   if (!db_ || !db_->is_open())
     return;
 
-  const auto id_a = stable_id_for_peer(a);
-  const auto id_b = stable_id_for_peer(b);
+  const auto id_from = device_identity_for_peer(from);
+  const auto id_to = device_identity_for_peer(to);
 
-  if (id_a && id_b) {
-    INFO("connection_db: storing live router edge peer {} ({}) <-> peer {} ({})",
-         a, *id_a, b, *id_b);
-    db_->record_connection(*id_a, *id_b);
+  if (id_from && id_to) {
+    stored_connection_t row;
+    row.side_a = id_from->serialize();
+    row.side_b = id_to->serialize();
+    row.direction = connection_direction_e::a2b;
+    row.enabled = true;
+    INFO("connection_db: storing live router edge {} -> {}", row.side_a,
+         row.side_b);
+    db_->save_connection(row);
     std::lock_guard<std::mutex> lock(state_mutex_);
     pending_records_.erase(
         std::remove_if(pending_records_.begin(), pending_records_.end(),
-                       [a, b](const pending_pair_t &p) {
-                         return (p.a == a && p.b == b) || (p.a == b && p.b == a);
+                       [from, to](const pending_pair_t &p) {
+                         return (p.a == from && p.b == to) ||
+                                (p.a == to && p.b == from);
                        }),
         pending_records_.end());
     return;
@@ -351,19 +523,11 @@ void connection_db_manager_t::try_record_pair(peer_id_t a, peer_id_t b) {
   {
     std::lock_guard<std::mutex> lock(state_mutex_);
     for (const auto &p : pending_records_) {
-      if ((p.a == a && p.b == b) || (p.a == b && p.b == a))
+      if ((p.a == from && p.b == to) || (p.a == to && p.b == from))
         return;
     }
-    pending_records_.push_back(pending_pair_t{a, b});
+    pending_records_.push_back(pending_pair_t{from, to});
   }
-
-  if (!id_a && !id_b)
-    INFO("connection_db: deferred recording for peers {} <-> {} (stable ids pending)",
-         a, b);
-  else if (!id_a)
-    INFO("connection_db: deferred recording for peer {} (stable id pending)", a);
-  else
-    INFO("connection_db: deferred recording for peer {} (stable id pending)", b);
 }
 
 void connection_db_manager_t::try_finalize_pending_for(peer_id_t peer_id) {
@@ -375,66 +539,6 @@ void connection_db_manager_t::try_finalize_pending_for(peer_id_t peer_id) {
   for (const auto &p : snapshot) {
     if (p.a == peer_id || p.b == peer_id)
       try_record_pair(p.a, p.b);
-  }
-}
-
-static bool router_has_edge(const std::shared_ptr<midirouter_t> &router,
-                            peer_id_t from, peer_id_t to) {
-  const auto targets = router->send_targets_for(from);
-  return std::find(targets.begin(), targets.end(), to) != targets.end();
-}
-
-void connection_db_manager_t::try_auto_connect_peer(peer_id_t peer_id) {
-  if (!db_ || !db_->is_open() || !router_)
-    return;
-
-  DEBUG("connection_db: auto-connect check for peer_id={}", peer_id);
-
-  const auto my_id = stable_id_for_peer(peer_id);
-  if (!my_id) {
-    DEBUG("connection_db: peer_id={} has no stable id yet, skip auto-connect",
-          peer_id);
-    return;
-  }
-
-  const auto saved = db_->get_connections();
-  DEBUG("connection_db: peer_id={} stable_id={} scanning {} saved pair(s)",
-        peer_id, *my_id, saved.size());
-
-  for (const auto &pair : saved) {
-    std::optional<std::string> other_stable;
-    if (pair.side_a == *my_id)
-      other_stable = pair.side_b;
-    else if (pair.side_b == *my_id)
-      other_stable = pair.side_a;
-    else
-      continue;
-
-    if (!other_stable)
-      continue;
-
-    const auto other_peer = find_peer_by_stable_id(*other_stable);
-    if (!other_peer) {
-      DEBUG("connection_db: saved pair {} <-> {} — other endpoint {} not online",
-            *my_id, *other_stable, *other_stable);
-      continue;
-    }
-    if (*other_peer == peer_id)
-      continue;
-
-    if (router_has_edge(router_, peer_id, *other_peer) &&
-        router_has_edge(router_, *other_peer, peer_id)) {
-      DEBUG("connection_db: saved pair {} <-> {} already routed (peers {} <-> "
-            "{})",
-            *my_id, *other_stable, peer_id, *other_peer);
-      continue;
-    }
-
-    INFO("connection_db: restoring from database {} <-> {} (router peers {} "
-         "<-> {})",
-         *my_id, *other_stable, peer_id, *other_peer);
-    router_->enqueue_connect(peer_id, *other_peer);
-    router_->enqueue_connect(*other_peer, peer_id);
   }
 }
 
@@ -458,29 +562,35 @@ void connection_db_manager_t::on_disconnected(peer_id_t from, peer_id_t to) {
   if (!db_ || !db_->is_open())
     return;
 
-  const auto id_from = stable_id_for_peer(from);
-  const auto id_to = stable_id_for_peer(to);
-  if (id_from && id_to) {
-    INFO("connection_db: removing live router edge peer {} ({}) <-> peer {} ({})",
-         from, *id_from, to, *id_to);
-    db_->remove_connection(*id_from, *id_to);
+  if (const auto id_from = device_identity_for_peer(from)) {
+    if (const auto id_to = device_identity_for_peer(to)) {
+      INFO("connection_db: removing live router edge {} -> {}",
+           id_from->serialize(), id_to->serialize());
+      db_->remove_connection(id_from->serialize(), id_to->serialize());
+      return;
+    }
+  }
+
+  const auto legacy_from = stable_id_for_peer(from);
+  const auto legacy_to = stable_id_for_peer(to);
+  if (legacy_from && legacy_to) {
+    auto a = *legacy_from;
+    auto b = *legacy_to;
+    if (b < a)
+      std::swap(a, b);
+    db_->remove_connection(a, b);
   }
 }
 
-void connection_db_manager_t::on_peer_added(peer_id_t peer_id) {
-  DEBUG("connection_db: peer_added peer_id={} — running auto-connect check",
-        peer_id);
-  try_auto_connect_peer(peer_id);
+void connection_db_manager_t::on_peer_added(peer_id_t /*peer_id*/) {
+  apply_saved_connections();
 }
 
 void connection_db_manager_t::on_peer_event(peer_id_t peer_id,
                                            midipeer_event_e evt) {
   if (evt == midipeer_event_e::CONNECTED_PEER) {
-    DEBUG("connection_db: peer_id={} CONNECTED_PEER — finalize pending + "
-          "auto-connect",
-          peer_id);
     try_finalize_pending_for(peer_id);
-    try_auto_connect_peer(peer_id);
+    apply_saved_connections();
   } else if (evt == midipeer_event_e::DISCONNECTED_PEER) {
     std::lock_guard<std::mutex> lock(state_mutex_);
     pending_records_.erase(
@@ -495,12 +605,13 @@ void connection_db_manager_t::on_peer_event(peer_id_t peer_id,
 void connection_db_manager_t::check_reconnects_for_all() {
   if (!router_)
     return;
-  const auto ids = router_->peer_ids();
-  const auto saved = db_ && db_->is_open() ? db_->get_connections() : std::vector<connection_pair_t>{};
-  INFO("connection_db: startup reconnect scan ({} peer(s), {} saved pair(s))",
-       ids.size(), saved.size());
-  for (const auto id : ids)
-    try_auto_connect_peer(id);
+  const auto saved =
+      db_ && db_->is_open() ? db_->list_connections()
+                            : std::vector<stored_connection_t>{};
+  INFO("connection_db: startup reconnect scan ({} peer(s), {} saved "
+       "connection(s))",
+       router_->peer_ids().size(), saved.size());
+  apply_saved_connections();
   try_auto_aconnect_all_alsa_pairs();
 }
 
@@ -508,11 +619,9 @@ void connection_db_manager_t::try_auto_aconnect_all_alsa_pairs() {
   if (!db_ || !db_->is_open() || !aseq_)
     return;
 
-  const auto saved = db_->get_connections();
+  const auto saved = db_->list_connections();
   std::vector<alsa_seq_port_row_t> ports;
   bool ports_loaded = false;
-  /* Lazily enumerate ports the first time we hit an ALSA-only saved pair so
-     the sweep is free when no such pairs are stored. */
   auto ensure_ports = [&]() {
     if (ports_loaded)
       return;
@@ -521,48 +630,39 @@ void connection_db_manager_t::try_auto_aconnect_all_alsa_pairs() {
   };
 
   for (const auto &pair : saved) {
-    if (!is_alsa_stable_id(pair.side_a) || !is_alsa_stable_id(pair.side_b))
+    if (!pair.enabled)
+      continue;
+    if (!is_direct_alsa_side(pair.side_a) || !is_direct_alsa_side(pair.side_b))
       continue;
     ensure_ports();
-    const auto a_names = parse_alsa_stable_id(pair.side_a);
-    const auto b_names = parse_alsa_stable_id(pair.side_b);
+    const auto a_names = alsa_side_names(pair.side_a);
+    const auto b_names = alsa_side_names(pair.side_b);
     if (!a_names || !b_names)
       continue;
     const auto port_a =
         find_alsa_port_by_names(ports, a_names->first, a_names->second);
     const auto port_b =
         find_alsa_port_by_names(ports, b_names->first, b_names->second);
-    if (!port_a || !port_b) {
-      DEBUG("connection_db: saved ALSA pair {} <-> {} - waiting for both "
-            "ports to come online",
-            pair.side_a, pair.side_b);
+    if (!port_a || !port_b)
       continue;
-    }
 
-    if (!alsa_is_already_connected(*aseq_, *port_a, *port_b)) {
-      INFO("connection_db: aconnect saved ALSA pair {} <-> {} ({}:{} -> "
-           "{}:{})",
-           pair.side_a, pair.side_b, port_a->client, port_a->port,
-           port_b->client, port_b->port);
+    const auto maybe_connect = [&](const aseq_t::port_t &from,
+                                   const aseq_t::port_t &to) {
+      if (alsa_is_already_connected(*aseq_, from, to))
+        return;
       try {
-        aseq_->connect_external(*port_a, *port_b);
+        aseq_->connect_external(from, to);
       } catch (const std::exception &e) {
-        ERROR("connection_db: aconnect failed {} -> {}: {}", pair.side_a,
-              pair.side_b, e.what());
+        ERROR("connection_db: aconnect failed: {}", e.what());
       }
-    }
-    if (!alsa_is_already_connected(*aseq_, *port_b, *port_a)) {
-      INFO("connection_db: aconnect saved ALSA pair {} <-> {} ({}:{} -> "
-           "{}:{}) [reverse]",
-           pair.side_a, pair.side_b, port_b->client, port_b->port,
-           port_a->client, port_a->port);
-      try {
-        aseq_->connect_external(*port_b, *port_a);
-      } catch (const std::exception &e) {
-        ERROR("connection_db: aconnect failed {} -> {}: {}", pair.side_b,
-              pair.side_a, e.what());
-      }
-    }
+    };
+
+    if (pair.direction == connection_direction_e::a2b ||
+        pair.direction == connection_direction_e::both)
+      maybe_connect(*port_a, *port_b);
+    if (pair.direction == connection_direction_e::b2a ||
+        pair.direction == connection_direction_e::both)
+      maybe_connect(*port_b, *port_a);
   }
 }
 
@@ -572,8 +672,6 @@ void connection_db_manager_t::record_stable_pair(const std::string &side_a,
     return;
   INFO("connection_db: store requested {} <-> {}", side_a, side_b);
   db_->record_connection(side_a, side_b);
-  /* check_reconnects_for_all() already sweeps ALSA pairs, so a newly stored
-     ALSA pair is materialised immediately if both ports are present. */
   check_reconnects_for_all();
 }
 
@@ -582,7 +680,11 @@ void connection_db_manager_t::remove_stable_pair(const std::string &side_a,
   if (!db_ || !db_->is_open())
     return;
   INFO("connection_db: delete requested {} <-> {}", side_a, side_b);
-  db_->remove_connection(side_a, side_b);
+  auto a = side_a;
+  auto b = side_b;
+  if (b < a)
+    std::swap(a, b);
+  db_->remove_connection(a, b);
 }
 
 } // namespace rtpmididns

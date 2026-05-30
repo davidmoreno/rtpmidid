@@ -246,7 +246,7 @@ go under `tests/` and are wired into `make test`.
 | 2 | Identity grammar (`key=value`) | ☑ Completed |
 | 3 | Query matching | ☑ Completed |
 | 4 | Device registry | ☑ Completed |
-| 5 | Persisted connections v2 (directed + query) | ☐ Not started |
+| 5 | Persisted connections v2 (directed + query) | ☑ Completed |
 | 6 | Control + Web UI | ☐ Not started |
 | 7 | Pure-ALSA direct + optional monitor tap | ☐ Not started |
 | 8 | Lifecycle / cleanup | ☐ Not started |
@@ -338,7 +338,7 @@ by the existing test suite (no behavior change ⇒ tests stay green).
   derivation for each peer type.
 
 ### Phase 5 — Persisted connections v2 (directed + query)
-**Status:** ☐ Not started
+**Status:** ☑ Completed
 
 * Migrate `connection_db_t` schema (Phase-4 tables); store `direction` + `enabled`.
 * `connection_db_manager_t`: on restore, expand each stored query to **all** matching

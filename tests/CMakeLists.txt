@@ -51,6 +51,22 @@ add_test(NAME test_signals COMMAND test_signals)
 
 
 #
+# Connection database v2 (Phase 5)
+#
+
+if (NOT LIBS_ONLY)
+  add_executable(test_connection_db
+      test_connection_db.cpp test_utils.cpp
+  )
+  target_link_libraries(test_connection_db -pthread rtpmidid-shared rtpmidid2-static)
+  add_test(NAME test_connection_db COMMAND test_connection_db)
+  target_link_libraries(test_connection_db ${ALSA_LIBRARIES})
+  target_link_libraries(test_connection_db ${FMT_LIBRARIES})
+  target_include_directories(test_connection_db PUBLIC ${ALSA_INCLUDE_DIRS})
+  target_compile_options(test_connection_db PUBLIC ${ALSA_CFLAGS_OTHER})
+endif (NOT LIBS_ONLY)
+
+#
 # Device registry (Phase 4)
 #
 
