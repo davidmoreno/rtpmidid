@@ -77,7 +77,7 @@ function Th({
     <th class="ui-th-sort">
       <button
         type="button"
-        class={`font-mono text-xs font-bold uppercase tracking-wide hover:underline ${active ? "ui-text-sort-active" : "ui-text"}`}
+        class={`ui-btn-plain px-1 font-mono text-xs font-bold uppercase tracking-wide hover:underline ${active ? "ui-text-sort-active" : "ui-text"}`}
         onClick={onClick}
       >
         {label}
@@ -103,13 +103,13 @@ function DirectionCircles({
     >
       <span
         title="Inbound: packets_recv increased recently (stays lit for one refresh interval)"
-        class={`ui-io flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold leading-none ease-out transition-[background-color,border-color,color,box-shadow] duration-[500ms] ${recvActive ? "ui-io-in-on" : ""}`}
+        class={`ui-io ui-r-full flex h-7 w-7 shrink-0 items-center justify-center font-mono text-[11px] font-bold leading-none ease-out transition-[background-color,border-color,color,box-shadow] duration-[500ms] ${recvActive ? "ui-io-in-on" : ""}`}
       >
         ←
       </span>
       <span
         title="Outbound: packets_sent increased recently (stays lit for one refresh interval)"
-        class={`ui-io flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold leading-none ease-out transition-[background-color,border-color,color,box-shadow] duration-[500ms] ${sentActive ? "ui-io-out-on" : ""}`}
+        class={`ui-io ui-r-full flex h-7 w-7 shrink-0 items-center justify-center font-mono text-[11px] font-bold leading-none ease-out transition-[background-color,border-color,color,box-shadow] duration-[500ms] ${sentActive ? "ui-io-out-on" : ""}`}
       >
         →
       </span>
@@ -121,7 +121,7 @@ function TypeBadge({ type }: { type: ConnectionRow["type"] }) {
   const isAlsa = type === "alsaseq";
   return (
     <span
-      class={`inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-wide ${
+      class={`ui-r-sm inline-flex shrink-0 items-center border px-1.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-wide ${
         isAlsa
           ? "ui-badge-local border-[color:var(--color-badge-local-border)]"
           : "ui-badge-remote border-[color:var(--color-badge-remote-border)]"
@@ -157,7 +157,7 @@ function EndpointPill({
     </>
   );
   const baseCls =
-    "inline-flex max-w-full items-center gap-1 truncate rounded border-2 px-1.5 py-0.5";
+    "ui-r-sm inline-flex max-w-full items-center gap-1 truncate border-2 px-1.5 py-0.5";
   if (side.unavailable || !onOpen) {
     return (
       <span
@@ -237,7 +237,7 @@ function DbStarCell({
   const disabled = !saved && !canAdd;
 
   const btnCls =
-    "flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-mono text-xl leading-none outline-none transition-all duration-200 ease-out focus-visible:ring-2 focus-visible:ring-[color:var(--color-ring-highlight)]";
+    "ui-r-sm flex h-7 w-7 shrink-0 items-center justify-center font-mono text-xl leading-none outline-none transition-all duration-200 ease-out focus-visible:ring-2 focus-visible:ring-[color:var(--color-ring-highlight)]";
 
   if (disabled) {
     return (
@@ -261,11 +261,11 @@ function DbStarCell({
     ? () => onRemove!(row)
     : () => onAdd!(row);
   const title = saved
-    ? `Remove from saved connections. ${CONFIRM_SKIP_HINT}`
-    : "Save this connection to the database";
+    ? `Stop remembering this connection. ${CONFIRM_SKIP_HINT}`
+    : "Remember this connection (auto-reconnect when devices come online)";
   const aria = saved
-    ? "Remove from saved connections"
-    : "Save this connection to the database";
+    ? "Stop remembering this connection"
+    : "Remember this connection";
 
   const onStarClick = (ev: MouseEvent) => {
     ev.preventDefault();
@@ -273,7 +273,7 @@ function DbStarCell({
     if (saved) {
       runWithConfirm(
         ev,
-        `Remove saved connection "${row.from.label}" ${row.direction} "${row.to.label}" from the database?`,
+        `Stop remembering "${row.from.label}" ${row.direction} "${row.to.label}"?`,
         handler,
       );
     } else {
@@ -319,8 +319,6 @@ type Props = {
   onRemoveFromDb?: (row: ConnectionRow) => void;
   /** Open editor for a saved connection. */
   onEditSaved?: (row: ConnectionRow) => void;
-  /** Enable or disable auto-reconnect for a saved connection. */
-  onToggleEnabled?: (row: ConnectionRow, enable: boolean) => void;
   /** Status refresh interval (ms); controls how long the I/O highlight stays lit. */
   refreshIntervalMs: number;
 };
@@ -333,7 +331,6 @@ export function ConnectionsTable({
   onAddToDb,
   onRemoveFromDb,
   onEditSaved,
-  onToggleEnabled,
   refreshIntervalMs,
 }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("from");
@@ -438,7 +435,7 @@ export function ConnectionsTable({
             {dbEnabled ? (
               <th
                 class="ui-th-sort w-10 text-left font-mono text-xs font-bold uppercase"
-                title="Save connections to the database (★ = saved, ☆ = save, dim ☆ = cannot save)"
+                title="Remember connections (★ = remembered, ☆ = remember, dim ☆ = cannot remember)"
               >
                 ★
               </th>
@@ -524,36 +521,15 @@ export function ConnectionsTable({
                 {dbEnabled ? (
                   <td class="whitespace-nowrap px-2 py-1.5 align-middle">
                     {r.persisted && r.persistedSideA && r.persistedSideB ? (
-                      <div class="flex flex-wrap gap-1">
-                        {onEditSaved ? (
-                          <button
-                            type="button"
-                            class="rounded border border-[color:var(--color-border)] px-1.5 py-0.5 font-mono text-[10px] ui-text-muted hover:ui-text"
-                            onClick={() => onEditSaved(r)}
-                          >
-                            Edit
-                          </button>
-                        ) : null}
-                        {onToggleEnabled ? (
-                          <button
-                            type="button"
-                            class="rounded border border-[color:var(--color-border)] px-1.5 py-0.5 font-mono text-[10px] ui-text-muted hover:ui-text"
-                            title={
-                              r.persistedEnabled === false
-                                ? "Enable auto-reconnect"
-                                : "Disable auto-reconnect"
-                            }
-                            onClick={() =>
-                              onToggleEnabled(
-                                r,
-                                r.persistedEnabled === false,
-                              )
-                            }
-                          >
-                            {r.persistedEnabled === false ? "Enable" : "Disable"}
-                          </button>
-                        ) : null}
-                      </div>
+                      onEditSaved ? (
+                        <button
+                          type="button"
+                          class="ui-btn-plain border border-[color:var(--color-border)] px-1.5 py-0.5 font-mono text-[10px] ui-text-muted hover:ui-text"
+                          onClick={() => onEditSaved(r)}
+                        >
+                          Edit
+                        </button>
+                      ) : null
                     ) : null}
                   </td>
                 ) : null}
@@ -563,9 +539,9 @@ export function ConnectionsTable({
         </tbody>
       </table>
       <p class="mt-2 font-mono text-[10px] ui-text-subtle">
-        <span class="font-bold">★</span> = saved in DB (click to remove,
-        confirm unless Shift/Ctrl+click),
-        <span class="font-bold"> ☆</span> = click to save,
+        <span class="font-bold">★</span> = remembered (auto-reconnect; click to
+        forget, confirm unless Shift/Ctrl+click),
+        <span class="font-bold"> ☆</span> = click to remember,
         <span class="font-bold"> dim ☆</span> = cannot be saved (hover for
         reason). # = row order in this table. I/O: ← / → stay lit for one
         full refresh interval after the corresponding packet counter

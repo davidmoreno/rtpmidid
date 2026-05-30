@@ -1,12 +1,17 @@
 import type { MdnsRemote, RouterPeer } from "./model";
 import { groupMdnsRemotes } from "./model";
 import type { MidiAlsaSeqEntry, MidiRawmidiEntry } from "./midiEnumerate";
+import type { RegistryDevice } from "./devicesList";
+import { sourceLabel } from "./devicesList";
 import {
+  canonicalIdentity,
+  formatIdentityLabel,
   identityFromAlsaEntry,
   identityFromMdnsGroup,
   identityFromPeerRow,
   identityFromRawEntry,
   identityFromRtpClientConnect,
+  parseIdentity,
 } from "./deviceIdentity";
 
 export type EndpointKind =
@@ -287,6 +292,37 @@ export function buildEndpoints(args: {
     });
   }
 
+  return sortEndpoints(out);
+}
+
+/** Types that cannot be spawned from a bare identity string (runtime attachment only). */
+const PICKER_EXCLUDED_PREFIXES = new Set([
+  "rtpmidi_session",
+  "webui_monitor",
+]);
+
+function endpointKindForRegistry(reg: RegistryDevice): EndpointKind {
+  const parsed = parseIdentity(reg.identity);
+  const prefix = reg.type || parsed?.typePrefix || "";
+  if (prefix === "rtpmidi_client") return "rtpmidi";
+  if (prefix === "alsa_seq") return "alsa_seq";
+  if (prefix === "rawmidi") return "rawmidi";
+  if (prefix === "alsa_listener" || prefix === "rtpmidi_server") return "rtpmidi";
+  return "peer";
+}
+
+function registryPickerSub(reg: RegistryDevice): string {
+  const src = sourceLabel(reg.source);
+  if (reg.online && reg.peerId !== undefined) {
+    return `known device · ${src} · peer #${reg.peerId}`;
+  }
+  if (reg.online) {
+    return `known device · ${src} · creates peer on connect`;
+  }
+  return `known device · offline · ${src} · creates peer on connect`;
+}
+
+function sortEndpoints(out: Endpoint[]): Endpoint[] {
   const rank: Record<EndpointKind, number> = {
     rtpmidi: 0,
     alsa_seq: 1,
@@ -301,6 +337,40 @@ export function buildEndpoints(args: {
     const c = a.label.localeCompare(b.label);
     return c !== 0 ? c : a.identity.localeCompare(b.identity);
   });
-
   return out;
+}
+
+/**
+ * Endpoints for Connect / connection editor pickers: live ALSA/raw/mDNS/peers plus
+ * registry-known devices that are not online yet (spawned via endpoint.connect).
+ */
+export function buildPickerEndpoints(args: {
+  alsaSeq: MidiAlsaSeqEntry[];
+  rawmidi: MidiRawmidiEntry[];
+  mdnsRemotes: MdnsRemote[];
+  peers: RouterPeer[];
+  registryDevices?: RegistryDevice[];
+}): Endpoint[] {
+  const out = buildEndpoints(args);
+  const seen = new Set(out.map((e) => canonicalIdentity(e.identity)));
+
+  for (const reg of args.registryDevices ?? []) {
+    const identity = reg.identity.trim();
+    if (!identity) continue;
+    const parsed = parseIdentity(identity);
+    if (!parsed || PICKER_EXCLUDED_PREFIXES.has(parsed.typePrefix)) continue;
+    const canon = canonicalIdentity(identity);
+    if (seen.has(canon)) continue;
+
+    out.push({
+      identity,
+      kind: endpointKindForRegistry(reg),
+      label: reg.name.trim() || formatIdentityLabel(identity),
+      sub: registryPickerSub(reg),
+      peerId: reg.online ? reg.peerId : undefined,
+    });
+    seen.add(canon);
+  }
+
+  return sortEndpoints(out);
 }

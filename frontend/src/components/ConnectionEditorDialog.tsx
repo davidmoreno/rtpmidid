@@ -9,12 +9,12 @@ import {
   type ConnectionDirection,
 } from "../deviceIdentity";
 import { loadDeviceFavoriteIds } from "../deviceFavorites";
+import { useEscapeKey } from "../useEscapeKey";
 
 export type ConnectionEditorInitial = {
   sideA: string;
   sideB: string;
   direction: ConnectionDirection;
-  enabled: boolean;
 };
 
 type Props = {
@@ -32,6 +32,11 @@ type Props = {
 
 type PickTarget = "a" | "b" | null;
 
+function endpointForIdentity(endpoints: Endpoint[], identity: string): Endpoint | null {
+  if (!identity.trim()) return null;
+  return endpoints.find((e) => e.identity === identity) ?? null;
+}
+
 export function ConnectionEditorDialog({
   title,
   endpoints,
@@ -42,13 +47,16 @@ export function ConnectionEditorDialog({
   const [sideA, setSideA] = useState(initial.sideA);
   const [sideB, setSideB] = useState(initial.sideB);
   const [direction, setDirection] = useState<ConnectionDirection>(initial.direction);
-  const [enabled, setEnabled] = useState(initial.enabled);
   const [picker, setPicker] = useState<PickTarget>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   const favoriteIds = useMemo(() => loadDeviceFavoriteIds(), []);
   const preview = directionLabel(direction, sideA, sideB);
+
+  useEscapeKey(() => {
+    if (!busy) onClose();
+  });
 
   const pickEndpoint = (id: string) => {
     if (picker === "a") setSideA(id);
@@ -72,7 +80,7 @@ export function ConnectionEditorDialog({
         side_a: sideA,
         side_b: sideB,
         direction,
-        enabled: enabled ? 1 : 0,
+        enabled: 1,
       });
       onClose();
     } catch (e) {
@@ -85,15 +93,16 @@ export function ConnectionEditorDialog({
   return (
     <>
       <div
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        class="ui-modal-backdrop"
         onClick={(e) => {
           if (e.target === e.currentTarget) onClose();
         }}
       >
         <div
-          class="ui-card max-h-[90vh] w-full max-w-lg overflow-y-auto p-4 shadow-lg"
+          class="ui-modal max-h-[90vh] max-w-lg"
           role="dialog"
           aria-labelledby="conn-editor-title"
+          onClick={(e) => e.stopPropagation()}
         >
           <h2
             id="conn-editor-title"
@@ -102,17 +111,13 @@ export function ConnectionEditorDialog({
             {title}
           </h2>
 
-          <div class="mb-3 space-y-2">
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="font-mono text-[10px] font-bold uppercase ui-text-muted">
-                Side A
-              </span>
-              <Button type="button" onClick={() => setPicker("a")}>
-                Pick endpoint…
-              </Button>
-            </div>
-            <StoredQueryEditor label="A" value={sideA} onChange={setSideA} />
-          </div>
+          <StoredQueryEditor
+            label="A"
+            value={sideA}
+            onChange={setSideA}
+            onPickEndpoint={() => setPicker("a")}
+            endpoint={endpointForIdentity(endpoints, sideA)}
+          />
 
           <div class="mb-3">
             <span class="mb-1 block font-mono text-[10px] font-bold uppercase ui-text-muted">
@@ -129,7 +134,7 @@ export function ConnectionEditorDialog({
                 <button
                   key={dir}
                   type="button"
-                  class={`rounded border px-3 py-1 font-mono text-[11px] font-bold ${
+                  class={`ui-btn-plain border px-3 py-1 font-mono text-[11px] font-bold ${
                     direction === dir
                       ? "border-[color:var(--color-ring-highlight)] ui-text"
                       : "border-[color:var(--color-border)] ui-text-muted"
@@ -142,32 +147,17 @@ export function ConnectionEditorDialog({
             </div>
           </div>
 
-          <div class="mb-3 space-y-2">
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="font-mono text-[10px] font-bold uppercase ui-text-muted">
-                Side B
-              </span>
-              <Button type="button" onClick={() => setPicker("b")}>
-                Pick endpoint…
-              </Button>
-            </div>
-            <StoredQueryEditor label="B" value={sideB} onChange={setSideB} />
-          </div>
+          <StoredQueryEditor
+            label="B"
+            value={sideB}
+            onChange={setSideB}
+            onPickEndpoint={() => setPicker("b")}
+            endpoint={endpointForIdentity(endpoints, sideB)}
+          />
 
-          <p class="mb-3 rounded border border-[color:var(--color-border)] px-2 py-1.5 font-mono text-[11px] ui-text-muted">
+          <p class="ui-panel-bordered mb-3 px-2 py-1.5 font-mono text-[11px] ui-text-muted">
             Preview: {preview}
           </p>
-
-          <label class="mb-3 flex items-center gap-2 font-mono text-[11px] ui-text">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(e) =>
-                setEnabled((e.target as HTMLInputElement).checked)
-              }
-            />
-            Auto-reconnect when devices come online
-          </label>
 
           {err ? (
             <p class="mb-3 font-mono text-[11px] text-red-600">{err}</p>
@@ -186,7 +176,7 @@ export function ConnectionEditorDialog({
 
       {picker ? (
         <EndpointPickerDialog
-          title={picker === "a" ? "Pick side A" : "Pick side B"}
+          title={picker === "a" ? "Side A endpoint" : "Side B endpoint"}
           description="The endpoint identity is stored as a device query."
           endpoints={endpoints}
           excludeIds={

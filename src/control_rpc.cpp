@@ -178,6 +178,18 @@ static peer_id_t ensure_peer_for_side(control_rpc_context_t &ctx,
   return ensure_peer_for_identity(factory_context(ctx), ctx.router, side);
 }
 
+/** Match an online router peer only — never create peers (used for disconnect). */
+static std::optional<peer_id_t>
+peer_id_for_disconnect_side(control_rpc_context_t &ctx, std::string_view side) {
+  if (!ctx.router)
+    return std::nullopt;
+  const auto online = collect_online_devices_from_router(ctx.router);
+  const auto indices = match_side_to_devices(std::string(side), online);
+  if (indices.empty())
+    return std::nullopt;
+  return online[indices.front()].peer_id;
+}
+
 static std::optional<aseq_t::port_t>
 alsa_port_from_identity(const std::shared_ptr<aseq_t> &aseq,
                         const std::string &identity) {
@@ -250,6 +262,22 @@ resolve_side_to_connection_side(const std::string &side) {
     return side;
   throw std::runtime_error(
       FMT::format("Invalid device identity or query for side '{}'", side));
+}
+
+static void unpersist_endpoint_pair(control_rpc_context_t &ctx,
+                                    const std::string &from,
+                                    const std::string &to) {
+  if (!ctx.connection_db)
+    return;
+  try {
+    const auto sa = resolve_side_to_connection_side(from);
+    const auto sb = resolve_side_to_connection_side(to);
+    if (sa && sb)
+      ctx.connection_db->remove_stable_pair(*sa, *sb);
+  } catch (const std::exception &e) {
+    DEBUG("endpoint.disconnect: skip unpersist ({} -> {}): {}", from, to,
+          e.what());
+  }
 }
 
 static void maybe_persist_direct_endpoint_connection(
@@ -381,13 +409,18 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
           throw std::runtime_error("Could not resolve ALSA ports from identity");
         ctx.aseq->disconnect_external(*from_port, *to_port);
         ctx.aseq->disconnect_external(*to_port, *from_port);
+        unpersist_endpoint_pair(ctx, p.from, p.to);
         return respond_ok(env);
       }
 
-      const auto pa = ensure_peer_for_side(ctx, p.from);
-      const auto pb = ensure_peer_for_side(ctx, p.to);
-      ctx.router->enqueue_disconnect(pa, pb);
-      ctx.router->enqueue_disconnect(pb, pa);
+      const auto pa = peer_id_for_disconnect_side(ctx, p.from);
+      const auto pb = peer_id_for_disconnect_side(ctx, p.to);
+      if (!pa || !pb)
+        throw std::runtime_error(
+            "Could not resolve online peers for disconnect (check device "
+            "identities match the Devices tab)");
+      ctx.router->enqueue_disconnect(*pa, *pb);
+      ctx.router->enqueue_disconnect(*pb, *pa);
       return respond_ok(env);
     }
     if (env.method == "connect") {

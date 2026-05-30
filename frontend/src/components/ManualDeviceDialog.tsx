@@ -1,5 +1,6 @@
 import { useMemo, useState } from "preact/hooks";
 import { Button } from "./Button";
+import { useEscapeKey } from "../useEscapeKey";
 import {
   DEVICE_TYPE_DEFS,
   identityFromForm,
@@ -42,6 +43,10 @@ export function ManualDeviceDialog({
 
   const def = DEVICE_TYPE_DEFS.find((d) => d.typePrefix === typePrefix)!;
   const editing = !!initialIdentity;
+
+  useEscapeKey(() => {
+    if (!busy) onClose();
+  });
 
   const commit = async () => {
     const parsed = identityFromForm(typePrefix, values);

@@ -13,7 +13,8 @@ import {
 } from "../model";
 import type { MidiAlsaSeqEntry, MidiRawmidiEntry } from "../midiEnumerate";
 import type { RpcClient } from "../rpc";
-import { buildEndpoints } from "../endpoints";
+import { buildPickerEndpoints } from "../endpoints";
+import type { RegistryDevice } from "../devicesList";
 import {
   annotateLiveOnly,
   mergeConnectionsWithPersisted,
@@ -35,6 +36,8 @@ type Props = {
   mdnsRemotes: MdnsRemote[];
   alsaSeq: MidiAlsaSeqEntry[];
   rawmidi: MidiRawmidiEntry[];
+  registryDevices?: RegistryDevice[];
+  registryEnabled?: boolean;
   onAfterAction: () => Promise<void> | void;
   onStatus: (msg: string) => void;
 };
@@ -46,7 +49,6 @@ type EditorMode =
       sideA: string;
       sideB: string;
       direction: ConnectionDirection;
-      enabled: boolean;
     };
 
 export function ConnectionsTab({
@@ -63,6 +65,8 @@ export function ConnectionsTab({
   mdnsRemotes,
   alsaSeq,
   rawmidi,
+  registryDevices = [],
+  registryEnabled = false,
   onAfterAction,
   onStatus,
 }: Props) {
@@ -70,13 +74,14 @@ export function ConnectionsTab({
 
   const endpoints = useMemo(
     () =>
-      buildEndpoints({
+      buildPickerEndpoints({
         alsaSeq,
         rawmidi,
         mdnsRemotes,
         peers,
+        registryDevices: registryEnabled ? registryDevices : [],
       }),
-    [alsaSeq, rawmidi, mdnsRemotes, peers],
+    [alsaSeq, rawmidi, mdnsRemotes, peers, registryDevices, registryEnabled],
   );
 
   const liveAllRows = useMemo(() => {
@@ -154,18 +159,6 @@ export function ConnectionsTab({
     await removeSaved(sideA, sideB);
   };
 
-  const toggleEnabled = async (row: ConnectionRow, enable: boolean) => {
-    const sideA = row.persistedSideA ?? row.from.identity;
-    const sideB = row.persistedSideB ?? row.to.identity;
-    if (!sideA || !sideB) return;
-    await rpc.call(enable ? "connections.enable" : "connections.disable", {
-      side_a: sideA,
-      side_b: sideB,
-    });
-    await onAfterAction();
-    onStatus("");
-  };
-
   const openEdit = (row: ConnectionRow) => {
     const sideA = row.persistedSideA ?? row.from.identity;
     const sideB = row.persistedSideB ?? row.to.identity;
@@ -185,7 +178,6 @@ export function ConnectionsTab({
       sideA,
       sideB,
       direction,
-      enabled: saved?.enabled !== false,
     });
   };
 
@@ -202,9 +194,9 @@ export function ConnectionsTab({
               + Add saved connection
             </Button>
             <span class="font-mono text-[10px] ui-text-subtle">
-              Saved connections auto-reconnect with the direction and matching
-              rules you set. Click ★ on a live row to save quickly, or use the
-              editor for direction and partial matching.
+              Remembered connections (★) auto-reconnect with the direction and
+              matching rules you set. Click ☆ on a live row to remember quickly,
+              or use the editor for direction and partial matching.
             </span>
           </div>
         ) : (
@@ -222,11 +214,6 @@ export function ConnectionsTab({
           onAddToDb={dbEnabled ? (r) => void addRow(r) : undefined}
           onRemoveFromDb={dbEnabled ? (r) => void removeRow(r) : undefined}
           onEditSaved={dbEnabled ? (r) => openEdit(r) : undefined}
-          onToggleEnabled={
-            dbEnabled
-              ? (r, enable) => void toggleEnabled(r, enable)
-              : undefined
-          }
         />
       </Card>
 
@@ -240,13 +227,11 @@ export function ConnectionsTab({
                   sideA: "",
                   sideB: "",
                   direction: "both",
-                  enabled: true,
                 }
               : {
                   sideA: editor.sideA,
                   sideB: editor.sideB,
                   direction: editor.direction,
-                  enabled: editor.enabled,
                 }
           }
           onClose={() => setEditor(null)}

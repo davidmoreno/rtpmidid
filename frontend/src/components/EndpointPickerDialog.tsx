@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
+import { useEscapeKey } from "../useEscapeKey";
 import type { ComponentChildren } from "preact";
 import type { RouterPeer } from "../model";
 import type { Endpoint } from "../endpoints";
@@ -7,14 +8,15 @@ import {
   groupForEndpoint,
   type EndpointSortKey,
 } from "../endpointPickerUtils";
+import { canonicalIdentity } from "../deviceIdentity";
 import { Button } from "./Button";
 
 export function EndpointSelectBadge({ e }: { e: Endpoint }) {
   const g = groupForEndpoint(e);
   const cls =
     g === "local"
-      ? "ui-badge-local inline-flex items-center gap-1 rounded px-1 py-0.5 font-mono text-[11px] font-bold"
-      : "ui-badge-remote inline-flex items-center gap-1 rounded px-1 py-0.5 font-mono text-[11px] font-bold";
+      ? "ui-badge-local ui-r-sm inline-flex items-center gap-1 px-1 py-0.5 font-mono text-[11px] font-bold"
+      : "ui-badge-remote ui-r-sm inline-flex items-center gap-1 px-1 py-0.5 font-mono text-[11px] font-bold";
   return (
     <span class={cls}>
       <span class="max-w-[12rem] truncate">{e.label}</span>
@@ -56,10 +58,14 @@ export function EndpointPickerDialog({
 }: EndpointPickerDialogProps) {
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const exclude = useMemo(() => new Set(excludeIds), [excludeIds]);
+  const exclude = useMemo(
+    () => new Set(excludeIds.map((id) => canonicalIdentity(id))),
+    [excludeIds],
+  );
 
   const opts = useMemo(
-    () => endpoints.filter((x) => !exclude.has(x.identity)),
+    () =>
+      endpoints.filter((x) => !exclude.has(canonicalIdentity(x.identity))),
     [endpoints, exclude],
   );
 
@@ -82,16 +88,7 @@ export function EndpointPickerDialog({
     );
   }, [opts, q, favoriteIds, sortKey, isPeerConnected, byPeerId]);
 
-  useEffect(() => {
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") {
-        ev.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscapeKey(onClose);
 
   const selectedEp =
     selectedId !== null ? opts.find((x) => x.identity === selectedId) ?? null : null;
@@ -138,7 +135,7 @@ export function EndpointPickerDialog({
                   <button
                     type="button"
                     key={ep.identity}
-                    class={`w-full rounded-[var(--radius-sm)] border-2 p-2 text-left font-mono ${base} ${
+                    class={`ui-btn-plain w-full border-2 p-2 text-left font-mono ${base} ${
                       sel ? "ring-2 ring-[color:var(--color-ring-highlight)] ring-inset" : ""
                     }`}
                     onClick={() => {

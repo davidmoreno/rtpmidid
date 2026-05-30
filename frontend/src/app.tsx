@@ -427,6 +427,7 @@ export function App() {
           alsaSubs={alsaSubs}
           registryDevices={registryDevices}
           registryEnabled={registryEnabled}
+          connectionsDbEnabled={connectionsDbEnabled}
           highlightEndpointId={highlightEndpointId}
           rpc={rpc}
           onAfterAction={refresh}
@@ -452,6 +453,8 @@ export function App() {
           mdnsRemotes={mdnsParsed.remotes}
           alsaSeq={alsaSeq}
           rawmidi={rawmidi}
+          registryDevices={registryDevices}
+          registryEnabled={registryEnabled}
           onAfterAction={refresh}
           onStatus={setStatus}
         />

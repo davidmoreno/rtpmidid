@@ -23,6 +23,7 @@ import type { RpcClient } from "../rpc";
 import type { Endpoint } from "../endpoints";
 import {
   buildEndpoints,
+  buildPickerEndpoints,
   collectBridgeExportedEndpointIds,
   endpointFromRouterPeer,
 } from "../endpoints";
@@ -48,6 +49,7 @@ import {
 } from "../mergeDeviceList";
 import type { RegistryDevice } from "../devicesList";
 import { CONFIRM_SKIP_HINT, runWithConfirm } from "../confirmAction";
+import { disconnectEndpoints } from "../disconnectEndpoint";
 
 type SortKey = EndpointSortKey;
 
@@ -214,6 +216,7 @@ type Props = {
   alsaSubs: unknown[];
   registryDevices?: RegistryDevice[];
   registryEnabled?: boolean;
+  connectionsDbEnabled?: boolean;
   /** When set, scroll to the matching card and apply the highlight ring. */
   highlightEndpointId?: string | null;
   rpc: RpcClient;
@@ -229,6 +232,7 @@ export function PeersCards({
   alsaSubs,
   registryDevices = [],
   registryEnabled = false,
+  connectionsDbEnabled = false,
   highlightEndpointId,
   rpc,
   onAfterAction,
@@ -251,6 +255,18 @@ export function PeersCards({
         peers,
       }),
     [alsaSeq, rawmidi, mdnsRemotes, peers],
+  );
+
+  const pickerEndpoints = useMemo(
+    () =>
+      buildPickerEndpoints({
+        alsaSeq,
+        rawmidi,
+        mdnsRemotes,
+        peers,
+        registryDevices: registryEnabled ? registryDevices : [],
+      }),
+    [alsaSeq, rawmidi, mdnsRemotes, peers, registryDevices, registryEnabled],
   );
 
   const autoHiddenIds = useMemo(
@@ -546,15 +562,32 @@ export function PeersCards({
     }
   };
 
-  const doDisconnect = async (from: string, to: string) => {
-    try {
-      onStatus("");
-      await rpc.call("endpoint.disconnect", { from, to });
-      await onAfterAction();
-      pulseEndpoints([from, to], from);
-    } catch (e) {
-      onStatus(String(e));
-    }
+  const requestDisconnect = (
+    ev: MouseEvent,
+    fromIdentity: string,
+    toIdentity: string,
+    fromLabel: string,
+    toLabel: string,
+    fromPeerId?: number,
+    toPeerId?: number,
+  ) => {
+    runWithConfirm(
+      ev,
+      `Disconnect "${fromLabel}" from "${toLabel}"?`,
+      () =>
+        disconnectEndpoints(rpc, onStatus, async () => {
+          await onAfterAction();
+          pulseEndpoints([fromIdentity, toIdentity], fromIdentity);
+        }, {
+          fromIdentity,
+          toIdentity,
+          fromPeerId,
+          toPeerId,
+          fromLabel,
+          toLabel,
+          connectionsDbEnabled,
+        }),
+    );
   };
 
   const Toggle = ({
@@ -1036,13 +1069,23 @@ export function PeersCards({
                               ) : null}
                               <button
                                 type="button"
-                                class={`px-1 py-0.5 text-[10px] font-black uppercase ${
+                                class={`ui-btn-plain px-1 py-0.5 text-[10px] font-black uppercase ${
                                   groupForEndpoint(ce) === "local"
                                     ? "ui-wire-action-local"
                                     : "ui-wire-action-remote"
                                 }`}
-                                onClick={() => void doDisconnect(e!.identity, ce.identity)}
-                                title="Disconnect"
+                                title={`Disconnect. ${CONFIRM_SKIP_HINT}`}
+                                onClick={(ev) =>
+                                  requestDisconnect(
+                                    ev,
+                                    actionIdentity ?? e!.identity,
+                                    ce.identity,
+                                    row.label,
+                                    ce.label,
+                                    pid,
+                                    ce.peerId,
+                                  )
+                                }
                               >
                                 x
                               </button>
@@ -1085,8 +1128,19 @@ export function PeersCards({
                                   <span class="font-black">→</span>
                                   <button
                                     type="button"
-                                    class="ui-wire-action-local px-1 py-0.5 text-[10px] font-black uppercase"
-                                    onClick={() => void doDisconnect(fromId, toId)}
+                                    class="ui-btn-plain ui-wire-action-local px-1 py-0.5 text-[10px] font-black uppercase"
+                                    title={`Disconnect. ${CONFIRM_SKIP_HINT}`}
+                                    onClick={(ev) =>
+                                      requestDisconnect(
+                                        ev,
+                                        fromId,
+                                        toId,
+                                        row.label,
+                                        toLabel,
+                                        pid,
+                                        undefined,
+                                      )
+                                    }
                                   >
                                     x
                                   </button>
@@ -1130,8 +1184,19 @@ export function PeersCards({
                                   </span>
                                   <button
                                     type="button"
-                                    class="ui-wire-action-local px-1 py-0.5 text-[10px] font-black uppercase"
-                                    onClick={() => void doDisconnect(fromId, toId)}
+                                    class="ui-btn-plain ui-wire-action-local px-1 py-0.5 text-[10px] font-black uppercase"
+                                    title={`Disconnect. ${CONFIRM_SKIP_HINT}`}
+                                    onClick={(ev) =>
+                                      requestDisconnect(
+                                        ev,
+                                        fromId,
+                                        toId,
+                                        fromLabel,
+                                        row.label,
+                                        undefined,
+                                        pid,
+                                      )
+                                    }
                                   >
                                     x
                                   </button>
@@ -1196,6 +1261,8 @@ export function PeersCards({
                   connectDialogForId}
               </strong>
               . ALSA↔ALSA uses kernel aconnect; other pairs use the router.
+              Offline known devices (registry) create an RTP-MIDI client when
+              you connect. Click a row twice, or select once and press Connect.
               {endpoints.find((x) => x.identity === connectDialogForId)?.kind ===
               "alsa_seq" ? (
                 <label class="mt-2 flex cursor-pointer items-center gap-2">
@@ -1211,7 +1278,7 @@ export function PeersCards({
               ) : null}
             </>
           }
-          endpoints={endpoints}
+          endpoints={pickerEndpoints}
           excludeIds={[connectDialogForId]}
           favoriteIds={favoriteIds}
           sortKey={sortKey}

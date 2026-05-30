@@ -102,7 +102,7 @@
 
   --color-modal-backdrop: rgba(0, 0, 0, 0.5);
   --color-modal-bg: #ffffff;
-  --shadow-modal: 0 25px 50px -12px rgb(0 0 0 / 0.35);
+  --shadow-modal: var(--shadow-card);
 
   --color-peer-pill-id-bg: #f4f4f5;
   --color-peer-pill-id-border: #a1a1aa;

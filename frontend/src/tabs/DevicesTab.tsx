@@ -15,6 +15,7 @@ type Props = {
   alsaSubs: unknown[];
   registryDevices: RegistryDevice[];
   registryEnabled: boolean;
+  connectionsDbEnabled?: boolean;
   highlightEndpointId?: string | null;
   rpc: RpcClient;
   onAfterAction: () => Promise<void> | void;
@@ -31,6 +32,7 @@ export function DevicesTab({
   alsaSubs,
   registryDevices,
   registryEnabled,
+  connectionsDbEnabled = false,
   highlightEndpointId,
   rpc,
   onAfterAction,
@@ -50,6 +52,7 @@ export function DevicesTab({
         alsaSubs={alsaSubs}
         registryDevices={registryDevices}
         registryEnabled={registryEnabled}
+        connectionsDbEnabled={connectionsDbEnabled}
         highlightEndpointId={highlightEndpointId}
         rpc={rpc}
         onAfterAction={onAfterAction}
