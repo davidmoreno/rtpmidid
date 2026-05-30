@@ -51,6 +51,15 @@ add_test(NAME test_signals COMMAND test_signals)
 
 
 #
+# Device identity grammar (Phase 2)
+#
+
+add_executable(test_device_identity test_device_identity.cpp test_utils.cpp)
+target_link_libraries(test_device_identity rtpmidid-shared rtpmidid2-static -pthread)
+target_link_libraries(test_device_identity ${FMT_LIBRARIES})
+add_test(NAME test_device_identity COMMAND test_device_identity)
+
+#
 # Factory naming (Phase 1)
 #
 

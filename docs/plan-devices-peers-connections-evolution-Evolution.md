@@ -243,7 +243,7 @@ go under `tests/` and are wired into `make test`.
 | # | Phase | Status |
 |---|-------|--------|
 | 1 | Naming & shared abstractions | ☑ Completed |
-| 2 | Identity grammar (`key=value`) | ☐ Not started |
+| 2 | Identity grammar (`key=value`) | ☑ Completed |
 | 3 | Query matching | ☐ Not started |
 | 4 | Device registry | ☐ Not started |
 | 5 | Persisted connections v2 (directed + query) | ☐ Not started |
@@ -307,7 +307,7 @@ by the existing test suite (no behavior change ⇒ tests stay green).
   `get_type()` / identity prefix, so future renames are caught.
 
 ### Phase 2 — Identity grammar (`key=value`)
-**Status:** ☐ Not started
+**Status:** ☑ Completed
 
 * New `device_identity_t` (parse/serialize, ordered fields, escaping).
 * **Tests** (`tests/test_device_identity.cpp`): round-trip serialize/parse; field order

@@ -21,6 +21,7 @@ add_library(
   midirouter.cpp
   midipeer.cpp
   peer_kind.cpp
+  device_identity.cpp
   peer_device.cpp
   peer_export.cpp
   peer_import.cpp
