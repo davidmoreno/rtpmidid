@@ -19,7 +19,8 @@
 #pragma once
 #include <string_view>
 #include "aseq.hpp"
-#include "midipeer.hpp"
+#include "dm_json_status.hpp"
+#include "peer_import.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/rtpclient.hpp"
 #include "rtpmidid/signal.hpp"
@@ -37,8 +38,9 @@ namespace rtpmididns {
  * This is used both by mDNS, that creates and removes this port, and for
  * manually adding remote rtpmidi ports.
  */
-class local_alsa_listener_t : public midipeer_t {
-  NON_COPYABLE_NOR_MOVABLE(local_alsa_listener_t);
+/** ALSA port that opens an RTP-MIDI client when subscribed. */
+class peer_import_alsa_rtp_t : public peer_import_t {
+  NON_COPYABLE_NOR_MOVABLE(peer_import_alsa_rtp_t);
 
 public:
   std::string local_udp_port = "0";
@@ -64,13 +66,12 @@ public:
   // std::shared_ptr<rtpmidid::rtpclient_t> rtpclient;
   rtpmidid::rtppeer_t::status_change_event_t status_change_event_connection;
 
-  local_alsa_listener_t(const std::string &name, const std::string &hostname,
+  peer_import_alsa_rtp_t(const std::string &name, const std::string &hostname,
                         const std::string &port, std::shared_ptr<aseq_t> aseq,
                         const std::string &local_udp_port = "0");
-  ~local_alsa_listener_t() override;
+  ~peer_import_alsa_rtp_t() override;
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
-  const char *get_type() const override { return "local_alsa_listener_t"; }
   router_peer_row_t status() const override;
 
   void add_endpoint(const std::string &hostname, const std::string &port);
@@ -80,6 +81,15 @@ public:
   bool control_peer_command(std::string_view cmd, std::string_view params_json,
                             ::rtpmididns::dmjson::writer_t &out,
                             std::string &out_error) override;
+
+  static std::optional<std::string>
+  stable_id_from_row(const router_peer_row_t &row);
+
+protected:
+  peer_kind_e peer_kind() const override {
+    return peer_kind_e::import_alsa_rtp;
+  }
+  std::optional<std::string> compute_stable_id_impl() const override;
 };
 
 } // namespace rtpmididns

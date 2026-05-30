@@ -20,18 +20,23 @@ add_library(
   factory.cpp
   midirouter.cpp
   midipeer.cpp
+  peer_kind.cpp
+  peer_device.cpp
+  peer_export.cpp
+  peer_import.cpp
+  peer_stable_id.cpp
   rtpmidiremotehandler.cpp
   utils.cpp
   midi_normalizer.cpp
 
-  local_alsa_listener.cpp
-  local_alsa_multi_listener.cpp
-  local_alsa_peer.cpp
-  local_rawmidi_peer.cpp
-  network_rtpmidi_client.cpp
-  network_rtpmidi_listener.cpp
-  network_rtpmidi_multi_listener.cpp
-  network_rtpmidi_peer.cpp
+  peer_import_alsa_rtp.cpp
+  peer_export_alsa_network.cpp
+  peer_device_alsa_seq.cpp
+  peer_device_rawmidi.cpp
+  peer_device_rtpmidi_client.cpp
+  peer_export_rtpmidi_server.cpp
+  peer_import_rtpmidi.cpp
+  peer_device_rtpmidi_session.cpp
   webui_midi_monitor_peer.cpp
   connection_db.cpp
 )

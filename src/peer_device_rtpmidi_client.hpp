@@ -17,7 +17,8 @@
  */
 #pragma once
 
-#include "midipeer.hpp"
+#include "peer_device.hpp"
+#include "dm_json_status.hpp"
 #include "rtpmidid/rtpclient.hpp"
 #include "rtpmidid/signal.hpp"
 #include "rtpmidid/utils.hpp"
@@ -36,8 +37,9 @@ namespace rtpmididns {
  * Data from network to the peer is managed somewhere else, normally
  * a rtpmidid::rtpclient_t or rtpmidid::rtpserver_t object.
  */
-class network_rtpmidi_client_t : public midipeer_t {
-  NON_COPYABLE_NOR_MOVABLE(network_rtpmidi_client_t);
+/** One-to-one peer for an outbound RTP-MIDI client connection. */
+class peer_device_rtpmidi_client_t : public peer_device_t {
+  NON_COPYABLE_NOR_MOVABLE(peer_device_rtpmidi_client_t);
 
 public:
   std::shared_ptr<rtpmidid::rtpclient_t> peer;
@@ -45,11 +47,10 @@ public:
   rtpmidid::rtppeer_t::status_change_event_t::connection_t
       status_change_event_connection;
 
-  network_rtpmidi_client_t(std::shared_ptr<rtpmidid::rtpclient_t> peer);
-  network_rtpmidi_client_t(const std::string &name, const std::string &hostname,
+  peer_device_rtpmidi_client_t(std::shared_ptr<rtpmidid::rtpclient_t> peer);
+  peer_device_rtpmidi_client_t(const std::string &name, const std::string &hostname,
                            const std::string &port);
-  ~network_rtpmidi_client_t() override;
-  const char *get_type() const override { return "network_rtpmidi_client_t"; }
+  ~peer_device_rtpmidi_client_t() override;
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   router_peer_row_t status() const override;
   /* Deferred server addresses, populated by the (name,host,port) ctor and
@@ -58,6 +59,15 @@ public:
      racing with `add_peer` and dereferencing a null router on the poller
      thread. */
   void on_router_attached() override;
+
+  static std::optional<std::string>
+  stable_id_from_row(const router_peer_row_t &row);
+
+protected:
+  peer_kind_e peer_kind() const override {
+    return peer_kind_e::device_rtpmidi_client;
+  }
+  std::optional<std::string> compute_stable_id_impl() const override;
 
 private:
   std::vector<rtpmidid::rtpclient_t::endpoint_t> pending_server_addresses_;

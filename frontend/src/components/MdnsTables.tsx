@@ -24,8 +24,8 @@ type Props = {
   remotes: MdnsRemote[];
   rpc: RpcClient;
   /**
-   * Creates a new `local_alsa_peer_t` or `local_rawmidi_t` from the chosen listing,
-   * adds `network_rtpmidi_client_t`, and bidirectional `router.connect` edges.
+   * Creates a new `peer_device_alsa_seq_t` or `local_rawmidi_t` from the chosen listing,
+   * adds `peer_device_rtpmidi_client_t`, and bidirectional `router.connect` edges.
    */
   onWireMdnsToLocal?: (args: {
     serviceName: string;

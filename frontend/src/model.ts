@@ -397,7 +397,7 @@ export type ConnectionRow = {
 };
 
 /** Stable id helper for an ALSA-seq endpoint (`alsa:<client_name>:<port_name>`).
- *  Mirrors the daemon's `compute_stable_id` for `local_alsa_peer_t` and the
+ *  Mirrors the daemon's `compute_stable_id` for `peer_device_alsa_seq_t` and the
  *  alsa stable id produced by `resolve_side_to_stable_id` in control_rpc.cpp.
  *  Returns undefined when either name is empty.
  */
@@ -429,7 +429,7 @@ export function peerStableId(peer: RouterPeer): string | undefined {
   const realHost = (h: string) => (h && h !== "null" ? h : "");
 
   switch (peer.type) {
-    case "local_alsa_peer_t": {
+    case "peer_device_alsa_seq_t": {
       const asf = raw.alsa_subscribe_from as
         | { client_name?: string; port_name?: string }
         | undefined;
@@ -440,13 +440,13 @@ export function peerStableId(peer: RouterPeer): string | undefined {
       if (peerName) return make("alsa_local", [peerName]);
       return undefined;
     }
-    case "local_rawmidi_peer_t": {
+    case "peer_device_rawmidi_t": {
       const dev = String(raw.device ?? "");
       if (dev) return make("rawmidi", [dev]);
       if (peerName) return make("rawmidi_named", [peerName]);
       return undefined;
     }
-    case "network_rtpmidi_client_t": {
+    case "peer_device_rtpmidi_client_t": {
       let hostname = realHost(String(raw.connect_hostname ?? "").trim());
       let svc = "";
       const p = raw.peer as Record<string, unknown> | undefined;
@@ -463,7 +463,7 @@ export function peerStableId(peer: RouterPeer): string | undefined {
       if (peerName) return make("rtpmidi_client_named", [peerName]);
       return undefined;
     }
-    case "network_rtpmidi_peer_t": {
+    case "peer_device_rtpmidi_session_t": {
       const p = raw.peer as Record<string, unknown> | undefined;
       const rem = p
         ? (p.remote as Record<string, unknown> | undefined)
@@ -474,11 +474,11 @@ export function peerStableId(peer: RouterPeer): string | undefined {
       if (peerName) return make("rtpmidi_in_named", [peerName]);
       return undefined;
     }
-    case "network_rtpmidi_listener_t": {
+    case "peer_export_rtpmidi_server_t": {
       if (peerName) return make("rtpmidi_server", [peerName]);
       return undefined;
     }
-    case "local_alsa_listener_t": {
+    case "peer_import_alsa_rtp_t": {
       if (!peerName) return undefined;
       const pos = peerName.indexOf(" <-> ");
       if (pos >= 0) {
@@ -487,7 +487,7 @@ export function peerStableId(peer: RouterPeer): string | undefined {
       }
       return make("alsa_listener_named", [peerName]);
     }
-    case "network_rtpmidi_multi_listener_t": {
+    case "peer_import_rtpmidi_t": {
       const listening = raw.listening as { name?: string } | undefined;
       const n =
         listening?.name && listening.name.length > 0
@@ -496,7 +496,7 @@ export function peerStableId(peer: RouterPeer): string | undefined {
       if (n) return make("rtpmidi_multi", [n]);
       return undefined;
     }
-    case "local_alsa_multi_listener_t": {
+    case "peer_export_alsa_network_t": {
       if (peerName) return make("alsa_multi", [peerName]);
       return undefined;
     }
@@ -718,7 +718,7 @@ export function parseAlsaSubscriptions(raw: unknown): AlsaSubscriptionRaw[] {
  *   alsa:<client_name>:<port_name>` (matches `compute_stable_id` in
  *   `connection_db.cpp`, so saved-pair matching is purely client-side).
  * - `peerId` is set when the ALSA port also backs a router peer
- *   (`local_alsa_peer_t.alsa_subscribe_from`); this lets the click-through
+ *   (`peer_device_alsa_seq_t.alsa_subscribe_from`); this lets the click-through
  *   land on the right Devices card even when a router peer wraps the port.
  */
 export function buildAlsaSubscriptionConnections(
@@ -727,7 +727,7 @@ export function buildAlsaSubscriptionConnections(
 ): ConnectionRow[] {
   const peerByAlsa = new Map<string, RouterPeer>();
   for (const p of peers) {
-    if (p.type !== "local_alsa_peer_t") continue;
+    if (p.type !== "peer_device_alsa_seq_t") continue;
     const raw = p.raw as Record<string, unknown>;
     const asf = raw.alsa_subscribe_from as
       | { client?: unknown; port?: unknown }
@@ -893,7 +893,7 @@ export function buildAlsaSubscriptionConnections(
 }
 
 /**
- * After connect adds a local_alsa_listener_t peer, find the Connections row that
+ * After connect adds a peer_import_alsa_rtp_t peer, find the Connections row that
  * lists that router peer. If multiple listeners share the display name, the
  * greatest peer id (typically the newest) is chosen.
  */
@@ -904,7 +904,7 @@ export function connectionRowIdForAlsaListenerName(
   const name = serviceName.trim();
   const listeners = peers.filter(
     (p) =>
-      p.type === "local_alsa_listener_t" &&
+      p.type === "peer_import_alsa_rtp_t" &&
       (p.name === name || p.name.trim() === name),
   );
   if (!listeners.length) return null;

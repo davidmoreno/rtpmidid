@@ -18,7 +18,7 @@
 
 #include "hwautoannounce.hpp"
 #include "aseq.hpp"
-#include "local_alsa_multi_listener.hpp"
+#include "peer_export_alsa_network.hpp"
 #include "midirouter.hpp"
 #include "settings.hpp"
 #include <regex>
@@ -126,10 +126,10 @@ void HwAutoAnnounce::added_port_announcement(const std::string &name,
 
   DEBUG("HwAutoAnnounce::added_port_announcement {} {} {}", name, type, port);
 
-  // Find the local_alsa_listener_t
+  // Find the peer_import_alsa_rtp_t
   bool connected = false;
-  router->for_each_peer<local_alsa_multi_listener_t>(
-      [&](local_alsa_multi_listener_t *peer) {
+  router->for_each_peer<peer_export_alsa_network_t>(
+      [&](peer_export_alsa_network_t *peer) {
         INFO("Auto announcing {} {} {}", name, type, port);
         auto annport = aseq_t::port_t{aseq->client_id, peer->port};
         auto con1 = aseq->connect(port, annport);
@@ -143,7 +143,7 @@ void HwAutoAnnounce::added_port_announcement(const std::string &name,
         connected = true;
       });
   if (!connected) {
-    ERROR("No local_alsa_multi_listener_t found to connect {} {} {}", name,
+    ERROR("No peer_export_alsa_network_t found to connect {} {} {}", name,
           type, port);
   }
 }

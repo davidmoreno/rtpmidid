@@ -18,6 +18,16 @@
 
 #include "connection_db.hpp"
 #include "aseq.hpp"
+#include "peer_device_alsa_seq.hpp"
+#include "peer_device_rawmidi.hpp"
+#include "peer_device_rtpmidi_client.hpp"
+#include "peer_device_rtpmidi_session.hpp"
+#include "peer_export_alsa_network.hpp"
+#include "peer_export_rtpmidi_server.hpp"
+#include "peer_import_alsa_rtp.hpp"
+#include "peer_import_rtpmidi.hpp"
+#include "peer_kind.hpp"
+#include "peer_stable_id.hpp"
 #include "rtpmidid/logger.hpp"
 #include <algorithm>
 #include <sqlite3.h>
@@ -27,14 +37,6 @@ namespace rtpmididns {
 
 namespace {
 
-std::string escape_stable_component(std::string s) {
-  for (char &c : s) {
-    if (c == ':')
-      c = '|';
-  }
-  return s;
-}
-
 std::string unescape_stable_component(std::string s) {
   for (char &c : s) {
     if (c == '|')
@@ -43,24 +45,10 @@ std::string unescape_stable_component(std::string s) {
   return s;
 }
 
-std::optional<std::string> make_stable_id(std::string prefix,
-                                          const std::vector<std::string> &parts) {
-  for (const auto &p : parts) {
-    if (p.empty())
-      return std::nullopt;
-  }
-  std::string out = std::move(prefix);
-  for (const auto &p : parts) {
-    out += ':';
-    out += escape_stable_component(p);
-  }
-  return out;
-}
-
 /** Decode `alsa:<client_name>:<port_name>` (with `|` -> `:` unescaping) into the
  *  raw client/port name pair. Returns nullopt for any other prefix or malformed
  *  ids. The stable id format is produced by `compute_stable_id` for
- *  `local_alsa_peer_t` and `resolve_side_to_stable_id` for `alsa:<c>:<p>`. */
+ *  `peer_device_alsa_seq_t` and `resolve_side_to_stable_id` for `alsa:<c>:<p>`. */
 std::optional<std::pair<std::string, std::string>>
 parse_alsa_stable_id(const std::string &stable_id) {
   static const std::string kPrefix = "alsa:";
@@ -105,139 +93,42 @@ bool alsa_is_already_connected(aseq_t &aseq, const aseq_t::port_t &from,
 
 } // namespace
 
-namespace {
-
-/** `network_address_t::hostname()` formats unresolved sockaddrs as the literal
- *  string "null". Treat it as empty so we don't burn it into a stable id. */
-bool is_real_hostname(const std::string &h) {
-  return !h.empty() && h != "null";
-}
-
-} // namespace
-
 std::optional<std::string> compute_stable_id(const router_peer_row_t &row) {
+  const auto kind = peer_kind_from_wire_type(row.type.value_or(""));
+  if (kind) {
+    switch (*kind) {
+    case peer_kind_e::device_alsa_seq:
+      return peer_device_alsa_seq_t::stable_id_from_row(row);
+    case peer_kind_e::device_rawmidi:
+      return peer_device_rawmidi_t::stable_id_from_row(row);
+    case peer_kind_e::device_rtpmidi_client:
+      return peer_device_rtpmidi_client_t::stable_id_from_row(row);
+    case peer_kind_e::device_rtpmidi_session:
+      return peer_device_rtpmidi_session_t::stable_id_from_row(row);
+    case peer_kind_e::export_rtpmidi_server:
+      return peer_export_rtpmidi_server_t::stable_id_from_row(row);
+    case peer_kind_e::import_alsa_rtp:
+      return peer_import_alsa_rtp_t::stable_id_from_row(row);
+    case peer_kind_e::import_rtpmidi:
+      return peer_import_rtpmidi_t::stable_id_from_row(row);
+    case peer_kind_e::export_alsa_network:
+      return peer_export_alsa_network_t::stable_id_from_row(row);
+    case peer_kind_e::webui_monitor:
+      return std::nullopt;
+    case peer_kind_e::unknown:
+      break;
+    }
+  }
+
   const std::string type = row.type.value_or("");
   const std::string peer_name =
       row.name && !row.name->empty() ? *row.name : std::string();
-
-  /* Per-type structural id first. When that's unavailable, fall through to the
-     generic `<short_type>:<peer_name>` fallback below so the row stays
-     saveable. Caveat: peer names that include random suffixes (e.g.
-     `WEB:foo:abc123`) won't survive a restart, but neither do the underlying
-     peers; for INI / RPC-configured peers the name IS the stable identity. */
-
-  if (type == "local_alsa_peer_t") {
-    if (row.alsa_subscribe_from) {
-      const auto &s = *row.alsa_subscribe_from;
-      const auto sid = make_stable_id("alsa", {s.client_name, s.port_name});
-      if (sid)
-        return sid;
-    }
-    /* Local ALSA peer with no external subscription (e.g. a "Network" port on
-       this client). Identify by configured name. */
-    if (!peer_name.empty())
-      return make_stable_id("alsa_local", {peer_name});
-    return std::nullopt;
-  }
-
-  if (type == "local_rawmidi_peer_t") {
-    if (row.device && !row.device->empty())
-      return make_stable_id("rawmidi", {*row.device});
-    if (!peer_name.empty())
-      return make_stable_id("rawmidi_named", {peer_name});
-    return std::nullopt;
-  }
-
-  if (type == "network_rtpmidi_client_t") {
-    std::string hostname;
-    if (row.connect_hostname && is_real_hostname(*row.connect_hostname))
-      hostname = *row.connect_hostname;
-    else if (row.peer && is_real_hostname(row.peer->remote.hostname))
-      hostname = row.peer->remote.hostname;
-
-    std::string service_name;
-    if (row.peer && !row.peer->remote.name.empty())
-      service_name = row.peer->remote.name;
-    else if (!peer_name.empty())
-      service_name = peer_name;
-
-    if (!hostname.empty() && !service_name.empty())
-      return make_stable_id("rtpmidi", {hostname, service_name});
-    if (!peer_name.empty())
-      return make_stable_id("rtpmidi_client_named", {peer_name});
-    return std::nullopt;
-  }
-
-  if (type == "network_rtpmidi_peer_t") {
-    if (row.peer &&
-        !row.peer->remote.name.empty() &&
-        is_real_hostname(row.peer->remote.hostname)) {
-      return make_stable_id(
-          "rtpmidi_in", {row.peer->remote.hostname, row.peer->remote.name});
-    }
-    /* Inbound peer hasn't finished its handshake yet, but the daemon still
-       wants a stable id so the next reconnect from the same configured name
-       (when present) matches. */
-    if (!peer_name.empty())
-      return make_stable_id("rtpmidi_in_named", {peer_name});
-    return std::nullopt;
-  }
-
-  if (type == "network_rtpmidi_listener_t") {
-    if (!peer_name.empty())
-      return make_stable_id("rtpmidi_server", {peer_name});
-    return std::nullopt;
-  }
-
-  if (type == "local_alsa_listener_t") {
-    if (peer_name.empty())
-      return std::nullopt;
-    const auto pos = peer_name.find(" <-> ");
-    if (pos != std::string::npos) {
-      const std::string remote = peer_name.substr(pos + 5);
-      if (!remote.empty())
-        return make_stable_id("alsa_listener", {remote});
-    }
-    /* Name doesn't follow the " <-> " convention - still address it by the
-       full name so explicit user saves work. */
-    return make_stable_id("alsa_listener_named", {peer_name});
-  }
-
-  if (type == "network_rtpmidi_multi_listener_t") {
-    std::string name;
-    if (row.listening && !row.listening->name.empty())
-      name = row.listening->name;
-    else
-      name = peer_name;
-    if (name.empty())
-      return std::nullopt;
-    return make_stable_id("rtpmidi_multi", {name});
-  }
-
-  if (type == "local_alsa_multi_listener_t") {
-    if (peer_name.empty())
-      return std::nullopt;
-    return make_stable_id("alsa_multi", {peer_name});
-  }
-
-  /* webui_midi_monitor_peer_t: explicitly not saveable - the sink is created
-     per-session by monitor.start and tied to a uuid that changes every time. */
-  if (type == "webui_midi_monitor_peer_t")
-    return std::nullopt;
-
-  /* Last-resort fallback for any peer type we don't recognise: address it by
-     its configured name so user-initiated saves still work. Auto-save via
-     `on_connected` will populate the db with this id; if the peer's name is
-     stable across restarts the auto-reconnect picks it up, otherwise the
-     stale row is harmless (no matching peer comes back). */
   if (!type.empty() && !peer_name.empty()) {
-    /* Short prefix for readability: drop trailing "_t" if present. */
     std::string prefix = type;
     if (prefix.size() > 2 && prefix.compare(prefix.size() - 2, 2, "_t") == 0)
       prefix.resize(prefix.size() - 2);
     return make_stable_id(prefix, {peer_name});
   }
-
   return std::nullopt;
 }
 
@@ -418,10 +309,9 @@ std::optional<std::string>
 connection_db_manager_t::stable_id_for_peer(peer_id_t peer_id) const {
   if (!router_)
     return std::nullopt;
-  for (const auto &row : router_->status_rows()) {
-    if (row.id && static_cast<peer_id_t>(*row.id) == peer_id)
-      return compute_stable_id(row);
-  }
+  const auto peer = router_->get_peer_by_id(peer_id);
+  if (peer)
+    return peer->compute_stable_id();
   return std::nullopt;
 }
 

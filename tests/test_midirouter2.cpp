@@ -21,11 +21,11 @@
 #include "dm_json_generated.hpp"
 #include "../src/mididata.hpp"
 #include "../src/midirouter.hpp"
-#include "../src/network_rtpmidi_client.hpp"
-#include "../src/network_rtpmidi_listener.hpp"
+#include "../src/peer_device_rtpmidi_client.hpp"
+#include "../src/peer_export_rtpmidi_server.hpp"
 #include "../src/settings.hpp"
 #include "../tests/test_case.hpp"
-#include "local_alsa_listener.hpp"
+#include "peer_import_alsa_rtp.hpp"
 #include "rtpmidid/rtppeer.hpp"
 #include "rtpmidid/udppeer.hpp"
 #include "test_utils.hpp"
@@ -64,10 +64,10 @@ void test_send_receive_messages() {
 
     test_client_id = aseq->client_id;
 
-    router->add_peer(rtpmididns::make_local_alsa_multi_listener(
+    router->add_peer(rtpmididns::make_peer_export_alsa_network(
         rtpmididns::settings.alsa_name, aseq));
 
-    router->add_peer(rtpmididns::make_network_rtpmidi_multi_listener(
+    router->add_peer(rtpmididns::make_peer_import_rtpmidi(
         "rtpmidid-test", "60004", aseq));
   }
 
@@ -124,7 +124,7 @@ void test_send_receive_messages() {
 
   int port = 0;
 
-  router->for_each_peer<rtpmididns::network_rtpmidi_listener_t>(
+  router->for_each_peer<rtpmididns::peer_export_rtpmidi_server_t>(
       [&port](auto *peer) { port = peer->server.port(); });
 
   DEBUG("At port {}", port);
@@ -309,7 +309,7 @@ void test_midirouter_alsa_listener_lifecycle() {
   rtpmidid::udppeer_t test_midi("localhost",
                                 test_control.get_address().port() + 1);
 
-  auto alsanetwork = std::make_shared<rtpmididns::local_alsa_listener_t>(
+  auto alsanetwork = std::make_shared<rtpmididns::peer_import_alsa_rtp_t>(
       "test", "localhost", std::to_string(test_control.get_address().port()),
       aseq);
   router->add_peer(alsanetwork);
@@ -382,7 +382,7 @@ void test_midirouter_alsa_listener_lifecycle() {
 }
 
 /**
- * Regression: network_rtpmidi_client_t(name, host, port) used to call
+ * Regression: peer_device_rtpmidi_client_t(name, host, port) used to call
  * peer->add_server_address() in its constructor, which could fire
  * status_change_event on the poller thread before add_peer() wired `router`.
  * That dereferenced a null router (SIGSEGV observed with Peak-Peak MIDI 1).
@@ -391,9 +391,9 @@ void test_network_rtpmidi_client_status_before_router_attached() {
   auto router = std::make_shared<rtpmididns::midirouter_t>();
   router->start_router_thread();
 
-  auto client = rtpmididns::make_network_rtpmidi_client(
+  auto client = rtpmididns::make_peer_device_rtpmidi_client(
       "test-client", "127.0.0.1", "65535");
-  auto *raw = dynamic_cast<rtpmididns::network_rtpmidi_client_t *>(client.get());
+  auto *raw = dynamic_cast<rtpmididns::peer_device_rtpmidi_client_t *>(client.get());
   ASSERT_TRUE(raw != nullptr);
 
   /* Simulate the race: CONNECTED arrives before add_peer() sets router. */

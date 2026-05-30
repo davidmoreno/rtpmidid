@@ -16,7 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "local_alsa_peer.hpp"
+#include "peer_device_alsa_seq.hpp"
+#include "peer_stable_id.hpp"
 #include "aseq.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
@@ -26,7 +27,7 @@
 
 using namespace rtpmididns;
 
-local_alsa_peer_t::local_alsa_peer_t(const std::string &name_,
+peer_device_alsa_seq_t::peer_device_alsa_seq_t(const std::string &name_,
                                      std::shared_ptr<aseq_t> seq_,
                                      int subscribe_from_client,
                                      int subscribe_from_port)
@@ -41,9 +42,9 @@ local_alsa_peer_t::local_alsa_peer_t(const std::string &name_,
   }
 }
 
-void local_alsa_peer_t::on_router_attached() { attach_alsa_input(); }
+void peer_device_alsa_seq_t::on_router_attached() { attach_alsa_input(); }
 
-void local_alsa_peer_t::attach_alsa_input() {
+void peer_device_alsa_seq_t::attach_alsa_input() {
   if (alsa_input_attached_)
     return;
   alsa_input_attached_ = true;
@@ -77,12 +78,12 @@ void local_alsa_peer_t::attach_alsa_input() {
   }
 }
 
-local_alsa_peer_t::~local_alsa_peer_t() {
+peer_device_alsa_seq_t::~peer_device_alsa_seq_t() {
   alsa_source_subscription_.reset();
   seq->remove_port(port);
 }
 
-void local_alsa_peer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
+void peer_device_alsa_seq_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   packets_recv += 1;
   DEBUG("[MIDI_FLOW] local_alsa_peer {}: send_midi() called, from_peer_id={}, size={} bytes",
         peer_id, from, data.size());
@@ -125,7 +126,7 @@ void local_alsa_peer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   });
 }
 
-router_peer_row_t local_alsa_peer_t::status() const {
+router_peer_row_t peer_device_alsa_seq_t::status() const {
   router_peer_row_t row;
   row.name = name;
   row.port = port;
@@ -139,4 +140,23 @@ router_peer_row_t local_alsa_peer_t::status() const {
     row.alsa_subscribe_from = s;
   }
   return row;
+}
+
+std::optional<std::string>
+peer_device_alsa_seq_t::stable_id_from_row(const router_peer_row_t &row) {
+  const std::string peer_name =
+      row.name && !row.name->empty() ? *row.name : std::string();
+  if (row.alsa_subscribe_from) {
+    const auto &s = *row.alsa_subscribe_from;
+    const auto sid = make_stable_id("alsa", {s.client_name, s.port_name});
+    if (sid)
+      return sid;
+  }
+  if (!peer_name.empty())
+    return make_stable_id("alsa_local", {peer_name});
+  return std::nullopt;
+}
+
+std::optional<std::string> peer_device_alsa_seq_t::compute_stable_id_impl() const {
+  return stable_id_from_row(status());
 }

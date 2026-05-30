@@ -44,6 +44,10 @@ thread_local midipeer_t *g_current_peer_thread = nullptr;
 
 midipeer_t::~midipeer_t() { stop_thread(); }
 
+std::optional<std::string> midipeer_t::compute_stable_id() const {
+  return std::nullopt;
+}
+
 bool midipeer_t::on_peer_thread() const {
   return g_current_peer_thread == this;
 }

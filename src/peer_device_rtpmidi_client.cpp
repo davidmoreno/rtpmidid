@@ -16,7 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "network_rtpmidi_client.hpp"
+#include "peer_device_rtpmidi_client.hpp"
+#include "peer_stable_id.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
@@ -28,7 +29,7 @@
 #include <memory>
 
 namespace rtpmididns {
-network_rtpmidi_client_t::network_rtpmidi_client_t(
+peer_device_rtpmidi_client_t::peer_device_rtpmidi_client_t(
     std::shared_ptr<rtpmidid::rtpclient_t> peer_)
     : peer(peer_) {
 
@@ -49,7 +50,7 @@ network_rtpmidi_client_t::network_rtpmidi_client_t(
            dereference a null router shared_ptr (observed crash for
            "Peak-Peak MIDI 1" on MIDI_PORT). */
         if (!router) {
-          WARNING("network_rtpmidi_client_t {} got status change {} before "
+          WARNING("peer_device_rtpmidi_client_t {} got status change {} before "
                   "being attached to a router; ignoring.",
                   peer->peer.remote_name, static_cast<int>(status));
           return;
@@ -62,10 +63,10 @@ network_rtpmidi_client_t::network_rtpmidi_client_t(
       });
 }
 
-network_rtpmidi_client_t::network_rtpmidi_client_t(const std::string &name,
+peer_device_rtpmidi_client_t::peer_device_rtpmidi_client_t(const std::string &name,
                                                    const std::string &hostname,
                                                    const std::string &port)
-    : network_rtpmidi_client_t(std::make_shared<rtpmidid::rtpclient_t>(name)) {
+    : peer_device_rtpmidi_client_t(std::make_shared<rtpmidid::rtpclient_t>(name)) {
   /* Do NOT trigger peer->add_server_address() here. The rtpclient's connect()
      would start the state machine on the poller thread, and on a fast/local
      network the first OK can arrive (and fire status_change_event) BEFORE the
@@ -75,9 +76,9 @@ network_rtpmidi_client_t::network_rtpmidi_client_t(const std::string &name,
   pending_server_addresses_.push_back({hostname, port});
 }
 
-network_rtpmidi_client_t::~network_rtpmidi_client_t() {}
+peer_device_rtpmidi_client_t::~peer_device_rtpmidi_client_t() {}
 
-void network_rtpmidi_client_t::on_router_attached() {
+void peer_device_rtpmidi_client_t::on_router_attached() {
   if (pending_server_addresses_.empty())
     return;
   auto endpoints = std::move(pending_server_addresses_);
@@ -85,12 +86,12 @@ void network_rtpmidi_client_t::on_router_attached() {
   peer->add_server_addresses(endpoints);
 }
 
-void network_rtpmidi_client_t::send_midi(midipeer_id_t from,
+void peer_device_rtpmidi_client_t::send_midi(midipeer_id_t from,
                                          const mididata_t &data) {
   peer->peer.send_midi(data);
 };
 
-router_peer_row_t network_rtpmidi_client_t::status() const {
+router_peer_row_t peer_device_rtpmidi_client_t::status() const {
   router_peer_row_t row;
   row.name = peer->peer.remote_name;
   row.peer = rtp_peer_status_from(peer->peer);
@@ -100,6 +101,34 @@ router_peer_row_t network_rtpmidi_client_t::status() const {
     row.connect_port = ep.port;
   }
   return row;
+}
+
+std::optional<std::string>
+peer_device_rtpmidi_client_t::stable_id_from_row(const router_peer_row_t &row) {
+  const std::string peer_name =
+      row.name && !row.name->empty() ? *row.name : std::string();
+  std::string hostname;
+  if (row.connect_hostname && stable_id_is_real_hostname(*row.connect_hostname))
+    hostname = *row.connect_hostname;
+  else if (row.peer && stable_id_is_real_hostname(row.peer->remote.hostname))
+    hostname = row.peer->remote.hostname;
+
+  std::string service_name;
+  if (row.peer && !row.peer->remote.name.empty())
+    service_name = row.peer->remote.name;
+  else if (!peer_name.empty())
+    service_name = peer_name;
+
+  if (!hostname.empty() && !service_name.empty())
+    return make_stable_id("rtpmidi", {hostname, service_name});
+  if (!peer_name.empty())
+    return make_stable_id("rtpmidi_client_named", {peer_name});
+  return std::nullopt;
+}
+
+std::optional<std::string>
+peer_device_rtpmidi_client_t::compute_stable_id_impl() const {
+  return stable_id_from_row(status());
 }
 
 } // namespace rtpmididns

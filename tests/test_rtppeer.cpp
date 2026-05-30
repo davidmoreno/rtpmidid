@@ -115,7 +115,7 @@ void test_connect_disconnect_reverse_order() {
    initiator_id=0) resend IN to an already-CONNECTED peer in a tight loop.
    parse_command_in used to call status_change_event(status) unconditionally,
    so every duplicate IN re-fired CONNECTED. Downstream listeners like
-   network_rtpmidi_multi_listener_t reacted by wrapping the same rtppeer in a
+   peer_import_rtpmidi_t reacted by wrapping the same rtppeer in a
    new pair of midipeers each time, leaking ALSA ports + chaining bad
    connection_db restores. Fix: only emit on real bitfield transitions. */
 void test_no_duplicate_status_change_on_repeated_in() {

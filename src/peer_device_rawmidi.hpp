@@ -19,7 +19,8 @@
 #pragma once
 
 #include "midi_normalizer.hpp"
-#include "midipeer.hpp"
+#include "dm_json_status.hpp"
+#include "peer_device.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/utils.hpp"
 #include <string>
@@ -28,8 +29,9 @@ namespace rtpmididns {
 /**
  * @short ALSA port that just receives data and send to another midipeer_t
  */
-class local_rawmidi_peer_t : public midipeer_t {
-  NON_COPYABLE_NOR_MOVABLE(local_rawmidi_peer_t);
+/** One-to-one peer for a raw MIDI device (`/dev/snd/midi*`). */
+class peer_device_rawmidi_t : public peer_device_t {
+  NON_COPYABLE_NOR_MOVABLE(peer_device_rawmidi_t);
 
 public:
   std::string device;
@@ -40,8 +42,8 @@ public:
   int connection_count = 0;
   std::array<uint8_t, 1024> buffer;
 
-  local_rawmidi_peer_t(const std::string &name, const std::string &device);
-  ~local_rawmidi_peer_t() override;
+  peer_device_rawmidi_t(const std::string &name, const std::string &device);
+  ~peer_device_rawmidi_t() override;
 
   void read_midi();
   void open();
@@ -52,7 +54,15 @@ public:
   void event(midipeer_event_e event, midipeer_id_t from) override;
   void connected(midipeer_id_t peer_id);
   void disconnected(midipeer_id_t peer_id);
-  const char *get_type() const override { return "local_rawmidi_peer_t"; }
+
+  static std::optional<std::string>
+  stable_id_from_row(const router_peer_row_t &row);
+
+protected:
+  peer_kind_e peer_kind() const override {
+    return peer_kind_e::device_rawmidi;
+  }
+  std::optional<std::string> compute_stable_id_impl() const override;
 };
 
 /** `/dev/snd/midi*` devices for UI / RPC (device path + friendly label). */

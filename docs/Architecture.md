@@ -15,34 +15,34 @@ from one peer to the connected ones.
 ## `local:alsa:multi:listener`
 
 Exports an ALSA `Network` port. Any ALSA connection there creates a new
-`network_rtpmidi_listener_t` server. Data is properly routed to/from that
-`network_rtpmidi_listener_t`.
+`peer_export_rtpmidi_server_t` server. Data is properly routed to/from that
+`peer_export_rtpmidi_server_t`.
 
-It does an impersonated send of data to the `network_rtpmidi_listener_t` and from
+It does an impersonated send of data to the `peer_export_rtpmidi_server_t` and from
 it to the right ALSA port.
 
 ## `local:alsa:listener`
 
 Created manually or via mDNS/Avahi/Bounjour it creates a local ALSA port
 which, when a connection is kept, connects to a remote rtpmidi server.
-Connects to a `network_rtpmidi_client_t`.
+Connects to a `peer_device_rtpmidi_client_t`.
 
 ## `local:alsa:peer`
 
-Just redirects MIDI to/from an ALSA port. Used by `network_rtpmidi_multi_listener_t`
+Just redirects MIDI to/from an ALSA port. Used by `peer_import_rtpmidi_t`
 
 ## `network:rtpmidi:client`
 
 Stores an `rtpclient_t` RTP client that connects to a remote peer and redirecs all
 MIDI data as needed.
 
-It's used by `local_alsa_listener_t` and is ver similar to `network_rtpmidi_peer_t`, but this
+It's used by `peer_import_alsa_rtp_t` and is ver similar to `peer_device_rtpmidi_session_t`, but this
 is for a `rtpmidiclient_t`.
 
 ## `network:rtpmidi:multi:listener`
 
 Creates a RTP server port on which whenever an RTP peer connects creates
-both a `local_alsa_peer_t` and a `network_rtpmidi_peer_t` and connects them.
+both a `peer_device_alsa_seq_t` and a `peer_device_rtpmidi_session_t` and connects them.
 
 It does not send nor receive MIDI data.
 

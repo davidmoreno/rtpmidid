@@ -51,6 +51,22 @@ add_test(NAME test_signals COMMAND test_signals)
 
 
 #
+# Factory naming (Phase 1)
+#
+
+if (NOT LIBS_ONLY)
+  add_executable(test_factory_naming
+      test_factory_naming.cpp test_utils.cpp
+  )
+  target_link_libraries(test_factory_naming -pthread rtpmidid-shared rtpmidid2-static)
+  add_test(NAME test_factory_naming COMMAND test_factory_naming)
+  target_link_libraries(test_factory_naming ${ALSA_LIBRARIES})
+  target_link_libraries(test_factory_naming ${FMT_LIBRARIES})
+  target_include_directories(test_factory_naming PUBLIC ${ALSA_INCLUDE_DIRS})
+  target_compile_options(test_factory_naming PUBLIC ${ALSA_CFLAGS_OTHER})
+endif (NOT LIBS_ONLY)
+
+#
 # MIDIROUTER
 #
 

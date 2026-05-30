@@ -95,7 +95,7 @@ export function rtpPortsEqual(portA: number | string, portB: unknown): boolean {
 
 /**
  * mDNS device rows that correspond to RTP listeners this daemon exports
- * (`network_rtpmidi_listener_t` / `network_rtpmidi_multi_listener_t`).
+ * (`peer_export_rtpmidi_server_t` / `peer_import_rtpmidi_t`).
  */
 export function collectBridgeExportedEndpointIds(
   peers: RouterPeer[],
@@ -107,7 +107,7 @@ export function collectBridgeExportedEndpointIds(
     const id = endpointIdForMdns(g.name, g.port);
     const name = g.name.trim();
     for (const p of peers) {
-      if (p.type === "network_rtpmidi_listener_t") {
+      if (p.type === "peer_export_rtpmidi_server_t") {
         const raw = peerRaw(p);
         const pn = String(p.name ?? raw.name ?? "").trim();
         if (pn !== name) continue;
@@ -115,7 +115,7 @@ export function collectBridgeExportedEndpointIds(
           out.add(id);
           break;
         }
-      } else if (p.type === "network_rtpmidi_multi_listener_t") {
+      } else if (p.type === "peer_import_rtpmidi_t") {
         const raw = peerRaw(p);
         const pn = String(p.name ?? raw.name ?? "").trim();
         if (pn !== name) continue;
@@ -145,7 +145,7 @@ function peerRaw(p: RouterPeer): Record<string, unknown> {
 
 function matchPeerForAlsa(peers: RouterPeer[], e: MidiAlsaSeqEntry): number | undefined {
   for (const p of peers) {
-    if (p.type !== "local_alsa_peer_t") continue;
+    if (p.type !== "peer_device_alsa_seq_t") continue;
     const raw = peerRaw(p);
     const asf = raw.alsa_subscribe_from as { client?: unknown; port?: unknown } | undefined;
     if (!asf) continue;
@@ -156,7 +156,7 @@ function matchPeerForAlsa(peers: RouterPeer[], e: MidiAlsaSeqEntry): number | un
 
 function matchPeerForRaw(peers: RouterPeer[], e: MidiRawmidiEntry): number | undefined {
   for (const p of peers) {
-    if (p.type !== "local_rawmidi_peer_t") continue;
+    if (p.type !== "peer_device_rawmidi_t") continue;
     const raw = peerRaw(p);
     if (String(raw.device ?? "") === e.device) return peerId(p);
   }
@@ -170,7 +170,7 @@ function matchPeerForRemote(
 ): number | undefined {
   const pstr = String(port);
   for (const p of peers) {
-    if (p.type !== "network_rtpmidi_client_t") continue;
+    if (p.type !== "peer_device_rtpmidi_client_t") continue;
     const raw = peerRaw(p);
     const ch = String(raw.connect_hostname ?? "").trim();
     const cp = String(raw.connect_port ?? "").trim();

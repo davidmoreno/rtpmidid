@@ -62,9 +62,9 @@ def normalize_rpc_command(cmd):
 
 ROUTER_CREATE_TYPE_TO_METHOD = {
     "local_rawmidi_t": "router.create.local_rawmidi",
-    "network_rtpmidi_client_t": "router.create.network_rtpmidi_client",
-    "network_rtpmidi_listener_t": "router.create.network_rtpmidi_listener",
-    "local_alsa_peer_t": "router.create.local_alsa_peer",
+    "peer_device_rtpmidi_client_t": "router.create.network_rtpmidi_client",
+    "peer_export_rtpmidi_server_t": "router.create.network_rtpmidi_listener",
+    "peer_device_alsa_seq_t": "router.create.local_alsa_peer",
 }
 
 
@@ -379,13 +379,13 @@ class Top:
                 return
             params[key] = value
 
-        if name == "network_rtpmidi_listener_t" and "udp_port" in params:
+        if name == "peer_export_rtpmidi_server_t" and "udp_port" in params:
             try:
                 params["udp_port"] = int(str(params["udp_port"]))
             except Exception:
                 self.dialog("udp_port must be an integer", background=self.ANSI_BG_RED)
                 return
-        if name == "local_alsa_peer_t":
+        if name == "peer_device_alsa_seq_t":
             for fld in ("alsa_client", "alsa_port"):
                 if fld in params and params[fld] not in (None, ""):
                     try:

@@ -22,7 +22,7 @@
 #include "dm_json_rpc.hpp"
 #include "dm_json_status.hpp"
 #include "factory.hpp"
-#include "local_rawmidi_peer.hpp"
+#include "peer_device_rawmidi.hpp"
 #include "midirouter.hpp"
 #include "midipeer.hpp"
 #include "settings.hpp"
@@ -121,15 +121,15 @@ static router_create_list_t build_router_create_list() {
   router_create_list_t o;
   o.schemas["local_rawmidi_t"]["name"] = "Name of the peer";
   o.schemas["local_rawmidi_t"]["device"] = "Path to the device";
-  o.schemas["network_rtpmidi_client_t"]["name"] = "Name of the peer";
-  o.schemas["network_rtpmidi_client_t"]["hostname"] = "Hostname of the server";
-  o.schemas["network_rtpmidi_client_t"]["port"] = "Port of the server";
-  o.schemas["network_rtpmidi_listener_t"]["name"] = "Name of the peer";
-  o.schemas["network_rtpmidi_listener_t"]["udp_port"] = "UDP port to listen [random]";
-  o.schemas["local_alsa_peer_t"]["name"] = "Name of the peer";
-  o.schemas["local_alsa_peer_t"]["alsa_client"] =
+  o.schemas["peer_device_rtpmidi_client_t"]["name"] = "Name of the peer";
+  o.schemas["peer_device_rtpmidi_client_t"]["hostname"] = "Hostname of the server";
+  o.schemas["peer_device_rtpmidi_client_t"]["port"] = "Port of the server";
+  o.schemas["peer_export_rtpmidi_server_t"]["name"] = "Name of the peer";
+  o.schemas["peer_export_rtpmidi_server_t"]["udp_port"] = "UDP port to listen [random]";
+  o.schemas["peer_device_alsa_seq_t"]["name"] = "Name of the peer";
+  o.schemas["peer_device_alsa_seq_t"]["alsa_client"] =
       "Optional: external ALSA client id to subscribe from";
-  o.schemas["local_alsa_peer_t"]["alsa_port"] =
+  o.schemas["peer_device_alsa_seq_t"]["alsa_port"] =
       "Optional: external ALSA port index (with alsa_client)";
   return o;
 }
@@ -270,7 +270,7 @@ static std::optional<peer_id_t>
 find_peer_for_alsa(const std::vector<router_peer_row_t> &rows, int client,
                    int port) {
   for (const auto &r : rows) {
-    if (r.type.value_or("") != "local_alsa_peer_t")
+    if (r.type.value_or("") != "peer_device_alsa_seq_t")
       continue;
     if (!r.alsa_subscribe_from)
       continue;
@@ -288,7 +288,7 @@ static std::optional<peer_id_t>
 find_peer_for_raw(const std::vector<router_peer_row_t> &rows,
                   const std::string &device) {
   for (const auto &r : rows) {
-    if (r.type.value_or("") != "local_rawmidi_peer_t")
+    if (r.type.value_or("") != "peer_device_rawmidi_t")
       continue;
     if (r.device && *r.device == device)
       return static_cast<peer_id_t>(r.id.value_or(0));
@@ -300,7 +300,7 @@ static std::optional<peer_id_t>
 find_peer_for_host(const std::vector<router_peer_row_t> &rows,
                    const std::string &hostname, const std::string &port) {
   for (const auto &r : rows) {
-    if (r.type.value_or("") != "network_rtpmidi_client_t")
+    if (r.type.value_or("") != "peer_device_rtpmidi_client_t")
       continue;
     const auto rh = r.connect_hostname.value_or("");
     const auto rp = r.connect_port.value_or("");
@@ -324,7 +324,7 @@ static peer_id_t ensure_peer_for_endpoint(control_rpc_context_t &ctx,
     if (!ctx.aseq)
       throw std::runtime_error("ALSA sequencer not available");
     const std::string name = FMT::format("WEB:ALSA:{}:{}", eid.client, eid.port);
-    auto peer = make_local_alsa_peer(name, ctx.aseq, eid.client, eid.port);
+    auto peer = make_peer_device_alsa_seq(name, ctx.aseq, eid.client, eid.port);
     return ctx.router->add_peer(peer);
   }
   if (eid.kind == endpoint_kind_e::RAW) {
@@ -332,7 +332,7 @@ static peer_id_t ensure_peer_for_endpoint(control_rpc_context_t &ctx,
     if (found && *found != 0)
       return *found;
     const std::string name = FMT::format("WEB:RAW:{}", eid.device);
-    auto peer = make_rawmidi_peer(name, eid.device);
+    auto peer = make_peer_device_rawmidi(name, eid.device);
     return ctx.router->add_peer(peer);
   }
   if (eid.kind == endpoint_kind_e::MDNS) {
@@ -348,7 +348,7 @@ static peer_id_t ensure_peer_for_endpoint(control_rpc_context_t &ctx,
     if (found && *found != 0)
       return *found;
     const std::string nm = FMT::format("WEB · {}", eid.hostname);
-    auto peer = make_network_rtpmidi_client(nm, eid.hostname, eid.hostport);
+    auto peer = make_peer_device_rtpmidi_client(nm, eid.hostname, eid.hostport);
     return ctx.router->add_peer(peer);
   }
   throw std::runtime_error("Unknown endpoint kind");
@@ -632,34 +632,34 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       auto p = parse_rpc_params<connect_params_t>(params);
       if (p.hostname.empty())
         throw std::runtime_error("Need object {hostname, port?, name?}");
-      ctx.router->add_peer(make_local_alsa_listener(
+      ctx.router->add_peer(make_peer_import_alsa_rtp(
           ctx.router, p.name.value_or(p.hostname), p.hostname,
           p.port.value_or("5004"), ctx.aseq, "0"));
       return respond_ok(env);
     }
     if (env.method == "router.create.local_rawmidi") {
       auto p = parse_rpc_params<create_local_rawmidi_params_t>(params);
-      auto peer = make_rawmidi_peer(p.name, p.device);
+      auto peer = make_peer_device_rawmidi(p.name, p.device);
       ctx.router->add_peer(peer);
       return respond(env, peer->status());
     }
     if (env.method == "router.create.network_rtpmidi_client") {
       auto p = parse_rpc_params<create_network_rtpmidi_client_params_t>(params);
-      auto peer = make_network_rtpmidi_client(p.name, p.hostname, p.port);
+      auto peer = make_peer_device_rtpmidi_client(p.name, p.hostname, p.port);
       ctx.router->add_peer(peer);
       return respond(env, peer->status());
     }
     if (env.method == "router.create.network_rtpmidi_listener") {
       auto p = parse_rpc_params<create_network_rtpmidi_listener_params_t>(params);
-      auto peer = make_network_rtpmidi_listener(p.name, std::to_string(p.udp_port));
+      auto peer = make_peer_export_rtpmidi_server(p.name, std::to_string(p.udp_port));
       ctx.router->add_peer(peer);
       return respond(env, peer->status());
     }
     if (env.method == "router.create.local_alsa_peer") {
       auto p = parse_rpc_params<create_local_alsa_peer_params_t>(params);
       auto peer = (p.alsa_client && p.alsa_port)
-                      ? make_local_alsa_peer(p.name, ctx.aseq, *p.alsa_client, *p.alsa_port)
-                      : make_local_alsa_peer(p.name, ctx.aseq);
+                      ? make_peer_device_alsa_seq(p.name, ctx.aseq, *p.alsa_client, *p.alsa_port)
+                      : make_peer_device_alsa_seq(p.name, ctx.aseq);
       ctx.router->add_peer(peer);
       return respond(env, peer->status());
     }

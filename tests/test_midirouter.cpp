@@ -17,18 +17,22 @@
  */
 
 #include "../src/aseq.hpp"
-#include "../src/factory.hpp"
-#include "../src/local_alsa_multi_listener.hpp"
+#include "../src/peer_export_alsa_network.hpp"
 #include "../src/mididata.hpp"
 #include "../src/midipeer.hpp"
 #include "../src/midirouter.hpp"
-#include "../src/network_rtpmidi_listener.hpp"
+#include "../src/peer_export_rtpmidi_server.hpp"
 #include "../tests/test_case.hpp"
 #include "rtpmidid/iobytes.hpp"
+#include "rtpmidid/mdns_rtpmidi.hpp"
 #include "test_utils.hpp"
 #include <alsa/seq_event.h>
 #include <alsa/seqmid.h>
 #include <memory>
+
+namespace rtpmididns {
+std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
+} // namespace rtpmididns
 
 class test_midiio_t : public rtpmididns::midipeer_t {
 public:
@@ -48,14 +52,22 @@ public:
   rtpmididns::router_peer_row_t status() const override { return {}; }
 };
 
-rtpmididns::network_rtpmidi_listener_t::network_rtpmidi_listener_t(
-    const std::string &name, const std::string &udp_port)
-    : server(name, "15005") {}
-rtpmididns::network_rtpmidi_listener_t::~network_rtpmidi_listener_t() {}
+/** Captures outbound MIDI instead of fanning out through rtpserver (test only). */
+class test_rtpmidi_server_capture_t
+    : public rtpmididns::peer_export_rtpmidi_server_t {
+public:
+  rtpmidid::io_bytes_managed recv;
+  rtpmidid::io_bytes_writer writer;
 
-void rtpmididns::network_rtpmidi_listener_t::send_midi(midipeer_id_t from,
-                                                       const mididata_t &) {}
-rtpmididns::router_peer_row_t rtpmididns::network_rtpmidi_listener_t::status() const { return {}; }
+  test_rtpmidi_server_capture_t(const std::string &name,
+                                const std::string &port)
+      : peer_export_rtpmidi_server_t(name, port), recv(1024), writer(recv) {}
+
+  void send_midi(rtpmididns::midipeer_id_t from,
+                 const rtpmididns::mididata_t &data) override {
+    writer.copy_from(data);
+  }
+};
 
 // rtpmididns::alsapeer_t::alsapeer_t(const std::string &name,
 //                                    rtpmidid::aseq &seq_)
@@ -70,17 +82,6 @@ rtpmididns::router_peer_row_t rtpmididns::network_rtpmidi_listener_t::status() c
 // rtpmididns::rtpmidiserver_t::rtpmidiserver_t(const std::string &name) {}
 // void rtpmididns::rtpmidiserver_t::send_midi(midipeer_id_t from,
 //                                             const mididata_t &) {}
-
-std::shared_ptr<rtpmididns::midipeer_t>
-rtpmididns::make_network_rtpmidi_listener(const std::string &name,
-                                          const std::string &udp_port) {
-  return std::make_shared<test_midiio_t>();
-}
-// std::shared_ptr<rtpmididns::midipeer_t>
-// rtpmididns::make_local_alsa_peer(const std::string &name,
-//                           std::shared_ptr<rtpmidins::aseq_t> seq) {
-//   return std::make_shared<test_midiio_t>();
-// }
 
 void test_basic_midirouter() {
   auto router = std::make_shared<rtpmididns::midirouter_t>();
@@ -113,10 +114,13 @@ void test_midirouter_from_alsa() {
   }
 
   auto alsanetwork =
-      std::make_shared<rtpmididns::local_alsa_multi_listener_t>("test", aseq);
+      std::make_shared<rtpmididns::peer_export_alsa_network_t>("test", aseq);
   router->add_peer(alsanetwork);
+  auto rtp_capture =
+      std::make_shared<test_rtpmidi_server_capture_t>("KB01", "50299");
+  router->add_peer(rtp_capture);
 
-  // This must have created a rtpmidid network connection
+  // Reuses the pre-registered KB01 export server (no factory stub needed).
   auto rtpmidinetwork_id =
       alsanetwork->new_alsa_connection({aseq->client_id, 0}, "KB01");
   ASSERT_GT(rtpmidinetwork_id, 0);
@@ -142,7 +146,8 @@ void test_midirouter_from_alsa() {
   rtpmididns::midipeer_t *midipeer =
       router->get_peer_by_id(rtpmidinetwork_id).get();
   ASSERT_TRUE(midipeer);
-  test_midiio_t *rtppeer = dynamic_cast<test_midiio_t *>(midipeer);
+  test_rtpmidi_server_capture_t *rtppeer =
+      dynamic_cast<test_rtpmidi_server_capture_t *>(midipeer);
   // rtppeer->writer.print_hex();
   ASSERT_TRUE(rtppeer);
   ASSERT_EQUAL(rtppeer->writer.pos(), 3);
@@ -159,7 +164,7 @@ void test_midirouter_for_each_peer() {
     return;
   }
   auto alsanetwork =
-      std::make_shared<rtpmididns::local_alsa_multi_listener_t>("test", aseq);
+      std::make_shared<rtpmididns::peer_export_alsa_network_t>("test", aseq);
   auto midiio = std::make_shared<test_midiio_t>();
 
   router->add_peer(alsanetwork);
@@ -178,7 +183,7 @@ void test_midirouter_for_each_peer() {
   ASSERT_EQUAL(count, 1);
 
   count = 0;
-  router->for_each_peer<rtpmididns::local_alsa_multi_listener_t>(
+  router->for_each_peer<rtpmididns::peer_export_alsa_network_t>(
       [&count, &alsanetwork](auto peer) {
         count++;
 

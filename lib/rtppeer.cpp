@@ -206,7 +206,7 @@ void rtppeer_t::parse_command_in(io_bytes_reader &buffer, port_e port) {
      (observed in the wild: HYDRASYNTH KB with initiator_id=0) resend IN to an
      already-CONNECTED peer in a tight loop; without this guard we'd re-emit
      CONNECTED on every duplicate, and downstream listeners like
-     network_rtpmidi_multi_listener_t would wrap the same rtppeer into a new
+     peer_import_rtpmidi_t would wrap the same rtppeer into a new
      pair of midipeers every time, leaking ALSA ports and feeding the
      connection_db auto-restore wrong inputs. */
   const auto old_status = status;

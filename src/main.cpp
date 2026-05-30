@@ -23,7 +23,7 @@
 #include "web_server.hpp"
 #include "factory.hpp"
 #include "hwautoannounce.hpp"
-#include "local_rawmidi_peer.hpp"
+#include "peer_device_rawmidi.hpp"
 #include "midipeer.hpp"
 #include "rtpmidid/exceptions.hpp"
 #include "rtpmidid/logger.hpp"
@@ -235,14 +235,14 @@ protected:
     // Create all the alsa network midipeers
     for (const auto &announce : rtpmididns::settings.alsa_announces) {
       router->add_peer(
-          rtpmididns::make_local_alsa_multi_listener(announce.name, aseq));
+          rtpmididns::make_peer_export_alsa_network(announce.name, aseq));
     }
   }
 
   void setup_network_rtpmidi_multilistener() {
     // Create all the rtpmidi network midipeers
     for (const auto &announce : rtpmididns::settings.rtpmidi_announces) {
-      router->add_peer(rtpmididns::make_network_rtpmidi_multi_listener(
+      router->add_peer(rtpmididns::make_peer_import_rtpmidi(
           announce.name, announce.port, aseq));
     }
   }
@@ -250,7 +250,7 @@ protected:
   void setup_network_rtpmidi_listener() {
     // Connect to all static endpoints
     for (const auto &connect_to : rtpmididns::settings.connect_to) {
-      router->add_peer(rtpmididns::make_local_alsa_listener(
+      router->add_peer(rtpmididns::make_peer_import_alsa_rtp(
           router, connect_to.name, connect_to.hostname, connect_to.port, aseq,
           connect_to.local_udp_port));
     }

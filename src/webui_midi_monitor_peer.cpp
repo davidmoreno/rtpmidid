@@ -3,6 +3,7 @@
  */
 #include "webui_midi_monitor_peer.hpp"
 #include "midirouter.hpp"
+#include "peer_kind.hpp"
 #include <rtpmidid/logger.hpp>
 
 #include <chrono>
@@ -43,7 +44,11 @@ webui_midi_monitor_peer_t::webui_midi_monitor_peer_t(std::string uuid_str,
       name_(std::move(display_name)) {}
 
 const char *webui_midi_monitor_peer_t::get_type() const {
-  return "webui_midi_monitor_peer_t";
+  return peer_kind_wire_type(peer_kind_e::webui_monitor);
+}
+
+std::optional<std::string> webui_midi_monitor_peer_t::compute_stable_id() const {
+  return std::nullopt;
 }
 
 router_peer_row_t webui_midi_monitor_peer_t::status() const {

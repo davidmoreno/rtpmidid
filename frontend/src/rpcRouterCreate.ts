@@ -3,9 +3,9 @@ import type { RpcClient } from "./rpc";
 /** Legacy `router.create` `{ type, ... }` maps to split RPC methods. */
 const ROUTER_CREATE_TYPE_TO_METHOD: Record<string, string> = {
   local_rawmidi_t: "router.create.local_rawmidi",
-  network_rtpmidi_client_t: "router.create.network_rtpmidi_client",
-  network_rtpmidi_listener_t: "router.create.network_rtpmidi_listener",
-  local_alsa_peer_t: "router.create.local_alsa_peer",
+  peer_device_rtpmidi_client_t: "router.create.network_rtpmidi_client",
+  peer_export_rtpmidi_server_t: "router.create.network_rtpmidi_listener",
+  peer_device_alsa_seq_t: "router.create.local_alsa_peer",
 };
 
 export async function rpcCallRouterCreatePayload(

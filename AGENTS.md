@@ -51,17 +51,17 @@ graph TB
         Router[midirouter_t]
         
         subgraph LocalPeers[Local Peers]
-            ALSA_Multi[local_alsa_multi_listener_t]
-            ALSA_Listener[local_alsa_listener_t]
-            ALSA_Peer[local_alsa_peer_t]
-            RawMIDI[local_rawmidi_peer_t]
+            ALSA_Multi[peer_export_alsa_network_t]
+            ALSA_Listener[peer_import_alsa_rtp_t]
+            ALSA_Peer[peer_device_alsa_seq_t]
+            RawMIDI[peer_device_rawmidi_t]
         end
         
         subgraph NetworkPeers[Network Peers]
-            RTP_Multi[network_rtpmidi_multi_listener_t]
-            RTP_Listener[network_rtpmidi_listener_t]
-            RTP_Client[network_rtpmidi_client_t]
-            RTP_Peer[network_rtpmidi_peer_t]
+            RTP_Multi[peer_import_rtpmidi_t]
+            RTP_Listener[peer_export_rtpmidi_server_t]
+            RTP_Client[peer_device_rtpmidi_client_t]
+            RTP_Peer[peer_device_rtpmidi_session_t]
         end
         
         subgraph Services[Services]
@@ -90,14 +90,14 @@ graph TB
 
 | Type | Description | File |
 |------|-------------|------|
-| `local_alsa_multi_listener_t` | ALSA "Network" port that creates RTP servers per connection | `local_alsa_multi_listener.cpp` |
-| `local_alsa_listener_t` | ALSA port that connects to a remote RTP server on connection | `local_alsa_listener.cpp` |
-| `local_alsa_peer_t` | Simple ALSA port for MIDI routing | `local_alsa_peer.cpp` |
-| `local_rawmidi_peer_t` | Raw MIDI device (e.g., `/dev/snd/midiC0D0`) | `local_rawmidi_peer.cpp` |
-| `network_rtpmidi_multi_listener_t` | RTP server that creates peers per incoming connection | `network_rtpmidi_multi_listener.cpp` |
-| `network_rtpmidi_listener_t` | Single RTP server endpoint (announced via mDNS) | `network_rtpmidi_listener.cpp` |
-| `network_rtpmidi_client_t` | RTP client connecting to remote server | `network_rtpmidi_client.cpp` |
-| `network_rtpmidi_peer_t` | Active RTP connection (server-side) | `network_rtpmidi_peer.cpp` |
+| `peer_export_alsa_network_t` | ALSA "Network" port that creates RTP servers per connection | `peer_export_alsa_network.cpp` |
+| `peer_import_alsa_rtp_t` | ALSA port that connects to a remote RTP server on connection | `peer_import_alsa_rtp.cpp` |
+| `peer_device_alsa_seq_t` | Simple ALSA port for MIDI routing | `peer_device_alsa_seq.cpp` |
+| `peer_device_rawmidi_t` | Raw MIDI device (e.g., `/dev/snd/midiC0D0`) | `peer_device_rawmidi.cpp` |
+| `peer_import_rtpmidi_t` | RTP server that creates peers per incoming connection | `peer_import_rtpmidi.cpp` |
+| `peer_export_rtpmidi_server_t` | Single RTP server endpoint (announced via mDNS) | `peer_export_rtpmidi_server.cpp` |
+| `peer_device_rtpmidi_client_t` | RTP client connecting to remote server | `peer_device_rtpmidi_client.cpp` |
+| `peer_device_rtpmidi_session_t` | Active RTP connection (server-side) | `peer_device_rtpmidi_session.cpp` |
 
 ---
 
@@ -238,14 +238,14 @@ The following areas of the codebase may need review for performance-critical use
 
 3. **Logging in MIDI paths** (various files)
    - `ERROR()` and `WARNING()` calls in `send_midi()` implementations write to stdout
-   - Example: `local_alsa_peer.cpp` logs errors on every failed ALSA event
+   - Example: `peer_device_alsa_seq.cpp` logs errors on every failed ALSA event
    - Use `ERROR_ONCE()` or `WARNING_RATE_LIMIT()` to reduce I/O
 
 4. **JSON status generation** (`src/midirouter.cpp`, `src/dm_json_status.hpp`)
    - `midirouter_t::status_rows()` enqueues a LOW-priority `query_t` on the router queue and blocks the caller on a `reply_channel_t` while the router thread builds the typed `router_peer_row_t` vector. Serialization (dm-json) then runs on the calling control/WebSocket thread, not the hot path.
    - For each peer, `internal_latency_stats()` performs its own per-peer queue round-trip (LOW priority on the peer queue), so a status snapshot is `O(N peers)` queue hops. Acceptable for the control plane; not for the MIDI hot path.
 
-5. **ALSA sequencer output** (`src/local_alsa_peer.cpp`)
+5. **ALSA sequencer output** (`src/peer_device_alsa_seq.cpp`)
    - Uses one `snd_seq_drain_output()` per `send_midi()` batch (after all `snd_seq_event_output` calls) to reduce syscalls; may still block that peer’s thread only
 
 ---
@@ -396,9 +396,9 @@ When MIDI data arrives from a network peer and needs to go to ALSA:
 sequenceDiagram
     participant UDP as UDP Socket
     participant Poller as poller_t
-    participant NetPeer as network_rtpmidi_peer_t
+    participant NetPeer as peer_device_rtpmidi_session_t
     participant Router as midirouter_t
-    participant ALSAPeer as local_alsa_peer_t
+    participant ALSAPeer as peer_device_alsa_seq_t
     participant ASEQ as aseq_t
     
     UDP->>Poller: FD readable event
@@ -417,12 +417,12 @@ sequenceDiagram
     participant mDNS as mdns_rtpmidi_t
     participant Handler as rtpmidi_remote_handler_t
     participant Router as midirouter_t
-    participant Listener as local_alsa_listener_t
+    participant Listener as peer_import_alsa_rtp_t
     participant ASEQ as aseq_t
     
     mDNS->>Handler: Remote service discovered
     Handler->>Handler: Check name filters (regex)
-    Handler->>Router: add_peer(make_local_alsa_listener(...))
+    Handler->>Router: add_peer(make_peer_import_alsa_rtp(...))
     Router->>Listener: Assign peer_id
     Listener->>ASEQ: Create ALSA port
     Note over Listener: Waits for ALSA connection

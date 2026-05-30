@@ -19,7 +19,7 @@ export type MidiRawmidiEntry = {
   kind: string;
 };
 
-/** Pick for mDNS Connect: create `local_alsa_peer_t` or `local_rawmidi_t` then wire RTP client. */
+/** Pick for mDNS Connect: create `peer_device_alsa_seq_t` or `local_rawmidi_t` then wire RTP client. */
 export type WireLocalChoice =
   | {
       mode: "alsa_seq";
@@ -30,7 +30,7 @@ export type WireLocalChoice =
     }
   | { mode: "rawmidi"; device: string; listingLabel: string };
 
-/** RTP-MIDI / mDNS UDP port string for `network_rtpmidi_client_t` (default Apple 5004). */
+/** RTP-MIDI / mDNS UDP port string for `peer_device_rtpmidi_client_t` (default Apple 5004). */
 export function normalizeRtpMidiUdpPort(p: number | string): string {
   const n = typeof p === "number" ? p : Number(String(p).trim());
   if (!Number.isFinite(n) || n < 1 || n > 65535) return "5004";

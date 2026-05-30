@@ -16,17 +16,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "local_alsa_listener.hpp"
+#include "peer_import_alsa_rtp.hpp"
+#include "peer_stable_id.hpp"
 #include "aseq.hpp"
 #include "factory.hpp"
 #include "dm_json_generated.hpp"
-#include "local_alsa_peer.hpp"
+#include "peer_device_alsa_seq.hpp"
 #include "mididata.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/rtpclient.hpp"
 
 namespace rtpmididns {
-local_alsa_listener_t::local_alsa_listener_t(const std::string &name_,
+peer_import_alsa_rtp_t::peer_import_alsa_rtp_t(const std::string &name_,
                                              const std::string &hostname_,
                                              const std::string &port_,
                                              std::shared_ptr<aseq_t> aseq_,
@@ -76,7 +77,7 @@ local_alsa_listener_t::local_alsa_listener_t(const std::string &name_,
       });
 }
 
-local_alsa_listener_t::~local_alsa_listener_t() {
+peer_import_alsa_rtp_t::~peer_import_alsa_rtp_t() {
   if (aseq) {
     aseq->remove_port(alsaport);
   }
@@ -87,7 +88,7 @@ local_alsa_listener_t::~local_alsa_listener_t() {
   }
 }
 
-void local_alsa_listener_t::add_endpoint(const std::string &hostname,
+void peer_import_alsa_rtp_t::add_endpoint(const std::string &hostname,
                                          const std::string &port) {
   DEBUG("Added endpoint for alsawaiter: {}, hostname: {}, port: {}",
         remote_name, hostname, port);
@@ -107,7 +108,7 @@ void local_alsa_listener_t::add_endpoint(const std::string &hostname,
     endpoints.push_back(rtpmidid::rtpclient_t::endpoint_t{hostname, port});
 }
 
-void local_alsa_listener_t::connect_to_remote_server(
+void peer_import_alsa_rtp_t::connect_to_remote_server(
     const std::string &portname) {
   if (endpoints.size() == 0) {
     WARNING("Unknown endpoints for this alsa waiter. Dont know where to "
@@ -123,7 +124,7 @@ void local_alsa_listener_t::connect_to_remote_server(
   auto rtpclient = std::make_shared<rtpmidid::rtpclient_t>(portname);
 
   rtpmidiclientworker_peer_id =
-      router->add_peer(make_network_rtpmidi_client(rtpclient));
+      router->add_peer(make_peer_device_rtpmidi_client(rtpclient));
   router->connect(rtpmidiclientworker_peer_id, peer_id);
   router->connect(peer_id, rtpmidiclientworker_peer_id);
 
@@ -131,14 +132,14 @@ void local_alsa_listener_t::connect_to_remote_server(
   rtpclient->add_server_addresses(endpoints);
 }
 
-void local_alsa_listener_t::disconnect_from_remote_server() {
+void peer_import_alsa_rtp_t::disconnect_from_remote_server() {
   DEBUG("Disconnect from remote server at {}:{}", hostname, port);
   router->enqueue_remove_peer(rtpmidiclientworker_peer_id);
   // rtpclient = nullptr; // for me, this is dead
   local_name = "";
 }
 
-void local_alsa_listener_t::send_midi(midipeer_id_t from,
+void peer_import_alsa_rtp_t::send_midi(midipeer_id_t from,
                                       const mididata_t &data) {
   mididata_t mididata{data};
   std::scoped_lock lock(aseq->output_mutex);
@@ -162,7 +163,7 @@ void local_alsa_listener_t::send_midi(midipeer_id_t from,
   });
 }
 
-router_peer_row_t local_alsa_listener_t::status() const {
+router_peer_row_t peer_import_alsa_rtp_t::status() const {
   router_peer_row_t row;
   std::vector<listener_endpoint_t> eps;
   for (const auto &endpoint : endpoints) {
@@ -179,7 +180,7 @@ router_peer_row_t local_alsa_listener_t::status() const {
   return row;
 }
 
-bool local_alsa_listener_t::control_peer_command(std::string_view cmd,
+bool peer_import_alsa_rtp_t::control_peer_command(std::string_view cmd,
                                                  std::string_view params_json,
                                                  ::rtpmididns::dmjson::writer_t &out,
                                                  std::string &out_error) {
@@ -236,4 +237,24 @@ bool local_alsa_listener_t::control_peer_command(std::string_view cmd,
   }
   return midipeer_t::control_peer_command(cmd, params_json, out, out_error);
 }
+
+std::optional<std::string>
+peer_import_alsa_rtp_t::stable_id_from_row(const router_peer_row_t &row) {
+  const std::string peer_name =
+      row.name && !row.name->empty() ? *row.name : std::string();
+  if (peer_name.empty())
+    return std::nullopt;
+  const auto pos = peer_name.find(" <-> ");
+  if (pos != std::string::npos) {
+    const std::string remote = peer_name.substr(pos + 5);
+    if (!remote.empty())
+      return make_stable_id("alsa_listener", {remote});
+  }
+  return make_stable_id("alsa_listener_named", {peer_name});
+}
+
+std::optional<std::string> peer_import_alsa_rtp_t::compute_stable_id_impl() const {
+  return stable_id_from_row(status());
+}
+
 } // namespace rtpmididns

@@ -173,6 +173,9 @@ public:
 
   virtual const char *get_type() const = 0;
 
+  /** Persistence key for this peer (nullopt if not saveable). */
+  virtual std::optional<std::string> compute_stable_id() const;
+
   /** Called from midirouter_t::add_peer after peer_id and router are assigned. */
   virtual void on_router_attached() {}
 };

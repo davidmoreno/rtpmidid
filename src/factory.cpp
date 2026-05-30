@@ -17,33 +17,33 @@
  */
 
 #include "factory.hpp"
-#include "local_alsa_listener.hpp"
-#include "local_alsa_multi_listener.hpp"
-#include "local_alsa_peer.hpp"
-#include "local_rawmidi_peer.hpp"
+#include "peer_import_alsa_rtp.hpp"
+#include "peer_export_alsa_network.hpp"
+#include "peer_device_alsa_seq.hpp"
+#include "peer_device_rawmidi.hpp"
 #include "midipeer.hpp"
-#include "network_rtpmidi_client.hpp"
-#include "network_rtpmidi_listener.hpp"
-#include "network_rtpmidi_multi_listener.hpp"
-#include "network_rtpmidi_peer.hpp"
+#include "peer_device_rtpmidi_client.hpp"
+#include "peer_export_rtpmidi_server.hpp"
+#include "peer_import_rtpmidi.hpp"
+#include "peer_device_rtpmidi_session.hpp"
 #include <memory>
 
 namespace rtpmididns {
 
 std::shared_ptr<midipeer_t>
-make_local_alsa_multi_listener(const std::string &name,
+make_peer_export_alsa_network(const std::string &name,
                                std::shared_ptr<aseq_t> aseq) {
-  return std::make_shared<local_alsa_multi_listener_t>(name, aseq);
+  return std::make_shared<peer_export_alsa_network_t>(name, aseq);
 }
 
 std::shared_ptr<midipeer_t>
-make_local_alsa_listener(std::shared_ptr<midirouter_t> &router,
+make_peer_import_alsa_rtp(std::shared_ptr<midirouter_t> &router,
                          const std::string &name, const std::string &hostname,
                          const std::string &port, std::shared_ptr<aseq_t> aseq,
                          const std::string &udp_port) {
   std::shared_ptr<midipeer_t> added;
-  router->for_each_peer<local_alsa_listener_t>(
-      [&](local_alsa_listener_t *peer) {
+  router->for_each_peer<peer_import_alsa_rtp_t>(
+      [&](peer_import_alsa_rtp_t *peer) {
         if (peer->remote_name == name) {
           peer->add_endpoint(hostname, port);
           added = peer->shared_from_this();
@@ -53,55 +53,55 @@ make_local_alsa_listener(std::shared_ptr<midirouter_t> &router,
   if (added)
     return added;
 
-  auto ret = std::make_shared<local_alsa_listener_t>(name, hostname, port, aseq,
+  auto ret = std::make_shared<peer_import_alsa_rtp_t>(name, hostname, port, aseq,
                                                      udp_port);
   return ret;
 }
 
-std::shared_ptr<midipeer_t> make_local_alsa_peer(const std::string &name,
+std::shared_ptr<midipeer_t> make_peer_device_alsa_seq(const std::string &name,
                                                  std::shared_ptr<aseq_t> aseq) {
-  return make_local_alsa_peer(name, aseq, -1, -1);
+  return make_peer_device_alsa_seq(name, aseq, -1, -1);
 }
 
 std::shared_ptr<midipeer_t>
-make_local_alsa_peer(const std::string &name, std::shared_ptr<aseq_t> aseq,
+make_peer_device_alsa_seq(const std::string &name, std::shared_ptr<aseq_t> aseq,
                      int subscribe_from_client, int subscribe_from_port) {
-  return std::make_shared<local_alsa_peer_t>(name, aseq, subscribe_from_client,
+  return std::make_shared<peer_device_alsa_seq_t>(name, aseq, subscribe_from_client,
                                              subscribe_from_port);
 }
 
 std::shared_ptr<midipeer_t>
-make_network_rtpmidi_client(std::shared_ptr<rtpmidid::rtpclient_t> peer) {
-  return std::make_shared<network_rtpmidi_client_t>(peer);
+make_peer_device_rtpmidi_client(std::shared_ptr<rtpmidid::rtpclient_t> peer) {
+  return std::make_shared<peer_device_rtpmidi_client_t>(peer);
 }
 std::shared_ptr<midipeer_t>
-make_network_rtpmidi_client(const std::string &name,
+make_peer_device_rtpmidi_client(const std::string &name,
                             const std::string &hostname,
                             const std::string &port) {
-  return std::make_shared<network_rtpmidi_client_t>(name, hostname, port);
+  return std::make_shared<peer_device_rtpmidi_client_t>(name, hostname, port);
 }
 
 std::shared_ptr<midipeer_t>
-make_network_rtpmidi_multi_listener(const std::string &name,
+make_peer_import_rtpmidi(const std::string &name,
                                     const std::string &port,
                                     std::shared_ptr<aseq_t> aseq) {
-  return std::make_shared<network_rtpmidi_multi_listener_t>(name, port, aseq);
+  return std::make_shared<peer_import_rtpmidi_t>(name, port, aseq);
 }
 
 std::shared_ptr<midipeer_t>
-make_network_rtpmidi_peer(std::shared_ptr<rtpmidid::rtppeer_t> peer) {
-  return std::make_shared<network_rtpmidi_peer_t>(peer);
+make_peer_device_rtpmidi_session(std::shared_ptr<rtpmidid::rtppeer_t> peer) {
+  return std::make_shared<peer_device_rtpmidi_session_t>(peer);
 }
 
 std::shared_ptr<midipeer_t>
-make_network_rtpmidi_listener(const std::string &name,
+make_peer_export_rtpmidi_server(const std::string &name,
                               const std::string &udp_port) {
-  return std::make_shared<network_rtpmidi_listener_t>(name, udp_port);
+  return std::make_shared<peer_export_rtpmidi_server_t>(name, udp_port);
 }
 
-std::shared_ptr<midipeer_t> make_rawmidi_peer(const std::string &name,
+std::shared_ptr<midipeer_t> make_peer_device_rawmidi(const std::string &name,
                                               const std::string &device) {
-  return std::make_shared<local_rawmidi_peer_t>(name, device);
+  return std::make_shared<peer_device_rawmidi_t>(name, device);
 }
 
 void create_rawmidi_rtpclient_pair(
@@ -109,9 +109,9 @@ void create_rawmidi_rtpclient_pair(
     const ::rtpmididns::settings_t::rawmidi_t &rawmidi) {
   std::string name = rawmidi.name;
   auto rawmidi_peer =
-      rtpmididns::make_rawmidi_peer(rawmidi.name, rawmidi.device);
+      rtpmididns::make_peer_device_rawmidi(rawmidi.name, rawmidi.device);
   if (name == "") {
-    name = dynamic_cast<rtpmididns::local_rawmidi_peer_t *>(rawmidi_peer.get())
+    name = dynamic_cast<rtpmididns::peer_device_rawmidi_t *>(rawmidi_peer.get())
                ->name;
   }
   router->add_peer(rawmidi_peer);
@@ -121,11 +121,11 @@ void create_rawmidi_rtpclient_pair(
     INFO("Creating rawmidi peer={} as listener at udp_port={}", name,
          rawmidi.local_udp_port);
     rtppeer =
-        rtpmididns::make_network_rtpmidi_listener(name, rawmidi.local_udp_port);
+        rtpmididns::make_peer_export_rtpmidi_server(name, rawmidi.local_udp_port);
   } else {
     INFO("Creating rawmidi peer={} as client to hostname={} udp_port={}", name,
          rawmidi.hostname, rawmidi.remote_udp_port);
-    rtppeer = rtpmididns::make_network_rtpmidi_client(name, rawmidi.hostname,
+    rtppeer = rtpmididns::make_peer_device_rtpmidi_client(name, rawmidi.hostname,
                                                       rawmidi.remote_udp_port);
   }
   router->add_peer(rtppeer);

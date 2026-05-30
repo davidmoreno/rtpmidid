@@ -16,9 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "network_rtpmidi_multi_listener.hpp"
+#include "peer_import_rtpmidi.hpp"
 #include "factory.hpp"
 #include "midirouter.hpp"
+#include "peer_stable_id.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "utils.hpp"
 
@@ -26,7 +27,7 @@ namespace rtpmididns {
 
 extern std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 
-network_rtpmidi_multi_listener_t::network_rtpmidi_multi_listener_t(
+peer_import_rtpmidi_t::peer_import_rtpmidi_t(
     const std::string &name, const std::string &port,
     std::shared_ptr<aseq_t> aseq_)
     : aseq(aseq_), server(name, port) {
@@ -37,7 +38,7 @@ network_rtpmidi_multi_listener_t::network_rtpmidi_multi_listener_t(
       [this](std::shared_ptr<rtpmidid::rtppeer_t> peer,
              rtpmidid::rtppeer_t::status_e status) {
         if (rtpmidid::rtppeer_t::is_disconnected(status)) {
-          /* The wrapper midipeers (network_rtpmidi_peer_t) clean themselves
+          /* The wrapper midipeers (peer_device_rtpmidi_session_t) clean themselves
              up on DISCONNECTED via their own status_change hook; we just
              forget the tracking entry so future reconnects at the same
              rtppeer address get re-wrapped. */
@@ -61,17 +62,17 @@ network_rtpmidi_multi_listener_t::network_rtpmidi_multi_listener_t(
         }
         DEBUG("Got connection from {}", peer->remote_name);
         auto alsa_id =
-            router->add_peer(make_local_alsa_peer(peer->remote_name, aseq));
-        auto peer_id = router->add_peer(make_network_rtpmidi_peer(peer));
-        router->connect(alsa_id, peer_id);
-        router->connect(peer_id, alsa_id);
+            router->add_peer(make_peer_device_alsa_seq(peer->remote_name, aseq));
+        auto session_id = router->add_peer(make_peer_device_rtpmidi_session(peer));
+        router->connect(alsa_id, session_id);
+        router->connect(session_id, alsa_id);
       });
 }
 
-void network_rtpmidi_multi_listener_t::send_midi(midipeer_id_t from,
+void peer_import_rtpmidi_t::send_midi(midipeer_id_t from,
                                                  const mididata_t &) {}
 
-router_peer_row_t network_rtpmidi_multi_listener_t::status() const {
+router_peer_row_t peer_import_rtpmidi_t::status() const {
   router_peer_row_t row;
   std::vector<rtp_peer_status_t> plist;
   for (const auto &peer : server.peers) {
@@ -85,6 +86,24 @@ router_peer_row_t network_rtpmidi_multi_listener_t::status() const {
   lp.midi_port = static_cast<uint16_t>(server.port() + 1);
   row.listening = lp;
   return row;
+}
+
+std::optional<std::string>
+peer_import_rtpmidi_t::stable_id_from_row(const router_peer_row_t &row) {
+  const std::string peer_name =
+      row.name && !row.name->empty() ? *row.name : std::string();
+  std::string name;
+  if (row.listening && !row.listening->name.empty())
+    name = row.listening->name;
+  else
+    name = peer_name;
+  if (name.empty())
+    return std::nullopt;
+  return make_stable_id("rtpmidi_multi", {name});
+}
+
+std::optional<std::string> peer_import_rtpmidi_t::compute_stable_id_impl() const {
+  return stable_id_from_row(status());
 }
 
 } // namespace rtpmididns

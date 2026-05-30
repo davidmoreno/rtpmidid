@@ -18,7 +18,8 @@
 #pragma once
 
 #include "aseq.hpp"
-#include "midipeer.hpp"
+#include "dm_json_status.hpp"
+#include "peer_export.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/rtppeer.hpp"
 #include "rtpmidid/utils.hpp"
@@ -43,8 +44,9 @@ namespace rtpmididns {
  * origin port and use that port to match to the ALSA connection
  * and send the data as if it comes from there to the midirouter.
  */
-class local_alsa_multi_listener_t : public midipeer_t {
-  NON_COPYABLE_NOR_MOVABLE(local_alsa_multi_listener_t);
+/** Exports local ALSA subscriptions as per-connection RTP-MIDI servers. */
+class peer_export_alsa_network_t : public peer_export_t {
+  NON_COPYABLE_NOR_MOVABLE(peer_export_alsa_network_t);
 
 public:
   std::shared_ptr<aseq_t> seq;
@@ -59,12 +61,9 @@ public:
   rtpmidid::connection_t<aseq_t::port_t> unsubscribe_connection;
   rtpmidid::connection_t<snd_seq_event_t *> midi_connection;
 
-  local_alsa_multi_listener_t(const std::string &name,
+  peer_export_alsa_network_t(const std::string &name,
                               std::shared_ptr<aseq_t> aseq);
-  ~local_alsa_multi_listener_t() override;
-  const char *get_type() const override {
-    return "local_alsa_multi_listener_t";
-  }
+  ~peer_export_alsa_network_t() override;
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   router_peer_row_t status() const override;
@@ -77,6 +76,15 @@ public:
   // received data from the alsa side, look who is the aseqpeer_t
   // and send pretending its it.
   void alsaseq_event(snd_seq_event_t *event);
+
+  static std::optional<std::string>
+  stable_id_from_row(const router_peer_row_t &row);
+
+protected:
+  peer_kind_e peer_kind() const override {
+    return peer_kind_e::export_alsa_network;
+  }
+  std::optional<std::string> compute_stable_id_impl() const override;
 };
 
 } // namespace rtpmididns

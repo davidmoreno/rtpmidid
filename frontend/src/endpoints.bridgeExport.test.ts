@@ -48,18 +48,18 @@ describe("collectBridgeExportedEndpointIds", () => {
     },
   ];
 
-  it("marks mdns endpoint ids that match network_rtpmidi_listener_t", () => {
+  it("marks mdns endpoint ids that match peer_export_rtpmidi_server_t", () => {
     const peers: RouterPeer[] = [
-      peer(1, "network_rtpmidi_listener_t", "MyExport", { port: 5004 }),
+      peer(1, "peer_export_rtpmidi_server_t", "MyExport", { port: 5004 }),
     ];
     const s = collectBridgeExportedEndpointIds(peers, mdnsRemotes);
     expect(s.has(endpointIdForMdns("MyExport", 5004))).toBe(true);
     expect(s.has(endpointIdForMdns("OtherSynth", 6000))).toBe(false);
   });
 
-  it("marks mdns endpoint ids that match network_rtpmidi_multi_listener_t listening.control_port", () => {
+  it("marks mdns endpoint ids that match peer_import_rtpmidi_t listening.control_port", () => {
     const peers: RouterPeer[] = [
-      peer(2, "network_rtpmidi_multi_listener_t", "MyExport", {
+      peer(2, "peer_import_rtpmidi_t", "MyExport", {
         listening: { name: "MyExport", control_port: 5004, midi_port: 5005 },
       }),
     ];
@@ -69,7 +69,7 @@ describe("collectBridgeExportedEndpointIds", () => {
 
   it("requires name match", () => {
     const peers: RouterPeer[] = [
-      peer(1, "network_rtpmidi_listener_t", "WrongName", { port: 5004 }),
+      peer(1, "peer_export_rtpmidi_server_t", "WrongName", { port: 5004 }),
     ];
     const s = collectBridgeExportedEndpointIds(peers, mdnsRemotes);
     expect(s.has(endpointIdForMdns("MyExport", 5004))).toBe(false);

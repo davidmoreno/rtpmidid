@@ -17,7 +17,7 @@ export function ActionsTab({ rpc, onRefresh, onStatus }: Props) {
   const [connectPort, setConnectPort] = useState("5004");
   const [connectName, setConnectName] = useState("");
   const [createJson, setCreateJson] = useState(
-    '{"type":"network_rtpmidi_client_t","name":"Remote","hostname":"127.0.0.1","port":5004}',
+    '{"type":"peer_device_rtpmidi_client_t","name":"Remote","hostname":"127.0.0.1","port":5004}',
   );
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");

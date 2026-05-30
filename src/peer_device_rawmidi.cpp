@@ -28,7 +28,9 @@
 #include <glob.h>
 #include <unistd.h>
 
-#include "local_rawmidi_peer.hpp"
+#include "peer_device_rawmidi.hpp"
+#include "peer_stable_id.hpp"
+#include "peer_stable_id.hpp"
 #include "mididata.hpp"
 #include "midirouter.hpp"
 #include "stringpp.hpp"
@@ -38,7 +40,7 @@ using namespace rtpmididns;
 
 static std::string get_rawmidi_name(const std::string &device);
 
-local_rawmidi_peer_t::local_rawmidi_peer_t(const std::string &name_,
+peer_device_rawmidi_t::peer_device_rawmidi_t(const std::string &name_,
                                            const std::string &device_)
     : device(device_), name(name_) {
   if (name == "") {
@@ -47,7 +49,7 @@ local_rawmidi_peer_t::local_rawmidi_peer_t(const std::string &name_,
   }
 }
 
-void local_rawmidi_peer_t::open() {
+void peer_device_rawmidi_t::open() {
   assert(fd < 0);
   buffer.fill(0);
   INFO("Creating rawmidi peer=\"{}\", device={}", name, device);
@@ -73,7 +75,7 @@ void local_rawmidi_peer_t::open() {
   }
 }
 
-void local_rawmidi_peer_t::close() {
+void peer_device_rawmidi_t::close() {
   if (fd >= 0) {
     fd_listener.stop();
     ::close(fd);
@@ -81,9 +83,9 @@ void local_rawmidi_peer_t::close() {
   }
 }
 
-local_rawmidi_peer_t::~local_rawmidi_peer_t() { close(); }
+peer_device_rawmidi_t::~peer_device_rawmidi_t() { close(); }
 
-router_peer_row_t local_rawmidi_peer_t::status() const {
+router_peer_row_t peer_device_rawmidi_t::status() const {
   router_peer_row_t row;
   row.name = name;
   row.device = device;
@@ -91,7 +93,7 @@ router_peer_row_t local_rawmidi_peer_t::status() const {
   return row;
 }
 
-void local_rawmidi_peer_t::send_midi(midipeer_id_t from,
+void peer_device_rawmidi_t::send_midi(midipeer_id_t from,
                                      const mididata_t &data) {
   if (fd < 0) {
     return;
@@ -103,7 +105,7 @@ void local_rawmidi_peer_t::send_midi(midipeer_id_t from,
   }
 }
 
-void local_rawmidi_peer_t::read_midi() {
+void peer_device_rawmidi_t::read_midi() {
   if (fd < 0) {
     return;
   }
@@ -124,7 +126,7 @@ void local_rawmidi_peer_t::read_midi() {
       });
 }
 
-void local_rawmidi_peer_t::event(midipeer_event_e event,
+void peer_device_rawmidi_t::event(midipeer_event_e event,
                                  midipeer_id_t peer_id) {
   DEBUG("event={} from={}", event, peer_id);
   switch (event) {
@@ -140,7 +142,7 @@ void local_rawmidi_peer_t::event(midipeer_event_e event,
   // default behaviour, logging
   midipeer_t::event(event, peer_id);
 }
-void local_rawmidi_peer_t::connected(midipeer_id_t peer_id) {
+void peer_device_rawmidi_t::connected(midipeer_id_t peer_id) {
   connection_count++;
   if (connection_count == 1) {
     INFO("Open rawmidi {}", device);
@@ -149,7 +151,7 @@ void local_rawmidi_peer_t::connected(midipeer_id_t peer_id) {
   DEBUG("Connected to rawmidi device={} count={}", device, connection_count);
 }
 
-void local_rawmidi_peer_t::disconnected(midipeer_id_t peer_id) {
+void peer_device_rawmidi_t::disconnected(midipeer_id_t peer_id) {
   connection_count--;
   if (connection_count == 0) {
     INFO("Close rawmidi {}", device);
@@ -251,6 +253,21 @@ std::vector<rawmidi_device_row_t> enumerate_rawmidi_devices() {
   }
   globfree(&gl);
   return arr;
+}
+
+std::optional<std::string>
+peer_device_rawmidi_t::stable_id_from_row(const router_peer_row_t &row) {
+  const std::string peer_name =
+      row.name && !row.name->empty() ? *row.name : std::string();
+  if (row.device && !row.device->empty())
+    return make_stable_id("rawmidi", {*row.device});
+  if (!peer_name.empty())
+    return make_stable_id("rawmidi_named", {peer_name});
+  return std::nullopt;
+}
+
+std::optional<std::string> peer_device_rawmidi_t::compute_stable_id_impl() const {
+  return stable_id_from_row(status());
 }
 
 } // namespace rtpmididns

@@ -92,11 +92,11 @@ describe("buildAlsaSubscriptionConnections", () => {
     expect(rows[0].to.label).toMatch(/B.*P2/);
   });
 
-  it("links the ALSA address to a router peer id when local_alsa_peer_t hangs off it", () => {
+  it("links the ALSA address to a router peer id when peer_device_alsa_seq_t hangs off it", () => {
     const peer: RouterPeer = {
       id: 7,
       name: "Synth bridge",
-      type: "local_alsa_peer_t",
+      type: "peer_device_alsa_seq_t",
       send_to: [],
       recv: 0,
       sent: 0,
@@ -111,11 +111,11 @@ describe("buildAlsaSubscriptionConnections", () => {
 });
 
 describe("peerStableId", () => {
-  it("matches the daemon's local_alsa_peer_t format", () => {
+  it("matches the daemon's peer_device_alsa_seq_t format", () => {
     const peer: RouterPeer = {
       id: 5,
       name: "ALSA: Synth",
-      type: "local_alsa_peer_t",
+      type: "peer_device_alsa_seq_t",
       send_to: [],
       recv: 0,
       sent: 0,
@@ -144,11 +144,11 @@ describe("peerStableId", () => {
      (relies on configured names rather than structural fields), but for
      INI/RPC-configured peers the name is stable across restarts. */
 
-  it("falls back to alsa_local:<name> for local_alsa_peer_t without alsa_subscribe_from", () => {
+  it("falls back to alsa_local:<name> for peer_device_alsa_seq_t without alsa_subscribe_from", () => {
     const peer: RouterPeer = {
       id: 12,
       name: "Network Export",
-      type: "local_alsa_peer_t",
+      type: "peer_device_alsa_seq_t",
       send_to: [],
       recv: 0,
       sent: 0,
@@ -163,7 +163,7 @@ describe("peerStableId", () => {
     const peer: RouterPeer = {
       id: 15,
       name: "MyClient",
-      type: "network_rtpmidi_client_t",
+      type: "peer_device_rtpmidi_client_t",
       send_to: [],
       recv: 0,
       sent: 0,
@@ -179,7 +179,7 @@ describe("peerStableId", () => {
     const peer: RouterPeer = {
       id: 20,
       name: "Custom Listener Name",
-      type: "local_alsa_listener_t",
+      type: "peer_import_alsa_rtp_t",
       send_to: [],
       recv: 0,
       sent: 0,
@@ -220,11 +220,11 @@ describe("buildConnections (aggregate rows dropped)", () => {
      listener's remotes and an RTP client's connection-string respectively.
      They duplicated info already shown in the Devices tab and their synthetic
      "to" side could never be saved, so we now drop them entirely. */
-  it("does not emit an aggregate row for network_rtpmidi_listener_t", () => {
+  it("does not emit an aggregate row for peer_export_rtpmidi_server_t", () => {
     const listener: RouterPeer = {
       id: 1,
       name: "rtpmidid",
-      type: "network_rtpmidi_listener_t",
+      type: "peer_export_rtpmidi_server_t",
       send_to: [],
       recv: 0,
       sent: 0,
@@ -234,11 +234,11 @@ describe("buildConnections (aggregate rows dropped)", () => {
     expect(rows).toHaveLength(0);
   });
 
-  it("does not emit an aggregate row for network_rtpmidi_client_t", () => {
+  it("does not emit an aggregate row for peer_device_rtpmidi_client_t", () => {
     const client: RouterPeer = {
       id: 2,
       name: "Synth",
-      type: "network_rtpmidi_client_t",
+      type: "peer_device_rtpmidi_client_t",
       send_to: [],
       recv: 0,
       sent: 0,
@@ -256,7 +256,7 @@ describe("buildConnections (aggregate rows dropped)", () => {
     const a: RouterPeer = {
       id: 3,
       name: "A",
-      type: "local_alsa_peer_t",
+      type: "peer_device_alsa_seq_t",
       send_to: [4],
       recv: 0,
       sent: 0,
@@ -267,7 +267,7 @@ describe("buildConnections (aggregate rows dropped)", () => {
     const b: RouterPeer = {
       id: 4,
       name: "B",
-      type: "local_alsa_peer_t",
+      type: "peer_device_alsa_seq_t",
       send_to: [],
       recv: 0,
       sent: 0,
@@ -333,7 +333,7 @@ describe("annotateLiveOnly / cannotSaveReason", () => {
     const alsa: RouterPeer = {
       id: 10,
       name: "Synth",
-      type: "local_alsa_peer_t",
+      type: "peer_device_alsa_seq_t",
       send_to: [],
       recv: 0,
       sent: 0,

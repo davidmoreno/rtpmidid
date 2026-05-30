@@ -77,7 +77,7 @@ export function ConnectionsTab({
   const favoriteIds = useMemo(() => loadDeviceFavoriteIds(), []);
 
   /* Merge router rows + pure ALSA aconnect rows. The ALSA rows are dropped
-     when they exactly match an existing router edge (local_alsa_peer_t hangs
+     when they exactly match an existing router edge (peer_device_alsa_seq_t hangs
      off the same ALSA port and the router edge already shows the traffic). */
   const liveAllRows = useMemo(() => {
     const alsaRows = buildAlsaSubscriptionConnections(

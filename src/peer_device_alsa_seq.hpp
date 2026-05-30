@@ -18,7 +18,8 @@
 
 #pragma once
 #include "aseq.hpp"
-#include "midipeer.hpp"
+#include "dm_json_status.hpp"
+#include "peer_device.hpp"
 #include "rtpmidid/utils.hpp"
 #include <optional>
 
@@ -26,8 +27,9 @@ namespace rtpmididns {
 /**
  * @short ALSA port that just receives data and send to another midipeer_t
  */
-class local_alsa_peer_t : public midipeer_t {
-  NON_COPYABLE_NOR_MOVABLE(local_alsa_peer_t);
+/** One-to-one peer for an ALSA sequencer port. */
+class peer_device_alsa_seq_t : public peer_device_t {
+  NON_COPYABLE_NOR_MOVABLE(peer_device_alsa_seq_t);
 
 public:
   uint8_t port;
@@ -46,14 +48,22 @@ public:
   int subscribe_src_client_ = -1;
   int subscribe_src_port_ = -1;
 
-  local_alsa_peer_t(const std::string &name, std::shared_ptr<aseq_t> seq,
+  peer_device_alsa_seq_t(const std::string &name, std::shared_ptr<aseq_t> seq,
                     int subscribe_from_client = -1,
                     int subscribe_from_port = -1);
-  ~local_alsa_peer_t() override;
+  ~peer_device_alsa_seq_t() override;
   void on_router_attached() override;
   router_peer_row_t status() const override;
   void send_midi(midipeer_id_t from, const mididata_t &) override;
-  const char *get_type() const override { return "local_alsa_peer_t"; }
+
+  static std::optional<std::string>
+  stable_id_from_row(const router_peer_row_t &row);
+
+protected:
+  peer_kind_e peer_kind() const override {
+    return peer_kind_e::device_alsa_seq;
+  }
+  std::optional<std::string> compute_stable_id_impl() const override;
 
 private:
   bool alsa_input_attached_ = false;

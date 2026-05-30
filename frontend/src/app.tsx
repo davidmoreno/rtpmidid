@@ -279,8 +279,8 @@ export function App() {
         const newLocals = peersAfterLocal.filter(
           (p) =>
             !idsBefore.has(p.id) &&
-            (p.type === "local_alsa_peer_t" ||
-              p.type === "local_rawmidi_peer_t"),
+            (p.type === "peer_device_alsa_seq_t" ||
+              p.type === "peer_device_rawmidi_t"),
         );
         const localPeer = newLocals.sort((a, b) => b.id - a.id)[0];
         if (!localPeer) {
@@ -306,7 +306,7 @@ export function App() {
         const peersAfterClient = normalizePeers(afterClient.router ?? []);
         const newClients = peersAfterClient.filter(
           (p) =>
-            !idsMid.has(p.id) && p.type === "network_rtpmidi_client_t",
+            !idsMid.has(p.id) && p.type === "peer_device_rtpmidi_client_t",
         );
         const clientPeer = newClients.sort((a, b) => b.id - a.id)[0];
         if (!clientPeer) {

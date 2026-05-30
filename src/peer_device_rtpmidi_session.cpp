@@ -16,7 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "network_rtpmidi_peer.hpp"
+#include "peer_device_rtpmidi_session.hpp"
+#include "peer_stable_id.hpp"
 #include "mididata.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/iobytes.hpp"
@@ -26,7 +27,7 @@
 #include <memory>
 
 namespace rtpmididns {
-network_rtpmidi_peer_t::network_rtpmidi_peer_t(
+peer_device_rtpmidi_session_t::peer_device_rtpmidi_session_t(
     std::shared_ptr<rtpmidid::rtppeer_t> peer_)
     : peer(peer_) {
 
@@ -54,19 +55,38 @@ network_rtpmidi_peer_t::network_rtpmidi_peer_t(
       });
 }
 
-network_rtpmidi_peer_t::~network_rtpmidi_peer_t() {}
+peer_device_rtpmidi_session_t::~peer_device_rtpmidi_session_t() {}
 
-void network_rtpmidi_peer_t::send_midi(midipeer_id_t from,
+void peer_device_rtpmidi_session_t::send_midi(midipeer_id_t from,
                                        const mididata_t &data) {
   // DEBUG("Send midi: {}", data.size());
   peer->send_midi(data);
 };
 
-router_peer_row_t network_rtpmidi_peer_t::status() const {
+router_peer_row_t peer_device_rtpmidi_session_t::status() const {
   router_peer_row_t row;
   row.name = peer->remote_name;
   row.peer = rtp_peer_status_from(*peer);
   return row;
+}
+
+std::optional<std::string>
+peer_device_rtpmidi_session_t::stable_id_from_row(const router_peer_row_t &row) {
+  const std::string peer_name =
+      row.name && !row.name->empty() ? *row.name : std::string();
+  if (row.peer && !row.peer->remote.name.empty() &&
+      stable_id_is_real_hostname(row.peer->remote.hostname)) {
+    return make_stable_id(
+        "rtpmidi_in", {row.peer->remote.hostname, row.peer->remote.name});
+  }
+  if (!peer_name.empty())
+    return make_stable_id("rtpmidi_in_named", {peer_name});
+  return std::nullopt;
+}
+
+std::optional<std::string>
+peer_device_rtpmidi_session_t::compute_stable_id_impl() const {
+  return stable_id_from_row(status());
 }
 
 } // namespace rtpmididns
