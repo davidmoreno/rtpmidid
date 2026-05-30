@@ -197,6 +197,9 @@ private:
   void disconnect_impl(peer_id_t from, peer_id_t to);
   void send_midi_inline(peer_id_t from, peer_id_t to, const uint8_t *data,
                         size_t size);
+  bool peer_is_router_isolated(peer_id_t id) const;
+  void remove_monitors_targeting(peer_id_t target);
+  void maybe_remove_ephemeral_web_peer(peer_id_t id);
   void event_directed_impl(peer_id_t from, peer_id_t to, midipeer_event_e evt);
   void event_broadcast_impl(peer_id_t from, midipeer_event_e evt);
   std::vector<router_peer_row_t> status_rows_impl();

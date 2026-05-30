@@ -33,7 +33,6 @@ import {
   type EndpointGroup,
   type EndpointSortKey,
 } from "../endpointPickerUtils";
-import { Button } from "./Button";
 import { DeviceMetaTags } from "./DeviceMetaTags";
 import { ManualDeviceDialog } from "./ManualDeviceDialog";
 import {
@@ -51,6 +50,42 @@ import type { RegistryDevice } from "../devicesList";
 import { CONFIRM_SKIP_HINT, runWithConfirm } from "../confirmAction";
 
 type SortKey = EndpointSortKey;
+
+function IconEye({ class: className = "h-4 w-4" }: { class?: string }) {
+  return (
+    <svg
+      class={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden
+    >
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function IconEyeOff({ class: className = "h-4 w-4" }: { class?: string }) {
+  return (
+    <svg
+      class={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden
+    >
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  );
+}
 
 /** Router neighbour on a device card: prefer Devices-tab endpoint row, else router peer row. */
 function resolveNeighborEndpoint(
@@ -462,14 +497,6 @@ export function PeersCards({
     subsRows,
   ]);
 
-  const hiddenEligibleCount = useMemo(
-    () =>
-      endpoints.filter(
-        (e) => hiddenIds.has(e.id) || autoHiddenIds.has(e.id),
-      ).length,
-    [endpoints, hiddenIds, autoHiddenIds],
-  );
-
   const [connectDialogForId, setConnectDialogForId] = useState<string | null>(
     null,
   );
@@ -535,12 +562,32 @@ export function PeersCards({
   return (
     <div class="space-y-4">
       <section class="ui-peer-card-shell">
-        <div class="flex flex-wrap items-end justify-between gap-3">
-          <div class="flex flex-wrap items-center gap-2">
+        <div class="ui-devices-toolbar">
+          <div class="ui-search-wrap">
+            <input
+              class="ui-input ui-search-input"
+              value={query}
+              onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+              placeholder="Search name, host, kind…"
+              aria-label="Search devices"
+            />
+            {query.trim() ? (
+              <button
+                type="button"
+                class="ui-search-clear"
+                aria-label="Clear search"
+                title="Clear search"
+                onClick={() => setQuery("")}
+              >
+                ×
+              </button>
+            ) : null}
+          </div>
+          <div class="ui-devices-toolbar-filters">
             <button
               type="button"
               onClick={() => setShowLocal(!showLocal)}
-              class={`rounded-[var(--radius-sm)] px-2 py-1 font-mono text-[11px] font-black uppercase transition-[transform,opacity] duration-150 hover:opacity-95 active:scale-[0.98] ${
+              class={`rounded-[var(--radius-sm)] px-2 py-1 font-mono text-[10px] font-black uppercase transition-[transform,opacity] duration-150 hover:opacity-95 active:scale-[0.98] sm:text-[11px] ${
                 showLocal ? "ui-filter-toggle-local-on" : "ui-filter-toggle-local-off"
               }`}
             >
@@ -549,44 +596,28 @@ export function PeersCards({
             <button
               type="button"
               onClick={() => setShowRemote(!showRemote)}
-              class={`rounded-[var(--radius-sm)] px-2 py-1 font-mono text-[11px] font-black uppercase transition-[transform,opacity] duration-150 hover:opacity-95 active:scale-[0.98] ${
+              class={`rounded-[var(--radius-sm)] px-2 py-1 font-mono text-[10px] font-black uppercase transition-[transform,opacity] duration-150 hover:opacity-95 active:scale-[0.98] sm:text-[11px] ${
                 showRemote ? "ui-filter-toggle-remote-on" : "ui-filter-toggle-remote-off"
               }`}
             >
               Remote
             </button>
             <Toggle
-              label="Connected"
-              value={connectedOnly}
-              onChange={setConnectedOnly}
-            />
-            <Toggle
-              label="Show hidden"
+              label="Hidden"
               value={showHidden}
               onChange={setShowHiddenPersist}
             />
-            <span class="font-mono text-[10px] ui-text-muted">
-              Showing{" "}
-              <span class="font-black ui-text">{shown.length}</span>
-              <span class="ui-text-subtle"> / {mergedDevices.length}</span> devices
-              {hiddenEligibleCount > 0 ? (
-                <span class="ui-text-subtle">
-                  {!showHidden
-                    ? ` · ${hiddenEligibleCount} hidden`
-                    : ` · ${hiddenEligibleCount} incl. hidden`}
-                </span>
-              ) : null}
-            </span>
-            <div class="ml-2 flex items-center gap-2">
-              <span class="font-mono text-[11px] font-bold uppercase ui-text-muted">
+            <div class="flex items-center gap-1">
+              <span class="hidden font-mono text-[10px] font-bold uppercase ui-text-muted sm:inline">
                 Sort
               </span>
               <select
-                class="ui-select mt-0 py-1 font-mono text-[11px] font-bold"
+                class="ui-select mt-0 max-w-[7rem] py-1 font-mono text-[10px] font-bold sm:max-w-none sm:text-[11px]"
                 value={sortKey}
                 onChange={(e) =>
                   setSortKey((e.target as HTMLSelectElement).value as SortKey)
                 }
+                aria-label="Sort devices"
               >
                 <option value="activity">Activity</option>
                 <option value="connected">Connected</option>
@@ -594,21 +625,29 @@ export function PeersCards({
                 <option value="kind">Kind</option>
               </select>
             </div>
+            <span class="hidden font-mono text-[10px] ui-text-muted sm:inline">
+              <span class="font-black ui-text">{shown.length}</span>
+              <span class="ui-text-subtle">/{mergedDevices.length}</span>
+            </span>
             {registryEnabled ? (
-              <Button type="button" onClick={() => setShowAddDevice(true)}>
-                + Add device
-              </Button>
+              <button
+                type="button"
+                class="ui-card-action ui-card-action-accent"
+                onClick={() => setShowAddDevice(true)}
+              >
+                + Add
+              </button>
             ) : null}
-          </div>
-          <label class="min-w-[14rem] grow font-mono text-[11px] font-bold uppercase ui-text-muted">
-            Search
-            <input
-              class="ui-input mt-1 text-xs"
-              value={query}
-              onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
-              placeholder="name, device, host, kind…"
+            <span class="font-mono text-[10px] ui-text-muted sm:hidden">
+              <span class="font-black ui-text">{shown.length}</span>
+              <span class="ui-text-subtle">/{mergedDevices.length}</span>
+            </span>
+            <Toggle
+              label="Connected"
+              value={connectedOnly}
+              onChange={setConnectedOnly}
             />
-          </label>
+          </div>
         </div>
       </section>
 
@@ -754,8 +793,9 @@ export function PeersCards({
                       {isManualHidden && showHidden ? (
                         <button
                           type="button"
-                          class="flex h-8 shrink-0 items-center rounded-md border border-[color:var(--color-border)] px-2 font-mono text-[10px] font-black uppercase ui-text-muted transition-colors hover:bg-[color:var(--color-surface-2)] hover:ui-text"
-                          title={`Remove from hidden list (stored in this browser). ${CONFIRM_SKIP_HINT}`}
+                          class="ui-icon-btn -ml-0.5"
+                          title={`Unhide (show in list). ${CONFIRM_SKIP_HINT}`}
+                          aria-label="Unhide device"
                           onClick={(ev) => {
                             ev.preventDefault();
                             ev.stopPropagation();
@@ -766,20 +806,21 @@ export function PeersCards({
                             );
                           }}
                         >
-                          Unhide
+                          <IconEyeOff />
                         </button>
                       ) : !isManualHidden && e ? (
                         <button
                           type="button"
-                          class="flex h-8 shrink-0 items-center rounded-md border border-[color:var(--color-border)] px-2 font-mono text-[10px] font-black uppercase ui-text-muted transition-colors hover:bg-[color:var(--color-surface-2)] hover:ui-text"
+                          class="ui-icon-btn -ml-0.5"
                           title="Hide from device list (stored in this browser)"
+                          aria-label="Hide device"
                           onClick={(ev) => {
                             ev.preventDefault();
                             ev.stopPropagation();
                             toggleManualHidden(row.id);
                           }}
                         >
-                          Hide
+                          <IconEye />
                         </button>
                       ) : null}
                       <span class="min-w-0 truncate font-mono text-sm font-black ui-text">
@@ -882,9 +923,8 @@ export function PeersCards({
               </div>
 
               <div class="p-3">
-                <div class="grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
-                  <div class="space-y-2">
-                    <div class="flex flex-wrap items-center gap-2 font-mono text-xs">
+                <div class="space-y-2">
+                  <div class="flex flex-wrap items-center gap-2 font-mono text-xs">
                       <span class="font-black uppercase ui-text-muted">
                         Stats
                       </span>
@@ -909,7 +949,7 @@ export function PeersCards({
                               {peer.recv + peer.sent}
                             </strong>
                           </span>
-                          {peerCombinedLatencyMs(peer) !== null ? (
+                          {peerCombinedLatencyMs(peer) !== null && conn ? (
                             <>
                               <span class="ui-text-subtle">·</span>
                               <span class="inline-flex items-center gap-2">
@@ -1041,23 +1081,25 @@ export function PeersCards({
                         ) : null}
                       </div>
                     </div>
-                  </div>
                   {actionEndpointId ? (
-                  <div class="flex shrink-0 flex-col items-end justify-end gap-2 sm:flex-row md:pt-0">
-                    <Button
-                      type="button"
-                      onClick={() =>
-                        setMonitorFor({ id: actionEndpointId, label: row.label })
-                      }
-                    >
-                      Monitor
-                    </Button>
-                    <Button
-                      onClick={() => setConnectDialogForId(actionEndpointId)}
-                    >
-                      Connect…
-                    </Button>
-                  </div>
+                    <div class="flex flex-wrap items-center justify-end gap-1 border-t border-[color:var(--color-border-muted)] pt-2">
+                      <button
+                        type="button"
+                        class="ui-card-action"
+                        onClick={() =>
+                          setMonitorFor({ id: actionEndpointId, label: row.label })
+                        }
+                      >
+                        Monitor
+                      </button>
+                      <button
+                        type="button"
+                        class="ui-card-action ui-card-action-accent"
+                        onClick={() => setConnectDialogForId(actionEndpointId)}
+                      >
+                        Connect
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               </div>

@@ -37,6 +37,12 @@ namespace {
  */
 thread_local midirouter_t *g_current_router_thread = nullptr;
 
+bool is_web_ephemeral_display_name(const std::string &name) {
+  if (name.starts_with("WEB · MIDI monitor"))
+    return false;
+  return name.starts_with("WEB · ") || name.starts_with("WEB:");
+}
+
 } // namespace
 
 midirouter_t::midirouter_t() = default;
@@ -294,6 +300,55 @@ void midirouter_t::disconnect_impl(peer_id_t from, peer_id_t to) {
   }
 }
 
+bool midirouter_t::peer_is_router_isolated(peer_id_t id) const {
+  const auto it = peers_.find(id);
+  if (it == peers_.end())
+    return false;
+  if (!it->second.send_to.empty())
+    return false;
+  for (const auto &p : peers_) {
+    if (p.first == id)
+      continue;
+    for (auto to : p.second.send_to) {
+      if (to == id)
+        return false;
+    }
+  }
+  return true;
+}
+
+void midirouter_t::remove_monitors_targeting(peer_id_t target) {
+  std::vector<peer_id_t> monitor_ids;
+  for (const auto &kv : peers_) {
+    const auto mon =
+        std::dynamic_pointer_cast<webui_midi_monitor_peer_t>(kv.second.peer);
+    if (!mon)
+      continue;
+    if (mon->monitor_target_peer_id() == target)
+      monitor_ids.push_back(kv.first);
+  }
+  for (peer_id_t mid : monitor_ids)
+    remove_peer_impl(mid);
+}
+
+void midirouter_t::maybe_remove_ephemeral_web_peer(peer_id_t id) {
+  if (!peer_is_router_isolated(id))
+    return;
+  const auto it = peers_.find(id);
+  if (it == peers_.end())
+    return;
+  const auto row = it->second.peer->status();
+  const std::string name = row.name.value_or("");
+  if (!is_web_ephemeral_display_name(name))
+    return;
+  remove_monitors_targeting(id);
+  if (peers_.find(id) == peers_.end())
+    return;
+  if (!peer_is_router_isolated(id))
+    return;
+  remove_peer_impl(id);
+}
+
 void midirouter_t::send_midi_inline(peer_id_t from, peer_id_t to,
                                     const uint8_t *data, size_t size) {
   auto from_it = peers_.find(from);
@@ -484,6 +539,8 @@ void midirouter_t::handle(router_cmd::connect_t &cmd) {
 
 void midirouter_t::handle(router_cmd::disconnect_t &cmd) {
   disconnect_impl(cmd.from, cmd.to);
+  maybe_remove_ephemeral_web_peer(cmd.from);
+  maybe_remove_ephemeral_web_peer(cmd.to);
 }
 
 void midirouter_t::handle(router_cmd::event_directed_t &cmd) {
