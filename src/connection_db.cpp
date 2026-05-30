@@ -132,6 +132,26 @@ const char *connection_direction_to_wire(connection_direction_e direction) {
   return "both";
 }
 
+connection_direction_e flip_connection_direction(connection_direction_e direction) {
+  switch (direction) {
+  case connection_direction_e::a2b:
+    return connection_direction_e::b2a;
+  case connection_direction_e::b2a:
+    return connection_direction_e::a2b;
+  case connection_direction_e::both:
+    return connection_direction_e::both;
+  }
+  return connection_direction_e::both;
+}
+
+stored_connection_t canonicalize_stored_connection(stored_connection_t connection) {
+  if (connection.side_b < connection.side_a) {
+    std::swap(connection.side_a, connection.side_b);
+    connection.direction = flip_connection_direction(connection.direction);
+  }
+  return connection;
+}
+
 std::optional<std::string> compute_stable_id(const router_peer_row_t &row) {
   const auto kind = peer_kind_from_wire_type(row.type.value_or(""));
   if (kind) {
@@ -664,6 +684,31 @@ void connection_db_manager_t::try_auto_aconnect_all_alsa_pairs() {
         pair.direction == connection_direction_e::both)
       maybe_connect(*port_b, *port_a);
   }
+}
+
+void connection_db_manager_t::save_stored_connection(
+    stored_connection_t connection) {
+  if (!db_ || !db_->is_open())
+    return;
+  connection = canonicalize_stored_connection(std::move(connection));
+  db_->save_connection(connection);
+  check_reconnects_for_all();
+}
+
+bool connection_db_manager_t::set_stored_enabled(const std::string &side_a,
+                                                 const std::string &side_b,
+                                                 bool enabled) {
+  if (!db_ || !db_->is_open())
+    return false;
+  stored_connection_t probe;
+  probe.side_a = side_a;
+  probe.side_b = side_b;
+  probe = canonicalize_stored_connection(std::move(probe));
+  const bool ok =
+      db_->set_enabled(probe.side_a, probe.side_b, enabled);
+  if (ok && enabled)
+    check_reconnects_for_all();
+  return ok;
 }
 
 void connection_db_manager_t::record_stable_pair(const std::string &side_a,

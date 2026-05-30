@@ -1,5 +1,8 @@
 /** Human-readable label for a stable id string stored in the database. */
+import { formatIdentityLabel, parseIdentity } from "./deviceIdentity";
+
 export function formatStableIdLabel(stableId: string): string {
+  if (parseIdentity(stableId)) return formatIdentityLabel(stableId);
   const parts = stableId.split(":");
   if (parts.length < 2) return stableId;
   const kind = parts[0];

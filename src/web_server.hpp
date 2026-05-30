@@ -26,6 +26,7 @@ namespace rtpmididns {
 class midirouter_t;
 class aseq_t;
 class connection_db_manager_t;
+class device_registry_t;
 
 class web_server_t {
   NON_COPYABLE_NOR_MOVABLE(web_server_t)
@@ -68,6 +69,7 @@ public:
   std::shared_ptr<aseq_t> aseq;
   std::shared_ptr<rtpmidid::mdns_rtpmidi_t> mdns;
   std::shared_ptr<connection_db_manager_t> connection_db;
+  std::shared_ptr<device_registry_t> device_registry;
 
   web_server_t() = default;
   ~web_server_t();

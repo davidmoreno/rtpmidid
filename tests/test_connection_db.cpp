@@ -224,9 +224,21 @@ void test_connection_manager_applies_directed_restore() {
   ASSERT_EQUAL(out_targets.size(), size_t{0});
 }
 
+void test_canonicalize_stored_connection_flips_direction() {
+  stored_connection_t row;
+  row.side_a = "z_side";
+  row.side_b = "a_side";
+  row.direction = connection_direction_e::a2b;
+  const auto canon = canonicalize_stored_connection(row);
+  ASSERT_EQUAL(canon.side_a, "a_side");
+  ASSERT_EQUAL(canon.side_b, "z_side");
+  ASSERT_TRUE(canon.direction == connection_direction_e::b2a);
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_connection_db_save_list_roundtrip),
+      TEST(test_canonicalize_stored_connection_flips_direction),
       TEST(test_connection_restore_a2b_only),
       TEST(test_connection_restore_b2a_only),
       TEST(test_connection_restore_both_directions),

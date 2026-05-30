@@ -247,7 +247,7 @@ go under `tests/` and are wired into `make test`.
 | 3 | Query matching | ☑ Completed |
 | 4 | Device registry | ☑ Completed |
 | 5 | Persisted connections v2 (directed + query) | ☑ Completed |
-| 6 | Control + Web UI | ☐ Not started |
+| 6 | Control + Web UI | ☑ Completed |
 | 7 | Pure-ALSA direct + optional monitor tap | ☐ Not started |
 | 8 | Lifecycle / cleanup | ☐ Not started |
 
@@ -348,15 +348,28 @@ by the existing test suite (no behavior change ⇒ tests stay green).
   round-trip.
 
 ### Phase 6 — Control + Web UI
-**Status:** ☐ Not started
+**Status:** ☑ Completed
 
-* RPC: `devices.list`, `connections.list`, `connections.save` (query + direction),
-  `connections.enable` / `connections.disable`, `devices.add_manual`, `devices.remove`.
-* Frontend: device list (online/offline/last-seen badges), connection editor with direction
-  and per-field active/`[ ]` toggles (`frontend/src/...`, `model.ts`, `rpc.ts`,
-  `ConnectionsTab.tsx`).
-* **Tests:** RPC dispatch tests (extend `test_dm_json_*`); frontend format tests
-  (`persistedConnectionsFormat`/`persistedConnections`).
+* RPC: `devices.list`, `connections.list` (v2: direction + enabled + query-side matching),
+  `connections.save` (query + direction), `connections.enable` / `connections.disable`,
+  `devices.add_manual`, `devices.remove`. Legacy `connections.add` / `connections.remove`
+  remain (add stores `both` direction).
+* `control_rpc_context_t` carries `device_registry`; wired from `main.cpp` through control
+  socket and web server.
+* Endpoint ids resolve to `key=value` identities on save when possible
+  (`resolve_side_to_connection_side` in `control_rpc.cpp`).
+* Frontend (`frontend/src/`):
+  * **Unified device list** on Devices tab — endpoint cards merged with registry
+    (`mergeDeviceList.ts`); **Online/Offline** + **source** tags on each card;
+    offline-only registry rows as muted cards; **+ Add device** in toolbar.
+  * **Connection editor** (`ConnectionEditorDialog`) — direction picker, endpoint picker,
+    per-field active/`[ ]` toggles (`StoredQueryEditor`), enable/disable auto-reconnect.
+  * Shared identity grammar in `deviceIdentity.ts` (parse/serialize/labels).
+* **Tests:** `test_dm_json_generated` (new RPC structs), `test_connection_db`
+  (canonicalize direction flip), `deviceIdentity.test.ts`, `persistedConnections.test.ts`.
+
+**UI notes (Phase 7+):** Pure-ALSA direct links still use legacy `connections.add` quick-save
+(→ `both`); directed ALSA restore is Phase 7. Monitor tap for direct ALSA is Phase 7.
 
 ### Phase 7 — Pure-ALSA direct + optional monitor tap
 **Status:** ☐ Not started

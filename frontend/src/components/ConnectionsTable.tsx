@@ -4,6 +4,7 @@ import {
   connectionCombinedLatencyMs,
   ConnectionLatencyHoverCell,
 } from "./LatencyBar";
+import { CONFIRM_SKIP_HINT, runWithConfirm } from "../confirmAction";
 
 type SortKey =
   | "type"
@@ -260,11 +261,25 @@ function DbStarCell({
     ? () => onRemove!(row)
     : () => onAdd!(row);
   const title = saved
-    ? "Remove from saved connections"
+    ? `Remove from saved connections. ${CONFIRM_SKIP_HINT}`
     : "Save this connection to the database";
   const aria = saved
     ? "Remove from saved connections"
     : "Save this connection to the database";
+
+  const onStarClick = (ev: MouseEvent) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (saved) {
+      runWithConfirm(
+        ev,
+        `Remove saved connection "${row.from.label}" ${row.direction} "${row.to.label}" from the database?`,
+        handler,
+      );
+    } else {
+      handler();
+    }
+  };
 
   return (
     <td class="px-2 py-1.5 align-middle">
@@ -274,11 +289,7 @@ function DbStarCell({
         aria-label={aria}
         aria-pressed={saved}
         title={title}
-        onClick={(ev) => {
-          ev.preventDefault();
-          ev.stopPropagation();
-          handler();
-        }}
+        onClick={onStarClick}
       >
         {saved ? (
           <span
@@ -306,6 +317,10 @@ type Props = {
   onAddToDb?: (row: ConnectionRow) => void;
   /** Remove this connection from the SQLite db (uses persistedSideA/B). */
   onRemoveFromDb?: (row: ConnectionRow) => void;
+  /** Open editor for a saved connection. */
+  onEditSaved?: (row: ConnectionRow) => void;
+  /** Enable or disable auto-reconnect for a saved connection. */
+  onToggleEnabled?: (row: ConnectionRow, enable: boolean) => void;
   /** Status refresh interval (ms); controls how long the I/O highlight stays lit. */
   refreshIntervalMs: number;
 };
@@ -317,6 +332,8 @@ export function ConnectionsTable({
   dbEnabled = false,
   onAddToDb,
   onRemoveFromDb,
+  onEditSaved,
+  onToggleEnabled,
   refreshIntervalMs,
 }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("from");
@@ -456,6 +473,11 @@ export function ConnectionsTable({
               asc={sortAsc}
               onClick={() => toggle("lat")}
             />
+            {dbEnabled ? (
+              <th class="ui-th-sort text-left font-mono text-xs font-bold uppercase">
+                Saved
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -499,13 +521,50 @@ export function ConnectionsTable({
                 <td class="relative min-w-[10rem] overflow-visible px-1 py-1 align-top">
                   <ConnectionLatencyHoverCell row={r} />
                 </td>
+                {dbEnabled ? (
+                  <td class="whitespace-nowrap px-2 py-1.5 align-middle">
+                    {r.persisted && r.persistedSideA && r.persistedSideB ? (
+                      <div class="flex flex-wrap gap-1">
+                        {onEditSaved ? (
+                          <button
+                            type="button"
+                            class="rounded border border-[color:var(--color-border)] px-1.5 py-0.5 font-mono text-[10px] ui-text-muted hover:ui-text"
+                            onClick={() => onEditSaved(r)}
+                          >
+                            Edit
+                          </button>
+                        ) : null}
+                        {onToggleEnabled ? (
+                          <button
+                            type="button"
+                            class="rounded border border-[color:var(--color-border)] px-1.5 py-0.5 font-mono text-[10px] ui-text-muted hover:ui-text"
+                            title={
+                              r.persistedEnabled === false
+                                ? "Enable auto-reconnect"
+                                : "Disable auto-reconnect"
+                            }
+                            onClick={() =>
+                              onToggleEnabled(
+                                r,
+                                r.persistedEnabled === false,
+                              )
+                            }
+                          >
+                            {r.persistedEnabled === false ? "Enable" : "Disable"}
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </td>
+                ) : null}
               </tr>
             );
           })}
         </tbody>
       </table>
       <p class="mt-2 font-mono text-[10px] ui-text-subtle">
-        <span class="font-bold">★</span> = saved in DB (click to remove),
+        <span class="font-bold">★</span> = saved in DB (click to remove,
+        confirm unless Shift/Ctrl+click),
         <span class="font-bold"> ☆</span> = click to save,
         <span class="font-bold"> dim ☆</span> = cannot be saved (hover for
         reason). # = row order in this table. I/O: ← / → stay lit for one

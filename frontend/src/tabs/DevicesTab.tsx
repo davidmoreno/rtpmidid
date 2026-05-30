@@ -3,6 +3,7 @@ import { RefreshBanner } from "../components/RefreshBanner";
 import type { MdnsRemote, RouterPeer } from "../model";
 import type { MidiAlsaSeqEntry, MidiRawmidiEntry } from "../midiEnumerate";
 import type { RpcClient } from "../rpc";
+import type { RegistryDevice } from "../devicesList";
 
 type Props = {
   refreshIntervalMs: number;
@@ -12,7 +13,8 @@ type Props = {
   alsaSeq: MidiAlsaSeqEntry[];
   rawmidi: MidiRawmidiEntry[];
   alsaSubs: unknown[];
-  /** Endpoint id to scroll into view + highlight (driven by Connections click). */
+  registryDevices: RegistryDevice[];
+  registryEnabled: boolean;
   highlightEndpointId?: string | null;
   rpc: RpcClient;
   onAfterAction: () => Promise<void> | void;
@@ -27,6 +29,8 @@ export function DevicesTab({
   alsaSeq,
   rawmidi,
   alsaSubs,
+  registryDevices,
+  registryEnabled,
   highlightEndpointId,
   rpc,
   onAfterAction,
@@ -44,6 +48,8 @@ export function DevicesTab({
         alsaSeq={alsaSeq}
         rawmidi={rawmidi}
         alsaSubs={alsaSubs}
+        registryDevices={registryDevices}
+        registryEnabled={registryEnabled}
         highlightEndpointId={highlightEndpointId}
         rpc={rpc}
         onAfterAction={onAfterAction}

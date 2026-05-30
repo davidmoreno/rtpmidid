@@ -553,6 +553,15 @@ The daemon exposes a Unix domain socket for runtime control and monitoring.
 | `export.rawmidi` | Export raw MIDI device | `{"device": "...", ...}` |
 | `monitor.start` | Web UI MIDI monitor: tee router edges into a sink peer | `{"endpoint": "<same id as Devices tab / endpoint.connect>"}` → `{uuid, peer_id, target_peer_id}` |
 | `monitor.stop` | Tear down monitor session | `{"uuid": "<from monitor.start>"}` |
+| `devices.list` | Known devices (registry): identity, online, source, last seen | none (requires `[database]`) |
+| `devices.add_manual` | Register a manual device | `{"identity": "key=value…", "name"?}` |
+| `devices.remove` | Remove a manual registry entry | `{"identity": "…"}` |
+| `connections.list` | Persisted connections with direction, enabled, match status | none (requires `[database]`) |
+| `connections.save` | Save/update connection with query sides + direction | `{"side_a", "side_b", "direction": "a2b"\|"b2a"\|"both", "enabled": 0\|1}` |
+| `connections.add` | Legacy: save pair as bidirectional | `{"side_a", "side_b"}` (endpoint id or identity) |
+| `connections.remove` | Delete persisted connection | `{"side_a", "side_b"}` |
+| `connections.enable` | Re-enable auto-reconnect for a saved connection | `{"side_a", "side_b"}` |
+| `connections.disable` | Disable auto-reconnect (keeps row in DB) | `{"side_a", "side_b"}` |
 | `{peer_id}.{cmd}` | Send command to specific peer | varies |
 
 ### Peer-Specific Commands
@@ -604,6 +613,8 @@ The sink peer type is **`webui_midi_monitor_peer_t`** (`src/webui_midi_monitor_p
 
 The SPA can open a fullscreen monitor via hash **`#monitor?uuid=…`** (`frontend/src/app.tsx`).
 
+**Devices & connections (Phase 6):** With `[database] path=…` enabled, the Web UI **Devices** tab shows a **single merged list**: live endpoint cards plus offline registry entries. Each card carries **Online/Offline** and **source** tags (Discovered, Config, Manual, or Session for ephemeral peers). Offline remembered devices appear as muted cards without Connect/Monitor. The **Connections** tab offers a connection editor with direction, endpoint picker, and per-field matching toggles. Identity strings use the `key=value` grammar (`frontend/src/deviceIdentity.ts`, `src/device_identity.hpp`). Merge logic: `frontend/src/mergeDeviceList.ts`.
+
 ---
 
 ## Testing and Development
@@ -625,6 +636,8 @@ tests/
 ├── test_rtpserver.cpp         # RTP server tests
 ├── test_settings.cpp          # Settings parsing tests
 ├── test_signals.cpp           # Signal handling tests
+├── test_device_registry.cpp   # Device registry merge/online tracking
+├── test_connection_db.cpp     # Persisted connections v2 + directed restore
 ├── test_dm_json_runtime.cpp   # dm-json writer / rpc::scan_envelope
 ├── test_dm_json_generated.cpp # dm-json generated round-trips
 ├── test_dm_json_gen/          # unittest goldens for scripts/dm_json_gen.py

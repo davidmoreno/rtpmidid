@@ -38,6 +38,10 @@ import {
   parseConnectionsListResult,
   type PersistedConnectionRow,
 } from "./persistedConnections";
+import {
+  parseDevicesListResult,
+  type RegistryDevice,
+} from "./devicesList";
 
 function parseMonitorUuidFromHash(): string | null {
   if (typeof window === "undefined") return null;
@@ -101,6 +105,8 @@ export function App() {
     PersistedConnectionRow[]
   >([]);
   const [connectionsDbEnabled, setConnectionsDbEnabled] = useState(false);
+  const [registryDevices, setRegistryDevices] = useState<RegistryDevice[]>([]);
+  const [registryEnabled, setRegistryEnabled] = useState(false);
 
   const rpc = useMemo(
     () =>
@@ -121,6 +127,17 @@ export function App() {
       setSavedConnections(parsed.connections ?? []);
     } catch (e) {
       console.debug("connections.list failed", e);
+    }
+  }, [rpc]);
+
+  const loadDevicesRegistry = useCallback(async () => {
+    try {
+      const raw = await rpc.call("devices.list", {});
+      const parsed = parseDevicesListResult(raw);
+      setRegistryEnabled(parsed.enabled);
+      setRegistryDevices(parsed.devices);
+    } catch (e) {
+      console.debug("devices.list failed", e);
     }
   }, [rpc]);
 
@@ -146,12 +163,13 @@ export function App() {
         }
       }
       await loadConnectionsDb();
+      await loadDevicesRegistry();
     } catch (e) {
       setStatus(String(e));
     } finally {
       refreshInFlightRef.current = false;
     }
-  }, [rpc, tab, loadConnectionsDb]);
+  }, [rpc, tab, loadConnectionsDb, loadDevicesRegistry]);
 
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
@@ -379,6 +397,8 @@ export function App() {
           alsaSeq={alsaSeq}
           rawmidi={rawmidi}
           alsaSubs={alsaSubs}
+          registryDevices={registryDevices}
+          registryEnabled={registryEnabled}
           highlightEndpointId={highlightEndpointId}
           rpc={rpc}
           onAfterAction={refresh}

@@ -18,6 +18,11 @@
 #include "control_rpc.hpp"
 #include "aseq.hpp"
 #include "connection_db.hpp"
+#include "connection_restore.hpp"
+#include "device_identity.hpp"
+#include "device_identity_from_peer.hpp"
+#include "device_query.hpp"
+#include "device_registry.hpp"
 #include "dm_json_generated.hpp"
 #include "dm_json_rpc.hpp"
 #include "dm_json_status.hpp"
@@ -156,10 +161,18 @@ static std::vector<rpc_help_entry_t> build_help_entries() {
       {"monitor.start",
        "Start Web UI MIDI monitor for an endpoint id (tees router edges already feeding target)"},
       {"monitor.stop", "Stop a monitor session by uuid"},
-      {"connections.list", "List persisted connection pairs from the database"},
+      {"connections.list", "List persisted connections (direction, enabled, query sides)"},
+      {"connections.save",
+       "Save a connection with direction (side_a/side_b: endpoint id or key=value query)"},
       {"connections.add",
-       "Add a persisted connection (side_a/side_b: endpoint id or stable id)"},
-      {"connections.remove", "Remove a persisted connection pair from the database"},
+       "Add a persisted connection (legacy: both directions, side_a/side_b)"},
+      {"connections.remove", "Remove a persisted connection from the database"},
+      {"connections.enable", "Enable a persisted connection (reconnect)"},
+      {"connections.disable", "Disable a persisted connection (no auto-reconnect)"},
+      {"devices.list", "List known devices (online/offline, source, last seen)"},
+      {"devices.add_manual",
+       "Add a manual device (identity: key=value string, optional display name)"},
+      {"devices.remove", "Remove a manual device from the registry"},
       {"help", "Return help text"},
   };
 }
@@ -415,6 +428,160 @@ static bool is_alsa_numeric_endpoint(std::string_view s) {
                        [](char c) { return c >= '0' && c <= '9'; });
   };
   return is_digits(rest.substr(0, pos)) && is_digits(rest.substr(pos + 1));
+}
+
+static std::vector<online_device_t>
+online_devices_snapshot(const control_rpc_context_t &ctx) {
+  std::vector<online_device_t> out;
+  for (const auto &row : router_rows_snapshot(ctx)) {
+    if (!row.id)
+      continue;
+    const auto identity = compute_device_identity(row);
+    if (!identity)
+      continue;
+    online_device_t device;
+    device.peer_id = static_cast<peer_id_t>(*row.id);
+    device.identity = *identity;
+    device.legacy_stable_id = compute_stable_id(row);
+    out.push_back(std::move(device));
+  }
+  return out;
+}
+
+struct side_match_info_t {
+  bool active = false;
+  std::optional<uint64_t> peer_id;
+};
+
+static side_match_info_t match_connection_side(
+    const std::string &side, const std::vector<online_device_t> &online) {
+  side_match_info_t info;
+  const auto indices = match_side_to_devices(side, online);
+  if (indices.empty())
+    return info;
+  info.active = true;
+  info.peer_id = static_cast<uint64_t>(online[indices.front()].peer_id);
+  return info;
+}
+
+static std::optional<std::string>
+identity_from_alsa_names(const std::string &client_name,
+                         const std::string &port_name) {
+  device_identity_t id;
+  id.type_prefix = "alsa_seq";
+  id.fields.push_back(device_identity_field_t{"client", client_name, false});
+  id.fields.push_back(device_identity_field_t{"port", port_name, false});
+  return id.serialize();
+}
+
+static std::optional<std::string>
+identity_from_raw_device(const std::string &device) {
+  device_identity_t id;
+  id.type_prefix = "rawmidi";
+  id.fields.push_back(device_identity_field_t{"device", device, false});
+  return id.serialize();
+}
+
+static std::optional<std::string>
+identity_from_rtpmidi_remote(const std::string &hostname,
+                             const std::string &service) {
+  device_identity_t id;
+  id.type_prefix = "rtpmidi_client";
+  id.fields.push_back(device_identity_field_t{"hostname", hostname, false});
+  id.fields.push_back(device_identity_field_t{"service", service, false});
+  return id.serialize();
+}
+
+static std::optional<std::string>
+resolve_side_to_stable_id(control_rpc_context_t &ctx, const std::string &side,
+                          const std::vector<router_peer_row_t> &rows);
+
+static std::optional<std::string>
+resolve_side_to_connection_side(control_rpc_context_t &ctx,
+                                const std::string &side,
+                                const std::vector<router_peer_row_t> &rows) {
+  if (device_query_t::parse(side) || device_identity_t::parse(side))
+    return side;
+
+  endpoint_id_t eid{};
+  if (parse_endpoint_id(side, eid)) {
+    if (eid.kind == endpoint_kind_e::PEER) {
+      for (const auto &r : rows) {
+        if (!r.id || static_cast<uint64_t>(*r.id) != eid.peer_id)
+          continue;
+        const auto did = compute_device_identity(r);
+        if (did)
+          return did->serialize();
+        const auto sid = compute_stable_id(r);
+        if (!sid)
+          throw std::runtime_error(
+              FMT::format("Peer {} has no stable id yet", eid.peer_id));
+        return sid;
+      }
+      throw std::runtime_error(FMT::format("Unknown peer {}", eid.peer_id));
+    }
+    if (eid.kind == endpoint_kind_e::ALSA) {
+      if (!ctx.aseq)
+        throw std::runtime_error("ALSA sequencer not available");
+      const auto cn = ctx.aseq->get_client_name_by_id(eid.client);
+      const auto pn = ctx.aseq->get_port_name(eid.client, eid.port);
+      if (cn.empty() || pn.empty())
+        throw std::runtime_error("Could not resolve ALSA client/port names");
+      if (auto id = identity_from_alsa_names(cn, pn))
+        return id;
+      return build_stable_id("alsa", {cn, pn});
+    }
+    if (eid.kind == endpoint_kind_e::RAW) {
+      if (eid.device.empty())
+        throw std::runtime_error("Empty raw MIDI device");
+      if (auto id = identity_from_raw_device(eid.device))
+        return id;
+      return build_stable_id("rawmidi", {eid.device});
+    }
+    if (eid.kind == endpoint_kind_e::MDNS) {
+      const auto hp =
+          mdns_resolve_to_hostport(ctx.mdns, eid.mdns_name, eid.mdns_port);
+      if (hp.first.empty() || eid.mdns_name.empty())
+        throw std::runtime_error("Could not resolve mDNS service");
+      if (auto id = identity_from_rtpmidi_remote(hp.first, eid.mdns_name))
+        return id;
+      return build_stable_id("rtpmidi", {hp.first, eid.mdns_name});
+    }
+    if (eid.kind == endpoint_kind_e::HOST) {
+      const auto found = find_peer_for_host(rows, eid.hostname, eid.hostport);
+      if (found && *found != 0) {
+        for (const auto &r : rows) {
+          if (r.id && static_cast<peer_id_t>(*r.id) == *found) {
+            if (const auto did = compute_device_identity(r))
+              return did->serialize();
+            if (const auto sid = compute_stable_id(r))
+              return sid;
+            break;
+          }
+        }
+      }
+      if (eid.hostname.empty())
+        throw std::runtime_error("Empty hostname");
+      if (auto id = identity_from_rtpmidi_remote(eid.hostname, eid.hostname))
+        return id;
+      return build_stable_id("rtpmidi", {eid.hostname, eid.hostname});
+    }
+    throw std::runtime_error("Unknown endpoint kind");
+  }
+
+  return resolve_side_to_stable_id(ctx, side, rows);
+}
+
+static std::string device_source_wire(device_source_e source) {
+  switch (source) {
+  case device_source_e::discovered:
+    return "discovered";
+  case device_source_e::ini:
+    return "ini";
+  case device_source_e::manual:
+    return "manual";
+  }
+  return "discovered";
 }
 
 static std::optional<std::string>
@@ -745,37 +912,59 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
         return respond(env, out);
       }
       out.enabled = 1;
-      const auto rows = router_rows_snapshot(ctx);
-      for (const auto &p : ctx.connection_db->database().get_connections()) {
+      const auto online = online_devices_snapshot(ctx);
+      for (const auto &p : ctx.connection_db->database().list_connections()) {
         persisted_connection_row_t row;
         row.side_a = p.side_a;
         row.side_b = p.side_b;
-        const auto pa = find_peer_id_for_stable_id(rows, p.side_a);
-        const auto pb = find_peer_id_for_stable_id(rows, p.side_b);
-        if (pa) {
-          row.active_a = 1;
-          row.peer_a = static_cast<uint64_t>(*pa);
-        }
-        if (pb) {
-          row.active_b = 1;
-          row.peer_b = static_cast<uint64_t>(*pb);
-        }
+        row.direction = connection_direction_to_wire(p.direction);
+        row.enabled = p.enabled ? 1 : 0;
+        const auto ma = match_connection_side(p.side_a, online);
+        const auto mb = match_connection_side(p.side_b, online);
+        row.active_a = ma.active ? 1 : 0;
+        row.active_b = mb.active ? 1 : 0;
+        row.peer_a = ma.peer_id;
+        row.peer_b = mb.peer_id;
         out.connections.push_back(std::move(row));
       }
       return respond(env, out);
+    }
+    if (env.method == "connections.save") {
+      if (!ctx.connection_db)
+        throw std::runtime_error("Connection database is not enabled");
+      auto p = parse_rpc_params<connections_save_params_t>(params);
+      const auto rows = router_rows_snapshot(ctx);
+      const auto sa = resolve_side_to_connection_side(ctx, p.side_a, rows);
+      const auto sb = resolve_side_to_connection_side(ctx, p.side_b, rows);
+      if (!sa || !sb)
+        throw std::runtime_error("Could not resolve connection sides");
+      if (*sa == *sb)
+        throw std::runtime_error("Both sides resolve to the same identity");
+      stored_connection_t row;
+      row.side_a = *sa;
+      row.side_b = *sb;
+      row.direction = connection_direction_from_wire(p.direction);
+      row.enabled = p.enabled != 0;
+      ctx.connection_db->save_stored_connection(std::move(row));
+      return respond_ok(env);
     }
     if (env.method == "connections.add") {
       if (!ctx.connection_db)
         throw std::runtime_error("Connection database is not enabled");
       auto p = parse_rpc_params<connections_mutate_params_t>(params);
       const auto rows = router_rows_snapshot(ctx);
-      const auto sa = resolve_side_to_stable_id(ctx, p.side_a, rows);
-      const auto sb = resolve_side_to_stable_id(ctx, p.side_b, rows);
+      const auto sa = resolve_side_to_connection_side(ctx, p.side_a, rows);
+      const auto sb = resolve_side_to_connection_side(ctx, p.side_b, rows);
       if (!sa || !sb)
         throw std::runtime_error("Could not resolve stable ids");
       if (*sa == *sb)
         throw std::runtime_error("Both sides resolve to the same stable id");
-      ctx.connection_db->record_stable_pair(*sa, *sb);
+      stored_connection_t row;
+      row.side_a = *sa;
+      row.side_b = *sb;
+      row.direction = connection_direction_e::both;
+      row.enabled = true;
+      ctx.connection_db->save_stored_connection(std::move(row));
       return respond_ok(env);
     }
     if (env.method == "connections.remove") {
@@ -783,11 +972,72 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
         throw std::runtime_error("Connection database is not enabled");
       auto p = parse_rpc_params<connections_mutate_params_t>(params);
       const auto rows = router_rows_snapshot(ctx);
-      const auto sa = resolve_side_to_stable_id(ctx, p.side_a, rows);
-      const auto sb = resolve_side_to_stable_id(ctx, p.side_b, rows);
+      const auto sa = resolve_side_to_connection_side(ctx, p.side_a, rows);
+      const auto sb = resolve_side_to_connection_side(ctx, p.side_b, rows);
       if (!sa || !sb)
         throw std::runtime_error("Could not resolve stable ids");
       ctx.connection_db->remove_stable_pair(*sa, *sb);
+      return respond_ok(env);
+    }
+    if (env.method == "connections.enable" ||
+        env.method == "connections.disable") {
+      if (!ctx.connection_db)
+        throw std::runtime_error("Connection database is not enabled");
+      auto p = parse_rpc_params<connections_enable_params_t>(params);
+      const auto rows = router_rows_snapshot(ctx);
+      const auto sa = resolve_side_to_connection_side(ctx, p.side_a, rows);
+      const auto sb = resolve_side_to_connection_side(ctx, p.side_b, rows);
+      if (!sa || !sb)
+        throw std::runtime_error("Could not resolve connection sides");
+      const bool ok = ctx.connection_db->set_stored_enabled(
+          *sa, *sb, env.method == "connections.enable");
+      if (!ok)
+        throw std::runtime_error("Connection not found in database");
+      return respond_ok(env);
+    }
+    if (env.method == "devices.list") {
+      devices_list_result_t out{};
+      if (!ctx.device_registry)
+        return respond(env, out);
+      out.enabled = 1;
+      for (const auto &d : ctx.device_registry->list_devices()) {
+        device_list_row_t row;
+        row.identity = d.identity_key();
+        row.type = d.identity.type_prefix;
+        row.name = d.display_name.empty() ? d.identity.type_prefix : d.display_name;
+        for (const auto &f : d.identity.fields) {
+          if (f.key == "name" || f.key == "service" || f.key == "client") {
+            if (!f.value.empty())
+              row.name = f.value;
+          }
+        }
+        row.source = device_source_wire(d.source);
+        row.first_seen = d.first_seen;
+        row.last_seen = d.last_seen;
+        row.online = d.online() ? 1 : 0;
+        if (d.online_peer_id)
+          row.peer_id = static_cast<uint64_t>(*d.online_peer_id);
+        out.devices.push_back(std::move(row));
+      }
+      return respond(env, out);
+    }
+    if (env.method == "devices.add_manual") {
+      if (!ctx.device_registry)
+        throw std::runtime_error("Device registry is not enabled");
+      auto p = parse_rpc_params<devices_add_manual_params_t>(params);
+      const auto id = device_identity_t::parse(p.identity);
+      if (!id)
+        throw std::runtime_error("Invalid device identity (expected key=value form)");
+      std::string display = p.name.value_or("");
+      ctx.device_registry->add_manual(*id, display);
+      return respond_ok(env);
+    }
+    if (env.method == "devices.remove") {
+      if (!ctx.device_registry)
+        throw std::runtime_error("Device registry is not enabled");
+      auto p = parse_rpc_params<devices_remove_params_t>(params);
+      if (!ctx.device_registry->remove_manual(p.identity))
+        throw std::runtime_error("Manual device not found (only manual entries can be removed)");
       return respond_ok(env);
     }
     if (env.method == "help")

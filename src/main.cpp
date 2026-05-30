@@ -173,6 +173,7 @@ public:
                 rtpmididns::settings));
         device_registry->attach();
         device_registry->refresh_from_router();
+        control.device_registry = device_registry;
       }
     }
 
@@ -186,6 +187,7 @@ public:
     web.aseq = aseq;
     web.mdns = rtpmididns::mdns;
     web.connection_db = connection_db;
+    web.device_registry = device_registry;
     web.start();
   }
   

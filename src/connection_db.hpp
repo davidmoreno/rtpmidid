@@ -35,6 +35,7 @@ enum class connection_direction_e { a2b, b2a, both };
 
 connection_direction_e connection_direction_from_wire(std::string_view wire);
 const char *connection_direction_to_wire(connection_direction_e direction);
+connection_direction_e flip_connection_direction(connection_direction_e direction);
 
 struct stored_connection_t {
   std::string side_a;
@@ -42,6 +43,9 @@ struct stored_connection_t {
   connection_direction_e direction = connection_direction_e::both;
   bool enabled = true;
 };
+
+/** Sort side_a/side_b lexicographically; flip direction when sides swap. */
+stored_connection_t canonicalize_stored_connection(stored_connection_t connection);
 
 /** Legacy row without direction metadata. */
 struct connection_pair_t {
@@ -103,6 +107,9 @@ public:
 
   void record_stable_pair(const std::string &side_a, const std::string &side_b);
   void remove_stable_pair(const std::string &side_a, const std::string &side_b);
+  void save_stored_connection(stored_connection_t connection);
+  bool set_stored_enabled(const std::string &side_a, const std::string &side_b,
+                          bool enabled);
 
 private:
   std::shared_ptr<midirouter_t> router_;

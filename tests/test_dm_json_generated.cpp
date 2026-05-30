@@ -40,9 +40,40 @@ static void test_connect_params_optional_omit() {
   ASSERT_FALSE(o.port.has_value());
 }
 
+static void test_connections_save_params_roundtrip() {
+  rtpmididns::connections_save_params_t p{};
+  p.side_a = "rtpmidi_server:name=Peak";
+  p.side_b = "alsa_seq:client=Peak,port=In";
+  p.direction = "a2b";
+  p.enabled = 1;
+  const std::string j = rtpmididns::dmjson::to_json(p);
+  rtpmididns::connections_save_params_t o{};
+  ASSERT_TRUE(rtpmididns::dmjson::from_json(j, o));
+  ASSERT_EQUAL(o.side_a, p.side_a);
+  ASSERT_EQUAL(o.direction, "a2b");
+}
+
+static void test_devices_list_row_roundtrip() {
+  rtpmididns::device_list_row_t row{};
+  row.identity = "rawmidi:device=/dev/snd/midiC0D0";
+  row.type = "rawmidi";
+  row.name = "Export";
+  row.source = "manual";
+  row.online = 1;
+  row.peer_id = 7;
+  const std::string j = rtpmididns::dmjson::to_json(row);
+  rtpmididns::device_list_row_t o{};
+  ASSERT_TRUE(rtpmididns::dmjson::from_json(j, o));
+  ASSERT_EQUAL(o.identity, row.identity);
+  ASSERT_TRUE(o.peer_id.has_value());
+  ASSERT_EQUAL(*o.peer_id, 7ull);
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{TEST(test_router_remove_roundtrip),
-                       TEST(test_connect_params_optional_omit)};
+                       TEST(test_connect_params_optional_omit),
+                       TEST(test_connections_save_params_roundtrip),
+                       TEST(test_devices_list_row_roundtrip)};
   testcase.run(argc, argv);
   return testcase.exit_code();
 }

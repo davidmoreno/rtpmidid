@@ -1,7 +1,7 @@
 import { useMemo, useState } from "preact/hooks";
 import { Card } from "../components/Card";
 import { ConnectionsTable } from "../components/ConnectionsTable";
-import { EndpointPickerDialog } from "../components/EndpointPickerDialog";
+import { ConnectionEditorDialog } from "../components/ConnectionEditorDialog";
 import { RefreshBanner } from "../components/RefreshBanner";
 import { Button } from "../components/Button";
 import {
@@ -14,12 +14,12 @@ import {
 import type { MidiAlsaSeqEntry, MidiRawmidiEntry } from "../midiEnumerate";
 import type { RpcClient } from "../rpc";
 import { buildEndpoints } from "../endpoints";
-import { loadDeviceFavoriteIds } from "../deviceFavorites";
 import {
   annotateLiveOnly,
   mergeConnectionsWithPersisted,
   type PersistedConnectionRow,
 } from "../persistedConnections";
+import type { ConnectionDirection } from "../deviceIdentity";
 
 type Props = {
   refreshIntervalMs: number;
@@ -39,7 +39,15 @@ type Props = {
   onStatus: (msg: string) => void;
 };
 
-type PickerTarget = "a" | "b" | null;
+type EditorMode =
+  | { kind: "add" }
+  | {
+      kind: "edit";
+      sideA: string;
+      sideB: string;
+      direction: ConnectionDirection;
+      enabled: boolean;
+    };
 
 export function ConnectionsTab({
   refreshIntervalMs,
@@ -58,10 +66,7 @@ export function ConnectionsTab({
   onAfterAction,
   onStatus,
 }: Props) {
-  const [picker, setPicker] = useState<PickerTarget>(null);
-  const [addSideA, setAddSideA] = useState<string | null>(null);
-  const [addSideB, setAddSideB] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [editor, setEditor] = useState<EditorMode | null>(null);
 
   const endpoints = useMemo(
     () =>
@@ -74,18 +79,11 @@ export function ConnectionsTab({
     [alsaSeq, rawmidi, mdnsRemotes, peers],
   );
 
-  const favoriteIds = useMemo(() => loadDeviceFavoriteIds(), []);
-
-  /* Merge router rows + pure ALSA aconnect rows. The ALSA rows are dropped
-     when they exactly match an existing router edge (peer_device_alsa_seq_t hangs
-     off the same ALSA port and the router edge already shows the traffic). */
   const liveAllRows = useMemo(() => {
     const alsaRows = buildAlsaSubscriptionConnections(
       parseAlsaSubscriptions(alsaSubs),
       peers,
     );
-    /* Hide alsa rows that are already represented by a router row connecting
-       the two backing peers, to avoid duplicate display. */
     const routerPeerPairs = new Set<string>();
     for (const r of liveConnections) {
       if (r.from.peerId !== undefined && r.to.peerId !== undefined) {
@@ -112,47 +110,24 @@ export function ConnectionsTab({
     [dbEnabled, liveAllRows, savedConnections, peers],
   );
 
-  const startAdd = () => {
-    setAddSideA(null);
-    setAddSideB(null);
-    setAdding(true);
-    setPicker("a");
-  };
-
-  const cancelAdd = () => {
-    setAdding(false);
-    setPicker(null);
-    setAddSideA(null);
-    setAddSideB(null);
-  };
-
-  const commitAdd = async () => {
-    if (!addSideA || !addSideB) {
-      onStatus("Pick both sides before saving.");
-      return;
-    }
-    try {
-      await rpc.call("connections.add", { side_a: addSideA, side_b: addSideB });
-      cancelAdd();
-      await onAfterAction();
-      onStatus("");
-    } catch (e) {
-      onStatus(String(e));
-    }
+  const saveConnection = async (payload: {
+    side_a: string;
+    side_b: string;
+    direction: ConnectionDirection;
+    enabled: number;
+  }) => {
+    await rpc.call("connections.save", payload);
+    setEditor(null);
+    await onAfterAction();
+    onStatus("");
   };
 
   const removeSaved = async (sideA: string, sideB: string) => {
-    try {
-      await rpc.call("connections.remove", { side_a: sideA, side_b: sideB });
-      await onAfterAction();
-      onStatus("");
-    } catch (e) {
-      onStatus(String(e));
-    }
+    await rpc.call("connections.remove", { side_a: sideA, side_b: sideB });
+    await onAfterAction();
+    onStatus("");
   };
 
-  /* Row-level "+" button: prefer stableId (avoids relying on the daemon
-     resolving `peer:N` -> stable id when a row's peer was just torn down). */
   const addRow = async (row: ConnectionRow) => {
     const sideA = row.from.stableId ?? row.from.endpointId;
     const sideB = row.to.stableId ?? row.to.endpointId;
@@ -160,13 +135,13 @@ export function ConnectionsTab({
       onStatus("Cannot save this connection (no stable identity).");
       return;
     }
-    try {
-      await rpc.call("connections.add", { side_a: sideA, side_b: sideB });
-      await onAfterAction();
-      onStatus("");
-    } catch (e) {
-      onStatus(String(e));
-    }
+    const bidi = row.bidirectional ?? row.direction === "↔";
+    await saveConnection({
+      side_a: sideA,
+      side_b: sideB,
+      direction: bidi ? "both" : "a2b",
+      enabled: 1,
+    });
   };
 
   const removeRow = async (row: ConnectionRow) => {
@@ -179,6 +154,41 @@ export function ConnectionsTab({
     await removeSaved(sideA, sideB);
   };
 
+  const toggleEnabled = async (row: ConnectionRow, enable: boolean) => {
+    const sideA = row.persistedSideA ?? row.from.stableId;
+    const sideB = row.persistedSideB ?? row.to.stableId;
+    if (!sideA || !sideB) return;
+    await rpc.call(enable ? "connections.enable" : "connections.disable", {
+      side_a: sideA,
+      side_b: sideB,
+    });
+    await onAfterAction();
+    onStatus("");
+  };
+
+  const openEdit = (row: ConnectionRow) => {
+    const sideA = row.persistedSideA ?? row.from.stableId ?? row.from.endpointId;
+    const sideB = row.persistedSideB ?? row.to.stableId ?? row.to.endpointId;
+    if (!sideA || !sideB) return;
+    const saved = savedConnections.find(
+      (s) =>
+        (s.side_a === sideA && s.side_b === sideB) ||
+        (s.side_a === sideB && s.side_b === sideA),
+    );
+    let direction: ConnectionDirection = saved?.direction ?? "both";
+    if (saved && saved.side_a === sideB && saved.side_b === sideA) {
+      if (direction === "a2b") direction = "b2a";
+      else if (direction === "b2a") direction = "a2b";
+    }
+    setEditor({
+      kind: "edit",
+      sideA,
+      sideB,
+      direction,
+      enabled: saved?.enabled !== false,
+    });
+  };
+
   return (
     <div class="space-y-4">
       <RefreshBanner
@@ -188,34 +198,14 @@ export function ConnectionsTab({
       <Card title="Connections (router + ALSA aconnect)">
         {dbEnabled === true ? (
           <div class="mb-3 flex flex-wrap items-center gap-2">
-            <Button type="button" onClick={startAdd}>
-              + Add saved pair
+            <Button type="button" onClick={() => setEditor({ kind: "add" })}>
+              + Add saved connection
             </Button>
-            {adding ? (
-              <>
-                <span class="font-mono text-[11px] ui-text-muted">
-                  {addSideA ? `A: ${addSideA}` : "Pick side A…"}
-                  {" · "}
-                  {addSideB ? `B: ${addSideB}` : "Pick side B…"}
-                </span>
-                <Button
-                  type="button"
-                  disabled={!addSideA || !addSideB}
-                  onClick={() => void commitAdd()}
-                >
-                  Save
-                </Button>
-                <Button type="button" onClick={cancelAdd}>
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <span class="font-mono text-[10px] ui-text-subtle">
-                Saved pairs persist across restarts. Use the row "+" to save a
-                live connection, or pick two endpoints to add a pair that does
-                not yet exist (grey names are offline endpoints).
-              </span>
-            )}
+            <span class="font-mono text-[10px] ui-text-subtle">
+              Saved connections auto-reconnect with the direction and matching
+              rules you set. Click ★ on a live row to save quickly, or use the
+              editor for direction and partial matching.
+            </span>
           </div>
         ) : (
           <p class="mb-3 font-mono text-[11px] ui-text-subtle">
@@ -231,36 +221,36 @@ export function ConnectionsTab({
           refreshIntervalMs={refreshIntervalMs}
           onAddToDb={dbEnabled ? (r) => void addRow(r) : undefined}
           onRemoveFromDb={dbEnabled ? (r) => void removeRow(r) : undefined}
+          onEditSaved={dbEnabled ? (r) => openEdit(r) : undefined}
+          onToggleEnabled={
+            dbEnabled
+              ? (r, enable) => void toggleEnabled(r, enable)
+              : undefined
+          }
         />
       </Card>
 
-      {picker !== null && adding ? (
-        <EndpointPickerDialog
-          title={picker === "a" ? "Pick side A" : "Pick side B"}
-          description="Endpoint is stored as a stable id in the database."
+      {editor !== null ? (
+        <ConnectionEditorDialog
+          title={editor.kind === "add" ? "Add saved connection" : "Edit saved connection"}
           endpoints={endpoints}
-          excludeIds={
-            picker === "a" && addSideB
-              ? [addSideB]
-              : picker === "b" && addSideA
-                ? [addSideA]
-                : []
+          initial={
+            editor.kind === "add"
+              ? {
+                  sideA: "",
+                  sideB: "",
+                  direction: "both",
+                  enabled: true,
+                }
+              : {
+                  sideA: editor.sideA,
+                  sideB: editor.sideB,
+                  direction: editor.direction,
+                  enabled: editor.enabled,
+                }
           }
-          favoriteIds={favoriteIds}
-          confirmLabel={picker === "a" && !addSideB ? "Next: side B" : "Select"}
-          onClose={() => {
-            if (picker === "b" || addSideA) setPicker(null);
-            else cancelAdd();
-          }}
-          onConfirm={(id) => {
-            if (picker === "a") {
-              setAddSideA(id);
-              setPicker("b");
-            } else {
-              setAddSideB(id);
-              setPicker(null);
-            }
-          }}
+          onClose={() => setEditor(null)}
+          onSave={saveConnection}
         />
       ) : null}
     </div>

@@ -212,7 +212,7 @@ bool control_socket_t::handle_client_data(int fd) {
     return true;
   }
   buf[static_cast<size_t>(l)] = 0;
-  control_rpc_context_t ctx{router, aseq, mdns, connection_db};
+  control_rpc_context_t ctx{router, aseq, mdns, connection_db, device_registry};
   const std::string retstr =
       control_rpc_dispatch_line(ctx, trim_copy(std::string(buf)));
   const ssize_t w = control_conn_send(fd, retstr.c_str(), retstr.length());
@@ -224,7 +224,7 @@ bool control_socket_t::handle_client_data(int fd) {
 }
 
 std::string control_socket_t::parse_command(const std::string &command) {
-  control_rpc_context_t ctx{router, aseq, mdns, connection_db};
+  control_rpc_context_t ctx{router, aseq, mdns, connection_db, device_registry};
   try {
     std::string r = control_rpc_dispatch_line(ctx, command);
     if (!r.empty() && r.back() == '\n')

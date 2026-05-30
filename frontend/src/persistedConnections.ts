@@ -5,12 +5,16 @@ import type {
   RouterPeer,
 } from "./model";
 import { formatStableIdLabel } from "./persistedConnectionsFormat";
+import type { ConnectionDirection } from "./deviceIdentity";
+import { directionArrow } from "./deviceIdentity";
 
 export type { formatStableIdLabel } from "./persistedConnectionsFormat";
 
 export type PersistedConnectionRow = {
   side_a: string;
   side_b: string;
+  direction?: ConnectionDirection;
+  enabled?: boolean;
   active_a?: boolean;
   active_b?: boolean;
   peer_a?: number;
@@ -39,6 +43,10 @@ export function parseConnectionsListResult(raw: unknown): ConnectionsListResult 
     const side_a = typeof row.side_a === "string" ? row.side_a : "";
     const side_b = typeof row.side_b === "string" ? row.side_b : "";
     if (!side_a || !side_b) continue;
+    const dirRaw = typeof row.direction === "string" ? row.direction : "both";
+    const direction: ConnectionDirection =
+      dirRaw === "a2b" || dirRaw === "b2a" || dirRaw === "both" ? dirRaw : "both";
+    const enabled = row.enabled !== false && row.enabled !== 0;
     const peer_a =
       typeof row.peer_a === "number"
         ? row.peer_a
@@ -54,6 +62,8 @@ export function parseConnectionsListResult(raw: unknown): ConnectionsListResult 
     connections.push({
       side_a,
       side_b,
+      direction,
+      enabled,
       active_a: row.active_a === true || row.active_a === 1,
       active_b: row.active_b === true || row.active_b === 1,
       peer_a: Number.isFinite(peer_a) ? peer_a : undefined,
@@ -176,13 +186,15 @@ function buildSavedOnlyRow(
      from the router on a previous run, so render it as midirouter. */
   const isAlsa = saved.side_a.startsWith("alsa:") &&
                  saved.side_b.startsWith("alsa:");
+  const dir = saved.direction ?? "both";
+  const dirSymbol = directionArrow(dir);
   return {
     id: `saved:${saved.side_a}:${saved.side_b}`,
     kind: "router",
     type: isAlsa ? "alsaseq" : "midirouter",
-    kindLabel: "Saved",
-    summary: `${labelA} ↔ ${labelB}`,
-    direction: "↔",
+    kindLabel: saved.enabled === false ? "Saved (disabled)" : "Saved",
+    summary: `${labelA} ${dirSymbol} ${labelB}`,
+    direction: dirSymbol,
     from: sideRef(saved.side_a, saved.peer_a, saved.active_a, labelA),
     to: sideRef(saved.side_b, saved.peer_b, saved.active_b, labelB),
     participantPeers: parts,
@@ -191,8 +203,9 @@ function buildSavedOnlyRow(
     trafficTotal: 0,
     recvSum: 0,
     sentSum: 0,
-    bidirectional: true,
+    bidirectional: dir === "both" || undefined,
     persisted: true,
+    persistedEnabled: saved.enabled !== false,
     canRemoveFromDb: true,
     persistedSideA: saved.side_a,
     persistedSideB: saved.side_b,
@@ -253,6 +266,7 @@ export function mergeConnectionsWithPersisted(
       out.push({
         ...row,
         persisted: true,
+        persistedEnabled: hit.enabled !== false,
         canRemoveFromDb: true,
         canAddToDb: false,
         cannotSaveReason: undefined,

@@ -190,6 +190,8 @@ struct monitor_stop_params_t {
 struct persisted_connection_row_t {
   std::string side_a;
   std::string side_b;
+  std::string direction = "both"; // a2b | b2a | both
+  int32_t enabled = 1;
   int32_t active_a = 0;
   int32_t active_b = 0;
   std::optional<uint64_t> peer_a; // [dm-json: omit_if_null]
@@ -206,6 +208,49 @@ struct connections_list_result_t {
 struct connections_mutate_params_t {
   std::string side_a;
   std::string side_b;
+};
+
+// [dm-json]
+struct connections_save_params_t {
+  std::string side_a;
+  std::string side_b;
+  std::string direction = "both"; // a2b | b2a | both
+  int32_t enabled = 1;
+};
+
+// [dm-json]
+struct connections_enable_params_t {
+  std::string side_a;
+  std::string side_b;
+};
+
+// [dm-json]
+struct device_list_row_t {
+  std::string identity;
+  std::string type;
+  std::string name;
+  std::string source; // discovered | ini | manual
+  int64_t first_seen = 0;
+  int64_t last_seen = 0;
+  int32_t online = 0;
+  std::optional<uint64_t> peer_id; // [dm-json: omit_if_null]
+};
+
+// [dm-json]
+struct devices_list_result_t {
+  int32_t enabled = 0;
+  std::vector<device_list_row_t> devices;
+};
+
+// [dm-json]
+struct devices_add_manual_params_t {
+  std::string identity;
+  std::optional<std::string> name; // [dm-json: omit_if_null]
+};
+
+// [dm-json]
+struct devices_remove_params_t {
+  std::string identity;
 };
 
 } // namespace rtpmididns

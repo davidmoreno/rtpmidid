@@ -31,6 +31,10 @@ export function endpointIdForMdns(name: string, port: number | string): string {
   return `mdns:${name}::${String(port)}`;
 }
 
+export function endpointIdForHost(hostname: string, port: number | string): string {
+  return `host:${hostname}:${String(port)}`;
+}
+
 /** Matches daemon `parse_endpoint_id` (`peer:<id>`) for router.disconnect via endpoint.disconnect. */
 export function endpointIdForPeer(peerId: number): string {
   return `peer:${peerId}`;
@@ -181,6 +185,36 @@ function matchPeerForRemote(
   return undefined;
 }
 
+function rtpClientHostPort(
+  p: RouterPeer,
+): { hostname: string; port: string } | undefined {
+  if (p.type !== "peer_device_rtpmidi_client_t") return undefined;
+  const raw = peerRaw(p);
+  const hostname = String(raw.connect_hostname ?? "").trim();
+  const port = String(raw.connect_port ?? "").trim();
+  if (!hostname || !port) return undefined;
+  return { hostname, port };
+}
+
+function labelForRtpClientPeer(
+  p: RouterPeer,
+  hostname: string,
+  port: string,
+): { label: string; sub: string } {
+  const raw = peerRaw(p);
+  const rem = raw.peer as { remote?: { name?: unknown } } | undefined;
+  const remoteName =
+    rem?.remote && typeof rem.remote.name === "string"
+      ? rem.remote.name.trim()
+      : "";
+  let label = remoteName || (p.name || "").trim();
+  if (label.startsWith("WEB · ")) label = hostname;
+  return {
+    label: label || hostname,
+    sub: `direct · ${hostname}:${port}`,
+  };
+}
+
 /** Prefer mDNS/DNS hostnames; fall back to resolved IPs. */
 function remoteHostCandidates(remotes: MdnsRemote[]): string[] {
   const hs = remotes.map((r) => r.hostname.trim()).filter((x) => x);
@@ -219,6 +253,7 @@ export function buildEndpoints(args: {
   }
 
   const groups = groupMdnsRemotes(args.mdnsRemotes);
+  const hostEndpointPeerIds = new Set<number>();
   for (const g of groups) {
     const port = g.port;
     const cands = remoteHostCandidates(g.instances);
@@ -227,12 +262,32 @@ export function buildEndpoints(args: {
     const ips = g.instances.map((r) => r.ip.trim()).filter((x) => x);
     const best = hostnames[0] || ips[0] || "";
     const hostSub = best ? `${best}:${String(port)}` : `${String(port)}`;
+    const matchedPeer = matchPeerForRemote(args.peers, cands, port);
+    if (matchedPeer !== undefined) hostEndpointPeerIds.add(matchedPeer);
     out.push({
       id: endpointIdForMdns(g.name, port),
       kind: "rtpmidi",
       label: g.name || "Remote",
       sub: `mDNS · ${hostSub}`,
-      peerId: matchPeerForRemote(args.peers, cands, port),
+      peerId: matchedPeer,
+    });
+  }
+
+  const seenHostEndpointIds = new Set<string>();
+  for (const p of args.peers) {
+    const hp = rtpClientHostPort(p);
+    if (!hp) continue;
+    const id = endpointIdForHost(hp.hostname, hp.port);
+    if (seenHostEndpointIds.has(id)) continue;
+    seenHostEndpointIds.add(id);
+    if (hostEndpointPeerIds.has(p.id)) continue;
+    const { label, sub } = labelForRtpClientPeer(p, hp.hostname, hp.port);
+    out.push({
+      id,
+      kind: "rtpmidi",
+      label,
+      sub,
+      peerId: p.id,
     });
   }
 

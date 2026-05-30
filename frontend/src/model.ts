@@ -386,6 +386,8 @@ export type ConnectionRow = {
   bidirectional?: boolean;
   /** Stored in the connection database. */
   persisted?: boolean;
+  /** False when saved connection is disabled in DB. */
+  persistedEnabled?: boolean;
   /** Show remove-from-database control. */
   canRemoveFromDb?: boolean;
   /** True when both sides are resolvable AND not already persisted. */

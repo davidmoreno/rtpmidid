@@ -29,12 +29,14 @@ namespace rtpmididns {
 class midirouter_t;
 class aseq_t;
 class connection_db_manager_t;
+class device_registry_t;
 
 struct control_rpc_context_t {
   std::shared_ptr<midirouter_t> router;
   std::shared_ptr<aseq_t> aseq;
   std::shared_ptr<rtpmidid::mdns_rtpmidi_t> mdns;
   std::shared_ptr<connection_db_manager_t> connection_db;
+  std::shared_ptr<device_registry_t> device_registry;
 };
 
 /** One line in, one line out (includes trailing newline). */
