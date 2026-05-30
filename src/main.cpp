@@ -19,6 +19,8 @@
 #include "argv.hpp"
 #include "aseq.hpp"
 #include "connection_db.hpp"
+#include "device_db.hpp"
+#include "device_registry.hpp"
 #include "control_socket.hpp"
 #include "web_server.hpp"
 #include "factory.hpp"
@@ -127,6 +129,7 @@ protected:
   std::optional<rtpmididns::rtpmidi_remote_handler_t> rtpmidi_remote_handler;
   rtpmididns::web_server_t web;
   std::shared_ptr<rtpmididns::connection_db_manager_t> connection_db;
+  std::shared_ptr<rtpmididns::device_registry_t> device_registry;
 
 public:
   // I want setup inside a try catch (and survive it), so I need a setup method
@@ -158,6 +161,18 @@ public:
         connection_db->attach();
         connection_db->attach_aseq(aseq);
         control.connection_db = connection_db;
+      }
+
+      auto device_db = std::make_unique<rtpmididns::device_db_t>(
+          rtpmididns::settings.database.path);
+      if (device_db->is_open()) {
+        device_registry = std::make_shared<rtpmididns::device_registry_t>(
+            router, std::move(device_db));
+        device_registry->seed_ini(
+            rtpmididns::ini_device_identities_from_settings(
+                rtpmididns::settings));
+        device_registry->attach();
+        device_registry->refresh_from_router();
       }
     }
 

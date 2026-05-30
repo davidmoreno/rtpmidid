@@ -245,7 +245,7 @@ go under `tests/` and are wired into `make test`.
 | 1 | Naming & shared abstractions | ☑ Completed |
 | 2 | Identity grammar (`key=value`) | ☑ Completed |
 | 3 | Query matching | ☑ Completed |
-| 4 | Device registry | ☐ Not started |
+| 4 | Device registry | ☑ Completed |
 | 5 | Persisted connections v2 (directed + query) | ☐ Not started |
 | 6 | Control + Web UI | ☐ Not started |
 | 7 | Pure-ALSA direct + optional monitor tap | ☐ Not started |
@@ -322,7 +322,7 @@ by the existing test suite (no behavior change ⇒ tests stay green).
   field omitted matches all; bracketed field does not narrow; mismatch.
 
 ### Phase 4 — Device registry
-**Status:** ☐ Not started
+**Status:** ☑ Completed
 
 * `device_registry_t`: merges sources (discovery, INI, manual/db); tracks `first_seen` /
   `last_seen` / `online`; emits change signals for the UI.

@@ -136,6 +136,7 @@ public:
   rtpmidid::signal_t<peer_id_t, peer_id_t> connected_event;
   rtpmidid::signal_t<peer_id_t, peer_id_t> disconnected_event;
   rtpmidid::signal_t<peer_id_t> peer_added_event;
+  rtpmidid::signal_t<peer_id_t> peer_removed_event;
   rtpmidid::signal_t<peer_id_t, midipeer_event_e> peer_event;
 
 private:
@@ -171,6 +172,7 @@ private:
   void handle(router_cmd::event_broadcast_t &cmd);
 
   void handle(router_cmd::signal_peer_added_t &cmd);
+  void handle(router_cmd::signal_peer_removed_t &cmd);
   void handle(router_cmd::signal_connected_t &cmd);
   void handle(router_cmd::signal_disconnected_t &cmd);
   void handle(router_cmd::signal_peer_event_t &cmd);
@@ -207,6 +209,7 @@ private:
 
   /** Post a typed signal message; in sync mode fires the signal directly. */
   void post_signal_peer_added(peer_id_t peer_id);
+  void post_signal_peer_removed(peer_id_t peer_id);
   void post_signal_connected(peer_id_t from, peer_id_t to);
   void post_signal_disconnected(peer_id_t from, peer_id_t to);
   void post_signal_peer_event(peer_id_t peer_id, midipeer_event_e evt);

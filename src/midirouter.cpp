@@ -71,6 +71,15 @@ void midirouter_t::post_signal_peer_added(peer_id_t peer_id) {
           rtpmidid::queue_priority_e::NORMAL);
 }
 
+void midirouter_t::post_signal_peer_removed(peer_id_t peer_id) {
+  if (sync_mode()) {
+    peer_removed_event(peer_id);
+    return;
+  }
+  enqueue(router_command_t{router_cmd::signal_peer_removed_t{peer_id}},
+          rtpmidid::queue_priority_e::NORMAL);
+}
+
 void midirouter_t::post_signal_connected(peer_id_t from, peer_id_t to) {
   if (sync_mode()) {
     connected_event(from, to);
@@ -221,8 +230,10 @@ void midirouter_t::remove_peer_impl(peer_id_t peer_id) {
 
   toremove->second.peer->router = nullptr;
   const auto removed = peers_.erase(peer_id);
-  if (removed)
+  if (removed) {
     INFO("Removed peer {}", peer_id);
+    post_signal_peer_removed(peer_id);
+  }
 
   removing_peers_.erase(peer_id);
 }
@@ -488,6 +499,14 @@ void midirouter_t::handle(router_cmd::signal_peer_added_t &cmd) {
     peer_added_event(cmd.peer_id);
   } catch (const std::exception &exc) {
     ERROR("signal_peer_added listener: {}", exc.what());
+  }
+}
+
+void midirouter_t::handle(router_cmd::signal_peer_removed_t &cmd) {
+  try {
+    peer_removed_event(cmd.peer_id);
+  } catch (const std::exception &exc) {
+    ERROR("signal_peer_removed listener: {}", exc.what());
   }
 }
 

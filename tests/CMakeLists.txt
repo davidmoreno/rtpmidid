@@ -51,6 +51,22 @@ add_test(NAME test_signals COMMAND test_signals)
 
 
 #
+# Device registry (Phase 4)
+#
+
+if (NOT LIBS_ONLY)
+  add_executable(test_device_registry
+      test_device_registry.cpp test_utils.cpp
+  )
+  target_link_libraries(test_device_registry -pthread rtpmidid-shared rtpmidid2-static)
+  add_test(NAME test_device_registry COMMAND test_device_registry)
+  target_link_libraries(test_device_registry ${ALSA_LIBRARIES})
+  target_link_libraries(test_device_registry ${FMT_LIBRARIES})
+  target_include_directories(test_device_registry PUBLIC ${ALSA_INCLUDE_DIRS})
+  target_compile_options(test_device_registry PUBLIC ${ALSA_CFLAGS_OTHER})
+endif (NOT LIBS_ONLY)
+
+#
 # Device query matching (Phase 3)
 #
 

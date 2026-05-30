@@ -88,6 +88,10 @@ struct signal_peer_added_t {
   peer_id_t peer_id{0};
 };
 
+struct signal_peer_removed_t {
+  peer_id_t peer_id{0};
+};
+
 struct signal_connected_t {
   peer_id_t from{0};
   peer_id_t to{0};
@@ -161,6 +165,7 @@ using router_command_t =
                  router_cmd::connect_t, router_cmd::disconnect_t,
                  router_cmd::event_directed_t, router_cmd::event_broadcast_t,
                  router_cmd::signal_peer_added_t,
+                 router_cmd::signal_peer_removed_t,
                  router_cmd::signal_connected_t,
                  router_cmd::signal_disconnected_t,
                  router_cmd::signal_peer_event_t,
