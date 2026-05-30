@@ -500,15 +500,16 @@ export function PeersCards({
   const [connectDialogForId, setConnectDialogForId] = useState<string | null>(
     null,
   );
+  const [connectBidi, setConnectBidi] = useState(true);
   const [monitorFor, setMonitorFor] = useState<{
     id: string;
     label: string;
   } | null>(null);
 
-  const doConnect = async (from: string, to: string) => {
+  const doConnect = async (from: string, to: string, bidi = true) => {
     try {
       onStatus("");
-      await rpc.call("endpoint.connect", { from, to, bidi: true });
+      await rpc.call("endpoint.connect", { from, to, bidi });
       await onAfterAction();
       pulseEndpoints([from, to], from);
     } catch (e) {
@@ -1095,7 +1096,10 @@ export function PeersCards({
                       <button
                         type="button"
                         class="ui-card-action ui-card-action-accent"
-                        onClick={() => setConnectDialogForId(actionEndpointId)}
+                        onClick={() => {
+                          setConnectBidi(true);
+                          setConnectDialogForId(actionEndpointId);
+                        }}
                       >
                         Connect
                       </button>
@@ -1121,7 +1125,20 @@ export function PeersCards({
                   )?.label ??
                   connectDialogForId}
               </strong>
-              . ALSA vs router routing is chosen by the server.
+              . ALSA↔ALSA uses kernel aconnect; other pairs use the router.
+              {endpoints.find((x) => x.id === connectDialogForId)?.kind ===
+              "alsa_seq" ? (
+                <label class="mt-2 flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={connectBidi}
+                    onChange={(e) =>
+                      setConnectBidi((e.target as HTMLInputElement).checked)
+                    }
+                  />
+                  Bidirectional (↔)
+                </label>
+              ) : null}
             </>
           }
           endpoints={endpoints}
@@ -1130,13 +1147,14 @@ export function PeersCards({
           sortKey={sortKey}
           isPeerConnected={isPeerConnected}
           byPeerId={byPeerId}
-          confirmLabel="Connect ↔"
+          confirmLabel={connectBidi ? "Connect ↔" : "Connect →"}
           confirmOnSecondClick
           onClose={() => setConnectDialogForId(null)}
           onConfirm={(otherId) => {
             const from = connectDialogForId;
+            const bidi = connectBidi;
             setConnectDialogForId(null);
-            void doConnect(from, otherId);
+            void doConnect(from, otherId, bidi);
           }}
         />
       )}

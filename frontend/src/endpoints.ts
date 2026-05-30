@@ -148,9 +148,11 @@ function peerRaw(p: RouterPeer): Record<string, unknown> {
 }
 
 function matchPeerForAlsa(peers: RouterPeer[], e: MidiAlsaSeqEntry): number | undefined {
+  const webName = `WEB:ALSA:${e.client}:${e.port}`;
   for (const p of peers) {
     if (p.type !== "peer_device_alsa_seq_t") continue;
     const raw = peerRaw(p);
+    if (String(raw.name ?? p.name ?? "") === webName) return peerId(p);
     const asf = raw.alsa_subscribe_from as { client?: unknown; port?: unknown } | undefined;
     if (!asf) continue;
     if (Number(asf.client) === e.client && Number(asf.port) === e.port) return peerId(p);

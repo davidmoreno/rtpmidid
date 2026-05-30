@@ -64,6 +64,19 @@ if (NOT LIBS_ONLY)
   target_link_libraries(test_connection_db ${FMT_LIBRARIES})
   target_include_directories(test_connection_db PUBLIC ${ALSA_INCLUDE_DIRS})
   target_compile_options(test_connection_db PUBLIC ${ALSA_CFLAGS_OTHER})
+
+  add_executable(test_connection_alsa_direct test_connection_alsa_direct.cpp)
+  target_link_libraries(test_connection_alsa_direct -pthread rtpmidid-shared rtpmidid2-static)
+  add_test(NAME test_connection_alsa_direct COMMAND test_connection_alsa_direct)
+  target_link_libraries(test_connection_alsa_direct ${FMT_LIBRARIES})
+
+  add_executable(test_alsa_monitor_tap test_alsa_monitor_tap.cpp)
+  target_link_libraries(test_alsa_monitor_tap -pthread rtpmidid-shared rtpmidid2-static)
+  add_test(NAME test_alsa_monitor_tap COMMAND test_alsa_monitor_tap)
+  target_link_libraries(test_alsa_monitor_tap ${ALSA_LIBRARIES})
+  target_link_libraries(test_alsa_monitor_tap ${FMT_LIBRARIES})
+  target_include_directories(test_alsa_monitor_tap PUBLIC ${ALSA_INCLUDE_DIRS})
+  target_compile_options(test_alsa_monitor_tap PUBLIC ${ALSA_CFLAGS_OTHER})
 endif (NOT LIBS_ONLY)
 
 #

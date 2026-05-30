@@ -77,6 +77,11 @@ export function persistedPairKey(a: string, b: string): string {
   return a < b ? `${a}\0${b}` : `${b}\0${a}`;
 }
 
+/** True when a stored connection side is a pure-ALSA aconnect endpoint. */
+export function isDirectAlsaSide(side: string): boolean {
+  return side.startsWith("alsa:") || side.startsWith("alsa_seq:");
+}
+
 function peerName(peers: RouterPeer[], id: number): string {
   const p = peers.find((x) => x.id === id);
   return p ? (p.name.trim() || `#${p.id}`) : `#${id}`;
@@ -184,8 +189,8 @@ function buildSavedOnlyRow(
      `alsa:` (escape rules of compute_stable_id), so a pair where BOTH sides
      are alsa stable ids is a pure aconnect pair. Any other combination came
      from the router on a previous run, so render it as midirouter. */
-  const isAlsa = saved.side_a.startsWith("alsa:") &&
-                 saved.side_b.startsWith("alsa:");
+  const isAlsa =
+    isDirectAlsaSide(saved.side_a) && isDirectAlsaSide(saved.side_b);
   const dir = saved.direction ?? "both";
   const dirSymbol = directionArrow(dir);
   return {

@@ -79,6 +79,8 @@ public:
   peer_id_t add_peer(std::shared_ptr<midipeer_t> peer);
   void remove_peer(peer_id_t peer_id);
   void connect(peer_id_t from, peer_id_t to);
+  /** Enqueue connect and block until the edge appears (control plane). */
+  void connect_blocking(peer_id_t from, peer_id_t to);
   void disconnect(peer_id_t from, peer_id_t to);
 
   /** Send MIDI from `from` to all connected destinations. HIGH priority. */

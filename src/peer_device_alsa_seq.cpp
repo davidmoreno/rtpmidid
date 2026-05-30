@@ -64,17 +64,12 @@ void peer_device_alsa_seq_t::attach_alsa_input() {
 
   if (subscribe_src_client_ >= 0 && subscribe_src_port_ >= 0 &&
       !alsa_source_subscription_) {
-    try {
-      alsa_source_subscription_ = seq->connect(
-          aseq_t::port_t(static_cast<uint8_t>(subscribe_src_client_),
-                         static_cast<uint8_t>(subscribe_src_port_)),
-          aseq_t::port_t(seq->client_id, port));
-      INFO("ALSA subscribe {}:{} -> rtpmidid {}:{} ({})", subscribe_src_client_,
-           subscribe_src_port_, seq->client_id, port, name);
-    } catch (const std::exception &e) {
-      WARNING("ALSA subscribe {}:{} failed for peer {}: {}", subscribe_src_client_,
-              subscribe_src_port_, name, e.what());
-    }
+    alsa_source_subscription_ = seq->connect(
+        aseq_t::port_t(static_cast<uint8_t>(subscribe_src_client_),
+                       static_cast<uint8_t>(subscribe_src_port_)),
+        aseq_t::port_t(seq->client_id, port));
+    INFO("ALSA subscribe {}:{} -> rtpmidid {}:{} ({})", subscribe_src_client_,
+         subscribe_src_port_, seq->client_id, port, name);
   }
 }
 

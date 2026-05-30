@@ -316,6 +316,20 @@ describe("mergeConnectionsWithPersisted (alsaseq path)", () => {
     expect(merged[0].type).toBe("alsaseq");
     expect(merged[0].persisted).toBe(true);
   });
+
+  it("classifies alsa_seq identity sides as alsaseq", () => {
+    const merged = mergeConnectionsWithPersisted(
+      [],
+      [
+        {
+          side_a: "alsa_seq:client=Alpha,port=OUT",
+          side_b: "alsa_seq:client=Beta,port=IN",
+        },
+      ],
+      [],
+    );
+    expect(merged[0].type).toBe("alsaseq");
+  });
 });
 
 describe("annotateLiveOnly / cannotSaveReason", () => {

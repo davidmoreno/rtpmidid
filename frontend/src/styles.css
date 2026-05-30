@@ -81,6 +81,70 @@
     color: var(--color-banner-warn-fg);
   }
 
+  .ui-conn-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border: var(--border-width) solid var(--color-warn-heading);
+    background-color: color-mix(in srgb, var(--color-warn-heading) 12%, transparent);
+    border-radius: var(--radius-md);
+    padding: 0.65rem 0.85rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.75rem;
+    color: var(--color-fg);
+  }
+
+  .ui-conn-banner-error {
+    border-color: var(--color-error, #c62828);
+    background-color: color-mix(in srgb, var(--color-error, #c62828) 10%, transparent);
+  }
+
+  .ui-conn-banner-body {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .ui-conn-banner-title {
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--color-warn-heading);
+  }
+
+  .ui-conn-banner-error .ui-conn-banner-title {
+    color: var(--color-error, #c62828);
+  }
+
+  .ui-conn-banner-detail {
+    font-size: 0.6875rem;
+    color: var(--color-fg-muted);
+    word-break: break-all;
+  }
+
+  .ui-conn-banner-retry {
+    flex-shrink: 0;
+    cursor: pointer;
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background-color: var(--color-surface);
+    padding: 0.35rem 0.65rem;
+    font-family: inherit;
+    font-size: 0.6875rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--color-fg);
+    transition: background-color 0.15s;
+  }
+
+  .ui-conn-banner-retry:hover {
+    background-color: var(--color-surface-2);
+  }
+
   .ui-mono {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }

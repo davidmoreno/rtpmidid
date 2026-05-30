@@ -16,6 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "control_rpc.hpp"
+#include "connection_alsa_direct.hpp"
+#include "alsa_monitor_tap.hpp"
 #include "aseq.hpp"
 #include "connection_db.hpp"
 #include "connection_restore.hpp"
@@ -282,16 +284,20 @@ router_rows_snapshot(const control_rpc_context_t &ctx) {
 static std::optional<peer_id_t>
 find_peer_for_alsa(const std::vector<router_peer_row_t> &rows, int client,
                    int port) {
+  const std::string web_name = FMT::format("WEB:ALSA:{}:{}", client, port);
   for (const auto &r : rows) {
     if (r.type.value_or("") != "peer_device_alsa_seq_t")
       continue;
+    const auto id = static_cast<peer_id_t>(r.id.value_or(0));
+    if (id == 0)
+      continue;
+    if (r.name && *r.name == web_name)
+      return id;
     if (!r.alsa_subscribe_from)
       continue;
     if (r.alsa_subscribe_from->client == client &&
         r.alsa_subscribe_from->port == port) {
-      const auto id = static_cast<peer_id_t>(r.id.value_or(0));
-      if (id != 0)
-        return id;
+      return id;
     }
   }
   return std::nullopt;
@@ -312,13 +318,21 @@ find_peer_for_raw(const std::vector<router_peer_row_t> &rows,
 static std::optional<peer_id_t>
 find_peer_for_host(const std::vector<router_peer_row_t> &rows,
                    const std::string &hostname, const std::string &port) {
+  const auto host_matches = [&](const std::string &candidate) {
+    return !candidate.empty() && candidate == hostname;
+  };
   for (const auto &r : rows) {
     if (r.type.value_or("") != "peer_device_rtpmidi_client_t")
       continue;
-    const auto rh = r.connect_hostname.value_or("");
-    const auto rp = r.connect_port.value_or("");
-    if (rh == hostname && rp == port)
-      return static_cast<peer_id_t>(r.id.value_or(0));
+    const auto ch = r.connect_hostname.value_or("");
+    const auto cp = r.connect_port.value_or("");
+    const auto id = static_cast<peer_id_t>(r.id.value_or(0));
+    if (id == 0)
+      continue;
+    if (cp == port && host_matches(ch))
+      return id;
+    if (cp == port && r.peer && host_matches(r.peer->remote.hostname))
+      return id;
   }
   return std::nullopt;
 }
@@ -672,6 +686,25 @@ resolve_side_to_stable_id(control_rpc_context_t &ctx, const std::string &side,
       FMT::format("Could not resolve stable id for side '{}'", side));
 }
 
+static void maybe_persist_direct_endpoint_connection(
+    control_rpc_context_t &ctx, const std::string &from_endpoint,
+    const std::string &to_endpoint, bool bidi,
+    const std::vector<router_peer_row_t> &rows) {
+  if (!ctx.connection_db)
+    return;
+  const auto sa = resolve_side_to_connection_side(ctx, from_endpoint, rows);
+  const auto sb = resolve_side_to_connection_side(ctx, to_endpoint, rows);
+  if (!sa || !sb || !is_direct_alsa_side(*sa) || !is_direct_alsa_side(*sb))
+    return;
+  stored_connection_t row;
+  row.side_a = *sa;
+  row.side_b = *sb;
+  row.direction =
+      bidi ? connection_direction_e::both : connection_direction_e::a2b;
+  row.enabled = true;
+  ctx.connection_db->save_stored_connection(std::move(row));
+}
+
 static void tee_monitor_edges(control_rpc_context_t &ctx, peer_id_t target,
                               peer_id_t monitor_id,
                               const std::shared_ptr<webui_midi_monitor_peer_t> &mon) {
@@ -687,13 +720,13 @@ static void tee_monitor_edges(control_rpc_context_t &ctx, peer_id_t target,
       const peer_id_t to = static_cast<peer_id_t>(to_raw);
       if (to != target)
         continue;
-      ctx.router->enqueue_connect(from, monitor_id);
+      ctx.router->connect_blocking(from, monitor_id);
       incoming_tees++;
       break;
     }
   }
 
-  ctx.router->enqueue_connect(target, monitor_id);
+  ctx.router->connect_blocking(target, monitor_id);
 
   INFO("monitor.start tee target_peer={} monitor_peer={}: {} incoming duplicate "
        "edge(s) (from→monitor when from→target existed); always added "
@@ -758,15 +791,20 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
         ctx.aseq->connect_external(from, to);
         if (bidi)
           ctx.aseq->connect_external(to, from);
+        const auto rows = router_rows_snapshot(ctx);
+        maybe_persist_direct_endpoint_connection(ctx, p.from, p.to, bidi, rows);
         return respond_ok(env);
       }
 
-      const auto rows = router_rows_snapshot(ctx);
-      const auto pa = ensure_peer_for_endpoint(ctx, a, rows);
-      const auto pb = ensure_peer_for_endpoint(ctx, b, rows);
-      ctx.router->enqueue_connect(pa, pb);
+      const auto ensure = [&](const endpoint_id_t &eid) {
+        const auto snap = router_rows_snapshot(ctx);
+        return ensure_peer_for_endpoint(ctx, eid, snap);
+      };
+      const auto pa = ensure(a);
+      const auto pb = ensure(b);
+      ctx.router->connect_blocking(pa, pb);
       if (bidi)
-        ctx.router->enqueue_connect(pb, pa);
+        ctx.router->connect_blocking(pb, pa);
       return respond_ok(env);
     }
     if (env.method == "endpoint.disconnect") {
@@ -890,6 +928,19 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       const peer_id_t mid = ctx.router->add_peer(peer_base);
       monitor_registry_register(uuid, mon);
       tee_monitor_edges(ctx, target, mid, mon);
+      if (eid.kind == endpoint_kind_e::ALSA && ctx.aseq) {
+        setup_alsa_monitor_taps(
+            ctx.aseq, ctx.router, static_cast<uint8_t>(eid.client),
+            static_cast<uint8_t>(eid.port), target, mid, uuid,
+            [&](uint8_t client, uint8_t port) {
+              endpoint_id_t ep{};
+              ep.kind = endpoint_kind_e::ALSA;
+              ep.client = client;
+              ep.port = port;
+              const auto snap = router_rows_snapshot(ctx);
+              return ensure_peer_for_endpoint(ctx, ep, snap);
+            });
+      }
       monitor_start_result_t out{};
       out.uuid = uuid;
       out.peer_id = static_cast<uint64_t>(mid);
@@ -903,6 +954,7 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       auto mon = monitor_registry_lookup(p.uuid);
       if (!mon)
         throw std::runtime_error("Unknown monitor session");
+      teardown_alsa_monitor_taps(ctx.router, p.uuid);
       monitor_session_stop(ctx.router, mon);
       return respond_ok(env);
     }

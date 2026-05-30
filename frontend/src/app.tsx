@@ -7,7 +7,8 @@ import {
   normalizePeers,
   parseMdns,
 } from "./model";
-import { RpcClient } from "./rpc";
+import { RpcClient, type RpcConnectionState } from "./rpc";
+import { ConnectionBanner } from "./components/ConnectionBanner";
 import {
   DEFAULT_STATUS_REFRESH_MS,
   parseStoredStatusRefreshMs,
@@ -77,6 +78,7 @@ export function App() {
       : DEFAULT_STATUS_REFRESH_MS,
   );
   const [status, setStatus] = useState<string>("");
+  const [connState, setConnState] = useState<RpcConnectionState | null>(null);
   const [data, setData] = useState<StatusResult | null>(null);
   const [tab, setTab] = useState(() => {
     const raw = typeof window !== "undefined" ? window.location.hash : "";
@@ -204,14 +206,26 @@ export function App() {
   );
 
   useEffect(() => {
+    rpc.setOnConnectionStateChange(setConnState);
     rpc.setOnReconnect(() => {
       void refreshRef.current();
     });
+
+    const onPageShow = () => {
+      if (!rpc.isConnected()) {
+        rpc.forceReconnect();
+      }
+    };
+    window.addEventListener("pageshow", onPageShow);
+
     rpc
       .connect()
       .then(() => refreshRef.current())
       .catch((e) => setStatus(String(e)));
+
     return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      rpc.setOnConnectionStateChange(null);
       rpc.setOnReconnect(null);
       rpc.disconnect();
     };
@@ -566,7 +580,13 @@ export function App() {
         </div>
       </header>
       <div class="ui-page-inner p-4 pt-0">
-        <p class="mb-4 font-mono text-xs ui-banner-warn">{status}</p>
+        <ConnectionBanner
+          state={connState}
+          onRetryNow={() => rpc.forceReconnect()}
+        />
+        {connState?.phase === "connected" && status ? (
+          <p class="mb-4 font-mono text-xs ui-banner-warn">{status}</p>
+        ) : null}
         <Tabs tabs={tabs} active={tab} onChange={setTab} />
       </div>
     </div>

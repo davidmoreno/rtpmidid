@@ -2,6 +2,7 @@
  * Phase 5: connection_db v2 + directed restore manager.
  */
 #include "connection_db.hpp"
+#include "connection_alsa_direct.hpp"
 #include "connection_restore.hpp"
 #include "device_identity_from_peer.hpp"
 #include "aseq.hpp"
@@ -23,82 +24,6 @@
 namespace rtpmididns {
 
 namespace {
-
-std::string unescape_stable_component(std::string s) {
-  for (char &c : s) {
-    if (c == '|')
-      c = ':';
-  }
-  return s;
-}
-
-std::optional<std::pair<std::string, std::string>>
-parse_alsa_stable_id(const std::string &stable_id) {
-  static const std::string kPrefix = "alsa:";
-  if (stable_id.size() <= kPrefix.size())
-    return std::nullopt;
-  if (stable_id.compare(0, kPrefix.size(), kPrefix) != 0)
-    return std::nullopt;
-  const std::string rest = stable_id.substr(kPrefix.size());
-  const auto pos = rest.find(':');
-  if (pos == std::string::npos || pos == 0 || pos + 1 == rest.size())
-    return std::nullopt;
-  return std::make_pair(unescape_stable_component(rest.substr(0, pos)),
-                        unescape_stable_component(rest.substr(pos + 1)));
-}
-
-std::optional<std::pair<std::string, std::string>>
-parse_alsa_seq_identity(const std::string &identity_key) {
-  const auto id = device_identity_t::parse(identity_key);
-  if (!id || id->type_prefix != "alsa_seq")
-    return std::nullopt;
-  std::optional<std::string> client;
-  std::optional<std::string> port;
-  for (const auto &f : id->fields) {
-    if (f.key == "client")
-      client = f.value;
-    else if (f.key == "port")
-      port = f.value;
-  }
-  if (!client || !port)
-    return std::nullopt;
-  return std::make_pair(*client, *port);
-}
-
-bool is_direct_alsa_side(const std::string &side) {
-  return parse_alsa_stable_id(side).has_value() ||
-         parse_alsa_seq_identity(side).has_value();
-}
-
-std::optional<std::pair<std::string, std::string>>
-alsa_side_names(const std::string &side) {
-  if (auto legacy = parse_alsa_stable_id(side))
-    return legacy;
-  return parse_alsa_seq_identity(side);
-}
-
-std::optional<aseq_t::port_t>
-find_alsa_port_by_names(const std::vector<alsa_seq_port_row_t> &ports,
-                        const std::string &client_name,
-                        const std::string &port_name) {
-  for (const auto &p : ports) {
-    if (p.client_name == client_name && p.port_name == port_name) {
-      return aseq_t::port_t{static_cast<uint8_t>(p.client),
-                            static_cast<uint8_t>(p.port)};
-    }
-  }
-  return std::nullopt;
-}
-
-bool alsa_is_already_connected(aseq_t &aseq, const aseq_t::port_t &from,
-                               const aseq_t::port_t &to) {
-  bool found = false;
-  aseq.for_connections(from, [&found, &to](const aseq_t::port_t &other) {
-    if (other == to)
-      found = true;
-  });
-  return found;
-}
 
 connection_direction_e merge_direction(connection_direction_e existing,
                                        connection_direction_e incoming) {
@@ -640,49 +565,24 @@ void connection_db_manager_t::try_auto_aconnect_all_alsa_pairs() {
     return;
 
   const auto saved = db_->list_connections();
-  std::vector<alsa_seq_port_row_t> ports;
-  bool ports_loaded = false;
-  auto ensure_ports = [&]() {
-    if (ports_loaded)
-      return;
-    ports = aseq_->enumerate_exported_ports();
-    ports_loaded = true;
-  };
+  const auto ports = aseq_->enumerate_exported_ports();
+  const auto actions = plan_alsa_aconnect_actions(saved, ports);
 
-  for (const auto &pair : saved) {
-    if (!pair.enabled)
+  for (const auto &action : actions) {
+    bool already = false;
+    aseq_->for_connections(action.from, [&already, &action](const aseq_t::port_t &other) {
+      if (other == action.to)
+        already = true;
+    });
+    if (already)
       continue;
-    if (!is_direct_alsa_side(pair.side_a) || !is_direct_alsa_side(pair.side_b))
-      continue;
-    ensure_ports();
-    const auto a_names = alsa_side_names(pair.side_a);
-    const auto b_names = alsa_side_names(pair.side_b);
-    if (!a_names || !b_names)
-      continue;
-    const auto port_a =
-        find_alsa_port_by_names(ports, a_names->first, a_names->second);
-    const auto port_b =
-        find_alsa_port_by_names(ports, b_names->first, b_names->second);
-    if (!port_a || !port_b)
-      continue;
-
-    const auto maybe_connect = [&](const aseq_t::port_t &from,
-                                   const aseq_t::port_t &to) {
-      if (alsa_is_already_connected(*aseq_, from, to))
-        return;
-      try {
-        aseq_->connect_external(from, to);
-      } catch (const std::exception &e) {
-        ERROR("connection_db: aconnect failed: {}", e.what());
-      }
-    };
-
-    if (pair.direction == connection_direction_e::a2b ||
-        pair.direction == connection_direction_e::both)
-      maybe_connect(*port_a, *port_b);
-    if (pair.direction == connection_direction_e::b2a ||
-        pair.direction == connection_direction_e::both)
-      maybe_connect(*port_b, *port_a);
+    try {
+      aseq_->connect_external(action.from, action.to);
+      INFO("connection_db: aconnect {}:{} -> {}:{}", action.from.client,
+           action.from.port, action.to.client, action.to.port);
+    } catch (const std::exception &e) {
+      ERROR("connection_db: aconnect failed: {}", e.what());
+    }
   }
 }
 

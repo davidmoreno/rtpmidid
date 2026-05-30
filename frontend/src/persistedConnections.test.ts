@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseConnectionsListResult } from "./persistedConnections";
+import {
+  isDirectAlsaSide,
+  parseConnectionsListResult,
+} from "./persistedConnections";
 
 describe("parseConnectionsListResult", () => {
   it("parses direction and enabled", () => {
@@ -20,5 +23,13 @@ describe("parseConnectionsListResult", () => {
     expect(parsed.connections[0].direction).toBe("a2b");
     expect(parsed.connections[0].enabled).toBe(false);
     expect(parsed.connections[0].peer_a).toBe(3);
+  });
+});
+
+describe("isDirectAlsaSide", () => {
+  it("recognizes legacy and identity ALSA sides", () => {
+    expect(isDirectAlsaSide("alsa:Peak:In")).toBe(true);
+    expect(isDirectAlsaSide("alsa_seq:client=Peak,port=In")).toBe(true);
+    expect(isDirectAlsaSide("rawmidi:device=/dev/x")).toBe(false);
   });
 });

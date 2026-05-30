@@ -27,6 +27,8 @@ add_library(
   device_db.cpp
   device_registry.cpp
   connection_restore.cpp
+  connection_alsa_direct.cpp
+  alsa_monitor_tap.cpp
   peer_device.cpp
   peer_export.cpp
   peer_import.cpp

@@ -22,7 +22,9 @@
 #include "rtpmidid/logger.hpp"
 #include "rtpmidid/shutdown_signals.hpp"
 #include "webui_midi_monitor_peer.hpp"
+#include <algorithm>
 #include <chrono>
+#include <thread>
 #include <unordered_map>
 #include <variant>
 
@@ -165,7 +167,12 @@ peer_id_t midirouter_t::add_peer_impl(std::shared_ptr<midipeer_t> peer) {
     peer->start_thread();
   }
 
-  peer->on_router_attached();
+  try {
+    peer->on_router_attached();
+  } catch (...) {
+    remove_peer_impl(pid);
+    throw;
+  }
 
   post_signal_peer_added(pid);
   return pid;
@@ -791,6 +798,22 @@ void midirouter_t::connect(peer_id_t from, peer_id_t to) {
   }
   router_cmd::connect_t cmd{from, to};
   enqueue(router_command_t{std::move(cmd)}, rtpmidid::queue_priority_e::NORMAL);
+}
+
+void midirouter_t::connect_blocking(peer_id_t from, peer_id_t to) {
+  connect(from, to);
+  if (sync_mode() || on_router_thread())
+    return;
+  const auto deadline =
+      std::chrono::steady_clock::now() + kReplyTimeout;
+  while (std::chrono::steady_clock::now() < deadline) {
+    const auto targets = send_targets_for(from);
+    if (std::find(targets.begin(), targets.end(), to) != targets.end())
+      return;
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  throw std::runtime_error(
+      FMT::format("Timed out waiting for router connect {} -> {}", from, to));
 }
 
 void midirouter_t::disconnect(peer_id_t from, peer_id_t to) {

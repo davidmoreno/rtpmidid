@@ -368,11 +368,12 @@ by the existing test suite (no behavior change ⇒ tests stay green).
 * **Tests:** `test_dm_json_generated` (new RPC structs), `test_connection_db`
   (canonicalize direction flip), `deviceIdentity.test.ts`, `persistedConnections.test.ts`.
 
-**UI notes (Phase 7+):** Pure-ALSA direct links still use legacy `connections.add` quick-save
-(→ `both`); directed ALSA restore is Phase 7. Monitor tap for direct ALSA is Phase 7.
+**UI notes (Phase 7+):** Pure-ALSA direct links use `endpoint.connect` with optional bidi toggle;
+saved pairs use `alsa:` / `alsa_seq:` sides and honor direction on restore. Monitor tap for direct
+ALSA is active via `alsa_monitor_tap` on `monitor.start` / `monitor.stop`.
 
 ### Phase 7 — Pure-ALSA direct + optional monitor tap
-**Status:** ☐ Not started
+**Status:** ☑ Done
 
 * Keep ALSA↔ALSA links via `aconnect` (extend `try_auto_aconnect_all_alsa_pairs`), now
   honoring direction and stored queries.

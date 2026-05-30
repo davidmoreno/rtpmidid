@@ -56,6 +56,13 @@ public:
   router_peer_row_t status() const override;
   void send_midi(midipeer_id_t from, const mididata_t &) override;
 
+  bool wants_alsa_subscribe() const {
+    return subscribe_src_client_ >= 0 && subscribe_src_port_ >= 0;
+  }
+  bool has_alsa_source_subscription() const {
+    return static_cast<bool>(alsa_source_subscription_);
+  }
+
   static std::optional<std::string>
   stable_id_from_row(const router_peer_row_t &row);
 
