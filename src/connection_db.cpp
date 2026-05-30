@@ -6,16 +6,6 @@
 #include "connection_restore.hpp"
 #include "device_identity_from_peer.hpp"
 #include "aseq.hpp"
-#include "peer_device_alsa_seq.hpp"
-#include "peer_device_rawmidi.hpp"
-#include "peer_device_rtpmidi_client.hpp"
-#include "peer_device_rtpmidi_session.hpp"
-#include "peer_export_alsa_network.hpp"
-#include "peer_export_rtpmidi_server.hpp"
-#include "peer_import_alsa_rtp.hpp"
-#include "peer_import_rtpmidi.hpp"
-#include "peer_kind.hpp"
-#include "peer_stable_id.hpp"
 #include "rtpmidid/logger.hpp"
 #include <algorithm>
 #include <sqlite3.h>
@@ -77,59 +67,6 @@ stored_connection_t canonicalize_stored_connection(stored_connection_t connectio
   return connection;
 }
 
-std::optional<std::string> compute_stable_id(const router_peer_row_t &row) {
-  const auto kind = peer_kind_from_wire_type(row.type.value_or(""));
-  if (kind) {
-    switch (*kind) {
-    case peer_kind_e::device_alsa_seq:
-      return peer_device_alsa_seq_t::stable_id_from_row(row);
-    case peer_kind_e::device_rawmidi:
-      return peer_device_rawmidi_t::stable_id_from_row(row);
-    case peer_kind_e::device_rtpmidi_client:
-      return peer_device_rtpmidi_client_t::stable_id_from_row(row);
-    case peer_kind_e::device_rtpmidi_session:
-      return peer_device_rtpmidi_session_t::stable_id_from_row(row);
-    case peer_kind_e::export_rtpmidi_server:
-      return peer_export_rtpmidi_server_t::stable_id_from_row(row);
-    case peer_kind_e::import_alsa_rtp:
-      return peer_import_alsa_rtp_t::stable_id_from_row(row);
-    case peer_kind_e::import_rtpmidi:
-      return peer_import_rtpmidi_t::stable_id_from_row(row);
-    case peer_kind_e::export_alsa_network:
-      return peer_export_alsa_network_t::stable_id_from_row(row);
-    case peer_kind_e::webui_monitor:
-      return std::nullopt;
-    case peer_kind_e::unknown:
-      break;
-    }
-  }
-
-  const std::string type = row.type.value_or("");
-  const std::string peer_name =
-      row.name && !row.name->empty() ? *row.name : std::string();
-  if (!type.empty() && !peer_name.empty()) {
-    std::string prefix = type;
-    if (prefix.size() > 2 && prefix.compare(prefix.size() - 2, 2, "_t") == 0)
-      prefix.resize(prefix.size() - 2);
-    return make_stable_id(prefix, {peer_name});
-  }
-  return std::nullopt;
-}
-
-std::optional<peer_id_t>
-find_peer_id_for_stable_id(const std::vector<router_peer_row_t> &rows,
-                           const std::string &stable_id) {
-  for (const auto &row : rows) {
-    const auto sid = compute_stable_id(row);
-    if (sid && *sid == stable_id && row.id)
-      return static_cast<peer_id_t>(*row.id);
-    const auto did = compute_device_identity(row);
-    if (did && did->serialize() == stable_id && row.id)
-      return static_cast<peer_id_t>(*row.id);
-  }
-  return std::nullopt;
-}
-
 std::pair<std::string, std::string>
 connection_db_t::normalize_sides(std::string a, std::string b) {
   if (b < a)
@@ -138,7 +75,7 @@ connection_db_t::normalize_sides(std::string a, std::string b) {
 }
 
 void connection_db_t::migrate_schema() {
-  if (!db_)
+  if (!db_.is_open())
     return;
 
   const char *create =
@@ -150,12 +87,8 @@ void connection_db_t::migrate_schema() {
       "  PRIMARY KEY (side_a, side_b)"
       ");";
 
-  char *errmsg = nullptr;
-  if (sqlite3_exec(db_.get(), create, nullptr, nullptr, &errmsg) != SQLITE_OK) {
-    ERROR("connection_db: schema init failed: {}",
-          errmsg ? errmsg : "unknown error");
-    sqlite3_free(errmsg);
-    db_.reset();
+  if (!db_.exec(create, "connection_db schema init")) {
+    db_.close();
     return;
   }
 
@@ -163,162 +96,136 @@ void connection_db_t::migrate_schema() {
       "ALTER TABLE connections ADD COLUMN direction TEXT NOT NULL DEFAULT 'both';",
       "ALTER TABLE connections ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1;",
   };
-  for (const char *sql : alters) {
-    if (sqlite3_exec(db_.get(), sql, nullptr, nullptr, &errmsg) != SQLITE_OK) {
-      sqlite3_free(errmsg);
-      errmsg = nullptr;
-    }
+  const char *columns[] = {"direction", "enabled"};
+  for (size_t i = 0; i < sizeof(columns) / sizeof(columns[0]); ++i) {
+    if (!db_.has_table_column("connections", columns[i]))
+      db_.exec(alters[i], "connection_db schema migrate");
   }
 }
 
-connection_db_t::connection_db_t(std::string path) {
-  if (path.empty())
+connection_db_t::connection_db_t(std::string path) : db_(std::move(path)) {
+  if (!db_.is_open())
     return;
-
-  sqlite3 *raw = nullptr;
-  const int rc = sqlite3_open(path.c_str(), &raw);
-  if (rc != SQLITE_OK) {
-    ERROR("connection_db: cannot open {}: {}", path,
-          raw ? sqlite3_errmsg(raw) : "unknown error");
-    sqlite3_deleter{}(raw);
-    return;
-  }
-  db_.reset(raw);
   migrate_schema();
-  if (!db_)
+  if (!db_.is_open())
     return;
-
-  INFO("connection_db: opened {}", path);
+  INFO("connection_db: opened");
 }
 
 void connection_db_t::save_connection(const stored_connection_t &connection) {
-  if (!db_ || connection.side_a.empty() || connection.side_b.empty())
+  if (!db_.is_open() || connection.side_a.empty() || connection.side_b.empty())
     return;
 
   stored_connection_t merged = connection;
   {
-    std::lock_guard<std::mutex> lock(mutex_);
-    sqlite3_stmt *find = nullptr;
-    const char *find_sql =
-        "SELECT direction, enabled FROM connections WHERE side_a = ? AND side_b = ?;";
-    if (sqlite3_prepare_v2(db_.get(), find_sql, -1, &find, nullptr) == SQLITE_OK) {
-      sqlite3_bind_text(find, 1, connection.side_a.c_str(), -1, SQLITE_TRANSIENT);
-      sqlite3_bind_text(find, 2, connection.side_b.c_str(), -1, SQLITE_TRANSIENT);
-      if (sqlite3_step(find) == SQLITE_ROW) {
-        const char *dir =
-            reinterpret_cast<const char *>(sqlite3_column_text(find, 0));
+    auto lock = db_.lock();
+    auto find = db_.prepare(
+        "SELECT direction, enabled FROM connections WHERE side_a = ? AND side_b = ?;",
+        "connection_db save find");
+    if (find) {
+      find->bind_text(1, connection.side_a);
+      find->bind_text(2, connection.side_b);
+      if (find->step() == SQLITE_ROW) {
+        const auto dir = find->column_text(0);
         merged.direction =
-            merge_direction(connection_direction_from_wire(dir ? dir : "both"),
+            merge_direction(connection_direction_from_wire(dir ? *dir : "both"),
                             connection.direction);
         merged.enabled =
-            sqlite3_column_int(find, 1) != 0 && connection.enabled;
+            find->column_int(1) != 0 && connection.enabled;
       }
-      sqlite3_finalize(find);
     }
   }
 
-  std::lock_guard<std::mutex> lock(mutex_);
-  sqlite3_stmt *stmt = nullptr;
-  const char *sql =
+  auto lock = db_.lock();
+  auto stmt = db_.prepare(
       "INSERT OR REPLACE INTO connections (side_a, side_b, direction, enabled) "
-      "VALUES (?, ?, ?, ?);";
-  if (sqlite3_prepare_v2(db_.get(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
-    ERROR("connection_db: prepare save failed: {}", sqlite3_errmsg(db_.get()));
+      "VALUES (?, ?, ?, ?);",
+      "connection_db save");
+  if (!stmt)
     return;
-  }
 
-  sqlite3_bind_text(stmt, 1, merged.side_a.c_str(), -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 2, merged.side_b.c_str(), -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 3, connection_direction_to_wire(merged.direction), -1,
-                    SQLITE_STATIC);
-  sqlite3_bind_int(stmt, 4, merged.enabled ? 1 : 0);
+  stmt->bind_text(1, merged.side_a);
+  stmt->bind_text(2, merged.side_b);
+  stmt->bind_text(3, connection_direction_to_wire(merged.direction));
+  stmt->bind_int(4, merged.enabled ? 1 : 0);
 
-  if (sqlite3_step(stmt) != SQLITE_DONE) {
-    ERROR("connection_db: save failed: {}", sqlite3_errmsg(db_.get()));
+  if (stmt->step() != SQLITE_DONE) {
+    ERROR("connection_db: save failed: {}",
+          sqlite3_errmsg(db_.raw()));
   } else {
     INFO("connection_db: stored {} {} -> {} (enabled={})",
          connection_direction_to_wire(merged.direction), merged.side_a,
          merged.side_b, merged.enabled ? 1 : 0);
   }
-  sqlite3_finalize(stmt);
 }
 
 void connection_db_t::remove_connection(const std::string &side_a,
                                         const std::string &side_b) {
-  if (!db_)
+  if (!db_.is_open())
     return;
 
-  std::lock_guard<std::mutex> lock(mutex_);
-  sqlite3_stmt *stmt = nullptr;
-  const char *sql = "DELETE FROM connections WHERE side_a = ? AND side_b = ?;";
-  if (sqlite3_prepare_v2(db_.get(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
-    ERROR("connection_db: prepare delete failed: {}", sqlite3_errmsg(db_.get()));
+  auto lock = db_.lock();
+  auto stmt = db_.prepare(
+      "DELETE FROM connections WHERE side_a = ? AND side_b = ?;",
+      "connection_db delete");
+  if (!stmt)
     return;
-  }
 
-  sqlite3_bind_text(stmt, 1, side_a.c_str(), -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 2, side_b.c_str(), -1, SQLITE_TRANSIENT);
+  stmt->bind_text(1, side_a);
+  stmt->bind_text(2, side_b);
 
-  if (sqlite3_step(stmt) != SQLITE_DONE) {
-    ERROR("connection_db: delete failed: {}", sqlite3_errmsg(db_.get()));
-  } else if (sqlite3_changes(db_.get()) > 0) {
+  if (stmt->step() != SQLITE_DONE) {
+    ERROR("connection_db: delete failed: {}",
+          sqlite3_errmsg(db_.raw()));
+  } else if (db_.changes() > 0) {
     INFO("connection_db: deleted {} -> {}", side_a, side_b);
   }
-  sqlite3_finalize(stmt);
 }
 
 bool connection_db_t::set_enabled(const std::string &side_a,
-                                    const std::string &side_b, bool enabled) {
-  if (!db_)
+                                  const std::string &side_b, bool enabled) {
+  if (!db_.is_open())
     return false;
 
-  std::lock_guard<std::mutex> lock(mutex_);
-  sqlite3_stmt *stmt = nullptr;
-  const char *sql =
-      "UPDATE connections SET enabled = ? WHERE side_a = ? AND side_b = ?;";
-  if (sqlite3_prepare_v2(db_.get(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
-    ERROR("connection_db: prepare enable failed: {}", sqlite3_errmsg(db_.get()));
+  auto lock = db_.lock();
+  auto stmt = db_.prepare(
+      "UPDATE connections SET enabled = ? WHERE side_a = ? AND side_b = ?;",
+      "connection_db enable");
+  if (!stmt)
     return false;
-  }
 
-  sqlite3_bind_int(stmt, 1, enabled ? 1 : 0);
-  sqlite3_bind_text(stmt, 2, side_a.c_str(), -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 3, side_b.c_str(), -1, SQLITE_TRANSIENT);
+  stmt->bind_int(1, enabled ? 1 : 0);
+  stmt->bind_text(2, side_a);
+  stmt->bind_text(3, side_b);
 
-  const bool ok = sqlite3_step(stmt) == SQLITE_DONE &&
-                  sqlite3_changes(db_.get()) > 0;
-  sqlite3_finalize(stmt);
+  const bool ok = stmt->step() == SQLITE_DONE && db_.changes() > 0;
   return ok;
 }
 
 std::vector<stored_connection_t> connection_db_t::list_connections() const {
   std::vector<stored_connection_t> out;
-  if (!db_)
+  if (!db_.is_open())
     return out;
 
-  std::lock_guard<std::mutex> lock(mutex_);
-  sqlite3_stmt *stmt = nullptr;
-  const char *sql =
-      "SELECT side_a, side_b, direction, enabled FROM connections;";
-  if (sqlite3_prepare_v2(db_.get(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
-    ERROR("connection_db: prepare select failed: {}", sqlite3_errmsg(db_.get()));
+  auto lock = db_.lock();
+  auto stmt = db_.prepare(
+      "SELECT side_a, side_b, direction, enabled FROM connections;",
+      "connection_db list");
+  if (!stmt)
     return out;
-  }
 
-  while (sqlite3_step(stmt) == SQLITE_ROW) {
+  while (stmt->step() == SQLITE_ROW) {
     stored_connection_t row;
-    if (const char *a = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0)))
-      row.side_a = a;
-    if (const char *b = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1)))
-      row.side_b = b;
-    if (const char *dir =
-            reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2)))
-      row.direction = connection_direction_from_wire(dir);
-    row.enabled = sqlite3_column_int(stmt, 3) != 0;
+    if (const auto a = stmt->column_text(0))
+      row.side_a = std::string{*a};
+    if (const auto b = stmt->column_text(1))
+      row.side_b = std::string{*b};
+    if (const auto dir = stmt->column_text(2))
+      row.direction = connection_direction_from_wire(*dir);
+    row.enabled = stmt->column_int(3) != 0;
     if (!row.side_a.empty() && !row.side_b.empty())
       out.push_back(std::move(row));
   }
-  sqlite3_finalize(stmt);
   return out;
 }
 
@@ -392,20 +299,9 @@ connection_db_manager_t::collect_online_devices() const {
     online_device_t device;
     device.peer_id = static_cast<peer_id_t>(*row.id);
     device.identity = *identity;
-    device.legacy_stable_id = compute_stable_id(row);
     out.push_back(std::move(device));
   }
   return out;
-}
-
-std::optional<std::string>
-connection_db_manager_t::stable_id_for_peer(peer_id_t peer_id) const {
-  if (!router_)
-    return std::nullopt;
-  const auto peer = router_->get_peer_by_id(peer_id);
-  if (peer)
-    return peer->compute_stable_id();
-  return std::nullopt;
 }
 
 std::optional<device_identity_t>
@@ -512,18 +408,7 @@ void connection_db_manager_t::on_disconnected(peer_id_t from, peer_id_t to) {
       INFO("connection_db: removing live router edge {} -> {}",
            id_from->serialize(), id_to->serialize());
       db_->remove_connection(id_from->serialize(), id_to->serialize());
-      return;
     }
-  }
-
-  const auto legacy_from = stable_id_for_peer(from);
-  const auto legacy_to = stable_id_for_peer(to);
-  if (legacy_from && legacy_to) {
-    auto a = *legacy_from;
-    auto b = *legacy_to;
-    if (b < a)
-      std::swap(a, b);
-    db_->remove_connection(a, b);
   }
 }
 

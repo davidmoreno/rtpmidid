@@ -421,61 +421,16 @@ Delivered:
 
 ---
 
-## Cleanup / refactor opportunities (post–Phase 8, for review)
+## Cleanup / refactor (post–Phase 8) — completed
 
-These are *optional* follow-ups noticed while implementing Phase 8. None change behavior;
-all are about DRY and clean code. Ordered roughly by value/effort.
+All nine follow-up items from the original cleanup list were implemented:
 
-1. **Two SQLite wrappers open the *same* file twice.** `connection_db_t`
-   (`src/connection_db.{hpp,cpp}`) and `device_db_t` (`src/device_db.{hpp,cpp}`) each open
-   their own `sqlite3*` to `settings.database.path`, each with its own deleter
-   (`sqlite3_deleter` vs `device_sqlite3_deleter`), its own `mutex_`, and its own
-   prepare/bind/step/finalize boilerplate. Extract a single small `sqlite_db_t` (open +
-   `exec` + a RAII `sqlite_stmt_t` that auto-`finalize`s and wraps bind/step) shared by
-   both tables, ideally over **one** connection. Removes the duplicated deleter, the
-   repeated error-logging, and every manual `sqlite3_finalize`.
-
-2. **Two parallel stable-id systems.** The legacy positional `compute_stable_id()` /
-   `compute_stable_id_impl()` / `find_peer_id_for_stable_id()` (`connection_db.cpp` + every
-   peer) coexists with the new `key=value` `compute_device_identity()` (Phase 2). The plan
-   says key=value *replaces* the positional form, but `control_rpc.cpp` and
-   `connection_restore.cpp` still consume `legacy_stable_id`. Migrate the remaining callers
-   to `device_identity_t` and delete the positional path (and per-peer
-   `compute_stable_id_impl`) to remove a whole duplicate identity scheme.
-
-3. **Duplicated `now_unix()` / time-now helper.** Both `device_registry.cpp` and
-   `connection_db.cpp` (and `lib/stats.cpp`) re-derive "seconds since epoch". Move one
-   `now_unix()` into a shared util header.
-
-4. **Duplicated `test_midiio_t` across tests.** `tests/test_device_registry.cpp` and
-   `tests/test_connection_db.cpp` define near-identical fake peers (status row with an
-   `alsa_subscribe_from`). Hoist a single configurable fake peer into `tests/test_utils.hpp`.
-
-5. **Repeated "find a field by key" in identities.** `display_name_for()`
-   (`device_registry.cpp`) hand-loops over `identity.fields` looking for
-   `name`/`client`/`service`; similar scans live in `device_query_t::matches` and
-   identity-from-peer code. Add `device_identity_t::find(std::string_view key)` →
-   `optional<string>` and reuse it.
-
-6. **`source_to_wire` / `source_from_wire` duplicate the enum.** `device_db.cpp` hand-maps
-   `device_source_e` ↔ string; `device_registry_t::source_priority` hand-maps the same enum
-   to a precedence int that the enum's declaration order already implies. A single
-   `device_source_e` ⇄ wire table (and using the underlying value for priority) removes two
-   switch statements that must be kept in sync.
-
-7. **Registry uses a `mutex_` instead of the queue/event model.** Per the project's
-   *Engineering principles* ("no new shared mutex"), `device_registry_t` guards `devices_`
-   with `mutex_` while also reacting to router-thread signals. This predates Phase 8 but is
-   worth flagging: the registry could own its own actor thread + typed messages like the
-   router/peers, or explicitly confine all mutation to the router thread.
-
-8. **Periodic sweep does DB I/O on the poller thread.** `start_periodic_cleanup` runs
-   `sweep_stale_discovered` (which deletes DB rows) from a poller timer. The cadence is
-   ~daily so the blip is negligible, but it technically violates "no DB writes on the
-   poller thread". If it ever matters, dispatch the sweep onto the router thread (it already
-   owns registry-affecting signals) or a dedicated low-priority worker.
-
-9. **`referenced_queries` provider lambda in `main.cpp`.** The connection→query parsing is
-   an inline lambda in `setup()`. Promote it to a named free function (e.g.
-   `referenced_queries_from(connection_db_manager_t&)`) so it is independently testable and
-   `setup()` reads at one level of abstraction.
+1. **Shared SQLite wrapper** — `sqlite_db_t` / `sqlite_stmt_t` in [`src/sqlite_db.{hpp,cpp}`](src/sqlite_db.hpp); [`connection_db`](src/connection_db.cpp) and [`device_db`](src/device_db.cpp) refactored onto it (still two connections to the same file, as before).
+2. **Legacy positional stable-id removed** — only `key=value` `compute_device_identity()` remains; `compute_stable_id` / per-peer `stable_id_from_row` deleted; `peer_stable_id` retains `stable_id_is_real_hostname()` only.
+3. **`now_unix()`** — shared in [`src/time_utils.{hpp,cpp}`](src/time_utils.hpp).
+4. **Test fake peer** — `fake_alsa_seq_peer_t` in [`tests/test_fake_peer.{hpp,cpp}`](tests/test_fake_peer.hpp).
+5. **`device_identity_t::find(key)`** — used by registry display names and query matching.
+6. **`device_source_e` wire table** — single `device_source_to_wire` / `device_source_from_wire` in [`device_registry.hpp`](src/device_registry.hpp).
+7. **Registry actor** — `device_registry_t` owns a thread + typed `device_registry_command_t` queue (no `mutex_` on `devices_`).
+8. **Cron thread** — [`cron_tasks_t`](src/cron_tasks.hpp) runs periodic sweeps; stale-device cleanup no longer uses the poller timer.
+9. **`referenced_queries_from()`** — named helper in [`device_registry.cpp`](src/device_registry.cpp); [`main.cpp`](src/main.cpp) provider calls it.

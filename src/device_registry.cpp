@@ -1,35 +1,35 @@
 /**
- * Phase 4: device registry implementation.
+ * Phase 4: device registry actor implementation.
  */
 #include "device_registry.hpp"
 
+#include "connection_db.hpp"
+#include "cron_tasks.hpp"
 #include "device_db.hpp"
 #include "device_identity_from_peer.hpp"
 #include "settings.hpp"
+#include "time_utils.hpp"
 
 #include "rtpmidid/logger.hpp"
+#include "rtpmidid/shutdown_signals.hpp"
 #include <algorithm>
-#include <chrono>
 #include <cstring>
 #include <utility>
+#include <variant>
 
 namespace rtpmididns {
 
 namespace {
 
-int64_t now_unix() {
-  return std::chrono::duration_cast<std::chrono::seconds>(
-             std::chrono::system_clock::now().time_since_epoch())
-      .count();
-}
+thread_local device_registry_t *g_current_registry_thread = nullptr;
 
 std::string display_name_for(const device_identity_t &identity,
                              const std::optional<std::string> &row_name) {
   if (row_name && !row_name->empty())
     return *row_name;
-  for (const auto &f : identity.fields) {
-    if (f.key == "name" || f.key == "client" || f.key == "service")
-      return f.value;
+  for (const char *key : {"name", "client", "service"}) {
+    if (const auto v = identity.find(key))
+      return *v;
   }
   return identity.serialize();
 }
@@ -64,7 +64,40 @@ bool is_stale_discovered(const device_record_t &record,
   return !is_referenced(record.identity, referenced_queries);
 }
 
+void post_reply(const rtpmidid::reply_slot_t &slot, auto &&value) {
+  if (!slot.wants_reply())
+    return;
+  rtpmidid::reply_envelope_t env;
+  env.id = slot.id;
+  env.value = std::forward<decltype(value)>(value);
+  slot.channel->post(std::move(env));
+}
+
 } // namespace
+
+const char *device_source_to_wire(device_source_e source) {
+  switch (source) {
+  case device_source_e::discovered:
+    return "discovered";
+  case device_source_e::ini:
+    return "ini";
+  case device_source_e::manual:
+    return "manual";
+  }
+  return "discovered";
+}
+
+std::optional<device_source_e> device_source_from_wire(const char *wire) {
+  if (!wire)
+    return std::nullopt;
+  if (std::strcmp(wire, "discovered") == 0)
+    return device_source_e::discovered;
+  if (std::strcmp(wire, "ini") == 0)
+    return device_source_e::ini;
+  if (std::strcmp(wire, "manual") == 0)
+    return device_source_e::manual;
+  return std::nullopt;
+}
 
 std::vector<std::string> select_stale_discovered_devices(
     const std::vector<device_record_t> &devices,
@@ -76,6 +109,18 @@ std::vector<std::string> select_stale_discovered_devices(
       stale.push_back(record.identity_key());
   }
   return stale;
+}
+
+std::vector<device_query_t>
+referenced_queries_from(const connection_db_manager_t &conn) {
+  std::vector<device_query_t> out;
+  for (const auto &c : conn.database().list_connections()) {
+    if (auto q = device_query_t::parse(c.side_a))
+      out.push_back(std::move(*q));
+    if (auto q = device_query_t::parse(c.side_b))
+      out.push_back(std::move(*q));
+  }
+  return out;
 }
 
 std::vector<device_identity_t>
@@ -130,6 +175,57 @@ device_registry_t::device_registry_t(std::shared_ptr<midirouter_t> router,
   }
 }
 
+device_registry_t::~device_registry_t() { stop_registry_thread(); }
+
+void device_registry_t::start_registry_thread() {
+  if (registry_running_.exchange(true))
+    return;
+  registry_thread_ = std::thread(&device_registry_t::registry_thread_loop, this);
+}
+
+void device_registry_t::stop_registry_thread() {
+  if (!registry_running_.load())
+    return;
+  if (!queue_.enqueue(device_registry_command_t{shutdown_t{}},
+                      rtpmidid::queue_priority_e::NORMAL)) {
+    registry_running_.store(false);
+    queue_.wake();
+  }
+  if (registry_thread_.joinable())
+    registry_thread_.join();
+}
+
+bool device_registry_t::on_registry_thread() const {
+  return g_current_registry_thread == this;
+}
+
+bool device_registry_t::sync_mode() const { return !registry_running_.load(); }
+
+bool device_registry_t::enqueue(device_registry_command_t &&cmd,
+                                rtpmidid::queue_priority_e prio) {
+  if (!queue_.enqueue(std::move(cmd), prio)) {
+    ERROR("device_registry: queue full");
+    return false;
+  }
+  return true;
+}
+
+void device_registry_t::registry_thread_loop() {
+  rtpmidid::block_shutdown_signals();
+  g_current_registry_thread = this;
+
+  device_registry_command_t cmd;
+  while (registry_running_.load()) {
+    if (queue_.wait_dequeue(cmd))
+      std::visit([this](auto &c) { handle(c); }, cmd);
+  }
+
+  while (queue_.try_dequeue(cmd))
+    std::visit([this](auto &c) { handle(c); }, cmd);
+
+  g_current_registry_thread = nullptr;
+}
+
 void device_registry_t::attach() {
   if (!router_)
     return;
@@ -147,19 +243,99 @@ void device_registry_t::attach() {
       [this](peer_id_t id, midipeer_event_e evt) { on_peer_event(id, evt); });
 }
 
-int device_registry_t::source_priority(device_source_e source) {
-  switch (source) {
-  case device_source_e::manual:
-    return 3;
-  case device_source_e::ini:
-    return 2;
-  case device_source_e::discovered:
-    return 1;
+void device_registry_t::seed_ini(const std::vector<device_identity_t> &devices) {
+  if (sync_mode() || on_registry_thread()) {
+    seed_ini_t cmd{devices};
+    handle(cmd);
+    return;
   }
-  return 0;
+  enqueue(device_registry_command_t{seed_ini_t{devices}},
+          rtpmidid::queue_priority_e::NORMAL);
 }
 
-void device_registry_t::upsert_locked(device_record_t record, bool persist) {
+void device_registry_t::refresh_from_router() {
+  if (sync_mode() || on_registry_thread()) {
+    refresh_from_router_t cmd;
+    handle(cmd);
+    return;
+  }
+  enqueue(device_registry_command_t{refresh_from_router_t{}},
+          rtpmidid::queue_priority_e::NORMAL);
+}
+
+void device_registry_t::add_manual(device_identity_t identity,
+                                   std::string display_name) {
+  add_manual_t cmd{std::move(identity), std::move(display_name)};
+  if (sync_mode() || on_registry_thread()) {
+    handle(cmd);
+    return;
+  }
+  enqueue(device_registry_command_t{std::move(cmd)},
+          rtpmidid::queue_priority_e::NORMAL);
+}
+
+bool device_registry_t::remove_manual(const std::string &identity_key) {
+  return dispatch_query<bool>(
+      remove_manual_t{identity_key, {}},
+      rtpmidid::queue_priority_e::NORMAL,
+      [identity_key](device_registry_t &self) {
+        return self.remove_manual_impl(identity_key);
+      });
+}
+
+std::vector<device_record_t> device_registry_t::list_devices() const {
+  return dispatch_query<std::vector<device_record_t>>(
+      query_list_devices_t{{}}, rtpmidid::queue_priority_e::LOW,
+      [](device_registry_t &self) { return self.list_devices_impl(); });
+}
+
+std::optional<device_record_t>
+device_registry_t::find_by_identity_key(const std::string &key) const {
+  return dispatch_query<std::optional<device_record_t>>(
+      query_find_by_key_t{key, {}},
+      rtpmidid::queue_priority_e::LOW,
+      [key](device_registry_t &self) -> std::optional<device_record_t> {
+        const auto it = self.devices_.find(key);
+        if (it == self.devices_.end())
+          return std::nullopt;
+        return it->second;
+      });
+}
+
+void device_registry_t::set_referenced_queries_provider(
+    referenced_queries_fn provider) {
+  set_referenced_provider_t cmd{std::move(provider)};
+  if (sync_mode() || on_registry_thread()) {
+    handle(cmd);
+    return;
+  }
+  enqueue(device_registry_command_t{std::move(cmd)},
+          rtpmidid::queue_priority_e::NORMAL);
+}
+
+size_t device_registry_t::sweep_stale_discovered(int64_t max_age_seconds) {
+  return dispatch_query<size_t>(
+      sweep_stale_t{max_age_seconds, {}},
+      rtpmidid::queue_priority_e::NORMAL,
+      [max_age_seconds](device_registry_t &self) {
+        return self.sweep_stale_impl(max_age_seconds);
+      });
+}
+
+void schedule_device_registry_cleanup(
+    cron_tasks_t &cron, const std::shared_ptr<device_registry_t> &registry,
+    std::chrono::seconds interval, int64_t max_age_seconds) {
+  cron.add_periodic(
+      "device_registry_sweep", interval,
+      [registry, max_age_seconds]() {
+        if (registry)
+          registry->sweep_stale_discovered(max_age_seconds);
+      });
+}
+
+void device_registry_t::notify_changed() { changed_event(); }
+
+void device_registry_t::upsert_impl(device_record_t record, bool persist) {
   const auto key = record.identity_key();
   const auto now = now_unix();
   if (record.first_seen == 0)
@@ -177,7 +353,7 @@ void device_registry_t::upsert_locked(device_record_t record, bool persist) {
   }
 
   auto &existing = it->second;
-  if (source_priority(record.source) > source_priority(existing.source))
+  if (static_cast<int>(record.source) > static_cast<int>(existing.source))
     existing.source = record.source;
   existing.first_seen = std::min(existing.first_seen, record.first_seen);
   existing.last_seen = std::max(existing.last_seen, record.last_seen);
@@ -191,93 +367,8 @@ void device_registry_t::upsert_locked(device_record_t record, bool persist) {
   notify_changed();
 }
 
-void device_registry_t::notify_changed() { changed_event(); }
-
-void device_registry_t::seed_ini(const std::vector<device_identity_t> &devices) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  for (const auto &identity : devices) {
-    device_record_t rec;
-    rec.identity = identity;
-    rec.source = device_source_e::ini;
-    rec.display_name = display_name_for(identity, std::nullopt);
-    upsert_locked(std::move(rec), true);
-  }
-}
-
-void device_registry_t::refresh_from_router() {
-  if (!router_)
-    return;
-
-  const auto rows = router_->status_rows();
-  std::lock_guard<std::mutex> lock(mutex_);
-  peer_to_identity_.clear();
-  for (const auto &row : rows) {
-    if (!row.id)
-      continue;
-    const auto identity = compute_device_identity(row);
-    if (!identity)
-      continue;
-    const peer_id_t pid = static_cast<peer_id_t>(*row.id);
-    device_record_t rec;
-    rec.identity = *identity;
-    rec.source = device_source_e::discovered;
-    rec.display_name = display_name_for(*identity, row.name);
-    rec.online_peer_id = pid;
-    rec.last_seen = now_unix();
-    peer_to_identity_[pid] = rec.identity_key();
-    upsert_locked(std::move(rec), true);
-  }
-}
-
-void device_registry_t::add_manual(device_identity_t identity,
-                                   std::string display_name) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  device_record_t rec;
-  rec.identity = std::move(identity);
-  rec.source = device_source_e::manual;
-  rec.display_name =
-      display_name.empty()
-          ? display_name_for(rec.identity, std::nullopt)
-          : std::move(display_name);
-  upsert_locked(std::move(rec), true);
-}
-
-bool device_registry_t::remove_manual(const std::string &identity_key) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  const auto it = devices_.find(identity_key);
-  if (it == devices_.end() || it->second.source != device_source_e::manual)
-    return false;
-  devices_.erase(it);
-  if (db_ && db_->is_open())
-    db_->remove(identity_key);
-  notify_changed();
-  return true;
-}
-
-std::vector<device_record_t> device_registry_t::list_devices() const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  std::vector<device_record_t> out;
-  out.reserve(devices_.size());
-  for (const auto &kv : devices_)
-    out.push_back(kv.second);
-  std::sort(out.begin(), out.end(), [](const device_record_t &a,
-                                       const device_record_t &b) {
-    return a.identity_key() < b.identity_key();
-  });
-  return out;
-}
-
-std::optional<device_record_t>
-device_registry_t::find_by_identity_key(const std::string &key) const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  const auto it = devices_.find(key);
-  if (it == devices_.end())
-    return std::nullopt;
-  return it->second;
-}
-
-void device_registry_t::observe_peer(peer_id_t peer_id,
-                                     device_source_e source) {
+void device_registry_t::observe_peer_impl(peer_id_t peer_id,
+                                          device_source_e source) {
   if (!router_)
     return;
   const auto row = status_row_for_peer(*router_, peer_id);
@@ -287,7 +378,6 @@ void device_registry_t::observe_peer(peer_id_t peer_id,
   if (!identity)
     return;
 
-  std::lock_guard<std::mutex> lock(mutex_);
   device_record_t rec;
   rec.identity = *identity;
   rec.source = source;
@@ -295,10 +385,10 @@ void device_registry_t::observe_peer(peer_id_t peer_id,
   rec.online_peer_id = peer_id;
   rec.last_seen = now_unix();
   peer_to_identity_[peer_id] = rec.identity_key();
-  upsert_locked(std::move(rec), true);
+  upsert_impl(std::move(rec), true);
 }
 
-void device_registry_t::mark_offline_locked(peer_id_t peer_id) {
+void device_registry_t::mark_offline_impl(peer_id_t peer_id) {
   const auto mapped = peer_to_identity_.find(peer_id);
   if (mapped == peer_to_identity_.end())
     return;
@@ -313,51 +403,19 @@ void device_registry_t::mark_offline_locked(peer_id_t peer_id) {
   notify_changed();
 }
 
-void device_registry_t::on_connected(peer_id_t /*from*/, peer_id_t /*to*/) {}
-
-void device_registry_t::on_disconnected(peer_id_t /*from*/, peer_id_t /*to*/) {}
-
-void device_registry_t::on_peer_added(peer_id_t peer_id) {
-  observe_peer(peer_id, device_source_e::discovered);
-}
-
-void device_registry_t::on_peer_removed(peer_id_t peer_id) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  mark_offline_locked(peer_id);
-}
-
-void device_registry_t::on_peer_event(peer_id_t peer_id, midipeer_event_e evt) {
-  if (evt == midipeer_event_e::CONNECTED_PEER)
-    observe_peer(peer_id, device_source_e::discovered);
-}
-
-void device_registry_t::set_referenced_queries_provider(
-    referenced_queries_fn provider) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  referenced_queries_provider_ = std::move(provider);
-}
-
-size_t device_registry_t::sweep_stale_discovered(int64_t max_age_seconds) {
-  // Gather referenced queries without holding mutex_ (the provider reads the
-  // connection DB, which has its own lock).
-  referenced_queries_fn provider;
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    provider = referenced_queries_provider_;
-  }
+size_t device_registry_t::sweep_stale_impl(int64_t max_age_seconds) {
   std::vector<device_query_t> referenced;
-  if (provider)
-    referenced = provider();
+  if (referenced_queries_provider_)
+    referenced = referenced_queries_provider_();
 
   const int64_t cutoff = now_unix() - max_age_seconds;
-
-  std::lock_guard<std::mutex> lock(mutex_);
   std::vector<device_record_t> snapshot;
   snapshot.reserve(devices_.size());
   for (const auto &kv : devices_)
     snapshot.push_back(kv.second);
 
-  const auto stale = select_stale_discovered_devices(snapshot, referenced, cutoff);
+  const auto stale =
+      select_stale_discovered_devices(snapshot, referenced, cutoff);
   for (const auto &key : stale) {
     devices_.erase(key);
     if (db_ && db_->is_open())
@@ -370,22 +428,136 @@ size_t device_registry_t::sweep_stale_discovered(int64_t max_age_seconds) {
   return stale.size();
 }
 
-void device_registry_t::start_periodic_cleanup(std::chrono::seconds interval,
-                                               int64_t max_age_seconds) {
-  cleanup_interval_ = interval;
-  cleanup_max_age_seconds_ = max_age_seconds;
-  schedule_cleanup();
+bool device_registry_t::remove_manual_impl(const std::string &identity_key) {
+  const auto it = devices_.find(identity_key);
+  if (it == devices_.end() || it->second.source != device_source_e::manual)
+    return false;
+  devices_.erase(it);
+  if (db_ && db_->is_open())
+    db_->remove(identity_key);
+  notify_changed();
+  return true;
 }
 
-void device_registry_t::schedule_cleanup() {
-  if (cleanup_interval_.count() <= 0)
+std::vector<device_record_t> device_registry_t::list_devices_impl() {
+  std::vector<device_record_t> out;
+  out.reserve(devices_.size());
+  for (const auto &kv : devices_)
+    out.push_back(kv.second);
+  std::sort(out.begin(), out.end(), [](const device_record_t &a,
+                                       const device_record_t &b) {
+    return a.identity_key() < b.identity_key();
+  });
+  return out;
+}
+
+void device_registry_t::handle(seed_ini_t &cmd) {
+  for (const auto &identity : cmd.devices) {
+    device_record_t rec;
+    rec.identity = identity;
+    rec.source = device_source_e::ini;
+    rec.display_name = display_name_for(identity, std::nullopt);
+    upsert_impl(std::move(rec), true);
+  }
+}
+
+void device_registry_t::handle(observe_peer_t &cmd) {
+  observe_peer_impl(cmd.peer_id, cmd.source);
+}
+
+void device_registry_t::handle(mark_offline_t &cmd) {
+  mark_offline_impl(cmd.peer_id);
+}
+
+void device_registry_t::handle(add_manual_t &cmd) {
+  device_record_t rec;
+  rec.identity = std::move(cmd.identity);
+  rec.source = device_source_e::manual;
+  rec.display_name =
+      cmd.display_name.empty()
+          ? display_name_for(rec.identity, std::nullopt)
+          : std::move(cmd.display_name);
+  upsert_impl(std::move(rec), true);
+}
+
+void device_registry_t::handle(remove_manual_t &cmd) {
+  post_reply(cmd.reply, remove_manual_impl(cmd.identity_key));
+}
+
+void device_registry_t::handle(refresh_from_router_t &) {
+  if (!router_)
     return;
-  cleanup_timer_ = rtpmidid::poller.add_timer_event(
-      std::chrono::duration_cast<std::chrono::milliseconds>(cleanup_interval_),
-      [this]() {
-        sweep_stale_discovered(cleanup_max_age_seconds_);
-        schedule_cleanup();
-      });
+
+  peer_to_identity_.clear();
+  for (const auto &row : router_->status_rows()) {
+    if (!row.id)
+      continue;
+    const auto identity = compute_device_identity(row);
+    if (!identity)
+      continue;
+    const peer_id_t pid = static_cast<peer_id_t>(*row.id);
+    device_record_t rec;
+    rec.identity = *identity;
+    rec.source = device_source_e::discovered;
+    rec.display_name = display_name_for(*identity, row.name);
+    rec.online_peer_id = pid;
+    rec.last_seen = now_unix();
+    peer_to_identity_[pid] = rec.identity_key();
+    upsert_impl(std::move(rec), true);
+  }
+}
+
+void device_registry_t::handle(sweep_stale_t &cmd) {
+  const size_t pruned = sweep_stale_impl(cmd.max_age_seconds);
+  post_reply(cmd.reply, pruned);
+}
+
+void device_registry_t::handle(set_referenced_provider_t &cmd) {
+  referenced_queries_provider_ = std::move(cmd.provider);
+}
+
+void device_registry_t::handle(query_list_devices_t &cmd) {
+  post_reply(cmd.reply, list_devices_impl());
+}
+
+void device_registry_t::handle(query_find_by_key_t &cmd) {
+  std::optional<device_record_t> out;
+  const auto it = devices_.find(cmd.identity_key);
+  if (it != devices_.end())
+    out = it->second;
+  post_reply(cmd.reply, std::move(out));
+}
+
+void device_registry_t::handle(shutdown_t &) {
+  registry_running_.store(false);
+}
+
+void device_registry_t::on_connected(peer_id_t /*from*/, peer_id_t /*to*/) {}
+
+void device_registry_t::on_disconnected(peer_id_t /*from*/, peer_id_t /*to*/) {}
+
+void device_registry_t::on_peer_added(peer_id_t peer_id) {
+  if (sync_mode() || on_registry_thread()) {
+    observe_peer_impl(peer_id, device_source_e::discovered);
+    return;
+  }
+  enqueue(device_registry_command_t{observe_peer_t{
+              peer_id, device_source_e::discovered}},
+          rtpmidid::queue_priority_e::NORMAL);
+}
+
+void device_registry_t::on_peer_removed(peer_id_t peer_id) {
+  if (sync_mode() || on_registry_thread()) {
+    mark_offline_impl(peer_id);
+    return;
+  }
+  enqueue(device_registry_command_t{mark_offline_t{peer_id}},
+          rtpmidid::queue_priority_e::NORMAL);
+}
+
+void device_registry_t::on_peer_event(peer_id_t peer_id, midipeer_event_e evt) {
+  if (evt == midipeer_event_e::CONNECTED_PEER)
+    on_peer_added(peer_id);
 }
 
 } // namespace rtpmididns

@@ -17,7 +17,6 @@
  */
 
 #include "peer_device_alsa_seq.hpp"
-#include "peer_stable_id.hpp"
 #include "aseq.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
@@ -135,23 +134,4 @@ router_peer_row_t peer_device_alsa_seq_t::status() const {
     row.alsa_subscribe_from = s;
   }
   return row;
-}
-
-std::optional<std::string>
-peer_device_alsa_seq_t::stable_id_from_row(const router_peer_row_t &row) {
-  const std::string peer_name =
-      row.name && !row.name->empty() ? *row.name : std::string();
-  if (row.alsa_subscribe_from) {
-    const auto &s = *row.alsa_subscribe_from;
-    const auto sid = make_stable_id("alsa", {s.client_name, s.port_name});
-    if (sid)
-      return sid;
-  }
-  if (!peer_name.empty())
-    return make_stable_id("alsa_local", {peer_name});
-  return std::nullopt;
-}
-
-std::optional<std::string> peer_device_alsa_seq_t::compute_stable_id_impl() const {
-  return stable_id_from_row(status());
 }

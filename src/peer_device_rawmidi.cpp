@@ -29,8 +29,6 @@
 #include <unistd.h>
 
 #include "peer_device_rawmidi.hpp"
-#include "peer_stable_id.hpp"
-#include "peer_stable_id.hpp"
 #include "mididata.hpp"
 #include "midirouter.hpp"
 #include "stringpp.hpp"
@@ -255,19 +253,6 @@ std::vector<rawmidi_device_row_t> enumerate_rawmidi_devices() {
   return arr;
 }
 
-std::optional<std::string>
-peer_device_rawmidi_t::stable_id_from_row(const router_peer_row_t &row) {
-  const std::string peer_name =
-      row.name && !row.name->empty() ? *row.name : std::string();
-  if (row.device && !row.device->empty())
-    return make_stable_id("rawmidi", {*row.device});
-  if (!peer_name.empty())
-    return make_stable_id("rawmidi_named", {peer_name});
-  return std::nullopt;
-}
 
-std::optional<std::string> peer_device_rawmidi_t::compute_stable_id_impl() const {
-  return stable_id_from_row(status());
-}
 
 } // namespace rtpmididns

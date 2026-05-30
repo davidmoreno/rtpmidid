@@ -183,6 +183,14 @@ std::string device_identity_t::serialize() const {
   return out;
 }
 
+std::optional<std::string> device_identity_t::find(std::string_view key) const {
+  for (const auto &f : fields) {
+    if (f.key == key)
+      return f.value;
+  }
+  return std::nullopt;
+}
+
 bool device_identity_t::operator==(const device_identity_t &o) const {
   return type_prefix == o.type_prefix && fields == o.fields;
 }

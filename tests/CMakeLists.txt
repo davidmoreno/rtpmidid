@@ -56,7 +56,7 @@ add_test(NAME test_signals COMMAND test_signals)
 
 if (NOT LIBS_ONLY)
   add_executable(test_connection_db
-      test_connection_db.cpp test_utils.cpp
+      test_connection_db.cpp test_utils.cpp test_fake_peer.cpp
   )
   target_link_libraries(test_connection_db -pthread rtpmidid-shared rtpmidid2-static)
   add_test(NAME test_connection_db COMMAND test_connection_db)
@@ -85,7 +85,7 @@ endif (NOT LIBS_ONLY)
 
 if (NOT LIBS_ONLY)
   add_executable(test_device_registry
-      test_device_registry.cpp test_utils.cpp
+      test_device_registry.cpp test_utils.cpp test_fake_peer.cpp
   )
   target_link_libraries(test_device_registry -pthread rtpmidid-shared rtpmidid2-static)
   add_test(NAME test_device_registry COMMAND test_device_registry)

@@ -114,6 +114,8 @@ The daemon is **multi-threaded** with a **Linux epoll** main loop (`rtpmidid::po
 | **Per peer** | One `std::thread` per `midipeer_t`; drains its own `priority_mpsc_queue<peer_command_t>`; runs `send_midi()` (ALSA / network) plus state queries | `src/midipeer.cpp` |
 | **DNS worker** | Blocking `getaddrinfo`; wakes poller via `eventfd` | `lib/dns_resolver.cpp`, `include/rtpmidid/dns_resolver.hpp` |
 | **Control socket** | Dedicated thread; `poll()` + blocking `accept`/`recv`/`write` on Unix socket | `src/control_socket.cpp` |
+| **Device registry** | Actor thread; drains `device_registry_command_t` (NORMAL mutations / LOW reads); owns `devices_` map | `src/device_registry.cpp` |
+| **Cron tasks** | Low-priority periodic work (e.g. stale-device sweep); not on poller/MIDI paths | `src/cron_tasks.cpp` |
 | **Logger** | Drains lock-free log queue | `lib/logger.cpp` |
 
 Shutdown: `main_t::close()` calls `rtpmidid::dns_resolver_shutdown()` **before** stopping router/peer threads so the DNS worker exits cleanly while `poller` is still valid.

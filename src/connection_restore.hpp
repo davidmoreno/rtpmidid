@@ -17,7 +17,6 @@ namespace rtpmididns {
 struct online_device_t {
   peer_id_t peer_id = 0;
   device_identity_t identity;
-  std::optional<std::string> legacy_stable_id;
 };
 
 struct connect_action_t {

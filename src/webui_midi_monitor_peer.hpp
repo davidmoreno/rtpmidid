@@ -25,7 +25,6 @@ public:
                              std::string display_name);
 
   const char *get_type() const override;
-  std::optional<std::string> compute_stable_id() const override;
   router_peer_row_t status() const override;
   void send_midi(midipeer_id_t from, const mididata_t &data) override;
 

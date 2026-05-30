@@ -24,7 +24,6 @@
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "peer_export_rtpmidi_server.hpp"
-#include "peer_stable_id.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/logger.hpp"
 #include <alsa/seqmid.h>
@@ -194,20 +193,6 @@ router_peer_row_t peer_export_alsa_network_t::status() const {
   row.name = name;
   row.connections = std::move(connections);
   return row;
-}
-
-std::optional<std::string>
-peer_export_alsa_network_t::stable_id_from_row(const router_peer_row_t &row) {
-  const std::string peer_name =
-      row.name && !row.name->empty() ? *row.name : std::string();
-  if (peer_name.empty())
-    return std::nullopt;
-  return make_stable_id("alsa_multi", {peer_name});
-}
-
-std::optional<std::string>
-peer_export_alsa_network_t::compute_stable_id_impl() const {
-  return stable_id_from_row(status());
 }
 
 } // namespace rtpmididns

@@ -17,26 +17,26 @@
  */
 #pragma once
 
-#include <chrono>
-#include <functional>
+#include "../src/midipeer.hpp"
+
 #include <string>
-#include <vector>
 
-#include <rtpmidid/iobytes.hpp>
+namespace rtpmididns {
 
-class test_client_t {
+/** Configurable ALSA-seq peer for registry/connection_db tests. */
+class fake_alsa_seq_peer_t : public midipeer_t {
 public:
-  int sockfd;
-  int local_port;
-  int remote_port;
-  // UDP connection to this "localhost":port
-  test_client_t(int local_port, int remote_port);
-  void send(rtpmidid::io_bytes_reader &&data);
-  void recv(rtpmidid::io_bytes_reader &&data);
+  fake_alsa_seq_peer_t(std::string name, std::string client = "Peak",
+                       std::string port = "In");
+
+  void send_midi(midipeer_id_t /*from*/, const mididata_t &) override {}
+  const char *get_type() const override;
+  router_peer_row_t status() const override;
+
+private:
+  std::string name_;
+  std::string client_;
+  std::string port_;
 };
 
-rtpmidid::io_bytes_managed hex_to_bin(const std::string &str);
-void poller_wait_for(std::chrono::milliseconds ms);
-void poller_wait_until(
-    const std::function<bool(void)> &f,
-    std::chrono::milliseconds ms = std::chrono::milliseconds(500));
+} // namespace rtpmididns

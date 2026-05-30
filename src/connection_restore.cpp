@@ -32,10 +32,7 @@ std::vector<size_t> match_side_to_devices(
   }
 
   for (size_t i = 0; i < online.size(); ++i) {
-    const auto key = online[i].identity.serialize();
-    if (key == side)
-      append_unique(matches, i);
-    else if (online[i].legacy_stable_id && *online[i].legacy_stable_id == side)
+    if (online[i].identity.serialize() == side)
       append_unique(matches, i);
   }
   return matches;

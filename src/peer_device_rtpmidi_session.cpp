@@ -70,23 +70,4 @@ router_peer_row_t peer_device_rtpmidi_session_t::status() const {
   return row;
 }
 
-std::optional<std::string>
-peer_device_rtpmidi_session_t::stable_id_from_row(const router_peer_row_t &row) {
-  const std::string peer_name =
-      row.name && !row.name->empty() ? *row.name : std::string();
-  if (row.peer && !row.peer->remote.name.empty() &&
-      stable_id_is_real_hostname(row.peer->remote.hostname)) {
-    return make_stable_id(
-        "rtpmidi_in", {row.peer->remote.hostname, row.peer->remote.name});
-  }
-  if (!peer_name.empty())
-    return make_stable_id("rtpmidi_in_named", {peer_name});
-  return std::nullopt;
-}
-
-std::optional<std::string>
-peer_device_rtpmidi_session_t::compute_stable_id_impl() const {
-  return stable_id_from_row(status());
-}
-
 } // namespace rtpmididns

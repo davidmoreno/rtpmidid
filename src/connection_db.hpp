@@ -10,6 +10,7 @@
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/signal.hpp"
+#include "sqlite_db.hpp"
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -18,18 +19,7 @@
 #include <utility>
 #include <vector>
 
-#include <sqlite3.h>
-
 namespace rtpmididns {
-
-struct sqlite3_deleter {
-  void operator()(sqlite3 *db) const noexcept {
-    if (db != nullptr)
-      sqlite3_close(db);
-  }
-};
-
-using sqlite3_db = std::unique_ptr<sqlite3, sqlite3_deleter>;
 
 enum class connection_direction_e { a2b, b2a, both };
 
@@ -53,13 +43,6 @@ struct connection_pair_t {
   std::string side_b;
 };
 
-/** Stable endpoint key for a peer status row (legacy positional id). */
-std::optional<std::string> compute_stable_id(const router_peer_row_t &row);
-
-std::optional<peer_id_t>
-find_peer_id_for_stable_id(const std::vector<router_peer_row_t> &rows,
-                           const std::string &stable_id);
-
 class connection_db_t {
   NON_COPYABLE_NOR_MOVABLE(connection_db_t)
 
@@ -67,7 +50,7 @@ public:
   explicit connection_db_t(std::string path);
   ~connection_db_t() = default;
 
-  bool is_open() const { return db_ != nullptr; }
+  bool is_open() const { return db_.is_open(); }
 
   void save_connection(const stored_connection_t &connection);
   void remove_connection(const std::string &side_a, const std::string &side_b);
@@ -80,8 +63,7 @@ public:
   std::vector<connection_pair_t> get_connections() const;
 
 private:
-  sqlite3_db db_;
-  mutable std::mutex mutex_;
+  sqlite_db_t db_;
 
   void migrate_schema();
   static std::pair<std::string, std::string> normalize_sides(std::string a,
@@ -132,7 +114,6 @@ private:
   std::vector<pending_pair_t> pending_records_;
 
   std::vector<online_device_t> collect_online_devices() const;
-  std::optional<std::string> stable_id_for_peer(peer_id_t peer_id) const;
   std::optional<device_identity_t>
   device_identity_for_peer(peer_id_t peer_id) const;
 

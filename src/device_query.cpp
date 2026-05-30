@@ -7,20 +7,6 @@
 
 namespace rtpmididns {
 
-namespace {
-
-const device_identity_field_t *
-find_field(const device_identity_t &identity, const std::string &key) {
-  const auto it = std::find_if(
-      identity.fields.begin(), identity.fields.end(),
-      [&](const device_identity_field_t &f) { return f.key == key; });
-  if (it == identity.fields.end())
-    return nullptr;
-  return &*it;
-}
-
-} // namespace
-
 std::optional<device_query_t> device_query_t::parse(std::string_view text) {
   const auto identity = device_identity_t::parse(text);
   if (!identity)
@@ -40,8 +26,8 @@ bool device_query_t::matches(const device_identity_t &identity) const {
     if (qf.bracketed)
       continue;
 
-    const auto *match = find_field(identity, qf.key);
-    if (!match || match->value != qf.value)
+    const auto value = identity.find(qf.key);
+    if (!value || *value != qf.value)
       return false;
   }
   return true;

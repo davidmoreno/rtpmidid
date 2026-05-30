@@ -1,6 +1,7 @@
 /**
  * Phase 1: peer_kind mapping and factory get_type() consistency.
  */
+#include "../src/device_identity_from_peer.hpp"
 #include "../src/factory.hpp"
 #include "../src/midipeer.hpp"
 #include "../src/peer_kind.hpp"
@@ -93,11 +94,13 @@ void test_peer_kind_rpc_create_keys() {
   ASSERT_FALSE(peer_kind_rpc_create_key(peer_kind_e::import_rtpmidi).has_value());
 }
 
-void test_factory_export_rtpmidi_server_stable_id() {
+void test_factory_export_rtpmidi_server_device_identity() {
   auto peer = make_peer_export_rtpmidi_server("factory-test", "50211");
-  const auto sid = peer->compute_stable_id();
-  ASSERT_TRUE(sid.has_value());
-  ASSERT_EQUAL(*sid, std::string("rtpmidi_server:factory-test"));
+  router_peer_row_t row = peer->status();
+  row.type = peer->get_type();
+  const auto id = compute_device_identity(row);
+  ASSERT_TRUE(id.has_value());
+  ASSERT_TRUE(id->serialize().find("rtpmidi_server:name=factory-test") == 0);
 }
 
 int main(int argc, char **argv) {
@@ -106,7 +109,7 @@ int main(int argc, char **argv) {
       TEST(test_peer_kind_identity_prefixes),
       TEST(test_peer_kind_classification_flags),
       TEST(test_factory_export_rtpmidi_server_type),
-      TEST(test_factory_export_rtpmidi_server_stable_id),
+      TEST(test_factory_export_rtpmidi_server_device_identity),
       TEST(test_factory_rtpmidi_client_type),
       TEST(test_peer_kind_rpc_create_keys),
   };

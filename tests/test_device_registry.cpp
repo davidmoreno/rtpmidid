@@ -10,6 +10,8 @@
 #include "../src/midirouter.hpp"
 #include "../src/peer_kind.hpp"
 #include "test_case.hpp"
+#include "test_fake_peer.hpp"
+#include "test_utils.hpp"
 #include <memory>
 #include <rtpmidid/mdns_rtpmidi.hpp>
 #include <string>
@@ -21,27 +23,6 @@ std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 } // namespace rtpmididns
 
 namespace {
-
-class test_midiio_t : public midipeer_t {
-public:
-  explicit test_midiio_t(std::string peer_name) : name_(std::move(peer_name)) {}
-
-  void send_midi(midipeer_id_t /*from*/, const mididata_t &) override {}
-  const char *get_type() const override { return peer_kind_wire_type(peer_kind_e::device_alsa_seq); }
-  router_peer_row_t status() const override {
-    router_peer_row_t row;
-    row.type = get_type();
-    row.name = name_;
-    alsa_subscribe_from_t sub;
-    sub.client_name = "Peak";
-    sub.port_name = "In";
-    row.alsa_subscribe_from = sub;
-    return row;
-  }
-
-private:
-  std::string name_;
-};
 
 device_record_t make_record(const std::string &identity_key,
                             device_source_e source, int64_t last_seen,
@@ -140,7 +121,7 @@ void test_registry_peer_appears_online() {
   device_registry_t registry(router);
   registry.attach();
 
-  auto peer = std::make_shared<test_midiio_t>("peak-in");
+  auto peer = std::make_shared<fake_alsa_seq_peer_t>("peak-in");
   const auto peer_id = router->add_peer(peer);
 
   const auto rec = registry.find_by_identity_key("alsa_seq:client=Peak,port=In");
@@ -155,7 +136,7 @@ void test_registry_peer_removed_offline_still_listed() {
   device_registry_t registry(router);
   registry.attach();
 
-  auto peer = std::make_shared<test_midiio_t>("peak-in");
+  auto peer = std::make_shared<fake_alsa_seq_peer_t>("peak-in");
   router->add_peer(peer);
   const std::string key = "alsa_seq:client=Peak,port=In";
 
@@ -174,7 +155,7 @@ void test_registry_merge_ini_manual_discovered() {
   const std::string key = "alsa_seq:client=Peak,port=In";
   registry.seed_ini({*device_identity_t::parse(key)});
 
-  auto peer = std::make_shared<test_midiio_t>("peak-in");
+  auto peer = std::make_shared<fake_alsa_seq_peer_t>("peak-in");
   router->add_peer(peer);
 
   auto rec = registry.find_by_identity_key(key);

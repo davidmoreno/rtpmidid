@@ -411,39 +411,6 @@ static std::string random_uuid_v4() {
  *   as sources only — previously only incoming edges were teed, so keyboard /
  *   RTP-export peers often had no matching edges).
  */
-static std::string escape_stable_component(std::string s) {
-  for (char &c : s) {
-    if (c == ':')
-      c = '|';
-  }
-  return s;
-}
-
-static std::string build_stable_id(std::string prefix,
-                                   const std::vector<std::string> &parts) {
-  std::string out = std::move(prefix);
-  for (const auto &p : parts) {
-    out += ':';
-    out += escape_stable_component(p);
-  }
-  return out;
-}
-
-static bool is_alsa_numeric_endpoint(std::string_view s) {
-  if (!std::startswith(s, "alsa:"))
-    return false;
-  const auto rest = s.substr(5);
-  const auto pos = rest.find(':');
-  if (pos == std::string::npos)
-    return false;
-  const auto is_digits = [](std::string_view x) {
-    return !x.empty() &&
-           std::all_of(x.begin(), x.end(),
-                       [](char c) { return c >= '0' && c <= '9'; });
-  };
-  return is_digits(rest.substr(0, pos)) && is_digits(rest.substr(pos + 1));
-}
-
 static std::vector<online_device_t>
 online_devices_snapshot(const control_rpc_context_t &ctx) {
   std::vector<online_device_t> out;
@@ -456,7 +423,6 @@ online_devices_snapshot(const control_rpc_context_t &ctx) {
     online_device_t device;
     device.peer_id = static_cast<peer_id_t>(*row.id);
     device.identity = *identity;
-    device.legacy_stable_id = compute_stable_id(row);
     out.push_back(std::move(device));
   }
   return out;
@@ -507,10 +473,6 @@ identity_from_rtpmidi_remote(const std::string &hostname,
 }
 
 static std::optional<std::string>
-resolve_side_to_stable_id(control_rpc_context_t &ctx, const std::string &side,
-                          const std::vector<router_peer_row_t> &rows);
-
-static std::optional<std::string>
 resolve_side_to_connection_side(control_rpc_context_t &ctx,
                                 const std::string &side,
                                 const std::vector<router_peer_row_t> &rows) {
@@ -524,13 +486,10 @@ resolve_side_to_connection_side(control_rpc_context_t &ctx,
         if (!r.id || static_cast<uint64_t>(*r.id) != eid.peer_id)
           continue;
         const auto did = compute_device_identity(r);
-        if (did)
-          return did->serialize();
-        const auto sid = compute_stable_id(r);
-        if (!sid)
+        if (!did)
           throw std::runtime_error(
-              FMT::format("Peer {} has no stable id yet", eid.peer_id));
-        return sid;
+              FMT::format("Peer {} has no device identity yet", eid.peer_id));
+        return did->serialize();
       }
       throw std::runtime_error(FMT::format("Unknown peer {}", eid.peer_id));
     }
@@ -543,14 +502,14 @@ resolve_side_to_connection_side(control_rpc_context_t &ctx,
         throw std::runtime_error("Could not resolve ALSA client/port names");
       if (auto id = identity_from_alsa_names(cn, pn))
         return id;
-      return build_stable_id("alsa", {cn, pn});
+      throw std::runtime_error("Could not build ALSA device identity");
     }
     if (eid.kind == endpoint_kind_e::RAW) {
       if (eid.device.empty())
         throw std::runtime_error("Empty raw MIDI device");
       if (auto id = identity_from_raw_device(eid.device))
         return id;
-      return build_stable_id("rawmidi", {eid.device});
+      throw std::runtime_error("Could not build raw MIDI device identity");
     }
     if (eid.kind == endpoint_kind_e::MDNS) {
       const auto hp =
@@ -559,7 +518,7 @@ resolve_side_to_connection_side(control_rpc_context_t &ctx,
         throw std::runtime_error("Could not resolve mDNS service");
       if (auto id = identity_from_rtpmidi_remote(hp.first, eid.mdns_name))
         return id;
-      return build_stable_id("rtpmidi", {hp.first, eid.mdns_name});
+      throw std::runtime_error("Could not build RTP-MIDI device identity");
     }
     if (eid.kind == endpoint_kind_e::HOST) {
       const auto found = find_peer_for_host(rows, eid.hostname, eid.hostport);
@@ -568,8 +527,6 @@ resolve_side_to_connection_side(control_rpc_context_t &ctx,
           if (r.id && static_cast<peer_id_t>(*r.id) == *found) {
             if (const auto did = compute_device_identity(r))
               return did->serialize();
-            if (const auto sid = compute_stable_id(r))
-              return sid;
             break;
           }
         }
@@ -578,112 +535,13 @@ resolve_side_to_connection_side(control_rpc_context_t &ctx,
         throw std::runtime_error("Empty hostname");
       if (auto id = identity_from_rtpmidi_remote(eid.hostname, eid.hostname))
         return id;
-      return build_stable_id("rtpmidi", {eid.hostname, eid.hostname});
+      throw std::runtime_error("Could not build RTP-MIDI device identity");
     }
     throw std::runtime_error("Unknown endpoint kind");
-  }
-
-  return resolve_side_to_stable_id(ctx, side, rows);
-}
-
-static std::string device_source_wire(device_source_e source) {
-  switch (source) {
-  case device_source_e::discovered:
-    return "discovered";
-  case device_source_e::ini:
-    return "ini";
-  case device_source_e::manual:
-    return "manual";
-  }
-  return "discovered";
-}
-
-static std::optional<std::string>
-resolve_side_to_stable_id(control_rpc_context_t &ctx, const std::string &side,
-                          const std::vector<router_peer_row_t> &rows) {
-  endpoint_id_t eid{};
-  if (parse_endpoint_id(side, eid)) {
-    if (eid.kind == endpoint_kind_e::PEER) {
-      for (const auto &r : rows) {
-        if (!r.id || static_cast<uint64_t>(*r.id) != eid.peer_id)
-          continue;
-        const auto sid = compute_stable_id(r);
-        if (!sid)
-          throw std::runtime_error(
-              FMT::format("Peer {} has no stable id yet", eid.peer_id));
-        return sid;
-      }
-      throw std::runtime_error(FMT::format("Unknown peer {}", eid.peer_id));
-    }
-    if (eid.kind == endpoint_kind_e::ALSA) {
-      if (!ctx.aseq)
-        throw std::runtime_error("ALSA sequencer not available");
-      const auto cn = ctx.aseq->get_client_name_by_id(eid.client);
-      const auto pn = ctx.aseq->get_port_name(eid.client, eid.port);
-      if (cn.empty() || pn.empty())
-        throw std::runtime_error("Could not resolve ALSA client/port names");
-      return build_stable_id("alsa", {cn, pn});
-    }
-    if (eid.kind == endpoint_kind_e::RAW) {
-      if (eid.device.empty())
-        throw std::runtime_error("Empty raw MIDI device");
-      return build_stable_id("rawmidi", {eid.device});
-    }
-    if (eid.kind == endpoint_kind_e::MDNS) {
-      const auto hp =
-          mdns_resolve_to_hostport(ctx.mdns, eid.mdns_name, eid.mdns_port);
-      if (hp.first.empty() || eid.mdns_name.empty())
-        throw std::runtime_error("Could not resolve mDNS service");
-      return build_stable_id("rtpmidi", {hp.first, eid.mdns_name});
-    }
-    if (eid.kind == endpoint_kind_e::HOST) {
-      const auto found = find_peer_for_host(rows, eid.hostname, eid.hostport);
-      if (found && *found != 0) {
-        for (const auto &r : rows) {
-          if (r.id && static_cast<peer_id_t>(*r.id) == *found) {
-            const auto sid = compute_stable_id(r);
-            if (sid)
-              return sid;
-            break;
-          }
-        }
-      }
-      if (eid.hostname.empty())
-        throw std::runtime_error("Empty hostname");
-      return build_stable_id("rtpmidi", {eid.hostname, eid.hostname});
-    }
-    throw std::runtime_error("Unknown endpoint kind");
-  }
-
-  /* Accept any well-formed stable id of the form `<prefix>:<rest>` where
-     <prefix> is `[a-z][a-z0-9_]*` and <rest> is non-empty. This intentionally
-     replaces the previous hardcoded allowlist of known prefixes - we keep
-     adding new ones in compute_stable_id (alsa_local, rawmidi_named,
-     rtpmidi_client_named, rtpmidi_in_named, alsa_listener_named, plus a
-     generic `<short_type>:<peer_name>` last-resort), and the allowlist kept
-     drifting out of sync. The `is_alsa_numeric_endpoint` exclusion stays so
-     `alsa:128:0` is still routed through parse_endpoint_id above. */
-  if (!is_alsa_numeric_endpoint(side)) {
-    const auto colon = side.find(':');
-    if (colon != std::string::npos && colon > 0 && colon + 1 < side.size()) {
-      bool prefix_ok = true;
-      for (size_t i = 0; i < colon; i++) {
-        const char c = side[i];
-        const bool ok =
-            (c >= 'a' && c <= 'z') ||
-            (i > 0 && ((c >= '0' && c <= '9') || c == '_'));
-        if (!ok) {
-          prefix_ok = false;
-          break;
-        }
-      }
-      if (prefix_ok)
-        return side;
-    }
   }
 
   throw std::runtime_error(
-      FMT::format("Could not resolve stable id for side '{}'", side));
+      FMT::format("Could not resolve device identity for side '{}'", side));
 }
 
 static void maybe_persist_direct_endpoint_connection(
@@ -1063,7 +921,7 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
               row.name = f.value;
           }
         }
-        row.source = device_source_wire(d.source);
+        row.source = device_source_to_wire(d.source);
         row.first_seen = d.first_seen;
         row.last_seen = d.last_seen;
         row.online = d.online() ? 1 : 0;

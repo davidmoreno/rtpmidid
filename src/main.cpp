@@ -19,6 +19,7 @@
 #include "argv.hpp"
 #include "aseq.hpp"
 #include "connection_db.hpp"
+#include "cron_tasks.hpp"
 #include "device_db.hpp"
 #include "device_registry.hpp"
 #include "control_socket.hpp"
@@ -130,6 +131,7 @@ protected:
   rtpmididns::web_server_t web;
   std::shared_ptr<rtpmididns::connection_db_manager_t> connection_db;
   std::shared_ptr<rtpmididns::device_registry_t> device_registry;
+  rtpmididns::cron_tasks_t cron_tasks;
 
 public:
   // I want setup inside a try catch (and survive it), so I need a setup method
@@ -181,20 +183,14 @@ public:
             connection_db;
         device_registry->set_referenced_queries_provider(
             [conn_weak]() -> std::vector<rtpmididns::device_query_t> {
-              std::vector<rtpmididns::device_query_t> out;
               auto conn = conn_weak.lock();
               if (!conn)
-                return out;
-              for (const auto &c : conn->database().list_connections()) {
-                if (auto q = rtpmididns::device_query_t::parse(c.side_a))
-                  out.push_back(std::move(*q));
-                if (auto q = rtpmididns::device_query_t::parse(c.side_b))
-                  out.push_back(std::move(*q));
-              }
-              return out;
+                return {};
+              return rtpmididns::referenced_queries_from(*conn);
             });
-        device_registry->start_periodic_cleanup(
-            std::chrono::hours(24), rtpmididns::kDefaultStaleDeviceSeconds);
+        rtpmididns::schedule_device_registry_cleanup(
+            cron_tasks, device_registry, std::chrono::hours(24),
+            rtpmididns::kDefaultStaleDeviceSeconds);
       }
     }
 
@@ -213,6 +209,10 @@ public:
   }
   
   void setup_threading() {
+    if (device_registry)
+      device_registry->start_registry_thread();
+    cron_tasks.start();
+
     // Start router thread first; once running, add_peer auto-starts each peer's
     // thread, but we still need to start the threads of peers that were added
     // during synchronous setup (before the router thread existed).
@@ -231,6 +231,9 @@ public:
     INFO("Shutting down: stopping web server");
     web.stop();
 
+    INFO("Shutting down: stopping cron tasks");
+    cron_tasks.stop();
+
     INFO("Shutting down: stopping DNS resolver");
     rtpmidid::dns_resolver_shutdown();
 
@@ -242,6 +245,11 @@ public:
 
     INFO("Shutting down: dropping hw auto-announce");
     hwautoannounce.reset();
+
+    if (device_registry) {
+      INFO("Shutting down: stopping device registry thread");
+      device_registry->stop_registry_thread();
+    }
 
     if (router) {
       INFO("Shutting down: stopping peer threads");

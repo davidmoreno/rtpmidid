@@ -82,14 +82,11 @@ public:
                             ::rtpmididns::dmjson::writer_t &out,
                             std::string &out_error) override;
 
-  static std::optional<std::string>
-  stable_id_from_row(const router_peer_row_t &row);
 
 protected:
   peer_kind_e peer_kind() const override {
     return peer_kind_e::import_alsa_rtp;
   }
-  std::optional<std::string> compute_stable_id_impl() const override;
 };
 
 } // namespace rtpmididns

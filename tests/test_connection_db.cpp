@@ -9,8 +9,12 @@
 #include "../src/midirouter.hpp"
 #include "../src/peer_kind.hpp"
 #include "test_case.hpp"
+#include "test_fake_peer.hpp"
+#include "test_utils.hpp"
 #include <memory>
 #include <rtpmidid/mdns_rtpmidi.hpp>
+#include <sqlite3.h>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -21,34 +25,6 @@ std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 } // namespace rtpmididns
 
 namespace {
-
-class test_midiio_t : public midipeer_t {
-public:
-  explicit test_midiio_t(std::string name, std::string client,
-                         std::string port)
-      : name_(std::move(name)), client_(std::move(client)),
-        port_(std::move(port)) {}
-
-  void send_midi(midipeer_id_t /*from*/, const mididata_t &) override {}
-  const char *get_type() const override {
-    return peer_kind_wire_type(peer_kind_e::device_alsa_seq);
-  }
-  router_peer_row_t status() const override {
-    router_peer_row_t row;
-    row.type = get_type();
-    row.name = name_;
-    alsa_subscribe_from_t sub;
-    sub.client_name = client_;
-    sub.port_name = port_;
-    row.alsa_subscribe_from = sub;
-    return row;
-  }
-
-private:
-  std::string name_;
-  std::string client_;
-  std::string port_;
-};
 
 online_device_t device_for(const std::string &client, const std::string &port,
                            peer_id_t peer_id) {
@@ -87,6 +63,61 @@ void test_connection_db_save_list_roundtrip() {
   ASSERT_EQUAL(listed[0].side_b, row.side_b);
   ASSERT_TRUE(listed[0].direction == connection_direction_e::a2b);
   ASSERT_TRUE(listed[0].enabled);
+}
+
+void test_connection_db_multiple_edges_same_target() {
+  connection_db_t db(":memory:");
+  ASSERT_TRUE(db.is_open());
+
+  stored_connection_t row1;
+  row1.side_a = "rtpmidi_server:name=Midi Through,port=40259";
+  row1.side_b = "alsa_multi:name=devel";
+  row1.direction = connection_direction_e::a2b;
+  db.save_connection(row1);
+
+  stored_connection_t row2;
+  row2.side_a = "rtpmidi_server:name=Virtual Raw MIDI,port=42287";
+  row2.side_b = "alsa_multi:name=devel";
+  row2.direction = connection_direction_e::a2b;
+  db.save_connection(row2);
+
+  ASSERT_EQUAL(db.list_connections().size(), size_t{2});
+}
+
+void test_connection_db_migrates_legacy_schema() {
+  const std::string path = "/tmp/rtpmidid_test_legacy_conn.db";
+  std::remove(path.c_str());
+
+  sqlite3 *raw = nullptr;
+  ASSERT_EQUAL(sqlite3_open(path.c_str(), &raw), SQLITE_OK);
+  char *err = nullptr;
+  ASSERT_EQUAL(
+      sqlite3_exec(raw,
+                   "CREATE TABLE connections ("
+                   "  side_a TEXT NOT NULL,"
+                   "  side_b TEXT NOT NULL,"
+                   "  PRIMARY KEY (side_a, side_b)"
+                   ");",
+                   nullptr, nullptr, &err),
+      SQLITE_OK);
+  sqlite3_free(err);
+  sqlite3_close(raw);
+
+  connection_db_t db(path);
+  ASSERT_TRUE(db.is_open());
+
+  stored_connection_t row;
+  row.side_a = "alsa_seq:client=Peak,port=In";
+  row.side_b = "alsa_multi:name=devel";
+  row.direction = connection_direction_e::a2b;
+  db.save_connection(row);
+
+  const auto listed = db.list_connections();
+  ASSERT_EQUAL(listed.size(), size_t{1});
+  ASSERT_TRUE(listed[0].direction == connection_direction_e::a2b);
+  ASSERT_TRUE(listed[0].enabled);
+
+  std::remove(path.c_str());
 }
 
 void test_connection_restore_a2b_only() {
@@ -210,8 +241,8 @@ void test_connection_manager_applies_directed_restore() {
   conn.enabled = true;
   manager.database().save_connection(conn);
 
-  auto in_peer = std::make_shared<test_midiio_t>("in", "Peak", "In");
-  auto out_peer = std::make_shared<test_midiio_t>("out", "Peak", "Out");
+  auto in_peer = std::make_shared<fake_alsa_seq_peer_t>("in", "Peak", "In");
+  auto out_peer = std::make_shared<fake_alsa_seq_peer_t>("out", "Peak", "Out");
   const auto in_id = router->add_peer(in_peer);
   const auto out_id = router->add_peer(out_peer);
 
@@ -238,6 +269,8 @@ void test_canonicalize_stored_connection_flips_direction() {
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_connection_db_save_list_roundtrip),
+      TEST(test_connection_db_multiple_edges_same_target),
+      TEST(test_connection_db_migrates_legacy_schema),
       TEST(test_canonicalize_stored_connection_flips_direction),
       TEST(test_connection_restore_a2b_only),
       TEST(test_connection_restore_b2a_only),

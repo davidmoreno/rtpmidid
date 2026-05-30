@@ -1,6 +1,5 @@
 /**
- * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2026 David Moreno Montero <dmoreno@coralbits.com>
+ * One-to-one device peer base.
  */
 #pragma once
 
@@ -16,12 +15,8 @@ public:
     return peer_kind_wire_type(peer_kind());
   }
 
-  std::optional<std::string> compute_stable_id() const override;
-
 protected:
   virtual peer_kind_e peer_kind() const = 0;
-  virtual std::optional<std::string>
-  compute_stable_id_impl() const = 0;
 };
 
 } // namespace rtpmididns

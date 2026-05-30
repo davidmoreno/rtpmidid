@@ -33,6 +33,9 @@ struct device_identity_t {
   static std::string escape(std::string_view s);
   static std::string unescape(std::string_view s);
 
+  /** First field with @a key, or nullopt if absent. */
+  std::optional<std::string> find(std::string_view key) const;
+
   bool operator==(const device_identity_t &o) const;
 };
 

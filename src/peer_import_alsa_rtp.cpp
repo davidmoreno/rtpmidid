@@ -238,23 +238,4 @@ bool peer_import_alsa_rtp_t::control_peer_command(std::string_view cmd,
   return midipeer_t::control_peer_command(cmd, params_json, out, out_error);
 }
 
-std::optional<std::string>
-peer_import_alsa_rtp_t::stable_id_from_row(const router_peer_row_t &row) {
-  const std::string peer_name =
-      row.name && !row.name->empty() ? *row.name : std::string();
-  if (peer_name.empty())
-    return std::nullopt;
-  const auto pos = peer_name.find(" <-> ");
-  if (pos != std::string::npos) {
-    const std::string remote = peer_name.substr(pos + 5);
-    if (!remote.empty())
-      return make_stable_id("alsa_listener", {remote});
-  }
-  return make_stable_id("alsa_listener_named", {peer_name});
-}
-
-std::optional<std::string> peer_import_alsa_rtp_t::compute_stable_id_impl() const {
-  return stable_id_from_row(status());
-}
-
 } // namespace rtpmididns

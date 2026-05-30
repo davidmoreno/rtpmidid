@@ -47,10 +47,6 @@ const char *webui_midi_monitor_peer_t::get_type() const {
   return peer_kind_wire_type(peer_kind_e::webui_monitor);
 }
 
-std::optional<std::string> webui_midi_monitor_peer_t::compute_stable_id() const {
-  return std::nullopt;
-}
-
 router_peer_row_t webui_midi_monitor_peer_t::status() const {
   router_peer_row_t row{};
   row.name = name_;

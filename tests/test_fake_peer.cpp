@@ -15,28 +15,32 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#pragma once
 
-#include <chrono>
-#include <functional>
-#include <string>
-#include <vector>
+#include "test_fake_peer.hpp"
 
-#include <rtpmidid/iobytes.hpp>
+#include "../src/peer_kind.hpp"
 
-class test_client_t {
-public:
-  int sockfd;
-  int local_port;
-  int remote_port;
-  // UDP connection to this "localhost":port
-  test_client_t(int local_port, int remote_port);
-  void send(rtpmidid::io_bytes_reader &&data);
-  void recv(rtpmidid::io_bytes_reader &&data);
-};
+namespace rtpmididns {
 
-rtpmidid::io_bytes_managed hex_to_bin(const std::string &str);
-void poller_wait_for(std::chrono::milliseconds ms);
-void poller_wait_until(
-    const std::function<bool(void)> &f,
-    std::chrono::milliseconds ms = std::chrono::milliseconds(500));
+fake_alsa_seq_peer_t::fake_alsa_seq_peer_t(std::string name,
+                                           std::string client,
+                                           std::string port)
+    : name_(std::move(name)), client_(std::move(client)),
+      port_(std::move(port)) {}
+
+const char *fake_alsa_seq_peer_t::get_type() const {
+  return peer_kind_wire_type(peer_kind_e::device_alsa_seq);
+}
+
+router_peer_row_t fake_alsa_seq_peer_t::status() const {
+  router_peer_row_t row;
+  row.type = get_type();
+  row.name = name_;
+  alsa_subscribe_from_t sub;
+  sub.client_name = client_;
+  sub.port_name = port_;
+  row.alsa_subscribe_from = sub;
+  return row;
+}
+
+} // namespace rtpmididns

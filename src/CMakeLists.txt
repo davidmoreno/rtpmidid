@@ -26,6 +26,7 @@ add_library(
   device_query.cpp
   device_db.cpp
   device_registry.cpp
+  cron_tasks.cpp
   connection_restore.cpp
   connection_alsa_direct.cpp
   alsa_monitor_tap.cpp
@@ -35,6 +36,8 @@ add_library(
   peer_stable_id.cpp
   rtpmidiremotehandler.cpp
   utils.cpp
+  time_utils.cpp
+  sqlite_db.cpp
   midi_normalizer.cpp
 
   peer_import_alsa_rtp.cpp

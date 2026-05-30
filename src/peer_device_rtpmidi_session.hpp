@@ -53,13 +53,10 @@ public:
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   router_peer_row_t status() const override;
 
-  static std::optional<std::string>
-  stable_id_from_row(const router_peer_row_t &row);
 
 protected:
   peer_kind_e peer_kind() const override {
     return peer_kind_e::device_rtpmidi_session;
   }
-  std::optional<std::string> compute_stable_id_impl() const override;
 };
 } // namespace rtpmididns

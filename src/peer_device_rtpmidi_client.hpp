@@ -60,14 +60,11 @@ public:
      thread. */
   void on_router_attached() override;
 
-  static std::optional<std::string>
-  stable_id_from_row(const router_peer_row_t &row);
 
 protected:
   peer_kind_e peer_kind() const override {
     return peer_kind_e::device_rtpmidi_client;
   }
-  std::optional<std::string> compute_stable_id_impl() const override;
 
 private:
   std::vector<rtpmidid::rtpclient_t::endpoint_t> pending_server_addresses_;

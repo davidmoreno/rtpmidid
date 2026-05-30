@@ -55,14 +55,11 @@ public:
   void connected(midipeer_id_t peer_id);
   void disconnected(midipeer_id_t peer_id);
 
-  static std::optional<std::string>
-  stable_id_from_row(const router_peer_row_t &row);
 
 protected:
   peer_kind_e peer_kind() const override {
     return peer_kind_e::device_rawmidi;
   }
-  std::optional<std::string> compute_stable_id_impl() const override;
 };
 
 /** `/dev/snd/midi*` devices for UI / RPC (device path + friendly label). */
