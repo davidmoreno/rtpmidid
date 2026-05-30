@@ -21,6 +21,7 @@
 #include "dm_json_generated.hpp"
 #include "../src/mididata.hpp"
 #include "../src/midirouter.hpp"
+#include "../src/network_rtpmidi_client.hpp"
 #include "../src/network_rtpmidi_listener.hpp"
 #include "../src/settings.hpp"
 #include "../tests/test_case.hpp"
@@ -380,11 +381,39 @@ void test_midirouter_alsa_listener_lifecycle() {
   INFO("Ok, disconnected 2, peer not exists");
 }
 
+/**
+ * Regression: network_rtpmidi_client_t(name, host, port) used to call
+ * peer->add_server_address() in its constructor, which could fire
+ * status_change_event on the poller thread before add_peer() wired `router`.
+ * That dereferenced a null router (SIGSEGV observed with Peak-Peak MIDI 1).
+ */
+void test_network_rtpmidi_client_status_before_router_attached() {
+  auto router = std::make_shared<rtpmididns::midirouter_t>();
+  router->start_router_thread();
+
+  auto client = rtpmididns::make_network_rtpmidi_client(
+      "test-client", "127.0.0.1", "65535");
+  auto *raw = dynamic_cast<rtpmididns::network_rtpmidi_client_t *>(client.get());
+  ASSERT_TRUE(raw != nullptr);
+
+  /* Simulate the race: CONNECTED arrives before add_peer() sets router. */
+  raw->peer->peer.status_change_event(rtpmidid::rtppeer_t::CONNECTED);
+  ASSERT_FALSE(raw->router);
+
+  const auto id = router->add_peer(client);
+  ASSERT_NOT_EQUAL(id, 0);
+  ASSERT_TRUE(raw->router != nullptr);
+  ASSERT_EQUAL(raw->peer_id, id);
+
+  router->stop_router_thread();
+}
+
 // NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_send_receive_messages),
       TEST(test_midirouter_alsa_listener_lifecycle),
+      TEST(test_network_rtpmidi_client_status_before_router_attached),
   };
 
   testcase.run(argc, argv);

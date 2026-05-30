@@ -21,6 +21,7 @@
 #include "rtpmidid/rtpserver.hpp"
 #include <memory>
 #include <string>
+#include <unordered_set>
 
 namespace rtpmididns {
 class aseq_t;
@@ -39,6 +40,13 @@ public:
   rtpmidid::rtpserver_t::midi_event_t::connection_t midi_connection;
   rtpmidid::rtpserver_t::status_change_event_t::connection_t
       status_change_connection;
+  /* Identity-tracks rtppeers we've already wrapped into a midipeer pair, so
+     duplicate CONNECTED events (e.g. from broken remotes that resend IN to an
+     already-connected peer) don't double-wrap and leak ALSA ports. The raw
+     pointer is fine as the key because we erase on DISCONNECTED before the
+     shared_ptr drops; if we miss a cleanup the worst case is a stale entry
+     that gets recycled by a later rtppeer at the same address. */
+  std::unordered_set<rtpmidid::rtppeer_t *> wrapped_peers_;
 
   network_rtpmidi_multi_listener_t(const std::string &name,
                                    const std::string &port,

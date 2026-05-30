@@ -111,6 +111,41 @@ void test_connect_disconnect_reverse_order() {
   ASSERT_EQUAL(peer.is_connected(), false);
 }
 
+/* Regression: misbehaving remotes (observed: HYDRASYNTH KB with
+   initiator_id=0) resend IN to an already-CONNECTED peer in a tight loop.
+   parse_command_in used to call status_change_event(status) unconditionally,
+   so every duplicate IN re-fired CONNECTED. Downstream listeners like
+   network_rtpmidi_multi_listener_t reacted by wrapping the same rtppeer in a
+   new pair of midipeers each time, leaking ALSA ports + chaining bad
+   connection_db restores. Fix: only emit on real bitfield transitions. */
+void test_no_duplicate_status_change_on_repeated_in() {
+  rtpmidid::rtppeer_t peer("test");
+
+  int events_fired = 0;
+  auto connected_event_c1 = peer.status_change_event.connect(
+      [&events_fired](rtpmidid::rtppeer_t::status_e) { events_fired++; });
+  /* Swallow send_event so the OK responses don't error out. */
+  auto send_event_c1 = peer.send_event.connect(
+      [](const rtpmidid::io_bytes_reader &, rtpmidid::rtppeer_t::port_e) {});
+
+  // Normal handshake: two real transitions (NOT_CONNECTED -> CONTROL_CONNECTED
+  // -> CONNECTED), so two events.
+  peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer_t::CONTROL_PORT);
+  ASSERT_EQUAL(events_fired, 1);
+  peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer_t::MIDI_PORT);
+  ASSERT_EQUAL(events_fired, 2);
+  ASSERT_EQUAL(peer.is_connected(), true);
+
+  // Now flood with duplicate IN on both ports - bitfield can't transition
+  // (already CONNECTED), so no extra events must fire.
+  for (int i = 0; i < 5; i++) {
+    peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer_t::CONTROL_PORT);
+    peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer_t::MIDI_PORT);
+  }
+  ASSERT_EQUAL(events_fired, 2);
+  ASSERT_EQUAL(peer.is_connected(), true);
+}
+
 void test_send_short_midi() {
   rtpmidid::rtppeer_t peer("test");
 
@@ -504,6 +539,7 @@ int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_connect_disconnect),
       TEST(test_connect_disconnect_reverse_order),
+      TEST(test_no_duplicate_status_change_on_repeated_in),
       TEST(test_send_short_midi),
       TEST(test_send_long_midi),
       TEST(test_recv_some_midi),

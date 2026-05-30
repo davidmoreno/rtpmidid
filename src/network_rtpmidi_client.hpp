@@ -52,5 +52,14 @@ public:
   const char *get_type() const override { return "network_rtpmidi_client_t"; }
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   router_peer_row_t status() const override;
+  /* Deferred server addresses, populated by the (name,host,port) ctor and
+     drained once the peer has been attached to a router. Triggering the
+     rtpclient connect() before `router` is set leads to status_change_event
+     racing with `add_peer` and dereferencing a null router on the poller
+     thread. */
+  void on_router_attached() override;
+
+private:
+  std::vector<rtpmidid::rtpclient_t::endpoint_t> pending_server_addresses_;
 };
 } // namespace rtpmididns

@@ -21,6 +21,7 @@
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/iobytes.hpp"
+#include "rtpmidid/logger.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/rtppeer.hpp"
 #include "utils.hpp"
@@ -41,6 +42,18 @@ network_rtpmidi_client_t::network_rtpmidi_client_t(
         DEBUG(
             "Status changed: {}. peer: {}. Add rtpmidi peer and alsa port too.",
             status, peer->peer.remote_name);
+        /* Belt-and-braces guard: status_change_event fires on the poller thread
+           as soon as the rtpclient's first OK arrives, which can race with
+           midirouter_t::add_peer() on a slow router queue or in test setups
+           that never wire this peer to a router. Without this check we would
+           dereference a null router shared_ptr (observed crash for
+           "Peak-Peak MIDI 1" on MIDI_PORT). */
+        if (!router) {
+          WARNING("network_rtpmidi_client_t {} got status change {} before "
+                  "being attached to a router; ignoring.",
+                  peer->peer.remote_name, static_cast<int>(status));
+          return;
+        }
         if (status == rtpmidid::rtppeer_t::status_e::CONNECTED) {
           router->event(peer_id, midipeer_event_e::CONNECTED_PEER);
         } else if (status >= rtpmidid::rtppeer_t::status_e::DISCONNECTED) {
@@ -53,10 +66,24 @@ network_rtpmidi_client_t::network_rtpmidi_client_t(const std::string &name,
                                                    const std::string &hostname,
                                                    const std::string &port)
     : network_rtpmidi_client_t(std::make_shared<rtpmidid::rtpclient_t>(name)) {
-  peer->add_server_address(hostname, port);
+  /* Do NOT trigger peer->add_server_address() here. The rtpclient's connect()
+     would start the state machine on the poller thread, and on a fast/local
+     network the first OK can arrive (and fire status_change_event) BEFORE the
+     caller manages to install us in a router via add_peer(). The lambda above
+     would then dereference an empty `router` shared_ptr. Stash the endpoint
+     and drain it from on_router_attached() instead. */
+  pending_server_addresses_.push_back({hostname, port});
 }
 
 network_rtpmidi_client_t::~network_rtpmidi_client_t() {}
+
+void network_rtpmidi_client_t::on_router_attached() {
+  if (pending_server_addresses_.empty())
+    return;
+  auto endpoints = std::move(pending_server_addresses_);
+  pending_server_addresses_.clear();
+  peer->add_server_addresses(endpoints);
+}
 
 void network_rtpmidi_client_t::send_midi(midipeer_id_t from,
                                          const mididata_t &data) {

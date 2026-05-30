@@ -36,7 +36,27 @@ network_rtpmidi_multi_listener_t::network_rtpmidi_multi_listener_t(
   status_change_connection = server.status_change_event.connect(
       [this](std::shared_ptr<rtpmidid::rtppeer_t> peer,
              rtpmidid::rtppeer_t::status_e status) {
+        if (rtpmidid::rtppeer_t::is_disconnected(status)) {
+          /* The wrapper midipeers (network_rtpmidi_peer_t) clean themselves
+             up on DISCONNECTED via their own status_change hook; we just
+             forget the tracking entry so future reconnects at the same
+             rtppeer address get re-wrapped. */
+          wrapped_peers_.erase(peer.get());
+          return;
+        }
         if (status != rtpmidid::rtppeer_t::status_e::CONNECTED) {
+          return;
+        }
+        /* Defensive de-dup: even if upstream (lib/rtppeer.cpp) re-fires
+           CONNECTED for the same rtppeer (split-brain accept of duplicate
+           IN), we only wrap it into router midipeers once. Without this,
+           every duplicate IN from a misbehaving remote would create a fresh
+           local_alsa_peer + network_rtpmidi_peer pair, leak an ALSA port,
+           and feed connection_db with a chain of stale stable-id matches. */
+        if (!wrapped_peers_.insert(peer.get()).second) {
+          DEBUG("Duplicate CONNECTED event for already-wrapped rtppeer {}; "
+                "ignoring (split-brain accept by remote {}).",
+                static_cast<void *>(peer.get()), peer->remote_name);
           return;
         }
         DEBUG("Got connection from {}", peer->remote_name);

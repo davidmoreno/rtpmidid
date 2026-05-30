@@ -474,15 +474,31 @@ resolve_side_to_stable_id(control_rpc_context_t &ctx, const std::string &side,
     throw std::runtime_error("Unknown endpoint kind");
   }
 
-  if (!is_alsa_numeric_endpoint(side) &&
-      (std::startswith(side, "alsa:") || std::startswith(side, "rawmidi:") ||
-       std::startswith(side, "rtpmidi:") ||
-       std::startswith(side, "rtpmidi_in:") ||
-       std::startswith(side, "rtpmidi_server:") ||
-       std::startswith(side, "alsa_listener:") ||
-       std::startswith(side, "rtpmidi_multi:") ||
-       std::startswith(side, "alsa_multi:"))) {
-    return side;
+  /* Accept any well-formed stable id of the form `<prefix>:<rest>` where
+     <prefix> is `[a-z][a-z0-9_]*` and <rest> is non-empty. This intentionally
+     replaces the previous hardcoded allowlist of known prefixes - we keep
+     adding new ones in compute_stable_id (alsa_local, rawmidi_named,
+     rtpmidi_client_named, rtpmidi_in_named, alsa_listener_named, plus a
+     generic `<short_type>:<peer_name>` last-resort), and the allowlist kept
+     drifting out of sync. The `is_alsa_numeric_endpoint` exclusion stays so
+     `alsa:128:0` is still routed through parse_endpoint_id above. */
+  if (!is_alsa_numeric_endpoint(side)) {
+    const auto colon = side.find(':');
+    if (colon != std::string::npos && colon > 0 && colon + 1 < side.size()) {
+      bool prefix_ok = true;
+      for (size_t i = 0; i < colon; i++) {
+        const char c = side[i];
+        const bool ok =
+            (c >= 'a' && c <= 'z') ||
+            (i > 0 && ((c >= '0' && c <= '9') || c == '_'));
+        if (!ok) {
+          prefix_ok = false;
+          break;
+        }
+      }
+      if (prefix_ok)
+        return side;
+    }
   }
 
   throw std::runtime_error(
