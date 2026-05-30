@@ -174,6 +174,27 @@ public:
         device_registry->attach();
         device_registry->refresh_from_router();
         control.device_registry = device_registry;
+
+        // Phase 8: protect devices referenced by any stored connection from the
+        // periodic cleanup sweep, then start the sweep itself.
+        std::weak_ptr<rtpmididns::connection_db_manager_t> conn_weak =
+            connection_db;
+        device_registry->set_referenced_queries_provider(
+            [conn_weak]() -> std::vector<rtpmididns::device_query_t> {
+              std::vector<rtpmididns::device_query_t> out;
+              auto conn = conn_weak.lock();
+              if (!conn)
+                return out;
+              for (const auto &c : conn->database().list_connections()) {
+                if (auto q = rtpmididns::device_query_t::parse(c.side_a))
+                  out.push_back(std::move(*q));
+                if (auto q = rtpmididns::device_query_t::parse(c.side_b))
+                  out.push_back(std::move(*q));
+              }
+              return out;
+            });
+        device_registry->start_periodic_cleanup(
+            std::chrono::hours(24), rtpmididns::kDefaultStaleDeviceSeconds);
       }
     }
 

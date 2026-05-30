@@ -1,7 +1,9 @@
 /**
  * Phase 4: device registry and identity-from-peer tests.
  */
+#include "../src/device_db.hpp"
 #include "../src/device_identity_from_peer.hpp"
+#include "../src/device_query.hpp"
 #include "../src/device_registry.hpp"
 #include "../src/factory.hpp"
 #include "../src/midipeer.hpp"
@@ -40,6 +42,19 @@ public:
 private:
   std::string name_;
 };
+
+device_record_t make_record(const std::string &identity_key,
+                            device_source_e source, int64_t last_seen,
+                            bool online) {
+  device_record_t rec;
+  rec.identity = *device_identity_t::parse(identity_key);
+  rec.source = source;
+  rec.first_seen = last_seen;
+  rec.last_seen = last_seen;
+  if (online)
+    rec.online_peer_id = peer_id_t{1};
+  return rec;
+}
 
 } // namespace
 
@@ -188,6 +203,75 @@ void test_registry_ini_seed_without_peer() {
   ASSERT_TRUE(rec->source == device_source_e::ini);
 }
 
+void test_sweep_selects_only_stale_unreferenced_discovered() {
+  const std::vector<device_record_t> devices = {
+      make_record("rtpmidi_client:hostname=a.local,service=Old",
+                  device_source_e::discovered, /*last_seen*/ 100, false),
+      make_record("rtpmidi_client:hostname=b.local,service=Recent",
+                  device_source_e::discovered, /*last_seen*/ 10000, false),
+      make_record("rtpmidi_client:hostname=c.local,service=Online",
+                  device_source_e::discovered, /*last_seen*/ 100, true),
+      make_record("alsa_multi:name=Net", device_source_e::ini,
+                  /*last_seen*/ 100, false),
+      make_record("rawmidi:name=Manual", device_source_e::manual,
+                  /*last_seen*/ 100, false),
+      make_record("rtpmidi_client:hostname=ref.local,service=Ref",
+                  device_source_e::discovered, /*last_seen*/ 100, false),
+  };
+  const std::vector<device_query_t> referenced = {
+      *device_query_t::parse("rtpmidi_client:hostname=ref.local"),
+  };
+
+  const auto stale =
+      select_stale_discovered_devices(devices, referenced, /*cutoff*/ 1000);
+
+  ASSERT_EQUAL(stale.size(), size_t{1});
+  ASSERT_EQUAL(stale[0], "rtpmidi_client:hostname=a.local,service=Old");
+}
+
+void test_sweep_no_references_prunes_all_stale_discovered() {
+  const std::vector<device_record_t> devices = {
+      make_record("rtpmidi_client:hostname=a.local,service=One",
+                  device_source_e::discovered, 100, false),
+      make_record("rtpmidi_client:hostname=b.local,service=Two",
+                  device_source_e::discovered, 200, false),
+  };
+
+  const auto stale = select_stale_discovered_devices(devices, {}, /*cutoff*/ 1000);
+
+  ASSERT_EQUAL(stale.size(), size_t{2});
+}
+
+void test_registry_sweep_prunes_and_persists() {
+  auto db = std::make_unique<device_db_t>(":memory:");
+  db->upsert(make_record("rtpmidi_client:hostname=x.local,service=Gone",
+                         device_source_e::discovered, /*last_seen*/ 100, false));
+  db->upsert(make_record("rtpmidi_client:hostname=ref.local,service=Ref",
+                         device_source_e::discovered, /*last_seen*/ 100, false));
+
+  auto router = std::make_shared<midirouter_t>();
+  device_registry_t registry(router, std::move(db));
+  registry.set_referenced_queries_provider([]() {
+    return std::vector<device_query_t>{
+        *device_query_t::parse("rtpmidi_client:hostname=ref.local")};
+  });
+
+  ASSERT_TRUE(
+      registry.find_by_identity_key("rtpmidi_client:hostname=x.local,service=Gone")
+          .has_value());
+
+  const size_t pruned = registry.sweep_stale_discovered(/*max_age_seconds*/ 1);
+
+  ASSERT_EQUAL(pruned, size_t{1});
+  ASSERT_FALSE(
+      registry.find_by_identity_key("rtpmidi_client:hostname=x.local,service=Gone")
+          .has_value());
+  ASSERT_TRUE(
+      registry
+          .find_by_identity_key("rtpmidi_client:hostname=ref.local,service=Ref")
+          .has_value());
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_compute_device_identity_alsa_seq),
@@ -200,6 +284,9 @@ int main(int argc, char **argv) {
       TEST(test_registry_peer_removed_offline_still_listed),
       TEST(test_registry_merge_ini_manual_discovered),
       TEST(test_registry_ini_seed_without_peer),
+      TEST(test_sweep_selects_only_stale_unreferenced_discovered),
+      TEST(test_sweep_no_references_prunes_all_stale_discovered),
+      TEST(test_registry_sweep_prunes_and_persists),
   };
 
   testcase.run(argc, argv);

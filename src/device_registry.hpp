@@ -5,11 +5,15 @@
 
 #include "device_identity.hpp"
 #include "device_db.hpp"
+#include "device_query.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
+#include "rtpmidid/poller.hpp"
 #include "rtpmidid/signal.hpp"
 
+#include <chrono>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -40,6 +44,19 @@ struct device_record_t {
 std::vector<device_identity_t>
 ini_device_identities_from_settings(const settings_t &settings);
 
+/** Default age after which an unreferenced discovered device is prunable. */
+constexpr int64_t kDefaultStaleDeviceSeconds = 30 * 24 * 60 * 60; // ~1 month
+
+/**
+ * Identity keys of discovered devices that are offline, older than @a
+ * cutoff_last_seen, and not matched by any referenced query. Pure helper
+ * (no I/O) so the retention rules are unit-testable in isolation.
+ */
+std::vector<std::string> select_stale_discovered_devices(
+    const std::vector<device_record_t> &devices,
+    const std::vector<device_query_t> &referenced_queries,
+    int64_t cutoff_last_seen);
+
 class device_registry_t {
   NON_COPYABLE_NOR_MOVABLE(device_registry_t)
 
@@ -59,6 +76,17 @@ public:
   std::optional<device_record_t>
   find_by_identity_key(const std::string &key) const;
 
+  /** Source of queries that protect a device from pruning (Phase 8). */
+  using referenced_queries_fn = std::function<std::vector<device_query_t>()>;
+  void set_referenced_queries_provider(referenced_queries_fn provider);
+
+  /** Prune stale, unreferenced discovered devices. Returns count removed. */
+  size_t sweep_stale_discovered(int64_t max_age_seconds);
+
+  /** Schedule a self-rescheduling cleanup sweep on the poller. */
+  void start_periodic_cleanup(std::chrono::seconds interval,
+                              int64_t max_age_seconds);
+
   rtpmidid::signal_t<> changed_event;
 
 private:
@@ -67,6 +95,12 @@ private:
   mutable std::mutex mutex_;
   std::map<std::string, device_record_t> devices_;
   std::map<peer_id_t, std::string> peer_to_identity_;
+
+  referenced_queries_fn referenced_queries_provider_;
+  rtpmidid::poller_t::timer_t cleanup_timer_;
+  std::chrono::seconds cleanup_interval_{0};
+  int64_t cleanup_max_age_seconds_ = 0;
+  void schedule_cleanup();
 
   rtpmidid::connection_t<peer_id_t, peer_id_t> connected_connection_;
   rtpmidid::connection_t<peer_id_t, peer_id_t> disconnected_connection_;

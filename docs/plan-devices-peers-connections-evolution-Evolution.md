@@ -75,14 +75,10 @@ Peer Connections:
  * Connections can be stored and selected by the user, so we have a list of connections 
    that are stored in the database.
 
-> 🔎 **Current code:** Router edges *are* directional — `connect(from,to)` is one-way and
-> bidi = two edges (`src/midirouter.hpp:81`), and N:M is supported (`peerconnection_t::send_to`
-> is a vector). **But persistence loses direction:** `normalize_sides()`
-> (`connection_db.cpp:255`) sorts the pair so it is stored *undirected*, and restore always
-> issues two `enqueue_connect` calls (`try_auto_connect_peer`, lines 546–547). The `[ ]`
-> optional-part syntax and partial matching are **not** implemented today (schema is just
-> `(side_a, side_b)`, exact match). **Decision:** store direction explicitly and implement
-> partial "query" matching (see below).
+> 🔎 **Current code (post–Phase 5):** Router edges remain directional; persistence now
+> stores `direction` + `enabled` and restore uses `plan_connection_restore()` (directed,
+> query fan-out). Partial/query matching is implemented for restore; pure-ALSA pairs still
+> use `aconnect` (Phase 7).
 
 Use cases:
  * A remote raspberry pi with all hardware devices aut connected to be exported to the 
@@ -248,8 +244,8 @@ go under `tests/` and are wired into `make test`.
 | 4 | Device registry | ☑ Completed |
 | 5 | Persisted connections v2 (directed + query) | ☑ Completed |
 | 6 | Control + Web UI | ☑ Completed |
-| 7 | Pure-ALSA direct + optional monitor tap | ☐ Not started |
-| 8 | Lifecycle / cleanup | ☐ Not started |
+| 7 | Pure-ALSA direct + optional monitor tap | ☑ Completed |
+| 8 | Lifecycle / cleanup | ☑ Completed |
 
 ### Engineering principles (apply to EVERY phase)
 
@@ -340,12 +336,24 @@ by the existing test suite (no behavior change ⇒ tests stay green).
 ### Phase 5 — Persisted connections v2 (directed + query)
 **Status:** ☑ Completed
 
-* Migrate `connection_db_t` schema (Phase-4 tables); store `direction` + `enabled`.
-* `connection_db_manager_t`: on restore, expand each stored query to **all** matching
-  devices and connect with the stored direction only (drop forced double-connect).
-* **Tests** (`tests/test_connection_db.cpp`, extend): directed restore (`->`, `<-`, `<->`);
-  fan-out connect to multiple matches; disabled connection not restored; enable/disable
-  round-trip.
+Delivered:
+
+* **`connection_db_t` schema v2** — `connections` table extended with `direction`
+  (`a2b` / `b2a` / `both`) and `enabled`; in-place migration for existing DBs
+  (`connection_db.cpp`: `migrate_schema()`).
+* **`stored_connection_t`** — sides hold `key=value` identities or stored queries
+  (bracketed fields preserved in the string); `canonicalize_stored_connection()`
+  orders sides and flips direction when sides swap.
+* **`connection_restore.cpp`** — `plan_connection_restore()` expands query sides via
+  `device_query_t::matches()`, fans out to all online device pairs (cartesian product
+  when both sides match multiple peers), and emits directed `connect_action_t` edges
+  only (no forced bidirectional restore).
+* **`connection_db_manager_t`** — startup and signal-driven reconnect use directed
+  restore; `set_stored_enabled()` / `save_stored_connection()` honor direction;
+  legacy undirected pairs from old saves default to `both`.
+* **Tests** (`tests/test_connection_db.cpp`): save/list round-trip; directed restore
+  (`a2b`, `b2a`, `both`); query fan-out to multiple matching peers; disabled rows
+  skipped; enable/disable round-trip; manager integration with directed edges.
 
 ### Phase 6 — Control + Web UI
 **Status:** ☑ Completed
@@ -373,19 +381,101 @@ saved pairs use `alsa:` / `alsa_seq:` sides and honor direction on restore. Moni
 ALSA is active via `alsa_monitor_tap` on `monitor.start` / `monitor.stop`.
 
 ### Phase 7 — Pure-ALSA direct + optional monitor tap
-**Status:** ☑ Done
+**Status:** ☑ Completed
 
-* Keep ALSA↔ALSA links via `aconnect` (extend `try_auto_aconnect_all_alsa_pairs`), now
-  honoring direction and stored queries.
-* Monitor tap: when a monitor session targets a direct-ALSA edge, transiently route a router
-  copy via the existing `webui_midi_monitor_peer_t` path; tear down on `monitor.stop`.
-* **Tests:** direct-pair restore honoring direction; tap insert/remove leaves the direct link
-  intact. *(If the tap proves too invasive, mark direct-ALSA links as non-monitorable and
-  document it — this requirement is droppable.)*
+* **`connection_alsa_direct.cpp`** — query/identity/legacy ALSA-side matching;
+  `plan_alsa_aconnect_actions()` honors stored direction; used by
+  `try_auto_aconnect_all_alsa_pairs()`.
+* **`alsa_monitor_tap.cpp`** — transient router taps for pure-aconnect paths during
+  `monitor.start`; torn down on `monitor.stop` without disturbing aconnect.
+* **`endpoint.connect`** — ALSA↔ALSA uses kernel aconnect; mixed pairs use router
+  peers; ALSA pairs persisted with direction from `bidi`.
+* **Frontend** — `isDirectAlsaSide()`, connect bidi toggle, `endpoint.connect` with
+  `connect_blocking()` for reliable monitor tees.
+* **Tests:** `tests/test_connection_alsa_direct.cpp`, `tests/test_alsa_monitor_tap.cpp`.
 
 ### Phase 8 — Lifecycle / cleanup
-**Status:** ☐ Not started
+**Status:** ☑ Completed
 
-* Periodic sweep: delete `source='discovered'` devices with `last_seen` older than a
-  threshold (e.g. 1 month) that are not referenced by any stored connection.
-* **Tests:** stale discovered device pruned; referenced/ini/manual devices retained.
+Delivered:
+
+* **`select_stale_discovered_devices()`** (`src/device_registry.cpp`) — pure helper
+  (no I/O) that returns the identity keys of devices that are *all* of: `source ==
+  discovered`, **offline**, `last_seen < cutoff`, and **not matched** by any referenced
+  `device_query_t`. Retention rules (`is_stale_discovered` / `is_referenced`) live in
+  small named helpers so they read like prose.
+* **`device_registry_t::sweep_stale_discovered(max_age_seconds)`** — gathers referenced
+  queries (outside `mutex_`), computes the cutoff, then erases the selected rows from the
+  in-memory map *and* the `devices` table, firing `changed_event` once if anything was
+  pruned.
+* **Referenced-query provider** — `set_referenced_queries_provider()` decouples the
+  registry from `connection_db_t`: `main.cpp` injects a lambda that parses every
+  `connections` side (`side_a`/`side_b`) into `device_query_t`, so any device matched by a
+  stored connection (enabled or not) is protected from pruning.
+* **`start_periodic_cleanup(interval, max_age_seconds)`** — self-rescheduling poller timer
+  (wired in `main.cpp` at 24 h / `kDefaultStaleDeviceSeconds` ≈ 1 month).
+* **Tests** (`tests/test_device_registry.cpp`): `select_*` keeps recent / online / ini /
+  manual / referenced devices and prunes only stale unreferenced discovered ones;
+  no-references prunes all stale discovered; registry-level sweep removes the row from the
+  `:memory:` DB while keeping a referenced sibling.
+
+---
+
+## Cleanup / refactor opportunities (post–Phase 8, for review)
+
+These are *optional* follow-ups noticed while implementing Phase 8. None change behavior;
+all are about DRY and clean code. Ordered roughly by value/effort.
+
+1. **Two SQLite wrappers open the *same* file twice.** `connection_db_t`
+   (`src/connection_db.{hpp,cpp}`) and `device_db_t` (`src/device_db.{hpp,cpp}`) each open
+   their own `sqlite3*` to `settings.database.path`, each with its own deleter
+   (`sqlite3_deleter` vs `device_sqlite3_deleter`), its own `mutex_`, and its own
+   prepare/bind/step/finalize boilerplate. Extract a single small `sqlite_db_t` (open +
+   `exec` + a RAII `sqlite_stmt_t` that auto-`finalize`s and wraps bind/step) shared by
+   both tables, ideally over **one** connection. Removes the duplicated deleter, the
+   repeated error-logging, and every manual `sqlite3_finalize`.
+
+2. **Two parallel stable-id systems.** The legacy positional `compute_stable_id()` /
+   `compute_stable_id_impl()` / `find_peer_id_for_stable_id()` (`connection_db.cpp` + every
+   peer) coexists with the new `key=value` `compute_device_identity()` (Phase 2). The plan
+   says key=value *replaces* the positional form, but `control_rpc.cpp` and
+   `connection_restore.cpp` still consume `legacy_stable_id`. Migrate the remaining callers
+   to `device_identity_t` and delete the positional path (and per-peer
+   `compute_stable_id_impl`) to remove a whole duplicate identity scheme.
+
+3. **Duplicated `now_unix()` / time-now helper.** Both `device_registry.cpp` and
+   `connection_db.cpp` (and `lib/stats.cpp`) re-derive "seconds since epoch". Move one
+   `now_unix()` into a shared util header.
+
+4. **Duplicated `test_midiio_t` across tests.** `tests/test_device_registry.cpp` and
+   `tests/test_connection_db.cpp` define near-identical fake peers (status row with an
+   `alsa_subscribe_from`). Hoist a single configurable fake peer into `tests/test_utils.hpp`.
+
+5. **Repeated "find a field by key" in identities.** `display_name_for()`
+   (`device_registry.cpp`) hand-loops over `identity.fields` looking for
+   `name`/`client`/`service`; similar scans live in `device_query_t::matches` and
+   identity-from-peer code. Add `device_identity_t::find(std::string_view key)` →
+   `optional<string>` and reuse it.
+
+6. **`source_to_wire` / `source_from_wire` duplicate the enum.** `device_db.cpp` hand-maps
+   `device_source_e` ↔ string; `device_registry_t::source_priority` hand-maps the same enum
+   to a precedence int that the enum's declaration order already implies. A single
+   `device_source_e` ⇄ wire table (and using the underlying value for priority) removes two
+   switch statements that must be kept in sync.
+
+7. **Registry uses a `mutex_` instead of the queue/event model.** Per the project's
+   *Engineering principles* ("no new shared mutex"), `device_registry_t` guards `devices_`
+   with `mutex_` while also reacting to router-thread signals. This predates Phase 8 but is
+   worth flagging: the registry could own its own actor thread + typed messages like the
+   router/peers, or explicitly confine all mutation to the router thread.
+
+8. **Periodic sweep does DB I/O on the poller thread.** `start_periodic_cleanup` runs
+   `sweep_stale_discovered` (which deletes DB rows) from a poller timer. The cadence is
+   ~daily so the blip is negligible, but it technically violates "no DB writes on the
+   poller thread". If it ever matters, dispatch the sweep onto the router thread (it already
+   owns registry-affecting signals) or a dedicated low-priority worker.
+
+9. **`referenced_queries` provider lambda in `main.cpp`.** The connection→query parsing is
+   an inline lambda in `setup()`. Promote it to a named free function (e.g.
+   `referenced_queries_from(connection_db_manager_t&)`) so it is independently testable and
+   `setup()` reads at one level of abstraction.
