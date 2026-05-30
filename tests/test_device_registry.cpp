@@ -5,7 +5,7 @@
 #include "../src/device_identity_from_peer.hpp"
 #include "../src/device_query.hpp"
 #include "../src/device_registry.hpp"
-#include "../src/factory.hpp"
+#include "../src/peer_factory.hpp"
 #include "../src/midipeer.hpp"
 #include "../src/midirouter.hpp"
 #include "../src/peer_kind.hpp"
@@ -81,10 +81,12 @@ void test_compute_device_identity_rtpmidi_client() {
 }
 
 void test_compute_device_identity_rtpmidi_server_factory() {
-  auto peer = make_peer_export_rtpmidi_server("Peak InOut", "50220");
-  const auto row = peer->status();
-  router_peer_row_t full = row;
-  full.type = peer->get_type();
+  std::string err;
+  auto peer = create_peer_from_string("rtpmidi_server:name=Peak InOut,port=50220",
+                                      peer_factory_context_t{}, &err);
+  ASSERT_TRUE(peer.has_value());
+  router_peer_row_t full = (*peer)->status();
+  full.type = (*peer)->get_type();
   const auto id = compute_device_identity(full);
   ASSERT_TRUE(id.has_value());
   ASSERT_TRUE(id->serialize().find("rtpmidi_server:name=Peak InOut") == 0);

@@ -6,7 +6,7 @@ import type {
 } from "./model";
 import { formatStableIdLabel } from "./persistedConnectionsFormat";
 import type { ConnectionDirection } from "./deviceIdentity";
-import { directionArrow } from "./deviceIdentity";
+import { canonicalIdentity, directionArrow, identitiesEqual, parseIdentity } from "./deviceIdentity";
 
 export type { formatStableIdLabel } from "./persistedConnectionsFormat";
 
@@ -79,7 +79,10 @@ export function persistedPairKey(a: string, b: string): string {
 
 /** True when a stored connection side is a pure-ALSA aconnect endpoint. */
 export function isDirectAlsaSide(side: string): boolean {
-  return side.startsWith("alsa:") || side.startsWith("alsa_seq:");
+  if (side.startsWith("alsa_seq:")) return true;
+  if (side.startsWith("alsa:")) return true;
+  const parsed = parseIdentity(side);
+  return parsed?.typePrefix === "alsa_seq";
 }
 
 function peerName(peers: RouterPeer[], id: number): string {
@@ -88,7 +91,7 @@ function peerName(peers: RouterPeer[], id: number): string {
 }
 
 function participantForSide(
-  stableId: string,
+  identity: string,
   peerId: number | undefined,
   active: boolean | undefined,
   peers: RouterPeer[],
@@ -98,30 +101,25 @@ function participantForSide(
   }
   return {
     id: 0,
-    name: formatStableIdLabel(stableId),
+    name: formatStableIdLabel(identity),
     unavailable: true,
   };
 }
 
 function savedMatchesLiveRow(row: ConnectionRow, saved: PersistedConnectionRow): boolean {
-  /* Router rows: match by router peer ids when both sides resolve to a peer. */
   const pa = saved.peer_a;
   const pb = saved.peer_b;
   if (pa !== undefined && pb !== undefined) {
     const ids = row.participantRouterIds;
     if (ids.includes(pa) && ids.includes(pb)) return true;
   }
-  /* Stable-id match: covers alsaseq rows (no router peer) and router rows
-     whose live peers also expose a stable id. The db stores unordered pairs. */
-  const fromStable = row.from.stableId;
-  const toStable = row.to.stableId;
-  if (fromStable && toStable) {
-    if (
-      (fromStable === saved.side_a && toStable === saved.side_b) ||
-      (fromStable === saved.side_b && toStable === saved.side_a)
-    ) {
-      return true;
-    }
+  const fromId = row.from.identity;
+  const toId = row.to.identity;
+  if (
+    (identitiesEqual(fromId, saved.side_a) && identitiesEqual(toId, saved.side_b)) ||
+    (identitiesEqual(fromId, saved.side_b) && identitiesEqual(toId, saved.side_a))
+  ) {
+    return true;
   }
   return false;
 }
@@ -168,27 +166,19 @@ function buildSavedOnlyRow(
     (x): x is number => x !== undefined && Number.isFinite(x),
   );
   const sideRef = (
-    stable: string,
+    identity: string,
     peerId: number | undefined,
     active: boolean | undefined,
     label: string,
   ): ConnectionEndpointRef => ({
-    endpointId:
-      active && peerId !== undefined && Number.isFinite(peerId)
-        ? `peer:${peerId}`
-        : stable,
+    identity,
     label,
     peerId:
       active && peerId !== undefined && Number.isFinite(peerId)
         ? peerId
         : undefined,
-    stableId: stable,
     unavailable: !active,
   });
-  /* "midirouter" vs "alsaseq" classification: every alsa stable id starts with
-     `alsa:` (escape rules of compute_stable_id), so a pair where BOTH sides
-     are alsa stable ids is a pure aconnect pair. Any other combination came
-     from the router on a previous run, so render it as midirouter. */
   const isAlsa =
     isDirectAlsaSide(saved.side_a) && isDirectAlsaSide(saved.side_b);
   const dir = saved.direction ?? "both";
@@ -225,33 +215,29 @@ function classifyLiveRow(
   cannotSaveReason?: string;
 } {
   if (persisted) return {};
-  const fromStable = row.from.stableId;
-  const toStable = row.to.stableId;
-  if (fromStable && toStable && fromStable !== toStable) {
+  const fromId = row.from.identity;
+  const toId = row.to.identity;
+  if (fromId && toId && fromId !== toId && parseIdentity(fromId) && parseIdentity(toId)) {
     return { canAddToDb: true };
   }
-  /* A side without a stable id is something the db cannot durably address
-     (e.g. webui_midi_monitor_peer_t sink, router peers added at runtime that
-     have not been named, transient RTP peers without name/host yet). Show the
-     empty-circle indicator with the explanation below. */
-  if (!fromStable && !toStable) {
+  if (!fromId && !toId) {
     return {
       cannotSaveReason:
-        "Neither endpoint has a stable identity; cannot persist this pair.",
+        "Neither endpoint has a device identity; cannot persist this pair.",
     };
   }
-  if (!fromStable) {
+  if (!fromId || !parseIdentity(fromId)) {
     return {
-      cannotSaveReason: `"${row.from.label}" has no stable identity (e.g. monitor sink or unnamed peer); cannot persist this pair.`,
+      cannotSaveReason: `"${row.from.label}" has no device identity (e.g. monitor sink); cannot persist this pair.`,
     };
   }
-  if (!toStable) {
+  if (!toId || !parseIdentity(toId)) {
     return {
-      cannotSaveReason: `"${row.to.label}" has no stable identity (e.g. monitor sink or unnamed peer); cannot persist this pair.`,
+      cannotSaveReason: `"${row.to.label}" has no device identity (e.g. monitor sink); cannot persist this pair.`,
     };
   }
   return {
-    cannotSaveReason: "Both endpoints share the same stable identity.",
+    cannotSaveReason: "Both endpoints share the same device identity.",
   };
 }
 

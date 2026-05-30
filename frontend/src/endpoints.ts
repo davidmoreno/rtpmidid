@@ -1,6 +1,13 @@
 import type { MdnsRemote, RouterPeer } from "./model";
 import { groupMdnsRemotes } from "./model";
 import type { MidiAlsaSeqEntry, MidiRawmidiEntry } from "./midiEnumerate";
+import {
+  identityFromAlsaEntry,
+  identityFromMdnsGroup,
+  identityFromPeerRow,
+  identityFromRawEntry,
+  identityFromRtpClientConnect,
+} from "./deviceIdentity";
 
 export type EndpointKind =
   | "alsa_seq"
@@ -10,8 +17,8 @@ export type EndpointKind =
   | "peer";
 
 export type Endpoint = {
-  /** Opaque id understood by server endpoint.connect/disconnect. */
-  id: string;
+  /** Device identity for endpoint.connect / monitor.start / card highlight. */
+  identity: string;
   kind: EndpointKind;
   label: string;
   sub: string;
@@ -19,39 +26,15 @@ export type Endpoint = {
   peerId?: number;
 };
 
-export function endpointIdForAlsa(client: number, port: number): string {
-  return `alsa:${client}:${port}`;
-}
-
-export function endpointIdForRaw(device: string): string {
-  return `raw:${device}`;
-}
-
-export function endpointIdForMdns(name: string, port: number | string): string {
-  return `mdns:${name}::${String(port)}`;
-}
-
-export function endpointIdForHost(hostname: string, port: number | string): string {
-  return `host:${hostname}:${String(port)}`;
-}
-
-/** Matches daemon `parse_endpoint_id` (`peer:<id>`) for router.disconnect via endpoint.disconnect. */
-export function endpointIdForPeer(peerId: number): string {
-  return `peer:${peerId}`;
-}
-
 /**
  * Synthetic endpoint for `webui_midi_monitor_peer_t` — not a hardware listing; used so device
  * cards can show monitor tee edges in “connected to” (see endpointByPeerId in PeersCards).
  */
-/**
- * Display + disconnect id for any router peer not represented by a device row
- * (see “connected to” on PeersCards).
- */
 export function endpointFromRouterPeer(p: RouterPeer): Endpoint {
   if (p.type === "webui_midi_monitor_peer_t") return endpointForWebUiMonitorPeer(p);
+  const identity = identityFromPeerRow(p);
   return {
-    id: endpointIdForPeer(p.id),
+    identity: identity ?? `alsa_seq:name=${(p.name || "").trim() || `Peer #${p.id}`}`,
     kind: "peer",
     label: (p.name || "").trim() || `Peer #${p.id}`,
     sub: p.type || "router peer",
@@ -72,8 +55,9 @@ export function endpointForWebUiMonitorPeer(p: RouterPeer): Endpoint {
   }
   const tgtBit =
     tgt !== undefined ? `tee → peer #${tgt}` : "tee";
+  const identity = identityFromPeerRow(p);
   return {
-    id: endpointIdForPeer(p.id),
+    identity: identity ?? `alsa_seq:name=${(p.name || "").trim() || `monitor-${p.id}`}`,
     kind: "monitor",
     label: p.name.trim() || "Web MIDI monitor",
     sub:
@@ -108,7 +92,8 @@ export function collectBridgeExportedEndpointIds(
   const out = new Set<string>();
   const groups = groupMdnsRemotes(mdnsRemotes);
   for (const g of groups) {
-    const id = endpointIdForMdns(g.name, g.port);
+    const identity = identityFromMdnsGroup(g);
+    if (!identity) continue;
     const name = g.name.trim();
     for (const p of peers) {
       if (p.type === "peer_export_rtpmidi_server_t") {
@@ -116,7 +101,7 @@ export function collectBridgeExportedEndpointIds(
         const pn = String(p.name ?? raw.name ?? "").trim();
         if (pn !== name) continue;
         if (rtpPortsEqual(g.port, raw.port)) {
-          out.add(id);
+          out.add(identity);
           break;
         }
       } else if (p.type === "peer_import_rtpmidi_t") {
@@ -126,17 +111,13 @@ export function collectBridgeExportedEndpointIds(
         const lp = raw.listening as Record<string, unknown> | undefined;
         const cp = lp?.control_port;
         if (rtpPortsEqual(g.port, cp)) {
-          out.add(id);
+          out.add(identity);
           break;
         }
       }
     }
   }
   return out;
-}
-
-function isNum(x: unknown): x is number {
-  return typeof x === "number" && Number.isFinite(x);
 }
 
 function peerId(p: RouterPeer): number {
@@ -148,6 +129,7 @@ function peerRaw(p: RouterPeer): Record<string, unknown> {
 }
 
 function matchPeerForAlsa(peers: RouterPeer[], e: MidiAlsaSeqEntry): number | undefined {
+  const id = identityFromAlsaEntry(e);
   const webName = `WEB:ALSA:${e.client}:${e.port}`;
   for (const p of peers) {
     if (p.type !== "peer_device_alsa_seq_t") continue;
@@ -156,15 +138,21 @@ function matchPeerForAlsa(peers: RouterPeer[], e: MidiAlsaSeqEntry): number | un
     const asf = raw.alsa_subscribe_from as { client?: unknown; port?: unknown } | undefined;
     if (!asf) continue;
     if (Number(asf.client) === e.client && Number(asf.port) === e.port) return peerId(p);
+    if (id) {
+      const pid = identityFromPeerRow(p);
+      if (pid === id) return peerId(p);
+    }
   }
   return undefined;
 }
 
 function matchPeerForRaw(peers: RouterPeer[], e: MidiRawmidiEntry): number | undefined {
+  const id = identityFromRawEntry(e);
   for (const p of peers) {
     if (p.type !== "peer_device_rawmidi_t") continue;
     const raw = peerRaw(p);
     if (String(raw.device ?? "") === e.device) return peerId(p);
+    if (id && identityFromPeerRow(p) === id) return peerId(p);
   }
   return undefined;
 }
@@ -173,6 +161,7 @@ function matchPeerForRemote(
   peers: RouterPeer[],
   hostCandidates: string[],
   port: number | string,
+  serviceName: string,
 ): number | undefined {
   const pstr = String(port);
   for (const p of peers) {
@@ -183,6 +172,8 @@ function matchPeerForRemote(
     if (!ch || !cp) continue;
     if (cp !== pstr) continue;
     if (hostCandidates.includes(ch)) return peerId(p);
+    const id = identityFromRtpClientConnect(ch, cp, serviceName);
+    if (id && identityFromPeerRow(p) === id) return peerId(p);
   }
   return undefined;
 }
@@ -221,8 +212,6 @@ function labelForRtpClientPeer(
 function remoteHostCandidates(remotes: MdnsRemote[]): string[] {
   const hs = remotes.map((r) => r.hostname.trim()).filter((x) => x);
   const ips = remotes.map((r) => r.ip.trim()).filter((x) => x);
-  // Keep both: we prefer hostnames for connecting, but IPs help match
-  // already-created peers that used IPs.
   return Array.from(new Set([...hs, ...ips]));
 }
 
@@ -235,8 +224,10 @@ export function buildEndpoints(args: {
   const out: Endpoint[] = [];
 
   for (const e of args.alsaSeq) {
+    const identity = identityFromAlsaEntry(e);
+    if (!identity) continue;
     out.push({
-      id: endpointIdForAlsa(e.client, e.port),
+      identity,
       kind: "alsa_seq",
       label: e.label || `${e.client_name}:${e.port_name}`,
       sub: `${e.client}:${e.port} · ${e.kind || "alsa_seq"}`,
@@ -245,8 +236,10 @@ export function buildEndpoints(args: {
   }
 
   for (const e of args.rawmidi) {
+    const identity = identityFromRawEntry(e);
+    if (!identity) continue;
     out.push({
-      id: endpointIdForRaw(e.device),
+      identity,
       kind: "rawmidi",
       label: e.label || e.device,
       sub: `${e.device} · ${e.kind || "rawmidi"}`,
@@ -258,16 +251,17 @@ export function buildEndpoints(args: {
   const hostEndpointPeerIds = new Set<number>();
   for (const g of groups) {
     const port = g.port;
+    const identity = identityFromMdnsGroup(g);
+    if (!identity) continue;
     const cands = remoteHostCandidates(g.instances);
-    // Display hostname when available, otherwise resolved IP.
     const hostnames = g.instances.map((r) => r.hostname.trim()).filter((x) => x);
     const ips = g.instances.map((r) => r.ip.trim()).filter((x) => x);
     const best = hostnames[0] || ips[0] || "";
     const hostSub = best ? `${best}:${String(port)}` : `${String(port)}`;
-    const matchedPeer = matchPeerForRemote(args.peers, cands, port);
+    const matchedPeer = matchPeerForRemote(args.peers, cands, port, g.name);
     if (matchedPeer !== undefined) hostEndpointPeerIds.add(matchedPeer);
     out.push({
-      id: endpointIdForMdns(g.name, port),
+      identity,
       kind: "rtpmidi",
       label: g.name || "Remote",
       sub: `mDNS · ${hostSub}`,
@@ -275,17 +269,17 @@ export function buildEndpoints(args: {
     });
   }
 
-  const seenHostEndpointIds = new Set<string>();
+  const seenHostIdentities = new Set<string>();
   for (const p of args.peers) {
     const hp = rtpClientHostPort(p);
     if (!hp) continue;
-    const id = endpointIdForHost(hp.hostname, hp.port);
-    if (seenHostEndpointIds.has(id)) continue;
-    seenHostEndpointIds.add(id);
+    const identity = identityFromPeerRow(p);
+    if (!identity || seenHostIdentities.has(identity)) continue;
+    seenHostIdentities.add(identity);
     if (hostEndpointPeerIds.has(p.id)) continue;
     const { label, sub } = labelForRtpClientPeer(p, hp.hostname, hp.port);
     out.push({
-      id,
+      identity,
       kind: "rtpmidi",
       label,
       sub,
@@ -293,7 +287,6 @@ export function buildEndpoints(args: {
     });
   }
 
-  // Stable sort: kind then label then id.
   const rank: Record<EndpointKind, number> = {
     rtpmidi: 0,
     alsa_seq: 1,
@@ -306,9 +299,8 @@ export function buildEndpoints(args: {
     const rb = rank[b.kind];
     if (ra !== rb) return ra - rb;
     const c = a.label.localeCompare(b.label);
-    return c !== 0 ? c : a.id.localeCompare(b.id);
+    return c !== 0 ? c : a.identity.localeCompare(b.identity);
   });
 
   return out;
 }
-

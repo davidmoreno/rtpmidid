@@ -1,5 +1,7 @@
 /** Normalized shapes for `status` JSON from rtpmidid. */
 
+import { identityFromAlsaNames, identityFromPeerRow } from "./deviceIdentity";
+
 export type LatencyTriple = { last?: number; average?: number; stddev?: number };
 
 export type RouterPeer = {
@@ -330,24 +332,14 @@ export type ConnectionParticipant = {
  * One side of a Connection row (used to render the dominant "from <-> to" cell
  * and to drive the Save/Remove DB column).
  *
- * `endpointId` is the same id the daemon understands for endpoint.connect /
- * endpoint.disconnect / monitor.start (e.g. `peer:5`, `alsa:128:0`,
- * `mdns:Name::5004`). It is also the card id used by DevicesTab so clicking a
- * side from the Connections page can scroll + highlight the matching device
- * card.
- *
- * `stableId` is the SQLite stable id (e.g. `alsa:<client_name>:<port_name>`).
- * It is filled when the side could be resolved at row-build time so the
- * Connections page can match against persisted pairs and offer the "+" / "-"
- * DB button without a server round-trip.
+ * `identity` is the key=value device identity used by endpoint.connect,
+ * endpoint.disconnect, monitor.start, and the Devices tab card highlight.
  */
 export type ConnectionEndpointRef = {
-  endpointId: string;
+  identity: string;
   label: string;
   /** Router peer id when this side is a materialised router peer. */
   peerId?: number;
-  /** Stable id for SQLite persistence; absent when the side has no stable identity. */
-  stableId?: string;
   /** True when this side is referenced but not currently materialised (saved-only). */
   unavailable?: boolean;
 };
@@ -398,125 +390,6 @@ export type ConnectionRow = {
   persistedSideB?: string;
 };
 
-/** Stable id helper for an ALSA-seq endpoint (`alsa:<client_name>:<port_name>`).
- *  Mirrors the daemon's `compute_stable_id` for `peer_device_alsa_seq_t` and the
- *  alsa stable id produced by `resolve_side_to_stable_id` in control_rpc.cpp.
- *  Returns undefined when either name is empty.
- */
-export function alsaStableIdFromNames(
-  clientName: string,
-  portName: string,
-): string | undefined {
-  if (!clientName || !portName) return undefined;
-  const esc = (s: string) => s.replace(/:/g, "|");
-  return `alsa:${esc(clientName)}:${esc(portName)}`;
-}
-
-/** Compute the stable id for a router peer mirroring `compute_stable_id` in
- *  src/connection_db.cpp. Used to decide if a row is saveable without going
- *  through the daemon. Returns undefined only for peers with no stable
- *  identity at all (e.g. `webui_midi_monitor_peer_t`, or peers without a name
- *  and no structural identifier yet).
- */
-export function peerStableId(peer: RouterPeer): string | undefined {
-  const esc = (s: string) => s.replace(/:/g, "|");
-  const make = (prefix: string, parts: string[]): string | undefined => {
-    if (parts.some((p) => !p)) return undefined;
-    return prefix + ":" + parts.map(esc).join(":");
-  };
-  const raw = peer.raw as Record<string, unknown>;
-  const peerName = (peer.name || String(raw.name ?? "")).trim();
-  /* `network_address_t::hostname()` formats unresolved sockaddrs as the
-     literal string "null"; treat that as empty. */
-  const realHost = (h: string) => (h && h !== "null" ? h : "");
-
-  switch (peer.type) {
-    case "peer_device_alsa_seq_t": {
-      const asf = raw.alsa_subscribe_from as
-        | { client_name?: string; port_name?: string }
-        | undefined;
-      if (asf && asf.client_name && asf.port_name) {
-        const sid = make("alsa", [asf.client_name, asf.port_name]);
-        if (sid) return sid;
-      }
-      if (peerName) return make("alsa_local", [peerName]);
-      return undefined;
-    }
-    case "peer_device_rawmidi_t": {
-      const dev = String(raw.device ?? "");
-      if (dev) return make("rawmidi", [dev]);
-      if (peerName) return make("rawmidi_named", [peerName]);
-      return undefined;
-    }
-    case "peer_device_rtpmidi_client_t": {
-      let hostname = realHost(String(raw.connect_hostname ?? "").trim());
-      let svc = "";
-      const p = raw.peer as Record<string, unknown> | undefined;
-      if (!hostname && p) {
-        const rem = p.remote as Record<string, unknown> | undefined;
-        if (rem) hostname = realHost(String(rem.hostname ?? "").trim());
-      }
-      if (p) {
-        const rem = p.remote as Record<string, unknown> | undefined;
-        if (rem) svc = String(rem.name ?? "").trim();
-      }
-      if (!svc) svc = peerName;
-      if (hostname && svc) return make("rtpmidi", [hostname, svc]);
-      if (peerName) return make("rtpmidi_client_named", [peerName]);
-      return undefined;
-    }
-    case "peer_device_rtpmidi_session_t": {
-      const p = raw.peer as Record<string, unknown> | undefined;
-      const rem = p
-        ? (p.remote as Record<string, unknown> | undefined)
-        : undefined;
-      const h = realHost(String(rem?.hostname ?? "").trim());
-      const n = String(rem?.name ?? "").trim();
-      if (h && n) return make("rtpmidi_in", [h, n]);
-      if (peerName) return make("rtpmidi_in_named", [peerName]);
-      return undefined;
-    }
-    case "peer_export_rtpmidi_server_t": {
-      if (peerName) return make("rtpmidi_server", [peerName]);
-      return undefined;
-    }
-    case "peer_import_alsa_rtp_t": {
-      if (!peerName) return undefined;
-      const pos = peerName.indexOf(" <-> ");
-      if (pos >= 0) {
-        const remote = peerName.substring(pos + 5);
-        if (remote) return make("alsa_listener", [remote]);
-      }
-      return make("alsa_listener_named", [peerName]);
-    }
-    case "peer_import_rtpmidi_t": {
-      const listening = raw.listening as { name?: string } | undefined;
-      const n =
-        listening?.name && listening.name.length > 0
-          ? listening.name
-          : peerName;
-      if (n) return make("rtpmidi_multi", [n]);
-      return undefined;
-    }
-    case "peer_export_alsa_network_t": {
-      if (peerName) return make("alsa_multi", [peerName]);
-      return undefined;
-    }
-    /* Explicitly unsaveable: session-bound sink created by monitor.start with a
-       uuid that changes every connection. */
-    case "webui_midi_monitor_peer_t":
-      return undefined;
-    default: {
-      /* Generic fallback: address by configured name with a short type-derived
-         prefix so unknown peer types remain saveable. */
-      if (!peer.type || !peerName) return undefined;
-      let prefix = peer.type;
-      if (prefix.endsWith("_t")) prefix = prefix.slice(0, -2);
-      return make(prefix, [peerName]);
-    }
-  }
-}
-
 function pairKeyUnordered(a: number, b: number): string {
   return a < b ? `${a}:${b}` : `${b}:${a}`;
 }
@@ -526,12 +399,14 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
   const out: ConnectionRow[] = [];
 
   const peerLabel = (pr: RouterPeer): string => pr.name.trim() || `#${pr.id}`;
-  const peerRef = (pr: RouterPeer): ConnectionEndpointRef => ({
-    endpointId: `peer:${pr.id}`,
-    label: peerLabel(pr),
-    peerId: pr.id,
-    stableId: peerStableId(pr),
-  });
+  const peerRef = (pr: RouterPeer): ConnectionEndpointRef => {
+    const identity = identityFromPeerRow(pr);
+    return {
+      identity: identity ?? "",
+      label: peerLabel(pr),
+      peerId: pr.id,
+    };
+  };
 
   const pushRouterRow = (
     parts: RouterPeer[],
@@ -631,7 +506,7 @@ export function buildConnections(peers: RouterPeer[]): ConnectionRow[] {
       const toRef: ConnectionEndpointRef = toPeer
         ? peerRef(toPeer)
         : {
-            endpointId: `peer:${tid}`,
+            identity: "",
             label: `#${tid}`,
             peerId: tid,
             unavailable: true,
@@ -715,10 +590,8 @@ export function parseAlsaSubscriptions(raw: unknown): AlsaSubscriptionRaw[] {
  * Build Connection rows from ALSA-seq aconnect subscriptions.
  *
  * - Opposite directed pairs (A->B and B->A) are merged into one bidi row.
- * - Sides expose `endpointId = alsa:<c>:<p>` (matches Devices tab card ids and
- *   the daemon's `endpoint.connect` parsing) and `stableId =
- *   alsa:<client_name>:<port_name>` (matches `compute_stable_id` in
- *   `connection_db.cpp`, so saved-pair matching is purely client-side).
+ * - Sides expose `identity` as key=value `alsa_seq:client=…,port=…` strings
+ *   (matches Devices tab card ids and the daemon's endpoint.connect parsing).
  * - `peerId` is set when the ALSA port also backs a router peer
  *   (`peer_device_alsa_seq_t.alsa_subscribe_from`); this lets the click-through
  *   land on the right Devices card even when a router peer wraps the port.
@@ -748,10 +621,12 @@ export function buildAlsaSubscriptionConnections(
     clientName: string | undefined,
     portName: string | undefined,
   ): ConnectionEndpointRef => {
-    const endpointId = `alsa:${client}:${port}`;
-    const matchedPeer = peerByAlsa.get(`${client}:${port}`);
     const cn = clientName ?? "";
     const pn = portName ?? "";
+    const identity =
+      identityFromAlsaNames(cn, pn) ??
+      `alsa_seq:client=${cn || String(client)},port=${pn || String(port)}`;
+    const matchedPeer = peerByAlsa.get(`${client}:${port}`);
     const label =
       cn && pn
         ? `${cn} · ${pn}`
@@ -759,10 +634,9 @@ export function buildAlsaSubscriptionConnections(
           ? labelHint
           : `${client}:${port}`;
     return {
-      endpointId,
+      identity,
       label,
       peerId: matchedPeer?.id,
-      stableId: alsaStableIdFromNames(cn, pn),
     };
   };
 

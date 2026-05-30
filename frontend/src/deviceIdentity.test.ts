@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  endpointIdFromIdentity,
   formatIdentityLabel,
+  identityFromAlsaNames,
+  identityFromMdnsGroup,
+  identityFromPeerRow,
+  identityFromRtpClientConnect,
   parseIdentity,
   serializeIdentity,
 } from "./deviceIdentity";
+import type { MdnsRemoteGroup, RouterPeer } from "./model";
 
 describe("deviceIdentity", () => {
   it("round-trips a simple identity", () => {
@@ -25,16 +29,55 @@ describe("deviceIdentity", () => {
     expect(formatIdentityLabel("alsa_seq:client=Peak,port=In")).toContain("Peak");
   });
 
-  it("maps rtpmidi_client identity to host endpoint id", () => {
+  it("builds rtpmidi_client identity from hostname/service/port", () => {
     expect(
-      endpointIdFromIdentity(
-        "rtpmidi_client:hostname=192.168.1.80,service=DeepMind 12D",
-      ),
-    ).toBe("host:192.168.1.80:5004");
+      identityFromRtpClientConnect("192.168.1.80", "5004", "DeepMind 12D"),
+    ).toBe("rtpmidi_client:hostname=192.168.1.80,port=5004,service=DeepMind 12D");
     expect(
-      endpointIdFromIdentity(
-        "rtpmidi_client:hostname=192.168.1.80,service=DeepMind 12D,port=4001",
-      ),
-    ).toBe("host:192.168.1.80:4001");
+      identityFromRtpClientConnect("192.168.1.80", "4001", "DeepMind 12D"),
+    ).toBe("rtpmidi_client:hostname=192.168.1.80,port=4001,service=DeepMind 12D");
+  });
+
+  it("builds alsa_seq identity from client/port names", () => {
+    expect(identityFromAlsaNames("A", "P1")).toBe("alsa_seq:client=A,port=P1");
+  });
+
+  it("builds rtpmidi_client identity from mDNS group", () => {
+    const g: MdnsRemoteGroup = {
+      name: "Synth",
+      port: 5004,
+      addresses: ["host.local"],
+      ips: ["192.168.1.5"],
+      instances: [
+        {
+          name: "Synth",
+          hostname: "host.local",
+          ip: "192.168.1.5",
+          port: 5004,
+        },
+      ],
+    };
+    expect(identityFromMdnsGroup(g)).toBe(
+      "rtpmidi_client:hostname=host.local,port=5004,service=Synth",
+    );
+  });
+
+  it("derives identity from rtp client peer row", () => {
+    const peer: RouterPeer = {
+      id: 3,
+      name: "WEB · host",
+      type: "peer_device_rtpmidi_client_t",
+      send_to: [],
+      recv: 0,
+      sent: 0,
+      raw: {
+        connect_hostname: "192.168.1.80",
+        connect_port: "5004",
+        peer: { remote: { name: "DeepMind 12D", hostname: "192.168.1.80" } },
+      },
+    };
+    expect(identityFromPeerRow(peer)).toBe(
+      "rtpmidi_client:hostname=192.168.1.80,port=5004,service=DeepMind 12D",
+    );
   });
 });

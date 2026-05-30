@@ -35,13 +35,13 @@ bool has_link(const std::vector<alsa_aconnect_action_t> &actions, int fc,
 } // namespace
 
 void test_is_direct_alsa_side() {
-  ASSERT_TRUE(is_direct_alsa_side("alsa:Peak:In"));
   ASSERT_TRUE(is_direct_alsa_side("alsa_seq:client=Peak,port=In"));
   ASSERT_TRUE(is_direct_alsa_side("alsa_seq:client=Peak,[port=In]"));
   ASSERT_FALSE(is_direct_alsa_side("rawmidi:device=/dev/snd/midiC0D0"));
+  ASSERT_FALSE(is_direct_alsa_side("alsa:Peak:In"));
 }
 
-void test_match_alsa_ports_identity_and_legacy() {
+void test_match_alsa_ports_identity() {
   const std::vector<alsa_seq_port_row_t> ports = {
       port_row(1, 0, "Alpha", "OUT"),
       port_row(2, 0, "Beta", "IN"),
@@ -51,10 +51,6 @@ void test_match_alsa_ports_identity_and_legacy() {
       match_alsa_ports_for_side("alsa_seq:client=Alpha,port=OUT", ports);
   ASSERT_EQUAL(by_identity.size(), 1u);
   ASSERT_EQUAL(by_identity[0], 0u);
-
-  const auto by_legacy = match_alsa_ports_for_side("alsa:Alpha:OUT", ports);
-  ASSERT_EQUAL(by_legacy.size(), 1u);
-  ASSERT_EQUAL(by_legacy[0], 0u);
 }
 
 void test_match_alsa_ports_query_fanout() {
@@ -143,7 +139,7 @@ void test_plan_skips_non_alsa_and_disabled() {
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_is_direct_alsa_side),
-      TEST(test_match_alsa_ports_identity_and_legacy),
+      TEST(test_match_alsa_ports_identity),
       TEST(test_match_alsa_ports_query_fanout),
       TEST(test_plan_alsa_aconnect_direction),
       TEST(test_plan_alsa_aconnect_query_cartesian),

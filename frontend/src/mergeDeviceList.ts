@@ -2,12 +2,13 @@
 
 import type { Endpoint } from "./endpoints";
 import type { MidiAlsaSeqEntry } from "./midiEnumerate";
-import { peerStableId, type RouterPeer } from "./model";
+import type { RouterPeer } from "./model";
 import {
-  endpointIdFromIdentity,
+  canonicalIdentity,
   formatIdentityLabel,
+  identitiesEqual,
+  identityFromPeerRow,
   parseIdentity,
-  serializeIdentity,
 } from "./deviceIdentity";
 import { sourceLabel, type RegistryDevice } from "./devicesList";
 import { groupForEndpoint, type EndpointGroup } from "./endpointPickerUtils";
@@ -15,7 +16,7 @@ import { groupForEndpoint, type EndpointGroup } from "./endpointPickerUtils";
 export type DeviceStatusTag = "online" | "offline";
 
 export type MergedDeviceRow = {
-  /** Card id for refs, favorites, highlight (endpoint id or `registry:…`). */
+  /** Card id for refs, favorites, highlight (device identity or `registry:…`). */
   id: string;
   endpoint: Endpoint | null;
   registry: RegistryDevice | null;
@@ -29,8 +30,8 @@ export type MergedDeviceRow = {
   lastSeen?: number;
   /** Registry row with no live endpoint / peer. */
   isOfflineOnly: boolean;
-  /** endpoint.connect / monitor.start id (live endpoint or derived from identity). */
-  connectEndpointId: string | null;
+  /** endpoint.connect / monitor.start identity (live endpoint or registry). */
+  connectIdentity: string | null;
   /** Used for sort/filter (local vs remote, activity, …). */
   sortEndpoint: Endpoint;
 };
@@ -45,36 +46,11 @@ function groupForRegistryType(typePrefix: string): EndpointGroup {
   return typePrefix === "rtpmidi_client" ? "remote" : "local";
 }
 
-function alsaIdentityForEndpoint(
-  endpointId: string,
-  alsaSeq: MidiAlsaSeqEntry[],
-): string | undefined {
-  if (!endpointId.startsWith("alsa:")) return undefined;
-  const rest = endpointId.slice(5);
-  const colon = rest.indexOf(":");
-  if (colon < 0) return undefined;
-  const client = Number(rest.slice(0, colon));
-  const port = Number(rest.slice(colon + 1));
-  if (!Number.isFinite(client) || !Number.isFinite(port)) return undefined;
-  const row = alsaSeq.find((a) => a.client === client && a.port === port);
-  if (!row?.client_name || !row?.port_name) return undefined;
-  const parsed = parseIdentity(
-    serializeIdentity({
-      typePrefix: "alsa_seq",
-      fields: [
-        { key: "client", value: row.client_name, bracketed: false },
-        { key: "port", value: row.port_name, bracketed: false },
-      ],
-    }),
-  );
-  return parsed ? serializeIdentity(parsed) : undefined;
-}
-
 function buildRegistryIndexes(devices: RegistryDevice[]) {
   const byPeerId = new Map<number, RegistryDevice>();
   const byIdentity = new Map<string, RegistryDevice>();
   for (const d of devices) {
-    byIdentity.set(d.identity, d);
+    byIdentity.set(canonicalIdentity(d.identity), d);
     if (d.peerId !== undefined) byPeerId.set(d.peerId, d);
   }
   return { byPeerId, byIdentity };
@@ -85,28 +61,22 @@ function findRegistryForEndpoint(
   peer: RouterPeer | undefined,
   byPeerId: Map<number, RegistryDevice>,
   byIdentity: Map<string, RegistryDevice>,
-  alsaSeq: MidiAlsaSeqEntry[],
 ): RegistryDevice | null {
   if (endpoint.peerId !== undefined) {
     const hit = byPeerId.get(endpoint.peerId);
     if (hit) return hit;
   }
-  if (endpoint.id.startsWith("host:")) {
-    for (const d of byIdentity.values()) {
-      if (endpointIdFromIdentity(d.identity) === endpoint.id) return d;
-    }
-  }
+  const hit = byIdentity.get(canonicalIdentity(endpoint.identity));
+  if (hit) return hit;
   if (peer) {
-    const legacy = peerStableId(peer);
-    if (legacy) {
-      const hit = byIdentity.get(legacy);
-      if (hit) return hit;
+    const pid = identityFromPeerRow(peer);
+    if (pid) {
+      const byPeer = byIdentity.get(canonicalIdentity(pid));
+      if (byPeer) return byPeer;
     }
   }
-  const alsaId = alsaIdentityForEndpoint(endpoint.id, alsaSeq);
-  if (alsaId) {
-    const hit = byIdentity.get(alsaId);
-    if (hit) return hit;
+  for (const d of byIdentity.values()) {
+    if (identitiesEqual(d.identity, endpoint.identity)) return d;
   }
   return null;
 }
@@ -127,7 +97,7 @@ function rowFromEndpoint(
 ): MergedDeviceRow {
   const online = endpoint.peerId !== undefined || endpoint.kind === "rtpmidi";
   return {
-    id: endpoint.id,
+    id: endpoint.identity,
     endpoint,
     registry,
     label: registry?.name || endpoint.label,
@@ -138,7 +108,7 @@ function rowFromEndpoint(
     statusTag: online ? "online" : "offline",
     lastSeen: registry?.lastSeen,
     isOfflineOnly: false,
-    connectEndpointId: endpoint.id,
+    connectIdentity: endpoint.identity,
     sortEndpoint: endpoint,
   };
 }
@@ -148,10 +118,14 @@ function rowFromRegistry(
   registryEnabled: boolean,
 ): MergedDeviceRow {
   const label = registry.name || formatIdentityLabel(registry.identity);
-  const connectEndpointId = endpointIdFromIdentity(registry.identity);
+  const parsed = parseIdentity(registry.identity);
+  const kind =
+    registry.type === "rtpmidi_client" || parsed?.typePrefix === "rtpmidi_client"
+      ? "rtpmidi"
+      : "peer";
   const sortEndpoint: Endpoint = {
-    id: connectEndpointId ?? registryCardId(registry.identity),
-    kind: registry.type === "rtpmidi_client" ? "rtpmidi" : "peer",
+    identity: registry.identity,
+    kind,
     label,
     sub: formatIdentityLabel(registry.identity),
   };
@@ -167,7 +141,7 @@ function rowFromRegistry(
     statusTag: "offline",
     lastSeen: registry.lastSeen,
     isOfflineOnly: true,
-    connectEndpointId,
+    connectIdentity: registry.identity,
     sortEndpoint,
   };
 }
@@ -179,7 +153,7 @@ export function mergeDeviceList(args: {
   peers: RouterPeer[];
   alsaSeq: MidiAlsaSeqEntry[];
 }): MergedDeviceRow[] {
-  const { endpoints, registryDevices, registryEnabled, peers, alsaSeq } = args;
+  const { endpoints, registryDevices, registryEnabled, peers } = args;
   const byPeerIdPeer = new Map(peers.map((p) => [p.id, p]));
   const { byPeerId, byIdentity } = buildRegistryIndexes(registryDevices);
   const matchedRegistry = new Set<string>();
@@ -191,13 +165,7 @@ export function mergeDeviceList(args: {
         ? byPeerIdPeer.get(endpoint.peerId)
         : undefined;
     const registry = registryEnabled
-      ? findRegistryForEndpoint(
-          endpoint,
-          peer,
-          byPeerId,
-          byIdentity,
-          alsaSeq,
-        )
+      ? findRegistryForEndpoint(endpoint, peer, byPeerId, byIdentity)
       : null;
     if (registry) matchedRegistry.add(registry.identity);
     out.push(rowFromEndpoint(endpoint, registry, registryEnabled));
@@ -207,11 +175,7 @@ export function mergeDeviceList(args: {
     for (const registry of registryDevices) {
       if (matchedRegistry.has(registry.identity)) continue;
       if (registry.online && registry.peerId !== undefined) {
-        const connectId = endpointIdFromIdentity(registry.identity);
-        const liveEndpoint =
-          connectId !== null
-            ? endpoints.find((e) => e.id === connectId)
-            : undefined;
+        const liveEndpoint = endpoints.find((e) => e.peerId === registry.peerId);
         if (liveEndpoint) continue;
       }
       out.push(rowFromRegistry(registry, registryEnabled));

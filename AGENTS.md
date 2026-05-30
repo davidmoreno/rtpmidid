@@ -83,7 +83,7 @@ graph TB
 1. **Peer Abstraction**: Every MIDI endpoint (ALSA port, network connection, raw device) is a `midipeer_t`
 2. **Unidirectional Connections**: Router connections are one-way; bidirectional requires two connections
 3. **Event-Driven**: All I/O is non-blocking, using epoll for multiplexing
-4. **Factory Pattern**: Peer creation is centralized in `factory.cpp` for consistency and testability
+4. **Identity-based factory**: Peer creation is centralized in `peer_factory.cpp` (`create_peer` / `create_peer_from_string`) keyed on device identity strings
 5. **Shared Ownership**: Peers are managed via `std::shared_ptr` with the router holding references
 
 ### Peer Types
@@ -424,7 +424,7 @@ sequenceDiagram
     
     mDNS->>Handler: Remote service discovered
     Handler->>Handler: Check name filters (regex)
-    Handler->>Router: add_peer(make_peer_import_alsa_rtp(...))
+    Handler->>Router: ensure_peer_for_identity / create_peer
     Router->>Listener: Assign peer_id
     Listener->>ASEQ: Create ALSA port
     Note over Listener: Waits for ALSA connection
@@ -432,6 +432,45 @@ sequenceDiagram
     Listener->>Listener: Create RTP client
     Listener->>Listener: Connect to remote
 ```
+
+---
+
+## Device identity grammar
+
+Every MIDI endpoint is addressed by a single string everywhere: daemon startup INI, connection DB, control RPC, Web UI, and tests.
+
+```
+type_prefix:key=value,key2=value2
+```
+
+- **Type prefix** selects the peer kind (see table below). Parsed by `device_identity_t` (`src/device_identity.hpp`).
+- **Fields** are comma-separated `key=value` pairs. Values may be quoted or escaped per the grammar in `device_identity.cpp`.
+- **Queries** (partial identities with bracket syntax) match online devices but cannot create peers.
+- **Runtime-only types** (`rtpmidi_session`, `webui_monitor`) require protocol attachments at spawn time; they cannot be created from a bare identity string alone.
+
+| Type prefix | Peer kind | Creatable from string | Required fields |
+|-------------|-----------|----------------------|-----------------|
+| `alsa_seq` | ALSA sequencer port | yes | `client`, `port` (or `name` only for display) |
+| `rawmidi` | Raw MIDI device | yes | `device`; optional `name` |
+| `rtpmidi_client` | RTP-MIDI client | yes | `hostname`, `service`; optional `port` |
+| `rtpmidi_session` | Active RTP session | attachment only | `hostname`+`service` or `name` |
+| `rtpmidi_server` | RTP-MIDI server export | yes | `name`; optional `port` |
+| `rtpmidi_multi` | RTP-MIDI multi-listener | yes | `name`, `port` |
+| `alsa_multi` | ALSA network export | yes | `name` |
+| `alsa_listener` | ALSA listener (lazy RTP) | yes | `service` or `name`; optional `hostname`, `port` |
+| `webui_monitor` | Web UI monitor sink | internal only | `target`, `uuid` |
+
+**Factory API** (`src/peer_factory.hpp`, `src/peer_factory.cpp`):
+
+```cpp
+peer_factory_context_t ctx{aseq, router, mdns};
+create_peer_from_string("rawmidi:device=/dev/snd/midiC0D0", ctx, &err);
+create_peer({identity, attachment, rtppeer, rtpclient, ...}, ctx, &err);
+```
+
+**Spawn recipes** (`src/peer_spawn.cpp`): `spawn_import_rtpmidi_connection`, `spawn_alsa_network_server`, `spawn_alsa_listener_client`, `ensure_peer_for_identity`, `apply_ini_connects`.
+
+Inverse helpers (`src/device_identity_from_peer.hpp`): `identity_from_rtppeer`, `identity_from_rtpclient_connect`, `identity_from_alsa_names`, `compute_device_identity`.
 
 ---
 
@@ -451,28 +490,28 @@ control=/var/run/rtpmidid/control.sock  # Control socket path
 log_level=info               # debug|info|warning|error
 ```
 
-**[peer]** (repeatable) — stable `id=` and `type=`; factory types need no `[connect]` at startup.
-
-- `type=listen_rtpmidi` → RTP-MIDI multi-listener + mDNS announce (`name`, `port`).
-- `type=listen_alsa_network` → ALSA “Network Export” multi-listener (`name`).
-- Bridge leg types (`rawmidi`, `rtpmidi_listen`, `rtpmidi_connect`, `alsa_listener`) are used with `[connect]` and/or `[bridge]`; see `default.ini` and `src/ini_graph.cpp` (lowering to `rawmidi_t` / `connect_to_t` / announce vectors).
+**[peer]** (repeatable) — full device identity string (same grammar as connections DB / Web UI):
 
 ```ini
 [peer]
-id=announce_main
-type=listen_rtpmidi
-name={{hostname}}
-port=5004
+identity=rtpmidi_multi:name={{hostname}},port=5004
 
 [peer]
-id=alsa_net_export
-type=listen_alsa_network
-name=Network Export
+identity=alsa_multi:name=Network Export
 ```
 
-**[connect]** (repeatable) — `from=<peer id>` `to=<peer id>` (directed). Full-duplex raw MIDI ↔ RTP uses two opposite lines.
+**[connect]** (repeatable) — `from` and `to` are identity strings (or stored query sides). Optional `direction=a2b|b2a|both` (default `both`). Full-duplex bridges use two directed lines:
 
-**[bridge]** (repeatable) — `local.*` / `remote.*` keys (`local.id`, `local.type`, …); expands to peer rows + connects (or appends `connect_to_t` for `alsa_listener` + `rtpmidi_connect`).
+```ini
+[connect]
+from=rawmidi:device=/dev/snd/midiC4D0,name=MIDI Export
+to=rtpmidi_server:name=MIDI Export,port=5104
+[connect]
+from=rtpmidi_server:name=MIDI Export,port=5104
+to=rawmidi:device=/dev/snd/midiC4D0,name=MIDI Export
+```
+
+Legacy `[bridge]`, `type=listen_rtpmidi`, and `id=` peer graphs are **not** supported.
 
 **[rtpmidi_discover]**
 ```ini
@@ -492,7 +531,7 @@ type=hardware                # hardware|software|all|none
 
 ### Settings Structure
 
-Settings are parsed into `settings_t` (`src/settings.hpp`). Unified `[peer]` / `[connect]` / `[bridge]` populate `ini_peers` / `ini_connects` during parse; `load_ini()` then runs `finalize_unified_ini_graph()` which fills `rtpmidi_announces`, `alsa_announces`, `connect_to`, and `rawmidi` for `main.cpp`.
+Settings are parsed into `settings_t` (`src/settings.hpp`). `[peer]` and `[connect]` populate `ini_peers` / `ini_connects`; `main.cpp` creates peers via `create_peer_from_string()` and wires connects via `apply_ini_connects()`.
 
 ```cpp
 struct settings_t {
@@ -500,13 +539,11 @@ struct settings_t {
     std::string control_filename;
     rtpmidid::logger_level_t log_level;
 
-    std::vector<rtpmidi_announce_t> rtpmidi_announces;
+    std::vector<ini_peer_t> ini_peers;       // { identity }
+    std::vector<ini_connect_t> ini_connects; // { from, to, direction? }
     rtpmidi_discover_t rtpmidi_discover;
-    std::vector<alsa_announce_t> alsa_announces;
-    std::vector<connect_to_t> connect_to;
     alsa_hw_auto_export_t alsa_hw_auto_export;
-    std::vector<rawmidi_t> rawmidi;
-    // transient until finalize: ini_peer_template_t, ini_connect_t vectors
+    // web, database, ...
 };
 ```
 
@@ -546,21 +583,19 @@ The daemon exposes a Unix domain socket for runtime control and monitoring.
 | `router.remove` | Remove a peer | `{"peer_id": id}` |
 | `router.connect` | Connect two peers | `{"from": id, "to": id}` |
 | `router.disconnect` | Disconnect two peers | `{"from": id, "to": id}` |
-| `router.create.list` | List create-peer field schemas | `{}` |
-| `router.create.local_rawmidi` | Create raw MIDI peer | `{"name", "device"}` |
-| `router.create.network_rtpmidi_client` | Create RTP-MIDI client | `{"name", "hostname", "port"}` |
-| `router.create.network_rtpmidi_listener` | Create RTP-MIDI listener | `{"name", "udp_port"}` |
-| `router.create.local_alsa_peer` | Create ALSA sequencer peer | `{"name", "alsa_client"?, "alsa_port"?}` |
+| `router.create` | Create a peer from device identity | `{"identity": "rawmidi:device=…"}` |
+| `endpoint.connect` | Connect two identities (creates peers if needed) | `{"from": "<identity>", "to": "<identity>", "bidi": true?}` |
+| `endpoint.disconnect` | Disconnect two identities | same |
+| `router.create.list` | List creatable identity type prefixes | `{}` |
 | `mdns.remove` | Remove mDNS announcement | `{"name", "hostname"?, "port"}` |
-| `export.rawmidi` | Export raw MIDI device | `{"device": "...", ...}` |
-| `monitor.start` | Web UI MIDI monitor: tee router edges into a sink peer | `{"endpoint": "<same id as Devices tab / endpoint.connect>"}` → `{uuid, peer_id, target_peer_id}` |
+| `monitor.start` | Web UI MIDI monitor | `{"identity": "<target identity>"}` → `{uuid, peer_id, target_peer_id}` |
 | `monitor.stop` | Tear down monitor session | `{"uuid": "<from monitor.start>"}` |
 | `devices.list` | Known devices (registry): identity, online, source, last seen | none (requires `[database]`) |
 | `devices.add_manual` | Register a manual device | `{"identity": "key=value…", "name"?}` |
 | `devices.remove` | Remove a manual registry entry | `{"identity": "…"}` |
 | `connections.list` | Persisted connections with direction, enabled, match status | none (requires `[database]`) |
 | `connections.save` | Save/update connection with query sides + direction | `{"side_a", "side_b", "direction": "a2b"\|"b2a"\|"both", "enabled": 0\|1}` |
-| `connections.add` | Legacy: save pair as bidirectional | `{"side_a", "side_b"}` (endpoint id or identity) |
+| `connections.add` | Legacy: save pair as bidirectional | `{"side_a", "side_b"}` (identity strings) |
 | `connections.remove` | Delete persisted connection | `{"side_a", "side_b"}` |
 | `connections.enable` | Re-enable auto-reconnect for a saved connection | `{"side_a", "side_b"}` |
 | `connections.disable` | Disable auto-reconnect (keeps row in DB) | `{"side_a", "side_b"}` |
@@ -812,7 +847,7 @@ Output format includes colorized level, source file, line number, and message:
 **Adding a new peer type:**
 1. Create class inheriting from `midipeer_t`
 2. Implement all virtual methods
-3. Add factory function in `factory.cpp`
+3. Register in `peer_factory.cpp` (`create_peer` switch) and `peer_kind.cpp`
 4. Add configuration section if needed
 5. Write tests first (TDD)
 
@@ -833,7 +868,7 @@ Output format includes colorized level, source file, line number, and message:
 - C++17 standard
 - Use `std::shared_ptr` for shared ownership
 - Use RAII for resource management (poller listeners, timers)
-- Prefer factory functions over direct construction
+- Prefer `create_peer_from_string()` over direct peer construction
 - Use `NON_COPYABLE_NOR_MOVABLE` macro for non-copyable classes
 - JSON for control / Web UI via **dm-json** (`lib/dm_json/`, `scripts/dm_json_gen.py`, annotated structs in `src/dm_json_*.hpp`)
 

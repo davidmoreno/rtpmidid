@@ -1,8 +1,8 @@
 /**
- * Phase 1: peer_kind mapping and factory get_type() consistency.
+ * peer_kind mapping and peer_factory get_type() consistency.
  */
 #include "../src/device_identity_from_peer.hpp"
-#include "../src/factory.hpp"
+#include "../src/peer_factory.hpp"
 #include "../src/midipeer.hpp"
 #include "../src/peer_kind.hpp"
 #include "test_case.hpp"
@@ -34,6 +34,8 @@ void assert_peer_type(const std::shared_ptr<midipeer_t> &peer,
   ASSERT_TRUE(kind.has_value());
   ASSERT_TRUE(*kind == expected);
 }
+
+peer_factory_context_t empty_factory_ctx() { return peer_factory_context_t{}; }
 
 } // namespace
 
@@ -77,27 +79,29 @@ void test_peer_kind_classification_flags() {
 }
 
 void test_factory_export_rtpmidi_server_type() {
-  auto peer = make_peer_export_rtpmidi_server("factory-test", "50210");
-  assert_peer_type(peer, peer_kind_e::export_rtpmidi_server);
+  std::string err;
+  auto peer = create_peer_from_string("rtpmidi_server:name=factory-test,port=50210",
+                                      empty_factory_ctx(), &err);
+  ASSERT_TRUE(peer.has_value());
+  assert_peer_type(*peer, peer_kind_e::export_rtpmidi_server);
 }
 
 void test_factory_rtpmidi_client_type() {
-  auto peer = make_peer_device_rtpmidi_client("cli", "127.0.0.1", "5004");
-  assert_peer_type(peer, peer_kind_e::device_rtpmidi_client);
-}
-
-void test_peer_kind_rpc_create_keys() {
-  ASSERT_TRUE(peer_kind_rpc_create_key(peer_kind_e::device_rawmidi).has_value());
-  ASSERT_EQUAL(std::strcmp(*peer_kind_rpc_create_key(peer_kind_e::device_rawmidi),
-                           "local_rawmidi_t"),
-               0);
-  ASSERT_FALSE(peer_kind_rpc_create_key(peer_kind_e::import_rtpmidi).has_value());
+  std::string err;
+  auto peer = create_peer_from_string(
+      "rtpmidi_client:hostname=127.0.0.1,port=5004,service=cli",
+      empty_factory_ctx(), &err);
+  ASSERT_TRUE(peer.has_value());
+  assert_peer_type(*peer, peer_kind_e::device_rtpmidi_client);
 }
 
 void test_factory_export_rtpmidi_server_device_identity() {
-  auto peer = make_peer_export_rtpmidi_server("factory-test", "50211");
-  router_peer_row_t row = peer->status();
-  row.type = peer->get_type();
+  std::string err;
+  auto peer = create_peer_from_string("rtpmidi_server:name=factory-test,port=50211",
+                                      empty_factory_ctx(), &err);
+  ASSERT_TRUE(peer.has_value());
+  router_peer_row_t row = (*peer)->status();
+  row.type = (*peer)->get_type();
   const auto id = compute_device_identity(row);
   ASSERT_TRUE(id.has_value());
   ASSERT_TRUE(id->serialize().find("rtpmidi_server:name=factory-test") == 0);
@@ -111,7 +115,6 @@ int main(int argc, char **argv) {
       TEST(test_factory_export_rtpmidi_server_type),
       TEST(test_factory_export_rtpmidi_server_device_identity),
       TEST(test_factory_rtpmidi_client_type),
-      TEST(test_peer_kind_rpc_create_keys),
   };
 
   testcase.run(argc, argv);

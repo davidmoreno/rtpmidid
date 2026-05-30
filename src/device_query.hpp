@@ -26,6 +26,10 @@ struct device_query_t {
   bool matches(const device_identity_t &identity) const;
 };
 
+/** True when the identity string contains bracketed stored-query fields. */
+bool device_identity_is_stored_query(const device_identity_t &identity);
+bool device_identity_is_stored_query(std::string_view text);
+
 /** Indices into @a devices of every identity satisfied by @a query. */
 std::vector<size_t> find_all_matching(const device_query_t &query,
                                       const std::vector<device_identity_t> &devices);

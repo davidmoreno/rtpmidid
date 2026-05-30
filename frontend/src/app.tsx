@@ -25,6 +25,11 @@ import {
   type MidiAlsaSeqEntry,
   type MidiRawmidiEntry,
 } from "./midiEnumerate";
+import {
+  identityFromForm,
+  identityFromRtpClientConnect,
+  serializeIdentity,
+} from "./deviceIdentity";
 import { useUiTheme } from "./theme";
 import type { StatusResult } from "./tabs/types";
 import { AboutTab } from "./tabs/AboutTab";
@@ -176,11 +181,10 @@ export function App() {
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
 
-  /* Jump to Devices and pulse the matching card. The endpoint id format
-     matches the endpoint cards in PeersCards (alsa:c:p / peer:N / mdns:Name::Port). */
-  const onOpenEndpointInDevices = useCallback((endpointId: string) => {
+  /* Jump to Devices and pulse the matching card (device identity string). */
+  const onOpenEndpointInDevices = useCallback((identity: string) => {
     setTab("devices");
-    setHighlightEndpointId(endpointId);
+    setHighlightEndpointId(identity);
     if (endpointHighlightClearTimer.current !== undefined) {
       window.clearTimeout(endpointHighlightClearTimer.current);
     }
@@ -294,15 +298,23 @@ export function App() {
         );
 
         if (args.local.mode === "alsa_seq") {
-          await rpc.call("router.create.local_alsa_peer", {
+          const parsed = identityFromForm("alsa_seq", {
+            client: args.local.client,
+            port: args.local.port,
             name: uniquePeerName,
-            alsa_client: args.local.client,
-            alsa_port: args.local.port,
+          });
+          if (!parsed) throw new Error("Invalid ALSA identity");
+          await rpc.call("router.create", {
+            identity: serializeIdentity(parsed),
           });
         } else {
-          await rpc.call("router.create.local_rawmidi", {
-            name: uniquePeerName,
+          const parsed = identityFromForm("rawmidi", {
             device: args.local.device,
+            name: uniquePeerName,
+          });
+          if (!parsed) throw new Error("Invalid raw MIDI identity");
+          await rpc.call("router.create", {
+            identity: serializeIdentity(parsed),
           });
         }
 
@@ -328,11 +340,13 @@ export function App() {
           "Remote";
         const clientName = `WEB · ${safe}`;
 
-        await rpc.call("router.create.network_rtpmidi_client", {
-          name: clientName,
-          hostname: args.target.trim(),
-          port: normalizeRtpMidiUdpPort(args.port),
-        });
+        const clientIdentity = identityFromRtpClientConnect(
+          args.target.trim(),
+          normalizeRtpMidiUdpPort(args.port),
+          clientName,
+        );
+        if (!clientIdentity) throw new Error("Invalid RTP client identity");
+        await rpc.call("router.create", { identity: clientIdentity });
 
         const afterClient = (await rpc.call("status", {})) as StatusResult;
         const peersAfterClient = normalizePeers(afterClient.router ?? []);

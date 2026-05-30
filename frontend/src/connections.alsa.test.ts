@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { identityFromAlsaNames, identityFromPeerRow } from "./deviceIdentity";
 import {
-  alsaStableIdFromNames,
   buildAlsaSubscriptionConnections,
   buildConnections,
   parseAlsaSubscriptions,
-  peerStableId,
   type AlsaSubscriptionRaw,
   type RouterPeer,
 } from "./model";
@@ -27,22 +26,17 @@ const sub = (
   to_port_name: to.pn,
 });
 
-describe("alsaStableIdFromNames", () => {
-  it("escapes colons in client/port names so the id parses round-trippably", () => {
-    expect(alsaStableIdFromNames("My:Synth", "Port:1")).toBe(
-      "alsa:My|Synth:Port|1",
-    );
-  });
+describe("identityFromAlsaNames", () => {
   it("returns undefined when either name is empty", () => {
-    expect(alsaStableIdFromNames("", "Port")).toBeUndefined();
-    expect(alsaStableIdFromNames("Client", "")).toBeUndefined();
+    expect(identityFromAlsaNames("", "Port")).toBeNull();
+    expect(identityFromAlsaNames("Client", "")).toBeNull();
   });
 });
 
 describe("parseAlsaSubscriptions", () => {
   it("ignores rows that miss any of the four required numeric addresses", () => {
     const raw = [
-      { from_client: 1, from_port: 0, to_client: 2 }, // missing to_port
+      { from_client: 1, from_port: 0, to_client: 2 },
       sub({ c: 1, p: 0 }, { c: 2, p: 1 }),
     ];
     expect(parseAlsaSubscriptions(raw)).toHaveLength(1);
@@ -72,13 +66,11 @@ describe("buildAlsaSubscriptionConnections", () => {
     expect(rows[0].direction).toBe("→");
   });
 
-  it("populates stableId on both sides so the row can be saved", () => {
+  it("populates identity on both sides so the row can be saved", () => {
     const subs = [sub({ c: 1, p: 0, cn: "A", pn: "P1" }, { c: 2, p: 0, cn: "B", pn: "P2" })];
     const rows = buildAlsaSubscriptionConnections(subs, []);
-    expect(rows[0].from.stableId).toBe("alsa:A:P1");
-    expect(rows[0].to.stableId).toBe("alsa:B:P2");
-    expect(rows[0].from.endpointId).toBe("alsa:1:0");
-    expect(rows[0].to.endpointId).toBe("alsa:2:0");
+    expect(rows[0].from.identity).toBe("alsa_seq:client=A,port=P1");
+    expect(rows[0].to.identity).toBe("alsa_seq:client=B,port=P2");
   });
 
   it("uses the daemon-provided client/port names to build labels even when only one row carries them", () => {
@@ -110,8 +102,8 @@ describe("buildAlsaSubscriptionConnections", () => {
   });
 });
 
-describe("peerStableId", () => {
-  it("matches the daemon's peer_device_alsa_seq_t format", () => {
+describe("identityFromPeerRow", () => {
+  it("matches alsa_seq from peer_device_alsa_seq_t", () => {
     const peer: RouterPeer = {
       id: 5,
       name: "ALSA: Synth",
@@ -123,10 +115,10 @@ describe("peerStableId", () => {
         alsa_subscribe_from: { client: 128, port: 0, client_name: "My:Synth", port_name: "Out" },
       },
     };
-    expect(peerStableId(peer)).toBe("alsa:My|Synth:Out");
+    expect(identityFromPeerRow(peer)).toBe("alsa_seq:client=My\\:Synth,port=Out");
   });
 
-  it("returns undefined for peer types that have no stable identity", () => {
+  it("returns null for webui monitor peer", () => {
     const peer: RouterPeer = {
       id: 9,
       name: "Web monitor",
@@ -136,90 +128,11 @@ describe("peerStableId", () => {
       sent: 0,
       raw: {},
     };
-    expect(peerStableId(peer)).toBeUndefined();
-  });
-
-  /* The following tests cover the new fallback paths added so users see ☆
-     instead of the disabled marker on more rows. Each fallback IS lossy
-     (relies on configured names rather than structural fields), but for
-     INI/RPC-configured peers the name is stable across restarts. */
-
-  it("falls back to alsa_local:<name> for peer_device_alsa_seq_t without alsa_subscribe_from", () => {
-    const peer: RouterPeer = {
-      id: 12,
-      name: "Network Export",
-      type: "peer_device_alsa_seq_t",
-      send_to: [],
-      recv: 0,
-      sent: 0,
-      raw: { name: "Network Export" },
-    };
-    expect(peerStableId(peer)).toBe("alsa_local:Network Export");
-  });
-
-  it("treats hostname=\"null\" as empty so we don't burn the sentinel into a stable id", () => {
-    /* network_address_t formats unresolved sockaddrs as the literal "null".
-       Falling back to the peer name keeps the row saveable. */
-    const peer: RouterPeer = {
-      id: 15,
-      name: "MyClient",
-      type: "peer_device_rtpmidi_client_t",
-      send_to: [],
-      recv: 0,
-      sent: 0,
-      raw: {
-        connect_hostname: "null",
-        peer: { remote: { hostname: "null", name: "" } },
-      },
-    };
-    expect(peerStableId(peer)).toBe("rtpmidi_client_named:MyClient");
-  });
-
-  it("uses alsa_listener_named:<name> when the listener name doesn't follow the ' <-> ' convention", () => {
-    const peer: RouterPeer = {
-      id: 20,
-      name: "Custom Listener Name",
-      type: "peer_import_alsa_rtp_t",
-      send_to: [],
-      recv: 0,
-      sent: 0,
-      raw: { name: "Custom Listener Name" },
-    };
-    expect(peerStableId(peer)).toBe("alsa_listener_named:Custom Listener Name");
-  });
-
-  it("provides a generic <short_type>:<name> id for unknown peer types so saves still work", () => {
-    const peer: RouterPeer = {
-      id: 30,
-      name: "MyPeer",
-      type: "future_peer_kind_t",
-      send_to: [],
-      recv: 0,
-      sent: 0,
-      raw: { name: "MyPeer" },
-    };
-    expect(peerStableId(peer)).toBe("future_peer_kind:MyPeer");
-  });
-
-  it("never returns a stable id for the session-bound monitor sink even when it has a name", () => {
-    const peer: RouterPeer = {
-      id: 40,
-      name: "monitor-uuid-deadbeef",
-      type: "webui_midi_monitor_peer_t",
-      send_to: [],
-      recv: 0,
-      sent: 0,
-      raw: { name: "monitor-uuid-deadbeef" },
-    };
-    expect(peerStableId(peer)).toBeUndefined();
+    expect(identityFromPeerRow(peer)).toBeNull();
   });
 });
 
 describe("buildConnections (aggregate rows dropped)", () => {
-  /* `rtp_srv:` and `rtp_link:` rows used to be emitted to visualise an RTP
-     listener's remotes and an RTP client's connection-string respectively.
-     They duplicated info already shown in the Devices tab and their synthetic
-     "to" side could never be saved, so we now drop them entirely. */
   it("does not emit an aggregate row for peer_export_rtpmidi_server_t", () => {
     const listener: RouterPeer = {
       id: 1,
@@ -245,7 +158,7 @@ describe("buildConnections (aggregate rows dropped)", () => {
       raw: {
         name: "Synth",
         connect_hostname: "192.168.1.5",
-        connect_port: 5004,
+        connect_port: "5004",
       },
     };
     const rows = buildConnections([client]);
@@ -278,24 +191,30 @@ describe("buildConnections (aggregate rows dropped)", () => {
     const rows = buildConnections([a, b]);
     expect(rows).toHaveLength(1);
     expect(rows[0].kind).toBe("router");
+    expect(rows[0].from.identity).toBe("alsa_seq:client=A,port=P");
+    expect(rows[0].to.identity).toBe("alsa_seq:client=B,port=P");
   });
 });
 
 describe("mergeConnectionsWithPersisted (alsaseq path)", () => {
-  it("marks an alsaseq row as persisted when both sides stable ids match a saved pair", () => {
+  it("marks an alsaseq row as persisted when both sides match a saved pair", () => {
     const subs = [sub({ c: 1, p: 0, cn: "A", pn: "P1" }, { c: 2, p: 0, cn: "B", pn: "P2" })];
     const live = buildAlsaSubscriptionConnections(subs, []);
     const merged = mergeConnectionsWithPersisted(
       live,
-      [{ side_a: "alsa:A:P1", side_b: "alsa:B:P2" }],
+      [
+        {
+          side_a: "alsa_seq:client=A,port=P1",
+          side_b: "alsa_seq:client=B,port=P2",
+        },
+      ],
       [],
     );
-    /* One live row + zero saved-only rows (live matched the saved pair). */
     expect(merged).toHaveLength(1);
     expect(merged[0].persisted).toBe(true);
     expect(merged[0].canRemoveFromDb).toBe(true);
-    expect(merged[0].persistedSideA).toBe("alsa:A:P1");
-    expect(merged[0].persistedSideB).toBe("alsa:B:P2");
+    expect(merged[0].persistedSideA).toBe("alsa_seq:client=A,port=P1");
+    expect(merged[0].persistedSideB).toBe("alsa_seq:client=B,port=P2");
   });
 
   it("offers + (canAddToDb) for live alsaseq rows that have no matching saved pair", () => {
@@ -306,7 +225,7 @@ describe("mergeConnectionsWithPersisted (alsaseq path)", () => {
     expect(merged[0].persisted).toBeUndefined();
   });
 
-  it("classifies a saved-only alsa pair as alsaseq (not midirouter)", () => {
+  it("classifies a saved-only alsa pair as alsaseq (legacy alsa: prefix)", () => {
     const merged = mergeConnectionsWithPersisted(
       [],
       [{ side_a: "alsa:Alpha:OUT", side_b: "alsa:Beta:IN" }],
@@ -333,8 +252,7 @@ describe("mergeConnectionsWithPersisted (alsaseq path)", () => {
 });
 
 describe("annotateLiveOnly / cannotSaveReason", () => {
-  it("flags router rows whose endpoint has no stable identity with a tooltip reason", () => {
-    /* Monitor peer (no stable id) wired to a local ALSA peer. */
+  it("flags router rows whose endpoint has no device identity with a tooltip reason", () => {
     const monitor: RouterPeer = {
       id: 9,
       name: "Web monitor",
@@ -359,6 +277,6 @@ describe("annotateLiveOnly / cannotSaveReason", () => {
     const annotated = annotateLiveOnly(live);
     expect(annotated).toHaveLength(1);
     expect(annotated[0].canAddToDb).toBeUndefined();
-    expect(annotated[0].cannotSaveReason).toMatch(/stable identity/i);
+    expect(annotated[0].cannotSaveReason).toMatch(/device identity/i);
   });
 });

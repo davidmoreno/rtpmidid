@@ -24,7 +24,8 @@
 #include "device_registry.hpp"
 #include "control_socket.hpp"
 #include "web_server.hpp"
-#include "factory.hpp"
+#include "peer_spawn.hpp"
+#include "peer_factory.hpp"
 #include "hwautoannounce.hpp"
 #include "peer_device_rawmidi.hpp"
 #include "midipeer.hpp"
@@ -147,10 +148,8 @@ public:
     control.mdns = rtpmididns::mdns;
     rtpmidi_remote_handler.emplace(router, aseq);
 
-    setup_local_alsa_multilistener();
-    setup_network_rtpmidi_multilistener();
-    setup_network_rtpmidi_listener();
-    setup_rawmidi_peers();
+    setup_ini_peers();
+    setup_ini_connects();
 
     hwautoannounce.emplace(aseq, router);
 
@@ -277,35 +276,27 @@ public:
   }
 
 protected:
-  void setup_local_alsa_multilistener() {
-    // Create all the alsa network midipeers
-    for (const auto &announce : rtpmididns::settings.alsa_announces) {
-      router->add_peer(
-          rtpmididns::make_peer_export_alsa_network(announce.name, aseq));
+  void setup_ini_peers() {
+    rtpmididns::peer_factory_context_t ctx;
+    ctx.aseq = aseq;
+    ctx.router = router;
+    ctx.mdns = rtpmididns::mdns;
+    for (const auto &p : rtpmididns::settings.ini_peers) {
+      std::string err;
+      auto peer =
+          rtpmididns::create_peer_from_string(p.identity, ctx, &err);
+      if (!peer)
+        throw rtpmidid::exception("INI peer '{}': {}", p.identity, err);
+      router->add_peer(*peer);
     }
   }
 
-  void setup_network_rtpmidi_multilistener() {
-    // Create all the rtpmidi network midipeers
-    for (const auto &announce : rtpmididns::settings.rtpmidi_announces) {
-      router->add_peer(rtpmididns::make_peer_import_rtpmidi(
-          announce.name, announce.port, aseq));
-    }
-  }
-
-  void setup_network_rtpmidi_listener() {
-    // Connect to all static endpoints
-    for (const auto &connect_to : rtpmididns::settings.connect_to) {
-      router->add_peer(rtpmididns::make_peer_import_alsa_rtp(
-          router, connect_to.name, connect_to.hostname, connect_to.port, aseq,
-          connect_to.local_udp_port));
-    }
-  }
-
-  void setup_rawmidi_peers() {
-    for (const auto &rawmidi : rtpmididns::settings.rawmidi) {
-      create_rawmidi_rtpclient_pair(router.get(), rawmidi);
-    }
+  void setup_ini_connects() {
+    rtpmididns::peer_factory_context_t ctx;
+    ctx.aseq = aseq;
+    ctx.router = router;
+    ctx.mdns = rtpmididns::mdns;
+    rtpmididns::apply_ini_connects(ctx, router, rtpmididns::settings.ini_connects);
   }
 };
 

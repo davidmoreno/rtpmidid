@@ -17,7 +17,8 @@
  */
 
 #include "peer_import_rtpmidi.hpp"
-#include "factory.hpp"
+#include "peer_spawn.hpp"
+#include "peer_factory.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "utils.hpp"
@@ -60,11 +61,11 @@ peer_import_rtpmidi_t::peer_import_rtpmidi_t(
           return;
         }
         DEBUG("Got connection from {}", peer->remote_name);
-        auto alsa_id =
-            router->add_peer(make_peer_device_alsa_seq(peer->remote_name, aseq));
-        auto session_id = router->add_peer(make_peer_device_rtpmidi_session(peer));
-        router->connect(alsa_id, session_id);
-        router->connect(session_id, alsa_id);
+        peer_factory_context_t ctx;
+        ctx.aseq = aseq;
+        ctx.router = router;
+        ctx.mdns = mdns;
+        spawn_import_rtpmidi_connection(ctx, router, peer);
       });
 }
 

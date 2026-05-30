@@ -17,6 +17,7 @@
  */
 
 #include "ini.hpp"
+#include "device_identity.hpp"
 #include "rtpmidid/logger.hpp"
 #include "settings.hpp"
 #include "stringpp.hpp"
@@ -92,6 +93,40 @@ static std::string get_hostname() {
   return std::string(hostname.data());
 }
 
+static settings_t::ini_peer_t *
+find_ini_peer_by_prefix(settings_t *settings, std::string_view prefix) {
+  for (auto &p : settings->ini_peers) {
+    if (p.identity.starts_with(std::string(prefix) + ":"))
+      return &p;
+  }
+  return nullptr;
+}
+
+static void upsert_rtpmidi_multi(settings_t *settings, const std::string &name,
+                                 const std::string &port) {
+  if (auto *p = find_ini_peer_by_prefix(settings, "rtpmidi_multi")) {
+    if (auto id = device_identity_t::parse(p->identity)) {
+      std::vector<device_identity_field_t> fields;
+      fields.push_back({"name", name, false});
+      if (!port.empty())
+        fields.push_back({"port", port, false});
+      id->fields = std::move(fields);
+      p->identity = id->serialize();
+      return;
+    }
+  }
+  settings->ini_peers.push_back(
+      {FMT::format("rtpmidi_multi:name={},port={}", name, port)});
+}
+
+static void upsert_alsa_multi(settings_t *settings, const std::string &name) {
+  if (auto *p = find_ini_peer_by_prefix(settings, "alsa_multi")) {
+    p->identity = FMT::format("alsa_multi:name={}", name);
+    return;
+  }
+  settings->ini_peers.push_back({FMT::format("alsa_multi:name={}", name)});
+}
+
 void help(const std::vector<argument_t> &arguments) {
   std::print(CMDLINE_HELP, VERSION);
   for (auto &argument : arguments) {
@@ -112,42 +147,31 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
   arguments.emplace_back("--port", //
                          "Opens local port as server. Default 5004.",
                          [settings](const std::string &value) {
-                           if (settings->rtpmidi_announces.size() == 0) {
-                             settings->rtpmidi_announces.emplace_back();
-                             settings->rtpmidi_announces.begin()->name =
-                                 get_hostname();
-                           }
-                           settings->rtpmidi_announces.begin()->port = value;
+                           const std::string name =
+                               find_ini_peer_by_prefix(settings, "rtpmidi_multi")
+                                   ? device_identity_t::parse(find_ini_peer_by_prefix(
+                                         settings, "rtpmidi_multi")->identity)
+                                         ->find("name")
+                                         .value_or(get_hostname())
+                                   : get_hostname();
+                           upsert_rtpmidi_multi(settings, name, value);
                          });
   arguments.emplace_back( //
       "--name",           //
       "Forces the alsa and rtpmidi name", [settings](const std::string &value) {
-        if (settings->rtpmidi_announces.size() == 0) {
-          settings->rtpmidi_announces.emplace_back();
-        }
-        if (settings->alsa_announces.size() == 0) {
-          settings->alsa_announces.emplace_back();
-        }
-
-        settings->rtpmidi_announces.begin()->name = value;
-        settings->alsa_announces.begin()->name = value;
+        upsert_rtpmidi_multi(settings, value, "5004");
+        upsert_alsa_multi(settings, value);
         settings->alsa_name = value;
       });
   arguments.emplace_back( //
       "--alsa-name",      //
       "Forces the alsa name", [settings](const std::string &value) {
-        if (settings->alsa_announces.size() == 0) {
-          settings->alsa_announces.emplace_back();
-        }
-        settings->alsa_announces.begin()->name = value;
+        upsert_alsa_multi(settings, value);
       });
   arguments.emplace_back( //
       "--rtpmidid-name",  //
       "Forces the rtpmidi name", [settings](const std::string &value) {
-        if (settings->rtpmidi_announces.size() == 0) {
-          settings->rtpmidi_announces.emplace_back();
-        }
-        settings->rtpmidi_announces.begin()->name = value;
+        upsert_rtpmidi_multi(settings, value, "5004");
       });
   arguments.emplace_back("--control",
                          "Creates a control socket. Check CONTROL.md. Default "
@@ -207,9 +231,8 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
           ERROR("Empty rawmidi device. Doing nothing.");
           return;
         }
-        settings->rawmidi.emplace_back();
-        settings->rawmidi.back().device = value;
-        settings->rawmidi.back().name = "";
+        settings->ini_peers.push_back(
+            {FMT::format("rawmidi:device={}", value)});
       });
   arguments.emplace_back( //
       "--version",        //

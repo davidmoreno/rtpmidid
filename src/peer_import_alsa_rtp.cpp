@@ -19,7 +19,9 @@
 #include "peer_import_alsa_rtp.hpp"
 #include "peer_stable_id.hpp"
 #include "aseq.hpp"
-#include "factory.hpp"
+#include "peer_spawn.hpp"
+#include "peer_factory.hpp"
+#include "device_identity_from_peer.hpp"
 #include "dm_json_generated.hpp"
 #include "peer_device_alsa_seq.hpp"
 #include "mididata.hpp"
@@ -121,10 +123,32 @@ void peer_import_alsa_rtp_t::connect_to_remote_server(
   // External index, in the future if first connection fails, try next
   // and so on. If all fail then real fail.
   local_name = portname;
-  auto rtpclient = std::make_shared<rtpmidid::rtpclient_t>(portname);
+  const auto &ep = endpoints.front();
+  peer_factory_context_t ctx;
+  ctx.aseq = aseq;
+  ctx.router = router;
 
-  rtpmidiclientworker_peer_id =
-      router->add_peer(make_peer_device_rtpmidi_client(rtpclient));
+  auto rtpclient = std::make_shared<rtpmidid::rtpclient_t>(portname);
+  const auto client_identity =
+      identity_from_rtpclient_connect(ep.hostname, ep.port, portname);
+  if (!client_identity)
+    return;
+
+  peer_create_request_t req;
+  req.identity = *client_identity;
+  req.attachment = peer_attachment_kind_e::rtpclient;
+  req.rtpclient = rtpclient;
+
+  std::string err;
+  auto peer = create_peer(req, ctx, &err);
+  if (!peer) {
+    ERROR("alsa_listener client create failed: {}", err);
+    connection_count = 0;
+    aseq->disconnect_port(alsaport);
+    return;
+  }
+
+  rtpmidiclientworker_peer_id = router->add_peer(*peer);
   router->connect(rtpmidiclientworker_peer_id, peer_id);
   router->connect(peer_id, rtpmidiclientworker_peer_id);
 

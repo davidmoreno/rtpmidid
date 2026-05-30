@@ -4,7 +4,7 @@
 #include "../src/connection_db.hpp"
 #include "../src/connection_restore.hpp"
 #include "../src/device_identity.hpp"
-#include "../src/factory.hpp"
+#include "../src/peer_factory.hpp"
 #include "../src/midipeer.hpp"
 #include "../src/midirouter.hpp"
 #include "../src/peer_kind.hpp"

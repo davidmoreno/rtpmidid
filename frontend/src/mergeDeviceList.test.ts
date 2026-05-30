@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildEndpoints, endpointIdForHost, type Endpoint } from "./endpoints";
+import { buildEndpoints, type Endpoint } from "./endpoints";
 import { mergeDeviceList, registryCardId } from "./mergeDeviceList";
 import type { RegistryDevice } from "./devicesList";
 import type { RouterPeer } from "./model";
 
 describe("buildEndpoints host rtp clients", () => {
-  it("adds host endpoint for direct rtp client peers", () => {
+  it("adds endpoint for direct rtp client peers", () => {
     const peers: RouterPeer[] = [
       {
         id: 7,
@@ -28,14 +28,16 @@ describe("buildEndpoints host rtp clients", () => {
       peers,
     });
     expect(endpoints).toHaveLength(1);
-    expect(endpoints[0].id).toBe(endpointIdForHost("192.168.1.80", 5004));
+    expect(endpoints[0].identity).toBe(
+      "rtpmidi_client:hostname=192.168.1.80,port=5004,service=DeepMind 12D",
+    );
     expect(endpoints[0].peerId).toBe(7);
     expect(endpoints[0].label).toBe("DeepMind 12D");
   });
 });
 
 describe("mergeDeviceList manual rtp host merge", () => {
-  it("merges manual registry onto live host endpoint by hostname/port", () => {
+  it("merges manual registry onto live host endpoint by identity", () => {
     const registry: RegistryDevice = {
       identity: "rtpmidi_client:hostname=192.168.1.80,service=DeepMind 12D,port=5004",
       type: "rtpmidi_client",
@@ -56,6 +58,7 @@ describe("mergeDeviceList manual rtp host merge", () => {
         raw: {
           connect_hostname: "192.168.1.80",
           connect_port: "5004",
+          peer: { remote: { name: "DeepMind 12D", hostname: "192.168.1.80" } },
         },
       },
     ];
@@ -77,13 +80,15 @@ describe("mergeDeviceList manual rtp host merge", () => {
     expect(rows[0].peerId).toBe(7);
     expect(rows[0].registry?.source).toBe("manual");
     expect(rows[0].label).toBe("DeepMind 12D");
-    expect(rows[0].id).toBe(endpointIdForHost("192.168.1.80", 5004));
+    expect(rows[0].id).toBe(
+      "rtpmidi_client:hostname=192.168.1.80,port=5004,service=DeepMind 12D",
+    );
   });
 });
 
 describe("mergeDeviceList", () => {
   const endpoint: Endpoint = {
-    id: "peer:5",
+    identity: "alsa_seq:client=Peak,port=In",
     kind: "peer",
     label: "Peak In",
     sub: "peer_device_alsa_seq_t",
@@ -133,7 +138,7 @@ describe("mergeDeviceList", () => {
     });
     expect(rows).toHaveLength(1);
     expect(rows[0].isOfflineOnly).toBe(true);
-    expect(rows[0].connectEndpointId).toBe("host:pi.local:5004");
+    expect(rows[0].connectIdentity).toBe("rtpmidi_client:hostname=pi.local,service=Synth");
     expect(rows[0].id).toBe(registryCardId(registry.identity));
     expect(rows[0].statusTag).toBe("offline");
     expect(rows[0].sourceTag).toBe("Manual");

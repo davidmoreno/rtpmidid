@@ -22,7 +22,6 @@
 #include <optional>
 #include <regex>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace rtpmididns {
@@ -33,33 +32,13 @@ struct settings_t {
   std::string control_filename = "/var/run/rtpmidid/control.sock";
   rtpmidid::logger_level_t log_level = rtpmidid::logger_level_t::INFO;
 
-  // Datas a read from the ini file
-  struct rtpmidi_announce_t {
-    std::string name;
-    std::string port;
-  };
-
   struct rtpmidi_discover_t {
     bool enabled = true;
     std::regex name_positive_regex = std::regex(".*");
     std::regex name_negative_regex = std::regex("^$");
   };
 
-  struct alsa_announce_t {
-    std::string name;
-  };
-
-  struct connect_to_t {
-    std::string hostname;
-    std::string port;
-    std::string name;
-    std::string local_udp_port;
-  };
-
-  std::vector<rtpmidi_announce_t> rtpmidi_announces;
   rtpmidi_discover_t rtpmidi_discover;
-  std::vector<alsa_announce_t> alsa_announces;
-  std::vector<connect_to_t> connect_to;
 
   enum alsa_hw_auto_export_type_e {
     NONE = 0,
@@ -79,27 +58,17 @@ struct settings_t {
 
   alsa_hw_auto_export_t alsa_hw_auto_export;
 
-  struct rawmidi_t {
-    std::string device;
-    std::string name;
-    std::string local_udp_port;
-    std::string remote_udp_port;
-    std::string hostname;
+  /** INI `[peer]` startup peers — full device identity strings. */
+  struct ini_peer_t {
+    std::string identity;
   };
-
-  std::vector<rawmidi_t> rawmidi;
-
-  /** Unified INI `[peer]` / `[connect]` / `[bridge]` before `finalize_unified_ini_graph`. */
-  struct ini_peer_template_t {
-    std::string id;
-    std::string type;
-    std::unordered_map<std::string, std::string> params;
-  };
+  /** INI `[connect]` startup router edges (identity sides). */
   struct ini_connect_t {
-    std::string from_id;
-    std::string to_id;
+    std::string from;
+    std::string to;
+    std::optional<std::string> direction; // a2b | b2a | both
   };
-  std::vector<ini_peer_template_t> ini_peers;
+  std::vector<ini_peer_t> ini_peers;
   std::vector<ini_connect_t> ini_connects;
 
   /** Web UI: HTTP static + WebSocket JSON-RPC (see [web] in ini). */
@@ -137,32 +106,19 @@ ENUM_FORMATTER_ELEMENT(
     rtpmididns::settings_t::alsa_hw_auto_export_type_e::SYSTEM, "SYSTEM");
 ENUM_FORMATTER_END();
 
-BASIC_FORMATTER(rtpmididns::settings_t::rawmidi_t, "rawmidi_t[{}, {}]",
-                v.device, v.name);
-BASIC_FORMATTER(rtpmididns::settings_t::connect_to_t,
-                "connect_to_t[{}, {}, {}]", v.hostname, v.port, v.name);
 BASIC_FORMATTER(rtpmididns::settings_t::alsa_hw_auto_export_t,
                 "alsa_hw_auto_export_t[{}, {}, {}]", v.name_positive,
                 v.name_negative, v.type);
-BASIC_FORMATTER(rtpmididns::settings_t::rtpmidi_announce_t,
-                "rtpmidi_announce_t[{}, {}]", v.name, v.port);
-BASIC_FORMATTER(rtpmididns::settings_t::alsa_announce_t, "alsa_announce_t[{}]",
-                v.name);
 BASIC_FORMATTER(::std::regex, "regex[{}]", "??");
 BASIC_FORMATTER(rtpmididns::settings_t::rtpmidi_discover_t,
                 "rtpmidi_discover_t[{}, {}, {}]", v.enabled,
                 v.name_positive_regex, v.name_negative_regex);
 
-VECTOR_FORMATTER(rtpmididns::settings_t::rtpmidi_announce_t);
-VECTOR_FORMATTER(rtpmididns::settings_t::alsa_announce_t);
-VECTOR_FORMATTER(rtpmididns::settings_t::connect_to_t);
-
 BASIC_FORMATTER(rtpmididns::settings_t::web_t, "web_t[enabled={}, {}:{} root={}]",
                 v.enabled, v.listen, v.port, v.root);
 BASIC_FORMATTER(rtpmididns::settings_t,
-                "settings_t[{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, ini_peers={}, "
+                "settings_t[{}, {}, {}, {}, {}, {}, {}, ini_peers={}, "
                 "ini_connects={}]",
                 v.alsa_name, v.alsa_network, v.control_filename, v.log_level,
-                v.rtpmidi_announces, v.rtpmidi_discover, v.alsa_announces,
-                v.connect_to, v.alsa_hw_auto_export, v.web, v.ini_peers.size(),
-                v.ini_connects.size());
+                v.rtpmidi_discover, v.alsa_hw_auto_export, v.web,
+                v.ini_peers.size(), v.ini_connects.size());

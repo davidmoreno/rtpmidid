@@ -33,6 +33,21 @@ bool device_query_t::matches(const device_identity_t &identity) const {
   return true;
 }
 
+bool device_identity_is_stored_query(const device_identity_t &identity) {
+  for (const auto &f : identity.fields) {
+    if (f.bracketed)
+      return true;
+  }
+  return false;
+}
+
+bool device_identity_is_stored_query(std::string_view text) {
+  const auto identity = device_identity_t::parse(text);
+  if (!identity)
+    return false;
+  return device_identity_is_stored_query(*identity);
+}
+
 std::vector<size_t> find_all_matching(const device_query_t &query,
                                       const std::vector<device_identity_t> &devices) {
   std::vector<size_t> out;

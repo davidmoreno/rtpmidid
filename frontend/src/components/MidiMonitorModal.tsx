@@ -4,7 +4,7 @@ import { Button } from "./Button";
 import { MidiMonitorPanel } from "./MidiMonitorPanel";
 
 type Props = {
-  endpointId: string;
+  identity: string;
   endpointLabel: string;
   rpc: RpcClient;
   onClose: () => void;
@@ -12,7 +12,7 @@ type Props = {
 };
 
 export function MidiMonitorModal({
-  endpointId,
+  identity,
   endpointLabel,
   rpc,
   onClose,
@@ -28,7 +28,7 @@ export function MidiMonitorModal({
       try {
         onStatus("");
         const r = (await rpc.call("monitor.start", {
-          endpoint: endpointId,
+          identity,
         })) as { uuid?: string };
         if (cancelled) return;
         if (typeof r?.uuid !== "string" || !r.uuid) {
@@ -44,7 +44,7 @@ export function MidiMonitorModal({
     return () => {
       cancelled = true;
     };
-  }, [endpointId, rpc, onStatus]);
+  }, [identity, rpc, onStatus]);
 
   useEffect(() => {
     return () => {
@@ -72,7 +72,7 @@ export function MidiMonitorModal({
     try {
       onStatus("");
       const r = (await rpc.call("monitor.start", {
-        endpoint: endpointId,
+        identity,
       })) as { uuid?: string };
       if (typeof r?.uuid !== "string" || !r.uuid) {
         onStatus("monitor.start did not return uuid");
@@ -83,7 +83,7 @@ export function MidiMonitorModal({
     } catch (e) {
       onStatus(String(e));
     }
-  }, [endpointId, rpc, onStatus]);
+  }, [identity, rpc, onStatus]);
 
   const onMonitorSessionEnded = useCallback(() => {
     uuidRef.current = null;
@@ -113,7 +113,7 @@ export function MidiMonitorModal({
         <p class="mb-3 shrink-0 font-mono text-[11px] leading-relaxed ui-text-muted">
           <span class="ui-text">{endpointLabel}</span>
           <span class="ui-text-subtle"> · </span>
-          <span class="font-mono text-[10px]">{endpointId}</span>
+          <span class="font-mono text-[10px]">{identity}</span>
         </p>
 
         {err ? (

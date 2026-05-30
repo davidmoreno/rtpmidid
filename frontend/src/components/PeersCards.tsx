@@ -25,8 +25,8 @@ import {
   buildEndpoints,
   collectBridgeExportedEndpointIds,
   endpointFromRouterPeer,
-  endpointIdForPeer,
 } from "../endpoints";
+import { identityFromAlsaAddress, identityFromPeerRow } from "../deviceIdentity";
 import {
   compareEndpointsForDevicesSort,
   groupForEndpoint,
@@ -97,13 +97,46 @@ function resolveNeighborEndpoint(
   if (ep) return ep;
   const rp = byPeerId.get(otherId);
   if (rp) return endpointFromRouterPeer(rp);
+  const identity = `alsa_seq:name=Peer #${otherId}`;
   return {
-    id: endpointIdForPeer(otherId),
+    identity,
     kind: "peer",
     label: `Peer #${otherId}`,
     sub: "missing from router status",
     peerId: otherId,
   };
+}
+
+function alsaSubTouchesEndpoint(
+  r: {
+    from_client: number;
+    from_port: number;
+    to_client: number;
+    to_port: number;
+    from_client_name?: string;
+    from_port_name?: string;
+    to_client_name?: string;
+    to_port_name?: string;
+  },
+  endpoint: Endpoint,
+  alsaSeq: MidiAlsaSeqEntry[],
+): boolean {
+  if (endpoint.kind !== "alsa_seq") return false;
+  const fromId = identityFromAlsaAddress(
+    r.from_client,
+    r.from_port,
+    r.from_client_name,
+    r.from_port_name,
+    alsaSeq,
+  );
+  const toId = identityFromAlsaAddress(
+    r.to_client,
+    r.to_port,
+    r.to_client_name,
+    r.to_port_name,
+    alsaSeq,
+  );
+  return endpoint.identity === fromId || endpoint.identity === toId;
 }
 
 function matchesMergedQuery(row: MergedDeviceRow, q: string): boolean {
@@ -454,17 +487,13 @@ export function PeersCards({
       const e = row.endpoint;
       const connAlsa =
         e?.kind === "alsa_seq" &&
-        subsRows.some(
-          (r) =>
-            `alsa:${r.from_client}:${r.from_port}` === e.id ||
-            `alsa:${r.to_client}:${r.to_port}` === e.id,
-        );
+        subsRows.some((r) => alsaSubTouchesEndpoint(r, e, alsaSeq));
       const conn = connRouter || connAlsa;
       if (connectedOnly && !conn) return false;
       if (!matchesMergedQuery(row, query)) return false;
       if (
         !showHidden &&
-        (hiddenIds.has(row.id) || (e && autoHiddenIds.has(e.id)))
+        (hiddenIds.has(row.id) || (e && autoHiddenIds.has(e.identity)))
       ) {
         return false;
       }
@@ -502,7 +531,7 @@ export function PeersCards({
   );
   const [connectBidi, setConnectBidi] = useState(true);
   const [monitorFor, setMonitorFor] = useState<{
-    id: string;
+    identity: string;
     label: string;
   } | null>(null);
 
@@ -655,7 +684,7 @@ export function PeersCards({
       <div class="grid gap-4">
         {shown.map((row) => {
           const e = row.endpoint;
-          const actionEndpointId = row.connectEndpointId;
+          const actionIdentity = row.connectIdentity;
           const g = groupForMergedRow(row);
           const pid = row.peerId;
           const peer = pid !== undefined ? byPeerId.get(pid) : undefined;
@@ -663,17 +692,13 @@ export function PeersCards({
             pid !== undefined ? (isPeerConnected.get(pid) ?? false) : false;
           const connAlsa =
             e?.kind === "alsa_seq" &&
-            subsRows.some(
-              (r) =>
-                `alsa:${r.from_client}:${r.from_port}` === e.id ||
-                `alsa:${r.to_client}:${r.to_port}` === e.id,
-            );
+            subsRows.some((r) => alsaSubTouchesEndpoint(r, e, alsaSeq));
           const conn = connRouter || connAlsa;
           const isSpotlight = spotlightIds.has(row.id);
           const spot = isSpotlight ? " ui-peer-card-spotlight" : "";
           const ring = highlightIds.has(row.id) ? " ui-tr-highlight" : "";
           const isManualHidden = hiddenIds.has(row.id);
-          const isAutoHidden = e ? autoHiddenIds.has(e.id) : false;
+          const isAutoHidden = e ? autoHiddenIds.has(e.identity) : false;
           const hiddenVisual =
             showHidden && (isManualHidden || isAutoHidden);
           const offlineOnly = row.isOfflineOnly;
@@ -724,19 +749,31 @@ export function PeersCards({
                   })
                   .sort((a, b) => {
                     const c = a.ce.label.localeCompare(b.ce.label);
-                    return c !== 0 ? c : a.ce.id.localeCompare(b.ce.id);
+                    return c !== 0 ? c : a.ce.identity.localeCompare(b.ce.identity);
                   })
               : [];
 
           const alsaOut =
             e?.kind === "alsa_seq"
-              ? subsRows.filter(
-                  (r) => `alsa:${r.from_client}:${r.from_port}` === e.id,
-                )
+              ? subsRows.filter((r) => alsaSubTouchesEndpoint(r, e, alsaSeq) &&
+                  identityFromAlsaAddress(
+                    r.from_client,
+                    r.from_port,
+                    r.from_client_name,
+                    r.from_port_name,
+                    alsaSeq,
+                  ) === e.identity)
               : [];
           const alsaIn =
             e?.kind === "alsa_seq"
-              ? subsRows.filter((r) => `alsa:${r.to_client}:${r.to_port}` === e.id)
+              ? subsRows.filter((r) => alsaSubTouchesEndpoint(r, e, alsaSeq) &&
+                  identityFromAlsaAddress(
+                    r.to_client,
+                    r.to_port,
+                    r.to_client_name,
+                    r.to_port_name,
+                    alsaSeq,
+                  ) === e.identity)
               : [];
 
           return (
@@ -977,18 +1014,20 @@ export function PeersCards({
                         {connectedEndpoints.length ? (
                           connectedEndpoints.map(({ ce, dir }) => (
                             <span
-                              key={ce.id}
+                              key={ce.identity}
                               class={`inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1 py-0.5 font-mono text-[11px] font-bold ${
                                 groupForEndpoint(ce) === "local"
                                   ? "ui-badge-local"
                                   : "ui-badge-remote"
                               }`}
-                              title={ce.id}
+                              title={ce.identity}
                             >
                               <button
                                 type="button"
                                 class="hover:underline ui-text"
-                                onClick={() => pulseEndpoints([e!.id, ce.id], ce.id)}
+                                onClick={() =>
+                                  pulseEndpoints([e!.identity, ce.identity], ce.identity)
+                                }
                               >
                                 {ce.label}
                               </button>
@@ -1002,7 +1041,7 @@ export function PeersCards({
                                     ? "ui-wire-action-local"
                                     : "ui-wire-action-remote"
                                 }`}
-                                onClick={() => void doDisconnect(e!.id, ce.id)}
+                                onClick={() => void doDisconnect(e!.identity, ce.identity)}
                                 title="Disconnect"
                               >
                                 x
@@ -1013,8 +1052,20 @@ export function PeersCards({
                         {e?.kind === "alsa_seq" ? (
                           <>
                             {alsaOut.map((r) => {
-                              const fromId = `alsa:${r.from_client}:${r.from_port}`;
-                              const toId = `alsa:${r.to_client}:${r.to_port}`;
+                              const fromId = identityFromAlsaAddress(
+                                r.from_client,
+                                r.from_port,
+                                r.from_client_name,
+                                r.from_port_name,
+                                alsaSeq,
+                              );
+                              const toId = identityFromAlsaAddress(
+                                r.to_client,
+                                r.to_port,
+                                r.to_client_name,
+                                r.to_port_name,
+                                alsaSeq,
+                              );
                               const toLabel = r.to_label ?? toId;
                               return (
                                 <span
@@ -1025,7 +1076,9 @@ export function PeersCards({
                                   <button
                                     type="button"
                                     class="hover:underline ui-text"
-                                    onClick={() => pulseEndpoints([e!.id, toId], toId)}
+                                    onClick={() =>
+                                      pulseEndpoints([e!.identity, toId], toId)
+                                    }
                                   >
                                     {toLabel}
                                   </button>
@@ -1041,8 +1094,20 @@ export function PeersCards({
                               );
                             })}
                             {alsaIn.map((r) => {
-                              const fromId = `alsa:${r.from_client}:${r.from_port}`;
-                              const toId = `alsa:${r.to_client}:${r.to_port}`;
+                              const fromId = identityFromAlsaAddress(
+                                r.from_client,
+                                r.from_port,
+                                r.from_client_name,
+                                r.from_port_name,
+                                alsaSeq,
+                              );
+                              const toId = identityFromAlsaAddress(
+                                r.to_client,
+                                r.to_port,
+                                r.to_client_name,
+                                r.to_port_name,
+                                alsaSeq,
+                              );
                               const fromLabel = r.from_label ?? fromId;
                               return (
                                 <span
@@ -1053,7 +1118,9 @@ export function PeersCards({
                                   <button
                                     type="button"
                                     class="hover:underline ui-text"
-                                    onClick={() => pulseEndpoints([e!.id, fromId], fromId)}
+                                    onClick={() =>
+                                      pulseEndpoints([e!.identity, fromId], fromId)
+                                    }
                                   >
                                     {fromLabel}
                                   </button>
@@ -1082,13 +1149,16 @@ export function PeersCards({
                         ) : null}
                       </div>
                     </div>
-                  {actionEndpointId ? (
+                  {actionIdentity ? (
                     <div class="flex flex-wrap items-center justify-end gap-1 border-t border-[color:var(--color-border-muted)] pt-2">
                       <button
                         type="button"
                         class="ui-card-action"
                         onClick={() =>
-                          setMonitorFor({ id: actionEndpointId, label: row.label })
+                          setMonitorFor({
+                            identity: actionIdentity,
+                            label: row.label,
+                          })
                         }
                       >
                         Monitor
@@ -1098,7 +1168,7 @@ export function PeersCards({
                         class="ui-card-action ui-card-action-accent"
                         onClick={() => {
                           setConnectBidi(true);
-                          setConnectDialogForId(actionEndpointId);
+                          setConnectDialogForId(actionIdentity);
                         }}
                       >
                         Connect
@@ -1119,14 +1189,14 @@ export function PeersCards({
             <>
               Pick another endpoint to connect with{" "}
               <strong class="ui-text">
-                {endpoints.find((x) => x.id === connectDialogForId)?.label ??
+                {endpoints.find((x) => x.identity === connectDialogForId)?.label ??
                   mergedDevices.find(
-                    (r) => r.connectEndpointId === connectDialogForId,
+                    (r) => r.connectIdentity === connectDialogForId,
                   )?.label ??
                   connectDialogForId}
               </strong>
               . ALSA↔ALSA uses kernel aconnect; other pairs use the router.
-              {endpoints.find((x) => x.id === connectDialogForId)?.kind ===
+              {endpoints.find((x) => x.identity === connectDialogForId)?.kind ===
               "alsa_seq" ? (
                 <label class="mt-2 flex cursor-pointer items-center gap-2">
                   <input
@@ -1161,7 +1231,7 @@ export function PeersCards({
 
       {monitorFor !== null ? (
         <MidiMonitorModal
-          endpointId={monitorFor.id}
+          identity={monitorFor.identity}
           endpointLabel={monitorFor.label}
           rpc={rpc}
           onClose={() => setMonitorFor(null)}

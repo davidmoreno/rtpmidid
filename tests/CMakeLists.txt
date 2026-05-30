@@ -127,6 +127,24 @@ if (NOT LIBS_ONLY)
   target_link_libraries(test_factory_naming ${FMT_LIBRARIES})
   target_include_directories(test_factory_naming PUBLIC ${ALSA_INCLUDE_DIRS})
   target_compile_options(test_factory_naming PUBLIC ${ALSA_CFLAGS_OTHER})
+
+  add_executable(test_peer_factory
+      test_peer_factory.cpp test_utils.cpp
+  )
+  target_link_libraries(test_peer_factory -pthread rtpmidid-shared rtpmidid2-static)
+  add_test(NAME test_peer_factory COMMAND test_peer_factory)
+  target_link_libraries(test_peer_factory ${ALSA_LIBRARIES})
+  target_link_libraries(test_peer_factory ${FMT_LIBRARIES})
+  target_include_directories(test_peer_factory PUBLIC ${ALSA_INCLUDE_DIRS})
+  add_executable(test_peer_spawn
+      test_peer_spawn.cpp test_utils.cpp test_fake_peer.cpp
+  )
+  target_link_libraries(test_peer_spawn -pthread rtpmidid-shared rtpmidid2-static)
+  add_test(NAME test_peer_spawn COMMAND test_peer_spawn)
+  target_link_libraries(test_peer_spawn ${ALSA_LIBRARIES})
+  target_link_libraries(test_peer_spawn ${FMT_LIBRARIES})
+  target_include_directories(test_peer_spawn PUBLIC ${ALSA_INCLUDE_DIRS})
+  target_compile_options(test_peer_spawn PUBLIC ${ALSA_CFLAGS_OTHER})
 endif (NOT LIBS_ONLY)
 
 #

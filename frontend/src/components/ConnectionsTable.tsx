@@ -142,7 +142,7 @@ function EndpointPill({
   onOpen,
 }: {
   side: ConnectionEndpointRef;
-  onOpen?: (endpointId: string) => void;
+  onOpen?: (identity: string) => void;
 }) {
   const peerTag =
     side.peerId !== undefined && side.peerId !== 0 ? `#${side.peerId}` : "";
@@ -176,8 +176,8 @@ function EndpointPill({
     <button
       type="button"
       class={`${baseCls} ui-chip-link border-[color:var(--color-border)] hover:bg-[color:var(--color-surface-elevated)]`}
-      title={`Open in Devices: ${side.endpointId}`}
-      onClick={() => onOpen(side.endpointId)}
+      title={`Open in Devices: ${side.identity}`}
+      onClick={() => onOpen(side.identity)}
     >
       {inner}
     </button>
@@ -189,7 +189,7 @@ function ConnectionCell({
   onOpen,
 }: {
   row: ConnectionRow;
-  onOpen?: (endpointId: string) => void;
+  onOpen?: (identity: string) => void;
 }) {
   const arrow = row.bidirectional ? "↔" : "→";
   return (
@@ -310,8 +310,8 @@ type Props = {
   rows: ConnectionRow[];
   /** Pulse ring + scroll after mDNS Connect (matches `ConnectionRow.id`). */
   highlightConnectionRowId?: string | null;
-  /** Navigate to Devices tab and highlight a card by endpoint id (alsa:c:p / peer:N / mdns:...). */
-  onOpenInDevices?: (endpointId: string) => void;
+  /** Navigate to Devices tab and highlight a card by device identity. */
+  onOpenInDevices?: (identity: string) => void;
   dbEnabled?: boolean;
   /** Save this connection in the SQLite db. */
   onAddToDb?: (row: ConnectionRow) => void;

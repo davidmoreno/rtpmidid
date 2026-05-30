@@ -73,6 +73,28 @@ peer_kind_rpc_create_key(peer_kind_e kind) {
   }
 }
 
+std::optional<peer_kind_e> peer_kind_from_identity_prefix(std::string_view prefix) {
+  if (prefix == "alsa_seq")
+    return peer_kind_e::device_alsa_seq;
+  if (prefix == "rawmidi")
+    return peer_kind_e::device_rawmidi;
+  if (prefix == "rtpmidi_client")
+    return peer_kind_e::device_rtpmidi_client;
+  if (prefix == "rtpmidi_session")
+    return peer_kind_e::device_rtpmidi_session;
+  if (prefix == "rtpmidi_server")
+    return peer_kind_e::export_rtpmidi_server;
+  if (prefix == "alsa_listener")
+    return peer_kind_e::import_alsa_rtp;
+  if (prefix == "rtpmidi_multi")
+    return peer_kind_e::import_rtpmidi;
+  if (prefix == "alsa_multi")
+    return peer_kind_e::export_alsa_network;
+  if (prefix == "webui_monitor")
+    return peer_kind_e::webui_monitor;
+  return std::nullopt;
+}
+
 std::optional<peer_kind_e> peer_kind_from_wire_type(std::string_view wire) {
   if (wire == "peer_device_alsa_seq_t")
     return peer_kind_e::device_alsa_seq;

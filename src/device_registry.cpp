@@ -126,41 +126,10 @@ referenced_queries_from(const connection_db_manager_t &conn) {
 std::vector<device_identity_t>
 ini_device_identities_from_settings(const settings_t &settings) {
   std::vector<device_identity_t> out;
-
-  for (const auto &announce : settings.alsa_announces) {
-    if (announce.name.empty())
-      continue;
-    out.push_back(device_identity_t{
-        "alsa_multi", {device_identity_field_t{"name", announce.name, false}}});
+  for (const auto &p : settings.ini_peers) {
+    if (const auto id = device_identity_t::parse(p.identity))
+      out.push_back(*id);
   }
-
-  for (const auto &announce : settings.rtpmidi_announces) {
-    if (announce.name.empty())
-      continue;
-    std::vector<device_identity_field_t> fields{
-        {"name", announce.name, false}};
-    if (!announce.port.empty())
-      fields.push_back({"port", announce.port, false});
-    out.push_back(device_identity_t{"rtpmidi_multi", std::move(fields)});
-  }
-
-  for (const auto &raw : settings.rawmidi) {
-    std::vector<device_identity_field_t> fields;
-    if (!raw.device.empty())
-      fields.push_back({"device", raw.device, false});
-    if (!raw.name.empty())
-      fields.push_back({"name", raw.name, false});
-    if (!fields.empty())
-      out.push_back(device_identity_t{"rawmidi", std::move(fields)});
-  }
-
-  for (const auto &connect : settings.connect_to) {
-    if (connect.name.empty())
-      continue;
-    out.push_back(device_identity_t{
-        "alsa_listener", {device_identity_field_t{"name", connect.name, false}}});
-  }
-
   return out;
 }
 

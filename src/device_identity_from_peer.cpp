@@ -5,6 +5,7 @@
 
 #include "peer_kind.hpp"
 #include "peer_stable_id.hpp"
+#include "rtpmidid/rtppeer.hpp"
 
 #include <utility>
 
@@ -175,6 +176,57 @@ compute_device_identity(const router_peer_row_t &row) {
     return std::nullopt;
   }
   return std::nullopt;
+}
+
+std::optional<device_identity_t>
+identity_from_alsa_names(const std::string &client_name,
+                         const std::string &port_name) {
+  if (client_name.empty() || port_name.empty())
+    return std::nullopt;
+  return make_identity("alsa_seq",
+                       {field("client", client_name), field("port", port_name)});
+}
+
+std::optional<device_identity_t>
+identity_from_raw_device(const std::string &device, const std::string &name) {
+  if (device.empty())
+    return std::nullopt;
+  std::vector<device_identity_field_t> fields{field("device", device)};
+  if (!name.empty())
+    fields.push_back(field("name", name));
+  return make_identity("rawmidi", std::move(fields));
+}
+
+std::optional<device_identity_t>
+identity_from_rtpmidi_remote(const std::string &hostname,
+                             const std::string &service,
+                             const std::string &port) {
+  if (hostname.empty() || service.empty())
+    return std::nullopt;
+  std::vector<device_identity_field_t> fields{
+      field("hostname", hostname), field("service", service)};
+  if (!port.empty())
+    fields.push_back(field("port", port));
+  return make_identity("rtpmidi_client", std::move(fields));
+}
+
+std::optional<device_identity_t>
+identity_from_rtppeer(const rtpmidid::rtppeer_t &peer) {
+  if (peer.remote_name.empty())
+    return std::nullopt;
+  if (stable_id_is_real_hostname(peer.remote_address.hostname())) {
+    return make_identity("rtpmidi_session",
+                         {field("hostname", peer.remote_address.hostname()),
+                          field("service", peer.remote_name)});
+  }
+  return make_identity("rtpmidi_session", {field("name", peer.remote_name)});
+}
+
+std::optional<device_identity_t>
+identity_from_rtpclient_connect(const std::string &hostname,
+                                const std::string &port,
+                                const std::string &service) {
+  return identity_from_rtpmidi_remote(hostname, service, port);
 }
 
 } // namespace rtpmididns

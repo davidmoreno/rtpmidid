@@ -17,7 +17,8 @@
  */
 
 #include "rtpmidiremotehandler.hpp"
-#include "factory.hpp"
+#include "peer_factory.hpp"
+#include "device_identity_from_peer.hpp"
 #include "peer_import_alsa_rtp.hpp"
 #include "midirouter.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
@@ -67,11 +68,26 @@ void rtpmidi_remote_handler_t::discover_peer(const std::string &name,
   }
 
   DEBUG("New peer=\"{}\"", fullname);
-  auto peer = rtpmididns::make_peer_import_alsa_rtp(router, name, hostname, port,
-                                                   aseq, "0");
-  peers.push_back(known_remote_peer_t{name, peer});
+  device_identity_t id;
+  id.type_prefix = "alsa_listener";
+  id.fields.push_back(device_identity_field_t{"service", name, false});
+  id.fields.push_back(device_identity_field_t{"hostname", hostname, false});
+  id.fields.push_back(device_identity_field_t{"port", port, false});
 
-  router->add_peer(peer);
+  peer_factory_context_t ctx;
+  ctx.aseq = aseq;
+  ctx.router = router;
+  ctx.mdns = mdns;
+
+  std::string err;
+  auto peer = create_peer({id}, ctx, &err);
+  if (!peer) {
+    ERROR("Failed to create alsa_listener for {}: {}", fullname, err);
+    return;
+  }
+  peers.push_back(known_remote_peer_t{name, *peer});
+
+  router->add_peer(*peer);
 }
 
 void rtpmidi_remote_handler_t::remove_peer(const std::string &name,

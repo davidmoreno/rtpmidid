@@ -38,6 +38,8 @@ peer_kind_rpc_create_key(peer_kind_e kind);
 
 std::optional<peer_kind_e> peer_kind_from_wire_type(std::string_view wire);
 
+std::optional<peer_kind_e> peer_kind_from_identity_prefix(std::string_view prefix);
+
 bool peer_kind_is_device(peer_kind_e kind);
 bool peer_kind_is_export(peer_kind_e kind);
 bool peer_kind_is_import(peer_kind_e kind);

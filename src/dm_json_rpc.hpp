@@ -100,6 +100,11 @@ struct export_rawmidi_params_t {
 };
 
 // [dm-json]
+struct router_create_params_t {
+  std::string identity;
+};
+
+// [dm-json]
 struct create_local_rawmidi_params_t {
   std::string name;
   std::string device;
@@ -170,8 +175,8 @@ struct endpoint_disconnect_params_t {
 
 // [dm-json]
 struct monitor_start_params_t {
-  /** Same endpoint id strings as `endpoint.connect` / Devices tab (`alsa:…`, `raw:…`, `mdns:…`). */
-  std::string endpoint;
+  /** Target device identity (same grammar as endpoint.connect / Devices tab). */
+  std::string identity;
 };
 
 // [dm-json]

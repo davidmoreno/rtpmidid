@@ -26,8 +26,8 @@ export function compareEndpointsForDevicesSort(
   isPeerConnected: Map<number, boolean>,
   byPeerId: Map<number, RouterPeer>,
 ): number {
-  const fa = favoriteIds.has(a.id) ? 1 : 0;
-  const fb = favoriteIds.has(b.id) ? 1 : 0;
+  const fa = favoriteIds.has(a.identity) ? 1 : 0;
+  const fb = favoriteIds.has(b.identity) ? 1 : 0;
   if (fa !== fb) return fb - fa;
 
   const activity = (e: Endpoint) => endpointActivity(e, byPeerId);
@@ -36,7 +36,7 @@ export function compareEndpointsForDevicesSort(
 
   if (sortKey === "name") {
     const c = a.label.localeCompare(b.label);
-    return c !== 0 ? c : a.id.localeCompare(b.id);
+    return c !== 0 ? c : a.identity.localeCompare(b.identity);
   }
   if (sortKey === "kind") {
     const ca = groupForEndpoint(a);

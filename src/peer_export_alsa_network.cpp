@@ -18,7 +18,8 @@
 
 #include "peer_export_alsa_network.hpp"
 #include "aseq.hpp"
-#include "factory.hpp"
+#include "peer_spawn.hpp"
+#include "peer_factory.hpp"
 #include "peer_device_alsa_seq.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
@@ -72,15 +73,13 @@ peer_export_alsa_network_t::new_alsa_connection(const aseq_t::port_t &port,
       });
 
   if (networkpeer_id == MIDIPEER_ID_INVALID) {
-    std::shared_ptr<midipeer_t> networkpeer =
-        make_peer_export_rtpmidi_server(name, "");
-    networkpeer_id = router->add_peer(networkpeer);
-
+    peer_factory_context_t ctx;
+    ctx.aseq = seq;
+    ctx.router = router;
+    networkpeer_id =
+        spawn_alsa_network_server(ctx, router, peer_id, name);
     aseqpeers[port] = networkpeer_id;
-    router->connect(networkpeer_id, peer_id);
   }
-
-  // return std::make_pair(alsapeer_id, networkpeer_id);
   return networkpeer_id;
 }
 

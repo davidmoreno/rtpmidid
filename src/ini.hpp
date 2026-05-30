@@ -19,7 +19,6 @@
 
 #include "settings.hpp"
 #include <string>
-#include <unordered_map>
 
 namespace rtpmididns {
 void load_ini(const std::string &filename);
@@ -32,18 +31,13 @@ class IniReader {
   std::string value;
   int lineno = 0;
 
-  // [peer] / [connect] / [bridge] accumulators (flushed on section change / finish)
-  std::string peer_id;
-  std::string peer_type;
-  std::unordered_map<std::string, std::string> peer_params;
-  std::string connect_from_id;
-  std::string connect_to_id;
-  std::unordered_map<std::string, std::string> bridge_local;
-  std::unordered_map<std::string, std::string> bridge_remote;
+  std::string peer_identity;
+  std::string connect_from;
+  std::string connect_to;
+  std::string connect_direction;
 
-  void flush_unified_peer();
-  void flush_unified_connect();
-  void flush_bridge();
+  void flush_peer();
+  void flush_connect();
 
 public:
   IniReader(settings_t *settings) : settings(settings) {}

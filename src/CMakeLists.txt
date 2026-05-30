@@ -9,7 +9,6 @@ add_library(
   aseq.cpp
   argv.cpp
   ini.cpp
-  ini_graph.cpp
   settings.cpp
   control_socket.cpp
   control_rpc.cpp
@@ -17,7 +16,8 @@ add_library(
   stringpp.cpp
   hwautoannounce.cpp
 
-  factory.cpp
+  peer_factory.cpp
+  peer_spawn.cpp
   midirouter.cpp
   midipeer.cpp
   peer_kind.cpp

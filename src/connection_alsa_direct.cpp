@@ -4,7 +4,6 @@
 #include "connection_alsa_direct.hpp"
 
 #include "device_query.hpp"
-#include "peer_stable_id.hpp"
 
 #include <unordered_set>
 #include <utility>
@@ -12,28 +11,6 @@
 namespace rtpmididns {
 
 namespace {
-
-std::optional<std::pair<std::string, std::string>>
-parse_alsa_stable_id(const std::string &stable_id) {
-  static const std::string kPrefix = "alsa:";
-  if (stable_id.size() <= kPrefix.size())
-    return std::nullopt;
-  if (stable_id.compare(0, kPrefix.size(), kPrefix) != 0)
-    return std::nullopt;
-  const std::string rest = stable_id.substr(kPrefix.size());
-  const auto pos = rest.find(':');
-  if (pos == std::string::npos || pos == 0 || pos + 1 == rest.size())
-    return std::nullopt;
-  auto unescape = [](std::string s) {
-    for (char &c : s) {
-      if (c == '|')
-        c = ':';
-    }
-    return s;
-  };
-  return std::make_pair(unescape(rest.substr(0, pos)),
-                        unescape(rest.substr(pos + 1)));
-}
 
 std::optional<std::pair<std::string, std::string>>
 parse_alsa_seq_identity(const std::string &identity_key) {
@@ -51,13 +28,6 @@ parse_alsa_seq_identity(const std::string &identity_key) {
   if (!client || !port)
     return std::nullopt;
   return std::make_pair(*client, *port);
-}
-
-std::optional<std::pair<std::string, std::string>>
-alsa_side_names(const std::string &side) {
-  if (auto legacy = parse_alsa_stable_id(side))
-    return legacy;
-  return parse_alsa_seq_identity(side);
 }
 
 void append_unique(std::vector<size_t> &out, size_t index) {
@@ -80,7 +50,7 @@ uint64_t link_key(const aseq_t::port_t &from, const aseq_t::port_t &to) {
 } // namespace
 
 bool is_direct_alsa_side(const std::string &side) {
-  if (alsa_side_names(side).has_value())
+  if (parse_alsa_seq_identity(side).has_value())
     return true;
   const auto query = device_query_t::parse(side);
   return query.has_value() && query->type_prefix == "alsa_seq";
@@ -120,7 +90,7 @@ std::vector<size_t> match_alsa_ports_for_side(
       return matches;
   }
 
-  if (const auto names = alsa_side_names(side)) {
+  if (const auto names = parse_alsa_seq_identity(side)) {
     for (size_t i = 0; i < ports.size(); ++i) {
       if (ports[i].client_name == names->first &&
           ports[i].port_name == names->second)

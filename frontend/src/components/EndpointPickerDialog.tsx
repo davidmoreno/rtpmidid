@@ -27,7 +27,7 @@ export type EndpointPickerDialogProps = {
   title: string;
   description?: ComponentChildren;
   endpoints: Endpoint[];
-  /** Endpoint ids to omit from the list (e.g. the other side already picked). */
+  /** Device identities to omit from the list (e.g. the other side already picked). */
   excludeIds?: string[];
   favoriteIds?: Set<string>;
   sortKey?: EndpointSortKey;
@@ -37,7 +37,7 @@ export type EndpointPickerDialogProps = {
   /** First click selects; second click on same row confirms (Devices connect flow). */
   confirmOnSecondClick?: boolean;
   onClose: () => void;
-  onConfirm: (endpointId: string) => void;
+  onConfirm: (identity: string) => void;
 };
 
 export function EndpointPickerDialog({
@@ -59,7 +59,7 @@ export function EndpointPickerDialog({
   const exclude = useMemo(() => new Set(excludeIds), [excludeIds]);
 
   const opts = useMemo(
-    () => endpoints.filter((x) => !exclude.has(x.id)),
+    () => endpoints.filter((x) => !exclude.has(x.identity)),
     [endpoints, exclude],
   );
 
@@ -68,7 +68,7 @@ export function EndpointPickerDialog({
     const base = !s
       ? opts
       : opts.filter((e) =>
-          [e.label, e.sub, e.kind, e.id].join(" ").toLowerCase().includes(s),
+          [e.label, e.sub, e.kind, e.identity].join(" ").toLowerCase().includes(s),
         );
     return [...base].sort((a, b) =>
       compareEndpointsForDevicesSort(
@@ -94,7 +94,7 @@ export function EndpointPickerDialog({
   }, [onClose]);
 
   const selectedEp =
-    selectedId !== null ? opts.find((x) => x.id === selectedId) ?? null : null;
+    selectedId !== null ? opts.find((x) => x.identity === selectedId) ?? null : null;
 
   return (
     <div
@@ -133,25 +133,25 @@ export function EndpointPickerDialog({
                 const g = groupForEndpoint(ep);
                 const base =
                   g === "local" ? "ui-endpoint-opt-local" : "ui-endpoint-opt-remote";
-                const sel = ep.id === selectedId;
+                const sel = ep.identity === selectedId;
                 return (
                   <button
                     type="button"
-                    key={ep.id}
+                    key={ep.identity}
                     class={`w-full rounded-[var(--radius-sm)] border-2 p-2 text-left font-mono ${base} ${
                       sel ? "ring-2 ring-[color:var(--color-ring-highlight)] ring-inset" : ""
                     }`}
                     onClick={() => {
-                      if (confirmOnSecondClick && selectedId === ep.id) {
-                        onConfirm(ep.id);
+                      if (confirmOnSecondClick && selectedId === ep.identity) {
+                        onConfirm(ep.identity);
                       } else {
-                        setSelectedId(ep.id);
+                        setSelectedId(ep.identity);
                       }
                     }}
                     title={
-                      confirmOnSecondClick && selectedId === ep.id
-                        ? `${ep.id} — click again to confirm`
-                        : ep.id
+                      confirmOnSecondClick && selectedId === ep.identity
+                        ? `${ep.identity} — click again to confirm`
+                        : ep.identity
                     }
                   >
                     <div class="flex flex-wrap items-center justify-between gap-2">
@@ -161,7 +161,7 @@ export function EndpointPickerDialog({
                       </div>
                       <div class="shrink-0 text-right">
                         <div class="text-[10px] font-black uppercase">{ep.kind}</div>
-                        <div class="text-[10px] opacity-80">{ep.id}</div>
+                        <div class="text-[10px] opacity-80">{ep.identity}</div>
                       </div>
                     </div>
                   </button>

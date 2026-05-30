@@ -29,7 +29,7 @@ type Props = {
   alsaSubs: unknown[];
   dbEnabled: boolean;
   highlightConnectionRowId: string | null;
-  onOpenInDevices: (endpointId: string) => void;
+  onOpenInDevices: (identity: string) => void;
   rpc: RpcClient;
   peers: RouterPeer[];
   mdnsRemotes: MdnsRemote[];
@@ -129,8 +129,8 @@ export function ConnectionsTab({
   };
 
   const addRow = async (row: ConnectionRow) => {
-    const sideA = row.from.stableId ?? row.from.endpointId;
-    const sideB = row.to.stableId ?? row.to.endpointId;
+    const sideA = row.from.identity;
+    const sideB = row.to.identity;
     if (!sideA || !sideB || sideA === sideB) {
       onStatus("Cannot save this connection (no stable identity).");
       return;
@@ -145,18 +145,18 @@ export function ConnectionsTab({
   };
 
   const removeRow = async (row: ConnectionRow) => {
-    const sideA = row.persistedSideA ?? row.from.stableId;
-    const sideB = row.persistedSideB ?? row.to.stableId;
+    const sideA = row.persistedSideA ?? row.from.identity;
+    const sideB = row.persistedSideB ?? row.to.identity;
     if (!sideA || !sideB) {
-      onStatus("Cannot remove this connection (no persisted side ids).");
+      onStatus("Cannot remove this connection (no persisted identities).");
       return;
     }
     await removeSaved(sideA, sideB);
   };
 
   const toggleEnabled = async (row: ConnectionRow, enable: boolean) => {
-    const sideA = row.persistedSideA ?? row.from.stableId;
-    const sideB = row.persistedSideB ?? row.to.stableId;
+    const sideA = row.persistedSideA ?? row.from.identity;
+    const sideB = row.persistedSideB ?? row.to.identity;
     if (!sideA || !sideB) return;
     await rpc.call(enable ? "connections.enable" : "connections.disable", {
       side_a: sideA,
@@ -167,8 +167,8 @@ export function ConnectionsTab({
   };
 
   const openEdit = (row: ConnectionRow) => {
-    const sideA = row.persistedSideA ?? row.from.stableId ?? row.from.endpointId;
-    const sideB = row.persistedSideB ?? row.to.stableId ?? row.to.endpointId;
+    const sideA = row.persistedSideA ?? row.from.identity;
+    const sideB = row.persistedSideB ?? row.to.identity;
     if (!sideA || !sideB) return;
     const saved = savedConnections.find(
       (s) =>

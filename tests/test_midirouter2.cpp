@@ -17,7 +17,7 @@
  */
 
 #include "../src/aseq.hpp"
-#include "../src/factory.hpp"
+#include "../src/peer_factory.hpp"
 #include "dm_json_generated.hpp"
 #include "../src/mididata.hpp"
 #include "../src/midirouter.hpp"
@@ -64,11 +64,21 @@ void test_send_receive_messages() {
 
     test_client_id = aseq->client_id;
 
-    router->add_peer(rtpmididns::make_peer_export_alsa_network(
-        rtpmididns::settings.alsa_name, aseq));
+    rtpmididns::peer_factory_context_t ctx;
+    ctx.aseq = aseq;
+    ctx.router = router;
+    ctx.mdns = rtpmididns::mdns;
+    std::string err;
+    auto alsa_net = rtpmididns::create_peer_from_string(
+        FMT::format("alsa_multi:name={}", rtpmididns::settings.alsa_name), ctx,
+        &err);
+    ASSERT_TRUE(alsa_net.has_value());
+    router->add_peer(*alsa_net);
 
-    router->add_peer(rtpmididns::make_peer_import_rtpmidi(
-        "rtpmidid-test", "60004", aseq));
+    auto rtp_multi = rtpmididns::create_peer_from_string(
+        "rtpmidi_multi:name=rtpmidid-test,port=60004", ctx, &err);
+    ASSERT_TRUE(rtp_multi.has_value());
+    router->add_peer(*rtp_multi);
   }
 
   // Now I prepare another local port that will be use dfor communication,
@@ -391,16 +401,22 @@ void test_network_rtpmidi_client_status_before_router_attached() {
   auto router = std::make_shared<rtpmididns::midirouter_t>();
   router->start_router_thread();
 
-  auto client = rtpmididns::make_peer_device_rtpmidi_client(
-      "test-client", "127.0.0.1", "65535");
-  auto *raw = dynamic_cast<rtpmididns::peer_device_rtpmidi_client_t *>(client.get());
+  rtpmididns::peer_factory_context_t ctx;
+  ctx.router = router;
+  std::string err;
+  auto client = rtpmididns::create_peer_from_string(
+      "rtpmidi_client:hostname=127.0.0.1,port=65535,service=test-client", ctx,
+      &err);
+  ASSERT_TRUE(client.has_value());
+  auto *raw = dynamic_cast<rtpmididns::peer_device_rtpmidi_client_t *>(
+      client->get());
   ASSERT_TRUE(raw != nullptr);
 
   /* Simulate the race: CONNECTED arrives before add_peer() sets router. */
   raw->peer->peer.status_change_event(rtpmidid::rtppeer_t::CONNECTED);
   ASSERT_FALSE(raw->router);
 
-  const auto id = router->add_peer(client);
+  const auto id = router->add_peer(*client);
   ASSERT_NOT_EQUAL(id, 0);
   ASSERT_TRUE(raw->router != nullptr);
   ASSERT_EQUAL(raw->peer_id, id);
