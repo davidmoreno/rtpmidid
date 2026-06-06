@@ -40,7 +40,7 @@ sequencer port.
 : Connects the given address. This is default, no need for \--connect
 
 **\--control path**
-: Creates a control socket. Check CONTROL.md. Default `/var/run/rtpmidid/control.sock`
+: Creates a control socket. See docs/user/control.md. Default `/var/run/rtpmidid/control.sock`
 
 Address for connect:
 
