@@ -53,6 +53,21 @@ Use **Devices → Monitor** on an endpoint that is part of an rtpmidid route.
 - Journal recovery is not implemented — packet loss on bad networks can lose
   note-offs and CC (see [development/development-notes.md](../development/development-notes.md)).
 
+## `could not bind control port` / server inactive
+
+If the log shows e.g. `Error binding socket: :::5004 Address already in use`
+followed by `rtpserver '…' could not bind control port`, that RTP-MIDI server
+is **inactive** and will not accept connections. Common causes:
+
+| Check | Action |
+|-------|--------|
+| Another rtpmidid already running | `Address already in use` on 5004 — stop the other instance or use a different `--port` |
+| Privileged port | `Permission denied` on ports < 1024 — run with a port ≥ 1024 |
+
+The daemon keeps running; only that one server is disabled. Older builds spammed
+`network_address_t is null; can not read port` on every status update — that
+diagnostic is now DEBUG-only, so update if you still see it at INFO level.
+
 ## Docker-specific issues
 
 See [Docker](docker.md) (D-Bus, mDNS, `/dev/snd` permissions).

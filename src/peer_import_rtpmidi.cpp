@@ -31,8 +31,13 @@ peer_import_rtpmidi_t::peer_import_rtpmidi_t(
     const std::string &name, const std::string &port,
     std::shared_ptr<aseq_t> aseq_)
     : aseq(aseq_), server(name, port) {
-  if (mdns)
+  if (!server.is_valid()) {
+    WARNING("peer_import_rtpmidi '{}' has no listening socket (port '{}' could "
+            "not be bound); it will not accept incoming connections.",
+            name, port);
+  } else if (mdns) {
     mdns->announce_rtpmidi(name, server.port());
+  }
 
   status_change_connection = server.status_change_event.connect(
       [this](std::shared_ptr<rtpmidid::rtppeer_t> peer,

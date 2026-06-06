@@ -54,7 +54,11 @@ network_address_t::~network_address_t() {
 
 int network_address_t::port() const {
   if (!addr) {
-    ERROR("network_address_t is null; can not read port ({}).",
+    // Quiet getter: callers that care should check is_valid(). The null
+    // sentinel (0) is the signal. We keep the diagnostic at DEBUG level so it
+    // is available when debugging but does not flood the logs on every status
+    // serialization. See to_string() for the human-facing rendering.
+    DEBUG("network_address_t is null; can not read port ({}).",
           network_address_null_reason(*this));
     return 0;
   }
@@ -66,7 +70,8 @@ int network_address_t::port() const {
 
 std::string network_address_t::ip() const {
   if (!addr) {
-    ERROR("network_address_t is null; can not read ip ({}).",
+    // Quiet getter (see port()): return the "null" sentinel without flooding.
+    DEBUG("network_address_t is null; can not read ip ({}).",
           network_address_null_reason(*this));
     return "null";
   }

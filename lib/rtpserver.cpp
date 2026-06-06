@@ -36,7 +36,20 @@ rtpserver_t::rtpserver_t(std::string _name, const std::string &port)
     : name(std::move(_name)) {
 
   control.open("::", port);
+  if (!control.is_open()) {
+    ERROR("rtpserver '{}' could not bind control port '{}'; this server is "
+          "inactive (no connections will be accepted).",
+          name, port);
+    return;
+  }
   midi.open("::", control.get_address().port() + 1);
+  if (!midi.is_open()) {
+    ERROR("rtpserver '{}' bound control port {} but could not bind the MIDI "
+          "port; this server is inactive.",
+          name, control.get_address().port());
+    control.close();
+    return;
+  }
 
   on_read_control = control.on_read.connect(
       [&](const packet_t &packet, const network_address_t &from) {
@@ -52,6 +65,8 @@ rtpserver_t::rtpserver_t(std::string _name, const std::string &port)
   INFO("Listening RTP MIDI connections at {} / {}, with name: '{}'",
        control.get_address().to_string(), midi.get_address().to_string(), name);
 }
+
+bool rtpserver_t::is_valid() const { return control.is_open(); }
 
 // NOLINTNEXTLINE(bugprone-exception-escape)
 rtpserver_t::~rtpserver_t() {

@@ -54,6 +54,10 @@ public:
 
   int port() const { return control.get_address().port(); }
 
+  // True when the control socket bound successfully (i.e. the server is
+  // actually listening). When false the server is inert and port() returns 0.
+  bool is_valid() const;
+
   void create_peer_from(io_bytes_reader &&buffer, const network_address_t &addr,
                         rtppeer_t::port_e port);
   void remove_peer(int peer_id);

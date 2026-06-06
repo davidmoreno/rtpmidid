@@ -33,8 +33,13 @@ extern std::shared_ptr<::rtpmidid::mdns_rtpmidi_t> mdns;
 peer_export_rtpmidi_server_t::peer_export_rtpmidi_server_t(
     const std::string &name, const std::string &udp_port)
     : name_(name), server(name, udp_port) {
-  if (mdns)
+  if (!server.is_valid()) {
+    WARNING("peer_export_rtpmidi_server '{}' has no listening socket (port "
+            "'{}' could not be bound); it will not accept connections.",
+            name, udp_port);
+  } else if (mdns) {
     mdns->announce_rtpmidi(name, server.port());
+  }
 
   midi_connection =
       server.midi_event.connect([this](const rtpmidid::io_bytes_reader &data) {
