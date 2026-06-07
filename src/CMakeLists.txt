@@ -12,6 +12,7 @@ add_library(
   settings.cpp
   control_socket.cpp
   control_rpc.cpp
+  event_subscription.cpp
   web_server.cpp
   stringpp.cpp
   hwautoannounce.cpp

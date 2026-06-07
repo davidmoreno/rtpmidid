@@ -234,3 +234,18 @@ add_executable(test_dm_json_generated test_dm_json_generated.cpp)
 target_link_libraries(test_dm_json_generated rtpmidid-dmjson rtpmidid-shared -pthread)
 target_link_libraries(test_dm_json_generated ${FMT_LIBRARIES})
 add_test(NAME test_dm_json_generated COMMAND test_dm_json_generated)
+
+if (NOT LIBS_ONLY)
+  add_executable(test_event_subscription
+      test_event_subscription.cpp test_utils.cpp
+  )
+  target_link_libraries(test_event_subscription -pthread rtpmidid-shared rtpmidid2-static)
+  add_test(NAME test_event_subscription COMMAND test_event_subscription)
+  target_link_libraries(test_event_subscription ${AVAHI_LIBRARIES})
+  target_link_libraries(test_event_subscription ${ALSA_LIBRARIES})
+  target_link_libraries(test_event_subscription ${FMT_LIBRARIES})
+  target_include_directories(test_event_subscription PUBLIC ${ALSA_INCLUDE_DIRS})
+  target_include_directories(test_event_subscription PUBLIC ${AVAHI_INCLUDE_DIRS})
+  target_compile_options(test_event_subscription PUBLIC ${ALSA_CFLAGS_OTHER})
+  target_compile_options(test_event_subscription PUBLIC ${AVAHI_CFLAGS_OTHER})
+endif (NOT LIBS_ONLY)

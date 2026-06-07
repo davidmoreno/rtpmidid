@@ -18,15 +18,18 @@
 #include "web_server.hpp"
 #include "aseq.hpp"
 #include "control_rpc.hpp"
+#include "event_subscription.hpp"
 #include "midirouter.hpp"
 #include "settings.hpp"
 #include "webui_midi_monitor_peer.hpp"
 #include "dm_json_generated.hpp"
 #include "dm_json_rpc.hpp"
+#include "dm_json_status.hpp"
 #include <rtpmidid/dm_json/runtime.hpp>
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/mdns_rtpmidi.hpp>
 #include <rtpmidid/shutdown_signals.hpp>
+#include <rtpmidid/signal.hpp>
 
 #include <cctype>
 #include <chrono>
@@ -318,7 +321,109 @@ void web_server_t::thread_main() {
 
   svr->WebSocket("/ws", [this, need_auth, user, pass](const httplib::Request &req,
                                                       httplib::ws::WebSocket &ws) {
-    control_rpc_context_t ctx{router, aseq, mdns, connection_db, device_registry};
+    // ── Per-connection event subscription ────────────────────────────
+    auto subs = std::make_shared<event_subscription_manager_t>();
+    subs->set_send_fn([&ws](const std::string &json) {
+      if (ws.is_open())
+        ws.send(json);
+    });
+
+    // RAII guards for signal → event forwarding.
+    // Each connection_t disconnects automatically on destruction.
+    struct signal_guards_t {
+      ::rtpmidid::connection_t<peer_id_t> peer_added;
+      ::rtpmidid::connection_t<peer_id_t> peer_removed;
+      ::rtpmidid::connection_t<peer_id_t, peer_id_t> edge_added;
+      ::rtpmidid::connection_t<peer_id_t, peer_id_t> edge_removed;
+      ::rtpmidid::connection_t<const std::string &, const std::string &,
+                                const std::string &>
+          mdns_discovered;
+      ::rtpmidid::connection_t<const std::string &, const std::string &,
+                                const std::string &>
+          mdns_removed;
+      ::rtpmidid::connection_t<peer_id_t> peer_stats;
+    };
+    auto guards = std::make_shared<signal_guards_t>();
+
+    // Connect router signals → event channels
+    if (router) {
+      guards->peer_added = router->peer_added_event.connect(
+          [subs, router = router](peer_id_t pid) {
+            auto rows = router->status_rows();
+            for (const auto &r : rows) {
+              if (r.id && static_cast<peer_id_t>(*r.id) == pid) {
+                subs->emit("router.peer_added", dmjson::to_json(r));
+                break;
+              }
+            }
+          });
+
+      guards->peer_removed = router->peer_removed_event.connect(
+          [subs](peer_id_t pid) {
+            router_peer_removed_event_t evt;
+            evt.peer_id = static_cast<uint64_t>(pid);
+            subs->emit("router.peer_removed", dmjson::to_json(evt));
+          });
+
+      guards->edge_added = router->connected_event.connect(
+          [subs](peer_id_t from, peer_id_t to) {
+            router_edge_event_t evt;
+            evt.from = static_cast<uint64_t>(from);
+            evt.to = static_cast<uint64_t>(to);
+            subs->emit("router.edge_added", dmjson::to_json(evt));
+          });
+
+      guards->edge_removed = router->disconnected_event.connect(
+          [subs](peer_id_t from, peer_id_t to) {
+            router_edge_event_t evt;
+            evt.from = static_cast<uint64_t>(from);
+            evt.to = static_cast<uint64_t>(to);
+            subs->emit("router.edge_removed", dmjson::to_json(evt));
+          });
+
+      // Stats-changed signal: throttled at source (~200ms), fires on MIDI path.
+      // We throttle again here (per-subscriber) as a safety net.
+      guards->peer_stats = router->peer_stats_changed.connect(
+          [subs, router = router](peer_id_t pid) {
+            // Get the full peer row; this call is on the router thread so
+            // status_rows() executes inline (no queue dispatch).
+            auto rows = router->status_rows();
+            for (const auto &r : rows) {
+              if (r.id && static_cast<peer_id_t>(*r.id) == pid) {
+                subs->emit("router.peer_updated", dmjson::to_json(r));
+                break;
+              }
+            }
+          });
+    }
+
+    // Connect mDNS signals → event channels
+    if (mdns) {
+      guards->mdns_discovered = mdns->discover_event.connect(
+          [subs](const std::string &name, const std::string &address,
+                  const std::string &port_str) {
+            mdns_remote_row_t evt;
+            evt.name = name;
+            evt.hostname = address;
+            evt.ip = address;
+            evt.port = static_cast<uint32_t>(std::stoul(port_str.empty() ? "0" : port_str));
+            subs->emit("mdns.discovered", dmjson::to_json(evt));
+          });
+
+      guards->mdns_removed = mdns->remove_event.connect(
+          [subs](const std::string &name, const std::string &address,
+                  const std::string &port_str) {
+            mdns_removed_event_t evt;
+            evt.name = name;
+            evt.address = address;
+            evt.port = static_cast<uint32_t>(std::stoul(port_str.empty() ? "0" : port_str));
+            subs->emit("mdns.removed", dmjson::to_json(evt));
+          });
+    }
+
+    // ── RPC dispatch ──────────────────────────────────────────────────
+    control_rpc_context_t ctx{router, aseq, mdns, connection_db, device_registry,
+                               subs};
     bool authed = !need_auth || check_basic_auth(req, user, pass);
 
     ws_shutdown_registration ws_reg(*this, [&ws]() {

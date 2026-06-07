@@ -7,13 +7,8 @@ import {
   normalizePeers,
   parseMdns,
 } from "./model";
-import { RpcClient, type RpcConnectionState } from "./rpc";
+import { RpcClient, type RpcConnectionState, type JsonRpcResponse } from "./rpc";
 import { ConnectionBanner } from "./components/ConnectionBanner";
-import {
-  DEFAULT_STATUS_REFRESH_MS,
-  parseStoredStatusRefreshMs,
-  STORAGE_KEY_STATUS_REFRESH_MS,
-} from "./statusRefresh";
 import {
   normalizeRtpMidiUdpPort,
   sanitizePeerBaseName,
@@ -32,6 +27,7 @@ import {
 } from "./deviceIdentity";
 import { useUiTheme } from "./theme";
 import type { StatusResult } from "./tabs/types";
+import { daemonStore, useDaemonState } from "./store";
 import { AboutTab } from "./tabs/AboutTab";
 import { ActionsTab } from "./tabs/ActionsTab";
 import { ConnectionsTab } from "./tabs/ConnectionsTab";
@@ -62,38 +58,130 @@ function parseMonitorUuidFromHash(): string | null {
   return u && u.trim().length > 0 ? u.trim() : null;
 }
 
-const AUTO_TABS = new Set([
-  "devices",
-  "connections",
-  "peers",
-  "mdns",
-  "about",
-]);
+/** Event channels the frontend subscribes to after connecting. */
+const SUBSCRIBE_CHANNELS = [
+  "router.peer_added",
+  "router.peer_removed",
+  "router.edge_added",
+  "router.edge_removed",
+  "router.peer_updated",
+  "mdns.discovered",
+  "mdns.removed",
+  "mdns.announcement_changed",
+];
+
+/**
+ * Route incoming WebSocket events to the daemon store.
+ */
+function handleWsEvent(ev: JsonRpcResponse) {
+  if (!ev.event || ev.params === undefined) return;
+
+  const params = ev.params as Record<string, unknown>;
+
+  switch (ev.event) {
+    case "router.peer_added":
+      daemonStore.reduce({
+        type: "peer_added",
+        peer: params as Record<string, unknown>,
+      });
+      break;
+
+    case "router.peer_removed":
+      daemonStore.reduce({
+        type: "peer_removed",
+        peer_id: Number((params as { peer_id: unknown }).peer_id),
+      });
+      break;
+
+    case "router.edge_added": {
+      const p = params as { from: unknown; to: unknown };
+      daemonStore.reduce({
+        type: "edge_added",
+        from: Number(p.from),
+        to: Number(p.to),
+      });
+      break;
+    }
+
+    case "router.edge_removed": {
+      const p = params as { from: unknown; to: unknown };
+      daemonStore.reduce({
+        type: "edge_removed",
+        from: Number(p.from),
+        to: Number(p.to),
+      });
+      break;
+    }
+
+    case "mdns.discovered": {
+      const p = params as {
+        name: string;
+        hostname: string;
+        ip: string;
+        port: number;
+      };
+      daemonStore.reduce({
+        type: "mdns_discovered",
+        remote: {
+          name: p.name,
+          hostname: p.hostname,
+          ip: p.ip ?? p.hostname,
+          port: p.port,
+        },
+      });
+      break;
+    }
+
+    case "mdns.removed": {
+      const p = params as { name: string; address: string; port: number };
+      daemonStore.reduce({
+        type: "mdns_removed",
+        name: p.name,
+        address: p.address,
+        port: p.port,
+      });
+      break;
+    }
+
+    case "router.peer_updated":
+      daemonStore.reduce({
+        type: "peer_added",
+        peer: params as Record<string, unknown>,
+      });
+      break;
+
+    case "mdns.announcement_changed": {
+      // Full mDNS snapshot — reload into store
+      const p = params as {
+        status: string;
+        announcements?: unknown[];
+        remote_announcements?: unknown[];
+      };
+      daemonStore.loadSnapshot({
+        mdns: {
+          status: p.status,
+          announcements: p.announcements ?? [],
+          remote_announcements: p.remote_announcements ?? [],
+        },
+      });
+      break;
+    }
+  }
+}
 
 export function App() {
   const [monitorStandaloneUuid, setMonitorStandaloneUuid] = useState<
     string | null
   >(() => parseMonitorUuidFromHash());
   const [theme, setTheme] = useUiTheme();
-  const [refreshIntervalMs, setRefreshIntervalMs] = useState(() =>
-    typeof localStorage !== "undefined"
-      ? parseStoredStatusRefreshMs(
-          localStorage.getItem(STORAGE_KEY_STATUS_REFRESH_MS),
-        )
-      : DEFAULT_STATUS_REFRESH_MS,
-  );
   const [status, setStatus] = useState<string>("");
   const [connState, setConnState] = useState<RpcConnectionState | null>(null);
-  const [data, setData] = useState<StatusResult | null>(null);
   const [tab, setTab] = useState(() => {
     const raw = typeof window !== "undefined" ? window.location.hash : "";
     let h = raw.startsWith("#") ? raw.slice(1) : raw;
     if (h === "peer_cards") h = "devices";
     return h || "devices";
   });
-  /* Kept null - the Connections page now opens the Devices tab instead of
-     Peers, so there's no caller that highlights a router peer. The PeersTab
-     prop is left in place because the table component still consumes it. */
   const [highlightPeerId] = useState<number | null>(null);
   const highlightClearTimer = useRef<number | undefined>(undefined);
   const [highlightConnectionRowId, setHighlightConnectionRowId] = useState<
@@ -115,22 +203,23 @@ export function App() {
   const [registryDevices, setRegistryDevices] = useState<RegistryDevice[]>([]);
   const [registryEnabled, setRegistryEnabled] = useState(false);
 
+  // ── Event-driven daemon state ──────────────────────────────────────
+  const daemonState = useDaemonState();
+
   const rpc = useMemo(
     () =>
       new RpcClient(
         (m) => setStatus(m),
-        (ev) => console.debug("event", ev),
+        handleWsEvent,
       ),
     [],
   );
-
-  const refreshInFlightRef = useRef(false);
 
   const loadConnectionsDb = useCallback(async () => {
     try {
       const raw = await rpc.call("connections.list", {});
       const parsed = parseConnectionsListResult(raw);
-      setConnectionsDbEnabled(parsed.enabled);
+      setConnectionsDbEnabled(parsed.enabled ?? false);
       setSavedConnections(parsed.connections ?? []);
     } catch (e) {
       console.debug("connections.list failed", e);
@@ -148,38 +237,44 @@ export function App() {
     }
   }, [rpc]);
 
-  const refresh = useCallback(async () => {
-    if (refreshInFlightRef.current) return;
-    refreshInFlightRef.current = true;
+  /** Fetch ALSA MIDI lists on demand (tab switch or initial load). */
+  const loadMidiLists = useCallback(async () => {
     try {
-      const r = (await rpc.call("status", {})) as StatusResult;
-      setData(r);
+      const [rAlsa, rRaw, rSubs] = await Promise.all([
+        rpc.call("midi.listAlsaSeq", {}),
+        rpc.call("midi.listRawMidi", {}),
+        rpc.call("midi.listAlsaSubscriptions", {}),
+      ]);
+      setAlsaSeq(parseMidiAlsaSeqResult(rAlsa) ?? []);
+      setRawmidi(parseMidiRawmidiResult(rRaw) ?? []);
+      setAlsaSubs(Array.isArray(rSubs) ? (rSubs as unknown[]) : []);
+    } catch (e) {
+      console.debug("midi list fetch failed", e);
+    }
+  }, [rpc]);
+
+  /** Called after each (re)connect: subscribe + load initial snapshot. */
+  const onSessionReady = useCallback(async () => {
+    try {
+      // Subscribe first so we don't miss events between status and subscription
+      await rpc.subscribe(SUBSCRIBE_CHANNELS);
+
+      // Load initial snapshot into the store
+      const statusResult = (await rpc.call("status", {})) as StatusResult;
+      daemonStore.loadSnapshot(statusResult);
       setLastRefresh(new Date());
-      if (tab === "devices" || tab === "connections") {
-        try {
-          const [rAlsa, rRaw, rSubs] = await Promise.all([
-            rpc.call("midi.listAlsaSeq", {}),
-            rpc.call("midi.listRawMidi", {}),
-            rpc.call("midi.listAlsaSubscriptions", {}),
-          ]);
-          setAlsaSeq(parseMidiAlsaSeqResult(rAlsa) ?? []);
-          setRawmidi(parseMidiRawmidiResult(rRaw) ?? []);
-          setAlsaSubs(Array.isArray(rSubs) ? (rSubs as unknown[]) : []);
-        } catch (e) {
-          console.debug("midi list refresh failed", e);
-        }
-      }
+
+      // Load auxiliary data
+      await loadMidiLists();
       await loadConnectionsDb();
       await loadDevicesRegistry();
     } catch (e) {
       setStatus(String(e));
-    } finally {
-      refreshInFlightRef.current = false;
     }
-  }, [rpc, tab, loadConnectionsDb, loadDevicesRegistry]);
+  }, [rpc, loadMidiLists, loadConnectionsDb, loadDevicesRegistry]);
 
-  const refreshRef = useRef(refresh);
-  refreshRef.current = refresh;
+  const reconnectHandlerRef = useRef(onSessionReady);
+  reconnectHandlerRef.current = onSessionReady;
 
   /* Jump to Devices and pulse the matching card (device identity string). */
   const onOpenEndpointInDevices = useCallback((identity: string) => {
@@ -212,7 +307,7 @@ export function App() {
   useEffect(() => {
     rpc.setOnConnectionStateChange(setConnState);
     rpc.setOnReconnect(() => {
-      void refreshRef.current();
+      void reconnectHandlerRef.current();
     });
 
     const onPageShow = () => {
@@ -224,7 +319,7 @@ export function App() {
 
     rpc
       .connect()
-      .then(() => refreshRef.current())
+      .then(() => reconnectHandlerRef.current())
       .catch((e) => setStatus(String(e)));
 
     return () => {
@@ -235,45 +330,31 @@ export function App() {
     };
   }, [rpc]);
 
+  // Fetch auxiliary data on tab switch to Devices/Connections
   useEffect(() => {
     if (tab !== "devices" && tab !== "connections") return;
-    void refresh();
-  }, [tab, refresh]);
+    void loadMidiLists();
+  }, [tab, loadMidiLists]);
 
-  /** Load saved pairs when opening Connections (refresh may have been skipped while in-flight). */
+  // Fetch DB data on tab switch to Connections
   useEffect(() => {
-    if (tab !== "connections" || lastRefresh === null) return;
+    if (tab !== "connections") return;
     void loadConnectionsDb();
-  }, [tab, lastRefresh, loadConnectionsDb]);
+  }, [tab, loadConnectionsDb]);
 
+  // Fetch registry on tab switch to Devices
   useEffect(() => {
-    if (!AUTO_TABS.has(tab) || refreshIntervalMs <= 0) return undefined;
-    let cancelled = false;
-    let timerId: number | undefined;
+    if (tab !== "devices") return;
+    void loadDevicesRegistry();
+  }, [tab, loadDevicesRegistry]);
 
-    const step = async () => {
-      await refresh();
-      if (!cancelled) {
-        timerId = window.setTimeout(step, refreshIntervalMs);
-      }
-    };
-
-    timerId = window.setTimeout(step, refreshIntervalMs);
-
-    return () => {
-      cancelled = true;
-      if (timerId !== undefined) window.clearTimeout(timerId);
-    };
-  }, [tab, refresh, refreshIntervalMs]);
-
-  const routerRaw = data?.router ?? [];
-  const peers = useMemo(() => normalizePeers(routerRaw), [routerRaw]);
+  const peers = useMemo(
+    () => daemonState.peers,
+    [daemonState.peers],
+  );
   const edges = useMemo(() => buildEdges(peers), [peers]);
   const connections = useMemo(() => buildConnections(peers), [peers]);
-  const mdnsParsed = useMemo(
-    () => parseMdns(data?.mdns as Record<string, unknown> | undefined),
-    [data?.mdns],
-  );
+  const mdnsParsed = useMemo(() => daemonState.mdns, [daemonState.mdns]);
 
   const wireMdnsRemoteToLocal = useCallback(
     async (args: {
@@ -283,9 +364,10 @@ export function App() {
       local: WireLocalChoice;
     }) => {
       try {
-        const snap = (await rpc.call("status", {})) as StatusResult;
+        // Snapshot before creating peers to track new IDs
+        const snapBefore = (await rpc.call("status", {})) as StatusResult;
         const idsBefore = new Set(
-          normalizePeers(snap.router ?? []).map((p) => p.id),
+          normalizePeers(snapBefore.router ?? []).map((p) => p.id),
         );
 
         const peerBase = sanitizePeerBaseName(
@@ -299,8 +381,8 @@ export function App() {
 
         if (args.local.mode === "alsa_seq") {
           const parsed = identityFromForm("alsa_seq", {
-            client: args.local.client,
-            port: args.local.port,
+            client: String(args.local.client),
+            port: String(args.local.port),
             name: uniquePeerName,
           });
           if (!parsed) throw new Error("Invalid ALSA identity");
@@ -309,7 +391,7 @@ export function App() {
           });
         } else {
           const parsed = identityFromForm("rawmidi", {
-            device: args.local.device,
+            device: String(args.local.device),
             name: uniquePeerName,
           });
           if (!parsed) throw new Error("Invalid raw MIDI identity");
@@ -317,23 +399,6 @@ export function App() {
             identity: serializeIdentity(parsed),
           });
         }
-
-        const afterLocal = (await rpc.call("status", {})) as StatusResult;
-        const peersAfterLocal = normalizePeers(afterLocal.router ?? []);
-        const newLocals = peersAfterLocal.filter(
-          (p) =>
-            !idsBefore.has(p.id) &&
-            (p.type === "peer_device_alsa_seq_t" ||
-              p.type === "peer_device_rawmidi_t"),
-        );
-        const localPeer = newLocals.sort((a, b) => b.id - a.id)[0];
-        if (!localPeer) {
-          throw new Error(
-            "Could not create local ALSA sequencer or raw MIDI peer",
-          );
-        }
-
-        const idsMid = new Set(peersAfterLocal.map((p) => p.id));
 
         const safe =
           args.serviceName.replace(/\s+/g, " ").trim().slice(0, 48) ||
@@ -348,53 +413,72 @@ export function App() {
         if (!clientIdentity) throw new Error("Invalid RTP client identity");
         await rpc.call("router.create", { identity: clientIdentity });
 
-        const afterClient = (await rpc.call("status", {})) as StatusResult;
-        const peersAfterClient = normalizePeers(afterClient.router ?? []);
-        const newClients = peersAfterClient.filter(
-          (p) =>
-            !idsMid.has(p.id) && p.type === "peer_device_rtpmidi_client_t",
-        );
-        const clientPeer = newClients.sort((a, b) => b.id - a.id)[0];
-        if (!clientPeer) {
-          throw new Error("Could not find new RTP MIDI client peer after create");
-        }
-
-        await rpc.call("router.connect", {
-          from: localPeer.id,
-          to: clientPeer.id,
-        });
-        await rpc.call("router.connect", {
-          from: clientPeer.id,
-          to: localPeer.id,
-        });
-
+        // Get final snapshot to find new peers
         const fin = (await rpc.call("status", {})) as StatusResult;
-        setData(fin);
-        setLastRefresh(new Date());
-        setStatus("");
-
         const peersFinal = normalizePeers(fin.router ?? []);
-        const rowId = connectionRowIdLinkingPeers(
-          peersFinal,
-          localPeer.id,
-          clientPeer.id,
-        );
-        setHighlightConnectionRowId(rowId);
-        setTab("connections");
+        const newPeers = peersFinal.filter((p) => !idsBefore.has(p.id));
 
-        if (connectionHighlightClearTimer.current !== undefined) {
-          window.clearTimeout(connectionHighlightClearTimer.current);
+        const localPeer = newPeers.find(
+          (p) =>
+            p.type === "peer_device_alsa_seq_t" ||
+            p.type === "peer_device_rawmidi_t",
+        );
+        const clientPeer = newPeers.find(
+          (p) => p.type === "peer_device_rtpmidi_client_t",
+        );
+
+        if (localPeer && clientPeer) {
+          await rpc.call("router.connect", {
+            from: localPeer.id,
+            to: clientPeer.id,
+          });
+          await rpc.call("router.connect", {
+            from: clientPeer.id,
+            to: localPeer.id,
+          });
+
+          daemonStore.loadSnapshot(fin);
+          setLastRefresh(new Date());
+          setStatus("");
+
+          const rowId = connectionRowIdLinkingPeers(
+            peersFinal,
+            localPeer.id,
+            clientPeer.id,
+          );
+          setHighlightConnectionRowId(rowId);
+          setTab("connections");
+
+          if (connectionHighlightClearTimer.current !== undefined) {
+            window.clearTimeout(connectionHighlightClearTimer.current);
+          }
+          connectionHighlightClearTimer.current = window.setTimeout(() => {
+            setHighlightConnectionRowId(null);
+            connectionHighlightClearTimer.current = undefined;
+          }, 4000);
+        } else {
+          throw new Error("Could not identify new peers after creation");
         }
-        connectionHighlightClearTimer.current = window.setTimeout(() => {
-          setHighlightConnectionRowId(null);
-          connectionHighlightClearTimer.current = undefined;
-        }, 4000);
       } catch (e) {
         setStatus(String(e));
       }
     },
     [rpc],
   );
+
+  /** Called after user actions to re-sync the full state. */
+  const onAfterAction = useCallback(async () => {
+    try {
+      const statusResult = (await rpc.call("status", {})) as StatusResult;
+      daemonStore.loadSnapshot(statusResult);
+      setLastRefresh(new Date());
+      setStatus("");
+      await loadConnectionsDb();
+      await loadDevicesRegistry();
+    } catch (e) {
+      setStatus(String(e));
+    }
+  }, [rpc, loadConnectionsDb, loadDevicesRegistry]);
 
   const statsRows = useMemo(() => {
     const edgesN = edges.length;
@@ -408,9 +492,9 @@ export function App() {
       { k: "Router peers", v: String(peers.length) },
       { k: "Routing edges", v: String(edgesN) },
       { k: "RTP sub-peer rows (approx)", v: String(rtpPeers) },
-      { k: "Version", v: String(data?.version ?? "—") },
+      { k: "Version", v: String(daemonState.version || "—") },
     ];
-  }, [data?.version, peers, edges.length]);
+  }, [daemonState.version, peers, edges.length]);
 
   const tabs: TabDef[] = [
     {
@@ -418,7 +502,6 @@ export function App() {
       label: "Devices",
       content: (
         <DevicesTab
-          refreshIntervalMs={refreshIntervalMs}
           lastRefresh={lastRefresh}
           peers={peers}
           mdnsRemotes={mdnsParsed.remotes}
@@ -430,7 +513,7 @@ export function App() {
           connectionsDbEnabled={connectionsDbEnabled}
           highlightEndpointId={highlightEndpointId}
           rpc={rpc}
-          onAfterAction={refresh}
+          onAfterAction={onAfterAction}
           onStatus={setStatus}
         />
       ),
@@ -440,7 +523,6 @@ export function App() {
       label: "Connections",
       content: (
         <ConnectionsTab
-          refreshIntervalMs={refreshIntervalMs}
           lastRefresh={lastRefresh}
           liveConnections={connections}
           savedConnections={savedConnections}
@@ -455,7 +537,7 @@ export function App() {
           rawmidi={rawmidi}
           registryDevices={registryDevices}
           registryEnabled={registryEnabled}
-          onAfterAction={refresh}
+          onAfterAction={onAfterAction}
           onStatus={setStatus}
         />
       ),
@@ -465,7 +547,6 @@ export function App() {
       label: "Peers",
       content: (
         <PeersTab
-          refreshIntervalMs={refreshIntervalMs}
           lastRefresh={lastRefresh}
           peers={peers}
           edges={edges}
@@ -478,7 +559,6 @@ export function App() {
       label: "mDNS",
       content: (
         <MdnsTab
-          refreshIntervalMs={refreshIntervalMs}
           lastRefresh={lastRefresh}
           status={mdnsParsed.status}
           announcements={mdnsParsed.announcements}
@@ -493,7 +573,6 @@ export function App() {
       label: "About",
       content: (
         <AboutTab
-          refreshIntervalMs={refreshIntervalMs}
           lastRefresh={lastRefresh}
           statsRows={statsRows}
         />
@@ -503,7 +582,7 @@ export function App() {
       id: "actions",
       label: "Actions",
       content: (
-        <ActionsTab rpc={rpc} onRefresh={refresh} onStatus={setStatus} />
+        <ActionsTab rpc={rpc} onRefresh={onAfterAction} onStatus={setStatus} />
       ),
     },
     {
@@ -513,8 +592,6 @@ export function App() {
         <SettingsTab
           theme={theme}
           setTheme={setTheme}
-          refreshIntervalMs={refreshIntervalMs}
-          setRefreshIntervalMs={setRefreshIntervalMs}
         />
       ),
     },
@@ -572,15 +649,16 @@ export function App() {
               rtpmidid
             </h1>
             <p class="font-mono text-xs ui-text-muted">
-              Web control · JSON-RPC over WebSocket
+              Web control · JSON-RPC over WebSocket · Live updates
             </p>
-            {data?.version && (
+            {daemonState.version && (
               <p class="mt-1 font-mono text-xs ui-text-subtle">
-                Daemon <span class="font-bold ui-text">{data.version}</span>
+                Daemon{" "}
+                <span class="font-bold ui-text">{daemonState.version}</span>
                 {lastRefresh && (
                   <>
                     {" "}
-                    · refreshed{" "}
+                    · loaded{" "}
                     <span class="tabular-nums">
                       {lastRefresh.toLocaleTimeString([], {
                         hour: "2-digit",

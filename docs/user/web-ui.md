@@ -22,7 +22,7 @@ protected.
 | **Peers** | Live router view — active peers, packet counts, latency. |
 | **mDNS** | Services announced and discovered on the network. |
 | **Actions** | Quick connect/disconnect and utilities. |
-| **Settings** | UI refresh interval and local preferences. |
+| **Settings** | UI theme preferences. |
 | **About** | Version and daemon info. |
 
 Requires `[database] path=…` for full **Devices** (offline memory) and

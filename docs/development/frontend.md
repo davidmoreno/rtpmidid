@@ -24,8 +24,25 @@ Configuration: `[web]` in INI — see [default.ini](../../default.ini) and
 | File | Role |
 |------|------|
 | `frontend/src/index.tsx` | Mount point |
-| `frontend/src/app.tsx` | Root: tabs, RPC client, status polling, hash routing |
-| `frontend/src/rpc.ts` | `RpcClient` — WebSocket JSON-RPC with reconnect |
+| `frontend/src/app.tsx` | Root: tabs, RPC client, event subscription, hash routing |
+| `frontend/src/rpc.ts` | `RpcClient` — WebSocket JSON-RPC with reconnect and subscriptions |
+| `frontend/src/store.ts` | Event-sourcing store — receives snapshot + incremental events from WebSocket |
+
+### Event-driven architecture
+
+The Web UI no longer polls for status. On connect:
+1. Subscribes to event channels (`router.peer_added`, `router.peer_removed`,
+   `router.edge_added`, `router.edge_removed`, `mdns.discovered`, `mdns.removed`)
+2. Fetches the initial `status` snapshot once
+3. Incremental events from the WebSocket are reduced into the `daemonStore`
+   (event-sourcing pattern in `store.ts`)
+4. Components use `useDaemonState()` hook to re-render on store changes
+
+Auxiliary data (ALSA MIDI lists, connection DB, device registry) is fetched
+on-demand when the relevant tab is opened.
+
+Backend events are pushed from router/mDNS signals through a per-connection
+`event_subscription_manager_t` (`src/event_subscription.hpp`).
 
 Fullscreen MIDI monitor: hash route `#monitor?uuid=…` →
 `MidiMonitorStandalone` (bypasses main tab chrome).
@@ -39,7 +56,7 @@ Fullscreen MIDI monitor: hash route `#monitor?uuid=…` →
 | Peers | `tabs/PeersTab.tsx` | `status` router rows |
 | mDNS | `tabs/MdnsTab.tsx` | `status` mDNS snapshot |
 | Actions | `tabs/ActionsTab.tsx` | Connect/disconnect/monitor actions |
-| Settings | `tabs/SettingsTab.tsx` | Local UI prefs (refresh interval) |
+| Settings | `tabs/SettingsTab.tsx` | Theme appearance |
 | About | `tabs/AboutTab.tsx` | Version info |
 
 ## Key modules

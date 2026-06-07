@@ -116,6 +116,15 @@ void midirouter_t::post_signal_peer_event(peer_id_t peer_id,
           rtpmidid::queue_priority_e::NORMAL);
 }
 
+void midirouter_t::post_signal_peer_stats_changed(peer_id_t peer_id) {
+  if (sync_mode()) {
+    peer_stats_changed(peer_id);
+    return;
+  }
+  enqueue(router_command_t{router_cmd::signal_peer_stats_changed_t{peer_id}},
+          rtpmidid::queue_priority_e::NORMAL);
+}
+
 void midirouter_t::dispatch_for_each_peer(
     std::function<void(midirouter_t &)> task) {
   if (!task)
@@ -365,6 +374,14 @@ void midirouter_t::send_midi_inline(peer_id_t from, peer_id_t to,
   }
   from_it->second.peer->packets_sent++;
 
+  // Throttled stats signal (sync mode)
+  auto now = std::chrono::steady_clock::now();
+  auto &last_from = last_stats_signal_[from];
+  if (now - last_from >= kStatsThrottle) {
+    last_from = now;
+    post_signal_peer_stats_changed(from);
+  }
+
   mididata_t mididata(const_cast<uint8_t *>(data),
                       static_cast<uint32_t>(size));
 
@@ -376,6 +393,12 @@ void midirouter_t::send_midi_inline(peer_id_t from, peer_id_t to,
     }
     to_it->second.peer->packets_recv++;
     to_it->second.peer->send_midi(from, mididata);
+    now = std::chrono::steady_clock::now();
+    auto &last_to = last_stats_signal_[to];
+    if (now - last_to >= kStatsThrottle) {
+      last_to = now;
+      post_signal_peer_stats_changed(to);
+    }
     return;
   }
 
@@ -385,6 +408,12 @@ void midirouter_t::send_midi_inline(peer_id_t from, peer_id_t to,
       continue;
     to_it->second.peer->packets_recv++;
     to_it->second.peer->send_midi(from, mididata);
+    now = std::chrono::steady_clock::now();
+    auto &last_to = last_stats_signal_[to_id];
+    if (now - last_to >= kStatsThrottle) {
+      last_to = now;
+      post_signal_peer_stats_changed(to_id);
+    }
   }
 }
 
@@ -490,12 +519,28 @@ void midirouter_t::handle(router_cmd::send_midi_t &cmd) {
   }
   from_it->second.peer->packets_sent++;
 
+  // Throttled stats-changed signal from the sender
+  auto now = std::chrono::steady_clock::now();
+  auto &last = last_stats_signal_[cmd.from];
+  if (now - last >= kStatsThrottle) {
+    last = now;
+    post_signal_peer_stats_changed(cmd.from);
+  }
+
   rtpmidid::midi_packet_t packet(cmd.from, cmd.data.data(), cmd.data.size());
 
   if (cmd.to != 0) {
     auto to_it = peers_.find(cmd.to);
     if (to_it != peers_.end()) {
       to_it->second.peer->enqueue_midi_packet(packet);
+      to_it->second.peer->packets_recv++;
+      // Throttled stats-changed from receiver
+      now = std::chrono::steady_clock::now();
+      auto &last_to = last_stats_signal_[cmd.to];
+      if (now - last_to >= kStatsThrottle) {
+        last_to = now;
+        post_signal_peer_stats_changed(cmd.to);
+      }
     }
     return;
   }
@@ -504,6 +549,13 @@ void midirouter_t::handle(router_cmd::send_midi_t &cmd) {
     auto to_it = peers_.find(to);
     if (to_it != peers_.end()) {
       to_it->second.peer->enqueue_midi_packet(packet);
+      to_it->second.peer->packets_recv++;
+      now = std::chrono::steady_clock::now();
+      auto &last_to = last_stats_signal_[to];
+      if (now - last_to >= kStatsThrottle) {
+        last_to = now;
+        post_signal_peer_stats_changed(to);
+      }
     }
   }
 }
@@ -595,6 +647,14 @@ void midirouter_t::handle(router_cmd::signal_peer_event_t &cmd) {
     peer_event(cmd.peer_id, cmd.evt);
   } catch (const std::exception &exc) {
     ERROR("signal_peer_event listener: {}", exc.what());
+  }
+}
+
+void midirouter_t::handle(router_cmd::signal_peer_stats_changed_t &cmd) {
+  try {
+    peer_stats_changed(cmd.peer_id);
+  } catch (const std::exception &exc) {
+    ERROR("signal_peer_stats_changed listener: {}", exc.what());
   }
 }
 

@@ -5,6 +5,7 @@ export type JsonRpcResponse = {
   result?: unknown;
   error?: unknown;
   event?: string;
+  params?: unknown;
 };
 
 export type RpcConnectionPhase =
@@ -380,5 +381,15 @@ export class RpcClient {
       this.pending.set(id, { resolve, reject });
       ws.send(body);
     });
+  }
+
+  /** Subscribe to one or more event channels. */
+  async subscribe(channels: string[]): Promise<void> {
+    await this.call("subscribe", { channels });
+  }
+
+  /** Unsubscribe from one or more event channels. */
+  async unsubscribe(channels: string[]): Promise<void> {
+    await this.call("unsubscribe", { channels });
   }
 }

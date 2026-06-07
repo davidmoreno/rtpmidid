@@ -140,6 +140,8 @@ public:
   rtpmidid::signal_t<peer_id_t> peer_added_event;
   rtpmidid::signal_t<peer_id_t> peer_removed_event;
   rtpmidid::signal_t<peer_id_t, midipeer_event_e> peer_event;
+  /** Fires when a peer's packet counters change (from send_midi path). */
+  rtpmidid::signal_t<peer_id_t> peer_stats_changed;
 
 private:
   // --- Router-thread-owned state ---
@@ -147,6 +149,11 @@ private:
   peer_id_t max_id_{1};
   std::unordered_map<peer_id_t, peerconnection_t> peers_;
   std::set<peer_id_t> removing_peers_;
+
+  // Throttle for peer_stats_changed: last signal time per peer (router-thread-only)
+  static constexpr auto kStatsThrottle = std::chrono::milliseconds(200);
+  std::unordered_map<peer_id_t, std::chrono::steady_clock::time_point>
+      last_stats_signal_;
 
   // --- Threading / queue ---
 
@@ -178,6 +185,7 @@ private:
   void handle(router_cmd::signal_connected_t &cmd);
   void handle(router_cmd::signal_disconnected_t &cmd);
   void handle(router_cmd::signal_peer_event_t &cmd);
+  void handle(router_cmd::signal_peer_stats_changed_t &cmd);
 
   void handle(router_cmd::query_peer_count_t &cmd);
   void handle(router_cmd::query_peer_ids_t &cmd);
@@ -218,6 +226,7 @@ private:
   void post_signal_connected(peer_id_t from, peer_id_t to);
   void post_signal_disconnected(peer_id_t from, peer_id_t to);
   void post_signal_peer_event(peer_id_t peer_id, midipeer_event_e evt);
+  void post_signal_peer_stats_changed(peer_id_t peer_id);
 
   /**
    * Dispatch a typed query.

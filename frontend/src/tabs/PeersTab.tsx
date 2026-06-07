@@ -5,7 +5,6 @@ import { RefreshBanner } from "../components/RefreshBanner";
 import type { EdgeRow, RouterPeer } from "../model";
 
 type Props = {
-  refreshIntervalMs: number;
   lastRefresh: Date | null;
   peers: RouterPeer[];
   edges: EdgeRow[];
@@ -13,7 +12,6 @@ type Props = {
 };
 
 export function PeersTab({
-  refreshIntervalMs,
   lastRefresh,
   peers,
   edges,
@@ -21,10 +19,7 @@ export function PeersTab({
 }: Props) {
   return (
     <div class="space-y-4">
-      <RefreshBanner
-        refreshIntervalMs={refreshIntervalMs}
-        lastRefresh={lastRefresh}
-      />
+      <RefreshBanner lastRefresh={lastRefresh} />
       <Card title="Peers">
         <PeersTable peers={peers} highlightPeerId={highlightPeerId} />
       </Card>

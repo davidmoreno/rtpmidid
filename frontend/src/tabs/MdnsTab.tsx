@@ -6,7 +6,6 @@ import type { WireLocalChoice } from "../midiEnumerate";
 import type { RpcClient } from "../rpc";
 
 type Props = {
-  refreshIntervalMs: number;
   lastRefresh: Date | null;
   status: string;
   announcements: MdnsAnnouncement[];
@@ -21,7 +20,6 @@ type Props = {
 };
 
 export function MdnsTab({
-  refreshIntervalMs,
   lastRefresh,
   status,
   announcements,
@@ -31,10 +29,7 @@ export function MdnsTab({
 }: Props) {
   return (
     <div class="space-y-4">
-      <RefreshBanner
-        refreshIntervalMs={refreshIntervalMs}
-        lastRefresh={lastRefresh}
-      />
+      <RefreshBanner lastRefresh={lastRefresh} />
       <Card title="mDNS">
         <MdnsTables
           status={status}

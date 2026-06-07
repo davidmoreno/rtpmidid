@@ -23,7 +23,6 @@ import {
 import type { ConnectionDirection } from "../deviceIdentity";
 
 type Props = {
-  refreshIntervalMs: number;
   lastRefresh: Date | null;
   liveConnections: ConnectionRow[];
   savedConnections: PersistedConnectionRow[];
@@ -52,7 +51,6 @@ type EditorMode =
     };
 
 export function ConnectionsTab({
-  refreshIntervalMs,
   lastRefresh,
   liveConnections,
   savedConnections,
@@ -183,10 +181,7 @@ export function ConnectionsTab({
 
   return (
     <div class="space-y-4">
-      <RefreshBanner
-        refreshIntervalMs={refreshIntervalMs}
-        lastRefresh={lastRefresh}
-      />
+      <RefreshBanner lastRefresh={lastRefresh} />
       <Card title="Connections (router + ALSA aconnect)">
         {dbEnabled === true ? (
           <div class="mb-3 flex flex-wrap items-center gap-2">
@@ -210,7 +205,7 @@ export function ConnectionsTab({
           highlightConnectionRowId={highlightConnectionRowId}
           onOpenInDevices={onOpenInDevices}
           dbEnabled={dbEnabled}
-          refreshIntervalMs={refreshIntervalMs}
+          refreshIntervalMs={5000}
           onAddToDb={dbEnabled ? (r) => void addRow(r) : undefined}
           onRemoveFromDb={dbEnabled ? (r) => void removeRow(r) : undefined}
           onEditSaved={dbEnabled ? (r) => openEdit(r) : undefined}

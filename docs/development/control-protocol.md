@@ -77,6 +77,36 @@ Param structs: `src/dm_json_rpc.hpp`. Handler list: `build_help_entries()` in
 
 ## Async events
 
+The daemon pushes server-sent events over the WebSocket `/ws` when the client
+has subscribed to event channels via the `subscribe` RPC method.
+
+### Subscription
+
+| Method | Params | Notes |
+|--------|--------|-------|
+| `subscribe` | `{channels: ["router.peer_added", ...]}` | Start receiving events |
+| `unsubscribe` | `{channels: ["router.peer_added"]}` | Stop specific channels |
+
+Event format:
+```json
+{"event":"<channel>","params":<payload>}
+```
+
+### Event channels
+
+| Channel | Payload | Trigger |
+|---------|---------|---------|
+| `router.peer_added` | `router_peer_row_t` (full peer row) | New peer added to router |
+| `router.peer_removed` | `{"peer_id": uint64}` | Peer removed from router |
+| `router.peer_updated` | `router_peer_row_t` (full peer row) | Peer stats/status changed (periodic, ~500ms) |
+| `router.edge_added` | `{"from": uint64, "to": uint64}` | Router connection created |
+| `router.edge_removed` | `{"from": uint64, "to": uint64}` | Router connection removed |
+| `mdns.discovered` | `mdns_remote_row_t` | New mDNS remote discovered |
+| `mdns.removed` | `{"name": string, "address": string, "port": uint32}` | mDNS remote removed |
+| `mdns.announcement_changed` | `mdns_snapshot_t` (full state) | Own announcements or remotes changed (periodic) |
+
+Legacy server-initiated close events (still sent regardless of subscription):
+
 ```json
 {"event":"close","detail":"Shutdown","code":0}
 ```

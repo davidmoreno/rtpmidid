@@ -3,22 +3,17 @@ import { RefreshBanner } from "../components/RefreshBanner";
 import { StatTable } from "../components/StatTable";
 
 type Props = {
-  refreshIntervalMs: number;
   lastRefresh: Date | null;
   statsRows: { k: string; v: string }[];
 };
 
 export function AboutTab({
-  refreshIntervalMs,
   lastRefresh,
   statsRows,
 }: Props) {
   return (
     <div class="space-y-4">
-      <RefreshBanner
-        refreshIntervalMs={refreshIntervalMs}
-        lastRefresh={lastRefresh}
-      />
+      <RefreshBanner lastRefresh={lastRefresh} />
       <Card title="About this UI">
         <p class="mb-3 font-mono text-xs leading-relaxed ui-text-muted">
           Web dashboard for <strong class="ui-text">rtpmidid</strong>: live

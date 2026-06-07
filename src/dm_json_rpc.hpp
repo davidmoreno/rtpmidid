@@ -258,4 +258,37 @@ struct devices_remove_params_t {
   std::string identity;
 };
 
+// ─── Event subscription (Phase: event-driven UI) ───────────────────────────
+
+// [dm-json]
+struct subscribe_params_t {
+  std::vector<std::string> channels;
+};
+
+// [dm-json]
+struct unsubscribe_params_t {
+  std::vector<std::string> channels;
+};
+
+/** Payload for `router.edge_added` / `router.edge_removed` events. */
+// [dm-json]
+struct router_edge_event_t {
+  uint64_t from;
+  uint64_t to;
+};
+
+/** Payload for `router.peer_removed` event. */
+// [dm-json]
+struct router_peer_removed_event_t {
+  uint64_t peer_id;
+};
+
+/** Payload for `mdns.removed` event. */
+// [dm-json]
+struct mdns_removed_event_t {
+  std::string name;
+  std::string address;
+  uint32_t port;
+};
+
 } // namespace rtpmididns

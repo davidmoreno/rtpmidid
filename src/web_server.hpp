@@ -7,6 +7,7 @@
 #pragma once
 
 #include "rtpmidid/utils.hpp"
+#include "dm_json_status.hpp"
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -27,6 +28,8 @@ class midirouter_t;
 class aseq_t;
 class connection_db_manager_t;
 class device_registry_t;
+
+struct router_peer_row_t;
 
 class web_server_t {
   NON_COPYABLE_NOR_MOVABLE(web_server_t)

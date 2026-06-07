@@ -28,6 +28,7 @@
 #include "dm_json_generated.hpp"
 #include "dm_json_rpc.hpp"
 #include "dm_json_status.hpp"
+#include "event_subscription.hpp"
 #include "peer_spawn.hpp"
 #include "peer_factory.hpp"
 #include "peer_device_rawmidi.hpp"
@@ -164,6 +165,8 @@ static std::vector<rpc_help_entry_t> build_help_entries() {
        "Add a manual device (identity: key=value string, optional display name)"},
       {"devices.remove", "Remove a manual device from the registry"},
       {"help", "Return help text"},
+      {"subscribe", "Subscribe to event channels (e.g. router.peer_added)"},
+      {"unsubscribe", "Unsubscribe from event channels"},
   };
 }
 
@@ -660,6 +663,20 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
     }
     if (env.method == "help")
       return respond_rows(env, build_help_entries());
+    if (env.method == "subscribe") {
+      if (!ctx.subscriptions)
+        throw std::runtime_error("Subscriptions not available on this transport");
+      auto p = parse_rpc_params<subscribe_params_t>(params);
+      ctx.subscriptions->subscribe(p.channels);
+      return respond_ok(env);
+    }
+    if (env.method == "unsubscribe") {
+      if (!ctx.subscriptions)
+        throw std::runtime_error("Subscriptions not available on this transport");
+      auto p = parse_rpc_params<unsubscribe_params_t>(params);
+      ctx.subscriptions->unsubscribe(p.channels);
+      return respond_ok(env);
+    }
 
     std::smatch match;
     if (std::regex_match(env.method, match, PEER_COMMAND_RE)) {

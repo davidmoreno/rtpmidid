@@ -6,7 +6,6 @@ import type { RpcClient } from "../rpc";
 import type { RegistryDevice } from "../devicesList";
 
 type Props = {
-  refreshIntervalMs: number;
   lastRefresh: Date | null;
   peers: RouterPeer[];
   mdnsRemotes: MdnsRemote[];
@@ -23,7 +22,6 @@ type Props = {
 };
 
 export function DevicesTab({
-  refreshIntervalMs,
   lastRefresh,
   peers,
   mdnsRemotes,
@@ -40,10 +38,7 @@ export function DevicesTab({
 }: Props) {
   return (
     <div class="space-y-4">
-      <RefreshBanner
-        refreshIntervalMs={refreshIntervalMs}
-        lastRefresh={lastRefresh}
-      />
+      <RefreshBanner lastRefresh={lastRefresh} />
       <PeersCards
         peers={peers}
         mdnsRemotes={mdnsRemotes}
