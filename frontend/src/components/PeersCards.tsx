@@ -20,7 +20,7 @@ import {
 import { buildRecvFromMap } from "../model";
 import type { MidiAlsaSeqEntry, MidiRawmidiEntry } from "../midiEnumerate";
 import type { RpcClient } from "../rpc";
-import type { Endpoint } from "../endpoints";
+import type { Endpoint, EndpointKind } from "../endpoints";
 import {
   buildEndpoints,
   buildPickerEndpoints,
@@ -52,6 +52,120 @@ import { CONFIRM_SKIP_HINT, runWithConfirm } from "../confirmAction";
 import { disconnectEndpoints } from "../disconnectEndpoint";
 
 type SortKey = EndpointSortKey;
+
+type DeviceFilterState = {
+  types: Set<string>;
+  groups: Set<string>;
+  statuses: Set<string>;
+  onlyFavourites: boolean;
+};
+
+const ALL_TYPES: EndpointKind[] = [
+  "alsa_seq",
+  "rawmidi",
+  "rtpmidi",
+  "monitor",
+  "peer",
+];
+
+const TYPE_LABELS: Record<string, string> = {
+  alsa_seq: "ALSA Seq",
+  rawmidi: "Raw MIDI",
+  rtpmidi: "RTP-MIDI",
+  monitor: "Monitor",
+  peer: "Router Peer",
+};
+
+function typeLabelForRow(row: MergedDeviceRow): string {
+  if (row.endpoint) return row.endpoint.kind;
+  if (row.registry) {
+    const t = row.registry.type;
+    if (t === "rtpmidi_client") return "rtpmidi";
+    if (t === "alsa_seq") return "alsa_seq";
+    if (t === "rawmidi") return "rawmidi";
+  }
+  return "registry";
+}
+
+function statusForRow(
+  row: MergedDeviceRow,
+  isPeerConnected: Map<number, boolean>,
+): string {
+  if (row.isOfflineOnly) return "offline";
+  const pid = row.peerId;
+  if (pid !== undefined && (isPeerConnected.get(pid) ?? false)) return "connected";
+  return "disconnected";
+}
+
+function matchesFilter(
+  row: MergedDeviceRow,
+  filters: DeviceFilterState,
+  isPeerConnected: Map<number, boolean>,
+  favoriteIds: Set<string>,
+  showHidden: boolean,
+  hiddenIds: Set<string>,
+  autoHiddenIds: Set<string>,
+): boolean {
+  if (filters.types.size > 0) {
+    const rowType = typeLabelForRow(row);
+    if (!filters.types.has(rowType)) return false;
+  }
+
+  if (filters.groups.size > 0) {
+    const g = groupForMergedRow(row);
+    if (!filters.groups.has(g)) return false;
+  }
+
+  if (filters.statuses.size > 0) {
+    const st = statusForRow(row, isPeerConnected);
+    if (!filters.statuses.has(st)) return false;
+  }
+
+  if (filters.onlyFavourites && !favoriteIds.has(row.id)) return false;
+
+  const e = row.endpoint;
+  if (
+    !showHidden &&
+    (hiddenIds.has(row.id) || (e && autoHiddenIds.has(e.identity)))
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function DEFAULT_FILTERS(): DeviceFilterState {
+  return {
+    types: new Set<string>(),
+    groups: new Set<string>(),
+    statuses: new Set<string>(),
+    onlyFavourites: false,
+  };
+}
+
+function toggleInSet(set: Set<string>, key: string): Set<string> {
+  const next = new Set(set);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  return next;
+}
+
+function IconFilter({ class: className = "h-4 w-4" }: { class?: string }) {
+  return (
+    <svg
+      class={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden
+    >
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+    </svg>
+  );
+}
 
 function IconEye({ class: className = "h-4 w-4" }: { class?: string }) {
   return (
@@ -238,11 +352,12 @@ export function PeersCards({
   onAfterAction,
   onStatus,
 }: Props) {
-  const [showLocal, setShowLocal] = useState(true);
-  const [showRemote, setShowRemote] = useState(true);
-  const [connectedOnly, setConnectedOnly] = useState(false);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("activity");
+  const [filters, setFilters] = useState<DeviceFilterState>(DEFAULT_FILTERS);
+  const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
+  const filterBtnRef = useRef<HTMLButtonElement>(null);
+  const filterPopoverRef = useRef<HTMLDivElement>(null);
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [editDevice, setEditDevice] = useState<RegistryDevice | null>(null);
 
@@ -492,27 +607,39 @@ export function PeersCards({
     [endpoints, registryDevices, registryEnabled, peers, alsaSeq],
   );
 
+  /* Close filter popover on outside click */
+  useEffect(() => {
+    if (!filterPopoverOpen) return;
+    const onClick = (ev: MouseEvent) => {
+      const target = ev.target as Node;
+      if (
+        filterBtnRef.current?.contains(target) ||
+        filterPopoverRef.current?.contains(target)
+      )
+        return;
+      setFilterPopoverOpen(false);
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setFilterPopoverOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [filterPopoverOpen]);
+
+  const hasActiveFilters =
+    filters.types.size > 0 ||
+    filters.groups.size > 0 ||
+    filters.statuses.size > 0 ||
+    filters.onlyFavourites;
+
   const filtered = useMemo(() => {
     const list = mergedDevices.filter((row) => {
-      const g = groupForMergedRow(row);
-      if (g === "local" && !showLocal) return false;
-      if (g === "remote" && !showRemote) return false;
-      const pid = row.peerId;
-      const connRouter =
-        pid !== undefined ? (isPeerConnected.get(pid) ?? false) : false;
-      const e = row.endpoint;
-      const connAlsa =
-        e?.kind === "alsa_seq" &&
-        subsRows.some((r) => alsaSubTouchesEndpoint(r, e, alsaSeq));
-      const conn = connRouter || connAlsa;
-      if (connectedOnly && !conn) return false;
+      if (!matchesFilter(row, filters, isPeerConnected, favoriteIds, showHidden, hiddenIds, autoHiddenIds)) return false;
       if (!matchesMergedQuery(row, query)) return false;
-      if (
-        !showHidden &&
-        (hiddenIds.has(row.id) || (e && autoHiddenIds.has(e.identity)))
-      ) {
-        return false;
-      }
       return true;
     });
 
@@ -528,9 +655,7 @@ export function PeersCards({
     );
   }, [
     mergedDevices,
-    showLocal,
-    showRemote,
-    connectedOnly,
+    filters,
     query,
     sortKey,
     isPeerConnected,
@@ -539,7 +664,6 @@ export function PeersCards({
     showHidden,
     hiddenIds,
     autoHiddenIds,
-    subsRows,
   ]);
 
   const [connectDialogForId, setConnectDialogForId] = useState<string | null>(
@@ -590,27 +714,7 @@ export function PeersCards({
     );
   };
 
-  const Toggle = ({
-    label,
-    value,
-    onChange,
-  }: {
-    label: string;
-    value: boolean;
-    onChange: (v: boolean) => void;
-  }) => (
-    <button
-      type="button"
-      onClick={() => onChange(!value)}
-      class={`rounded-[var(--radius-sm)] px-2 py-1 font-mono text-[11px] font-black uppercase ${
-        value ? "ui-toggle-on" : "ui-toggle-off"
-      }`}
-    >
-      {label}
-    </button>
-  );
-
-  const shown = showLocal || showRemote ? filtered : [];
+  const shown = filtered;
 
   const removeManualDevice = async (identity: string) => {
     try {
@@ -634,42 +738,132 @@ export function PeersCards({
               placeholder="Search name, host, kind…"
               aria-label="Search devices"
             />
-            {query.trim() ? (
-              <button
-                type="button"
-                class="ui-search-clear"
-                aria-label="Clear search"
-                title="Clear search"
-                onClick={() => setQuery("")}
-              >
-                ×
-              </button>
-            ) : null}
+            <button
+              type="button"
+              class={`ui-search-clear ${query.trim() ? "" : "ui-search-clear--muted"}`}
+              aria-label="Clear search"
+              title="Clear search"
+              onClick={() => setQuery("")}
+              disabled={!query.trim()}
+            >
+              ×
+            </button>
           </div>
           <div class="ui-devices-toolbar-filters">
-            <button
-              type="button"
-              onClick={() => setShowLocal(!showLocal)}
-              class={`rounded-[var(--radius-sm)] px-2 py-1 font-mono text-[10px] font-black uppercase transition-[transform,opacity] duration-150 hover:opacity-95 active:scale-[0.98] sm:text-[11px] ${
-                showLocal ? "ui-filter-toggle-local-on" : "ui-filter-toggle-local-off"
-              }`}
-            >
-              Local
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowRemote(!showRemote)}
-              class={`rounded-[var(--radius-sm)] px-2 py-1 font-mono text-[10px] font-black uppercase transition-[transform,opacity] duration-150 hover:opacity-95 active:scale-[0.98] sm:text-[11px] ${
-                showRemote ? "ui-filter-toggle-remote-on" : "ui-filter-toggle-remote-off"
-              }`}
-            >
-              Remote
-            </button>
-            <Toggle
-              label="Hidden"
-              value={showHidden}
-              onChange={setShowHiddenPersist}
-            />
+            <div class="ui-filter-btn-wrap">
+              <button
+                ref={filterBtnRef}
+                type="button"
+                class={`ui-filter-btn ${hasActiveFilters ? "ui-filter-btn--active" : ""}`}
+                aria-label="Filter devices"
+                title="Filter devices"
+                onClick={() => setFilterPopoverOpen((v) => !v)}
+              >
+                <IconFilter class="h-4 w-4" />
+              </button>
+              {filterPopoverOpen && (
+                <div ref={filterPopoverRef} class="ui-filter-popover">
+                  <div class="ui-filter-section">
+                    <span class="ui-filter-section-title">Type</span>
+                    <div class="ui-filter-chips">
+                      {ALL_TYPES.map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          class={`ui-filter-chip ${filters.types.has(t) ? "ui-filter-chip--on" : "ui-filter-chip--off"}`}
+                          onClick={() =>
+                            setFilters((f) => ({
+                              ...f,
+                              types: toggleInSet(f.types, t),
+                            }))
+                          }
+                        >
+                          {TYPE_LABELS[t] ?? t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div class="ui-filter-section">
+                    <span class="ui-filter-section-title">Group</span>
+                    <div class="ui-filter-chips">
+                      {(["local", "remote"] as const).map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          class={`ui-filter-chip ${filters.groups.has(g) ? `ui-filter-chip--${g}-on` : "ui-filter-chip--off"}`}
+                          onClick={() =>
+                            setFilters((f) => ({
+                              ...f,
+                              groups: toggleInSet(f.groups, g),
+                            }))
+                          }
+                        >
+                          {g === "local" ? "Local" : "Remote"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div class="ui-filter-section">
+                    <span class="ui-filter-section-title">Status</span>
+                    <div class="ui-filter-chips">
+                      {(["connected", "disconnected", "offline"] as const).map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          class={`ui-filter-chip ${filters.statuses.has(s) ? `ui-filter-chip--${s}-on` : "ui-filter-chip--off"}`}
+                          onClick={() =>
+                            setFilters((f) => ({
+                              ...f,
+                              statuses: toggleInSet(f.statuses, s),
+                            }))
+                          }
+                        >
+                          {s.charAt(0).toUpperCase() + s.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div class="ui-filter-section">
+                    <span class="ui-filter-section-title">Other</span>
+                    <div class="ui-filter-chips">
+                      <button
+                        type="button"
+                        class={`ui-filter-chip ${filters.onlyFavourites ? "ui-filter-chip--fav-on" : "ui-filter-chip--off"}`}
+                        onClick={() =>
+                          setFilters((f) => ({
+                            ...f,
+                            onlyFavourites: !f.onlyFavourites,
+                          }))
+                        }
+                      >
+                        ★ Favourites
+                      </button>
+                      <button
+                        type="button"
+                        class={`ui-filter-chip ${showHidden ? "ui-filter-chip--on" : "ui-filter-chip--off"}`}
+                        onClick={() => setShowHiddenPersist(!showHidden)}
+                      >
+                        <span class="inline-flex items-center gap-1">
+                          <IconEyeOff class="h-3 w-3" /> Hidden
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="ui-filter-section">
+                    <button
+                      type="button"
+                      class="ui-filter-reset"
+                      onClick={() => {
+                        setFilters(DEFAULT_FILTERS());
+                        setShowHiddenPersist(false);
+                      }}
+                    >
+                      Reset all filters
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <div class="flex items-center gap-1">
               <span class="hidden font-mono text-[10px] font-bold uppercase ui-text-muted sm:inline">
                 Sort
@@ -705,11 +899,6 @@ export function PeersCards({
               <span class="font-black ui-text">{shown.length}</span>
               <span class="ui-text-subtle">/{mergedDevices.length}</span>
             </span>
-            <Toggle
-              label="Connected"
-              value={connectedOnly}
-              onChange={setConnectedOnly}
-            />
           </div>
         </div>
       </section>
