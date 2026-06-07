@@ -866,6 +866,61 @@
     color: var(--latency-value-fg);
   }
 
+  /* ── Latency time-series graph (inside tooltip hover) ── */
+  .ui-latency-graph-wrap {
+    overflow: hidden;
+  }
+  .ui-latency-graph {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 120px;
+  }
+  .ui-latency-graph-bg {
+    fill: var(--latency-graph-bg, var(--color-surface));
+  }
+  .ui-latency-graph-line {
+    stroke: var(--latency-graph-line, var(--latency-tier-1));
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+  }
+  .ui-latency-graph-area {
+    fill: var(--latency-graph-area, color-mix(in srgb, var(--latency-tier-1) 12%, transparent));
+  }
+  .ui-latency-graph-dot {
+    fill: var(--latency-graph-dot, var(--latency-tier-1));
+    stroke: var(--latency-graph-dot-stroke, var(--color-surface));
+    stroke-width: 1;
+  }
+  .ui-latency-graph-grid-good {
+    stroke: var(--latency-graph-grid-good, var(--latency-tier-1));
+    stroke-width: 0.7;
+    stroke-dasharray: 3 3;
+    opacity: 0.55;
+  }
+  .ui-latency-graph-grid-warn {
+    stroke: var(--latency-graph-grid-warn, var(--latency-tier-2));
+    stroke-width: 0.7;
+    stroke-dasharray: 3 3;
+    opacity: 0.55;
+  }
+  .ui-latency-graph-grid-bad {
+    stroke: var(--latency-graph-grid-bad, var(--latency-tier-3));
+    stroke-width: 0.7;
+    stroke-dasharray: 3 3;
+    opacity: 0.55;
+  }
+  .ui-latency-graph-ytext {
+    fill: var(--latency-graph-axis-text, var(--color-fg-subtle));
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 7px;
+  }
+  .ui-latency-graph-xtext {
+    fill: var(--latency-graph-axis-text, var(--color-fg-subtle));
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 7px;
+  }
+
   .ui-tooltip-panel {
     overflow-y: auto;
     border: var(--border-width) solid var(--color-tooltip-border);

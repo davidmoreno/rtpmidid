@@ -26,6 +26,7 @@ import {
   serializeIdentity,
 } from "./deviceIdentity";
 import { useUiTheme } from "./theme";
+import { useLatencyCollector } from "./components/LatencyCollector";
 import type { StatusResult } from "./tabs/types";
 import { daemonStore, useDaemonState } from "./store";
 import { AboutTab } from "./tabs/AboutTab";
@@ -35,6 +36,7 @@ import { MdnsTab } from "./tabs/MdnsTab";
 import { DevicesTab } from "./tabs/DevicesTab";
 import { PeersTab } from "./tabs/PeersTab";
 import { SettingsTab } from "./tabs/SettingsTab";
+import { parseStoredStatusRefreshMs } from "./statusRefresh";
 import { MidiMonitorStandalone } from "./components/MidiMonitorStandalone";
 import {
   parseConnectionsListResult,
@@ -338,6 +340,32 @@ export function App() {
     };
   }, [rpc]);
 
+  // Periodic full-status polling — feeds latency history graph.
+  useEffect(() => {
+    if (connState?.phase !== "connected") return;
+    const ms = parseStoredStatusRefreshMs(
+      typeof localStorage !== "undefined"
+        ? localStorage.getItem("rtpmidid-status-refresh-ms")
+        : null,
+    );
+    if (ms <= 0) return; // user disabled refresh
+
+    const id = window.setInterval(() => {
+      rpc
+        .call("status", {})
+        .then((result) => {
+          const statusResult = result as StatusResult;
+          daemonStore.loadSnapshot(statusResult);
+          setLastRefresh(new Date());
+        })
+        .catch(() => {
+          // silently ignore — next poll will retry
+        });
+    }, ms);
+
+    return () => window.clearInterval(id);
+  }, [rpc, connState?.phase]);
+
   // Fetch auxiliary data on tab switch to Devices/Connections
   useEffect(() => {
     if (tab !== "devices" && tab !== "connections") return;
@@ -360,6 +388,10 @@ export function App() {
     () => daemonState.peers,
     [daemonState.peers],
   );
+
+  // Push latency samples to the browser-side history store
+  useLatencyCollector(peers);
+
   const edges = useMemo(() => buildEdges(peers), [peers]);
   const connections = useMemo(() => buildConnections(peers), [peers]);
   const mdnsParsed = useMemo(() => daemonState.mdns, [daemonState.mdns]);

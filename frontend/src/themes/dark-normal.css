@@ -66,6 +66,16 @@
   --latency-tick: rgba(241, 245, 249, 0.15);
   --latency-value-fg: #f1f5f9;
 
+  --latency-graph-bg: #0f172a;
+  --latency-graph-line: #34d399;
+  --latency-graph-area: rgba(52, 211, 153, 0.1);
+  --latency-graph-dot: #34d399;
+  --latency-graph-dot-stroke: #0f172a;
+  --latency-graph-grid-good: #34d399;
+  --latency-graph-grid-warn: #fbbf24;
+  --latency-graph-grid-bad: #f87171;
+  --latency-graph-axis-text: #64748b;
+
   --color-tooltip-bg: #1e293b;
   --color-tooltip-border: #334155;
   --color-tooltip-fg: #f1f5f9;

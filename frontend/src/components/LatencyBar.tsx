@@ -1,7 +1,9 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useRef } from "preact/hooks";
 import type { ConnectionRow, LatencyTriple, RouterPeer } from "../model";
+import { latencyHistory } from "../latencyHistory";
 import { useFixedTooltip } from "./FixedTooltipPortal";
+import { LatencyGraph, hasGraphData } from "./LatencyGraph";
 import {
   formatMs,
   latencyColorTier,
@@ -167,6 +169,17 @@ export function ConnectionLatencyHoverCell({ row }: { row: ConnectionRow }) {
   const fmt = (v: number | undefined) =>
     v !== undefined && !Number.isNaN(v) ? formatMs(v) : "—";
 
+  // Collect graph samples from all participant peers (computed inline — cheap O(samples))
+  const graphSamples = (() => {
+    const all: { timestamp: number; ms: number }[] = [];
+    for (const pid of row.participantRouterIds) {
+      const s = latencyHistory.get(pid);
+      for (const x of s) all.push(x);
+    }
+    all.sort((a, b) => a.timestamp - b.timestamp);
+    return all;
+  })();
+
   const detail = (
     <div class="space-y-1 ui-text">
       <div class="font-bold uppercase ui-text-subtle">
@@ -188,6 +201,11 @@ export function ConnectionLatencyHoverCell({ row }: { row: ConnectionRow }) {
         <span class="ui-text-subtle">Σ:</span>{" "}
         {combined === null ? "—" : formatMs(combined)}
       </div>
+      {hasGraphData(graphSamples) && (
+        <div class="border-t border-[color:var(--color-border-muted)] pt-1 mt-1">
+          <LatencyGraph samples={graphSamples} />
+        </div>
+      )}
     </div>
   );
 
@@ -201,6 +219,9 @@ export function PeerLatencyHoverCell({ peer }: { peer: RouterPeer }) {
   const u = lastMs(peer.internal?.until);
   const sm = lastMs(peer.internal?.sendMidi);
   const ck = lastMs(peer.network);
+
+  // Read graph samples from browser-side history (computed inline — cheap O(samples))
+  const graphSamples = latencyHistory.get(peer.id);
 
   const detail = (
     <div class="space-y-1 ui-text">
@@ -223,6 +244,11 @@ export function PeerLatencyHoverCell({ peer }: { peer: RouterPeer }) {
         <span class="ui-text-subtle">Σ (shown parts):</span>{" "}
         {combined === null ? "—" : formatMs(combined)}
       </div>
+      {hasGraphData(graphSamples) && (
+        <div class="border-t border-[color:var(--color-border-muted)] pt-1 mt-1">
+          <LatencyGraph samples={graphSamples} />
+        </div>
+      )}
     </div>
   );
 
