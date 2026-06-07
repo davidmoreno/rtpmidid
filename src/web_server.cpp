@@ -295,10 +295,6 @@ void web_server_t::thread_main() {
 
   svr->set_mount_point("/", root);
 
-  // PWA: .webmanifest → application/manifest+json (not in cpp-httplib defaults)
-  svr->set_file_extension_and_mimetype_mapping("webmanifest",
-                                                "application/manifest+json");
-
   svr->set_pre_routing_handler(
       [&](const httplib::Request &req, httplib::Response &res) {
         if (req.path == "/ws" || req.path == "/ws/monitor") {
