@@ -110,7 +110,7 @@ public:
     if (!is_midi_packet()) {
       std::string first_12_bytes_hex;
       for (int i = 0; i < 12; i++) {
-        first_12_bytes_hex += FMT::format("{:02x} ", data[i]);
+        first_12_bytes_hex += FMT::format("{:02x} ", unsigned(data[i]));
       }
       return FMT::format("RTP Packet: Invalid MIDI packet {}",
                          first_12_bytes_hex);
@@ -207,7 +207,7 @@ public:
     if (!is_command_packet()) {
       std::string first_12_bytes_hex;
       for (int i = 0; i < 12; i++) {
-        first_12_bytes_hex += FMT::format("{:02x} ", data[i]);
+        first_12_bytes_hex += FMT::format("{:02x} ", unsigned(data[i]));
       }
       return FMT::format("RTP Command Packet: Invalid Command packet {}",
                          first_12_bytes_hex);
@@ -274,7 +274,7 @@ public:
     if (!is_command_packet()) {
       std::string first_12_bytes_hex;
       for (int i = 0; i < 16; i++) {
-        first_12_bytes_hex += FMT::format("{:02x} ", data[i]);
+        first_12_bytes_hex += FMT::format("{:02x} ", unsigned(data[i]));
       }
       return FMT::format("RTP Command Packet: Invalid Command packet {}",
                          first_12_bytes_hex);
@@ -354,7 +354,7 @@ public:
     if (!is_command_packet()) {
       std::string first_12_bytes_hex;
       for (int i = 0; i < 12; i++) {
-        first_12_bytes_hex += FMT::format("{:02x} ", data[i]);
+        first_12_bytes_hex += FMT::format("{:02x} ", unsigned(data[i]));
       }
       return FMT::format("RTP Command Packet: Invalid Command packet {}",
                          first_12_bytes_hex);

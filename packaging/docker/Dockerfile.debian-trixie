@@ -7,6 +7,8 @@ RUN apt-get update && apt-get install -y \
     debhelper-compat \
     libavahi-client-dev \
     libasound2-dev \
+    libfmt-dev \
+    libsqlite3-dev \
     python3 \
     cmake \
     pandoc \

@@ -124,8 +124,10 @@ template <typename... Args>
 void println(FMT::format_string<Args...> format, Args... args) {
   std::cout << FMT::format(format, std::forward<Args>(args)...) << std::endl;
 }
-#endif
 } // namespace std
+#else
+#include <print>
+#endif
 
 #ifdef DEBUG
 #undef DEBUG

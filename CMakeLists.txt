@@ -9,32 +9,24 @@ option(ENABLE_PCH "Enable precompiled headers" ON)
 option(USE_CLANG "Use clang compiler" OFF)
 # option force the linker, default mold, if not found lld, if not found default
 set(LDD "auto" CACHE STRING "Use ldd linker (mold | lld | auto)")
-# option to use C++20 instead of C++17. With C++20 no need for FMT
-set(CPP_VERSION "auto" CACHE STRING "Use given C++  version. 17 and 20 supported")
-# option to force use fmt, depends on CPP20
+# C++ standard version. Defaults to 23 (minimum supported by Debian Bookworm).
+set(CPP_VERSION "23" CACHE STRING "C++ standard version (20, 23)")
+# option to force use fmt
 set(USE_FMT "auto" CACHE STRING "Use fmt library (ON | OFF | auto)")
 # option to set log level: 1=debug, 2=info, 3=warning, 4=error
 # Set from CLI with: cmake -DLOG_LEVEL=2 ..
 set(LOG_LEVEL "1" CACHE STRING "Set log level (1=debug, 2=info, 3=warning, 4=error)")
 option(RTPMIDID_ENABLE_TIMING "Enable steady_clock timing on MIDI hot path" OFF)
 
-# if CPP is "auto", check if C++20 is available and set it
-if (CPP_VERSION STREQUAL "auto" OR CPP_VERSION STREQUAL "auto")
-  message(STATUS "Checking for C++20 support")
+# Determine whether to use <format> or libfmt
+if (USE_FMT STREQUAL "auto")
   include(CheckIncludeFileCXX)
   CHECK_INCLUDE_FILE_CXX("format" HAVE_FORMAT)
   if (HAVE_FORMAT)
-    set(CPP_VERSION "20")
+    set(USE_FMT "OFF")
   else()
-    set(CPP_VERSION "17")
+    set(USE_FMT "ON")
   endif()
-endif()
-
-if (CPP_VERSION STREQUAL "20" AND USE_FMT STREQUAL "auto")
-  set(USE_FMT "OFF")
-endif()
-if (USE_FMT STREQUAL "auto")
-  set(USE_FMT "ON")
 endif()
 
 if (USE_FMT STREQUAL "ON")
@@ -50,6 +42,15 @@ if (USE_CLANG)
 endif()
 
 add_definitions("-std=c++${CPP_VERSION} -Wall -Werror")
+
+# fmt 9.x (Debian Bookworm < v10) has broken consteval format string
+# checking via FMT_CONSTEVAL=consteval on GCC 12. Disable it.
+# FMT_CONSTEVAL must be defined to a truly empty value (no quotes).
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DFMT_CONSTEVAL=")
+# GCC 12 false-positive maybe-uninitialized with std::variant
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 13)
+  add_compile_options(-Wno-error=maybe-uninitialized)
+endif()
 
 set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer")
 message(STATUS "Build type ${CMAKE_BUILD_TYPE}")

@@ -114,7 +114,7 @@ public:
       }
       block_chars--;
       line_chars--;
-      ret += FMT::format("{:02X} ", data[i]);
+      ret += FMT::format("{:02X} ", unsigned(data[i]));
     }
     return ret;
   }
