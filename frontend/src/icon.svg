@@ -1,85 +1,70 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0a0a1a"/>
-      <stop offset="100%" stop-color="#1a0a2e"/>
-    </linearGradient>
     <linearGradient id="mesh" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ff2d55"/>
-      <stop offset="50%" stop-color="#af52de"/>
-      <stop offset="100%" stop-color="#00d4ff"/>
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="50%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#ea580c"/>
     </linearGradient>
     <linearGradient id="note1" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ff6b8a"/>
-      <stop offset="100%" stop-color="#ff2d55"/>
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
     </linearGradient>
     <linearGradient id="note2" x1="0" y1="1" x2="1" y2="0">
-      <stop offset="0%" stop-color="#5e5ce6"/>
-      <stop offset="100%" stop-color="#00d4ff"/>
+      <stop offset="0%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#ea580c"/>
     </linearGradient>
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="4" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
   </defs>
-
-  <!-- Background -->
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
 
   <!-- Outer hexagon ring (network mesh) -->
   <polygon points="256,48 420,144 420,368 256,464 92,368 92,144"
-           fill="none" stroke="url(#mesh)" stroke-width="3" opacity="0.4"/>
+           fill="none" stroke="url(#mesh)" stroke-width="12" opacity="0.85"/>
 
-  <!-- MIDI connector: 5-pin DIN arc (top of icon) -->
-  <!-- Outer DIN ring -->
-  <circle cx="256" cy="210" r="140" fill="none" stroke="url(#mesh)" stroke-width="2.5" opacity="0.25"/>
-  <!-- Inner DIN ring -->
-  <circle cx="256" cy="210" r="105" fill="none" stroke="url(#mesh)" stroke-width="1.5" opacity="0.3"/>
+  <!-- MIDI 5-pin DIN connector: outer ring -->
+  <circle cx="256" cy="210" r="140" fill="none" stroke="url(#mesh)" stroke-width="10" opacity="0.7"/>
+  <!-- Inner ring -->
+  <circle cx="256" cy="210" r="105" fill="none" stroke="url(#mesh)" stroke-width="7" opacity="0.75"/>
 
-  <!-- MIDI 5 pins arranged in a semicircle -->
-  <circle cx="256" cy="105" r="8" fill="#ff2d55" filter="url(#glow)"/>
-  <circle cx="200" cy="126" r="7" fill="#af52de" filter="url(#glow)" opacity="0.9"/>
-  <circle cx="312" cy="126" r="7" fill="#af52de" filter="url(#glow)" opacity="0.9"/>
-  <circle cx="165" cy="168" r="6" fill="#00d4ff" filter="url(#glow)" opacity="0.8"/>
-  <circle cx="347" cy="168" r="6" fill="#00d4ff" filter="url(#glow)" opacity="0.8"/>
+  <!-- 5 DIN pins in semicircle -->
+  <circle cx="256" cy="105" r="18" fill="#f59e0b" stroke="#f97316" stroke-width="7"/>
+  <circle cx="200" cy="126" r="16" fill="#f97316" stroke="#f97316" stroke-width="6.5"/>
+  <circle cx="312" cy="126" r="16" fill="#f97316" stroke="#f97316" stroke-width="6.5"/>
+  <circle cx="165" cy="168" r="14" fill="#ea580c" stroke="#f97316" stroke-width="6"/>
+  <circle cx="347" cy="168" r="14" fill="#ea580c" stroke="#f97316" stroke-width="6"/>
 
-  <!-- Connecting traces from DIN pins -->
-  <line x1="256" y1="105" x2="256" y2="170" stroke="#ff2d55" stroke-width="2" opacity="0.5"/>
-  <line x1="200" y1="126" x2="228" y2="180" stroke="#af52de" stroke-width="1.5" opacity="0.4"/>
-  <line x1="312" y1="126" x2="284" y2="180" stroke="#af52de" stroke-width="1.5" opacity="0.4"/>
-  <line x1="165" y1="168" x2="215" y2="215" stroke="#00d4ff" stroke-width="1.5" opacity="0.35"/>
-  <line x1="347" y1="168" x2="297" y2="215" stroke="#00d4ff" stroke-width="1.5" opacity="0.35"/>
+  <!-- Traces from DIN pins down -->
+  <line x1="256" y1="123" x2="256" y2="184" stroke="#f97316" stroke-width="8" opacity="0.8"/>
+  <line x1="200" y1="142" x2="228" y2="194" stroke="#f97316" stroke-width="7" opacity="0.75"/>
+  <line x1="312" y1="142" x2="284" y2="194" stroke="#f97316" stroke-width="7" opacity="0.75"/>
+  <line x1="165" y1="182" x2="215" y2="226" stroke="#f97316" stroke-width="6" opacity="0.7"/>
+  <line x1="347" y1="182" x2="297" y2="226" stroke="#f97316" stroke-width="6" opacity="0.7"/>
 
-  <!-- Musical note ♪ (main character, centered) -->
-  <g filter="url(#glow)" opacity="0.95">
-    <!-- Note stem -->
-    <line x1="275" y1="155" x2="275" y2="270" stroke="#ff2d55" stroke-width="5" stroke-linecap="round"/>
-    <!-- Note head -->
-    <ellipse cx="250" cy="270" rx="32" ry="22" transform="rotate(-20 250 270)"
-             fill="url(#note1)" opacity="0.9"/>
-    <!-- Flag -->
+  <!-- Main musical note ♪ -->
+  <g>
+    <line x1="275" y1="155" x2="275" y2="270" stroke="#f97316" stroke-width="12" stroke-linecap="round"/>
+    <ellipse cx="250" cy="270" rx="38" ry="28" transform="rotate(-20 250 270)"
+             fill="url(#note1)" stroke="#f97316" stroke-width="7"/>
     <path d="M275 155 Q310 170 300 200 Q320 180 310 215 Q325 195 312 232"
-          fill="none" stroke="url(#note1)" stroke-width="4" stroke-linecap="round"/>
+          fill="none" stroke="url(#note1)" stroke-width="9" stroke-linecap="round"/>
   </g>
 
   <!-- Second smaller note -->
-  <g filter="url(#glow)" opacity="0.8">
-    <line x1="340" y1="155" x2="340" y2="250" stroke="#00d4ff" stroke-width="4" stroke-linecap="round"/>
-    <ellipse cx="318" cy="250" rx="26" ry="18" transform="rotate(-20 318 250)"
-             fill="url(#note2)" opacity="0.85"/>
+  <g>
+    <line x1="340" y1="155" x2="340" y2="250" stroke="#f97316" stroke-width="9" stroke-linecap="round"/>
+    <ellipse cx="318" cy="250" rx="30" ry="22" transform="rotate(-20 318 250)"
+             fill="url(#note2)" stroke="#f97316" stroke-width="6"/>
     <path d="M340 155 Q375 168 365 200" fill="none" stroke="url(#note2)"
-          stroke-width="3.5" stroke-linecap="round"/>
+          stroke-width="8" stroke-linecap="round"/>
   </g>
 
-  <!-- Network nodes around the edges -->
-  <circle cx="420" cy="144" r="6" fill="#00d4ff" filter="url(#glow)" opacity="0.6"/>
-  <circle cx="92" cy="144" r="6" fill="#00d4ff" filter="url(#glow)" opacity="0.6"/>
-  <circle cx="256" cy="48" r="6" fill="#ff2d55" filter="url(#glow)" opacity="0.6"/>
-  <circle cx="420" cy="368" r="5" fill="#af52de" filter="url(#glow)" opacity="0.5"/>
-  <circle cx="92" cy="368" r="5" fill="#af52de" filter="url(#glow)" opacity="0.5"/>
-  <circle cx="256" cy="464" r="5" fill="#af52de" filter="url(#glow)" opacity="0.5"/>
+  <!-- Network nodes on hexagon vertices -->
+  <circle cx="420" cy="144" r="14" fill="#ea580c" stroke="#f97316" stroke-width="5" opacity="0.9"/>
+  <circle cx="92" cy="144" r="14" fill="#ea580c" stroke="#f97316" stroke-width="5" opacity="0.9"/>
+  <circle cx="256" cy="48" r="14" fill="#f59e0b" stroke="#f97316" stroke-width="5" opacity="0.9"/>
+  <circle cx="420" cy="368" r="12" fill="#f97316" stroke="#f97316" stroke-width="4.5" opacity="0.85"/>
+  <circle cx="92" cy="368" r="12" fill="#f97316" stroke="#f97316" stroke-width="4.5" opacity="0.85"/>
+  <circle cx="256" cy="464" r="12" fill="#f97316" stroke="#f97316" stroke-width="4.5" opacity="0.85"/>
 
-  <!-- Subtle waveform at the bottom -->
+  <!-- Waveform at the bottom -->
   <path d="M120 380 Q160 340 190 370 Q220 400 250 370 Q280 340 310 370 Q340 400 370 370 Q390 350 400 360"
-        fill="none" stroke="url(#mesh)" stroke-width="2" opacity="0.3"/>
+        fill="none" stroke="url(#mesh)" stroke-width="9" opacity="0.65"/>
 </svg>
