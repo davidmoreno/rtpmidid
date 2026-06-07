@@ -42,6 +42,7 @@
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/mdns_rtpmidi.hpp>
 #include <regex>
+#include <unistd.h>
 
 namespace rtpmididns {
 extern const char *VERSION;
@@ -351,6 +352,31 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       ds.settings.control_filename = settings.control_filename;
       ds.router = ctx.router->status_rows();
       ds.mdns = mdns_snapshot(ctx.mdns);
+
+      // PWA / shareable web URL (mDNS .local when not localhost-only)
+      const auto &wl = settings.web.listen;
+      const int wp = settings.web.port;
+      const bool is_localhost =
+          wl == "127.0.0.1" || wl == "::1" || wl == "localhost";
+      ds.web.accessible = settings.web.enabled && !is_localhost;
+      if (ds.web.accessible) {
+        char hn[256]{};
+        gethostname(hn, sizeof(hn));
+        hn[sizeof(hn) - 1] = '\0';
+        std::string host = hn;
+        // Strip any trailing dot (some setups include it)
+        if (!host.empty() && host.back() == '.') {
+          host.pop_back();
+        }
+        // Don't append .local if hostname already contains a dot (FQDN)
+        if (host.find('.') == std::string::npos) {
+          host += ".local";
+        }
+        ds.web.url = "http://" + host + ":" + std::to_string(wp);
+      } else {
+        ds.web.url = "http://" + wl + ":" + std::to_string(wp);
+      }
+
       return respond(env, ds);
     }
     if (env.method == "router.remove") {

@@ -583,6 +583,8 @@ export function App() {
         <AboutTab
           lastRefresh={lastRefresh}
           statsRows={statsRows}
+          webUrl={daemonState.web.url}
+          webAccessible={daemonState.web.accessible}
         />
       ),
     },

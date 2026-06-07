@@ -3,4 +3,5 @@ export type StatusResult = {
   router?: unknown[];
   mdns?: Record<string, unknown>;
   settings?: Record<string, unknown>;
+  web?: { url: string; accessible: boolean };
 };

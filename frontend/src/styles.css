@@ -180,6 +180,14 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
+  .ui-btn-success {
+    border-color: var(--color-success, #22c55e);
+    background-color: color-mix(in srgb, var(--color-success, #22c55e) 18%, var(--color-surface-2));
+    color: var(--color-success, #22c55e);
+  }
+  .ui-btn-success:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-success, #22c55e) 26%, var(--color-surface-2));
+  }
 
   button:not(:disabled) {
     cursor: pointer;

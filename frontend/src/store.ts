@@ -29,6 +29,7 @@ export interface DaemonState {
   peers: RouterPeer[];
   routerRaw: Record<string, unknown>[];
   mdns: ReturnType<typeof parseMdns>;
+  web: { url: string; accessible: boolean };
 }
 
 // ── Store ──────────────────────────────────────────────────────────────────
@@ -41,6 +42,7 @@ function createDaemonStore() {
     peers: [],
     routerRaw: [],
     mdns: { status: "—", announcements: [], remotes: [] },
+    web: { url: "", accessible: false },
   };
 
   const listeners = new Set<Listener>();
@@ -70,6 +72,7 @@ function createDaemonStore() {
           peers: normalizePeers(routerRaw),
           routerRaw,
           mdns: parseMdns(st.mdns),
+          web: (st.web as DaemonState["web"]) ?? { url: "", accessible: false },
         };
         break;
       }

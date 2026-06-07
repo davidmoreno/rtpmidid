@@ -161,9 +161,16 @@ struct settings_status_t {
 };
 
 // [dm-json]
+struct web_status_t {
+  std::string url;
+  bool accessible;
+};
+
+// [dm-json]
 struct daemon_status_t {
   std::string version;
   settings_status_t settings;
+  web_status_t web;
   std::vector<router_peer_row_t> router;
   mdns_snapshot_t mdns;
 };
