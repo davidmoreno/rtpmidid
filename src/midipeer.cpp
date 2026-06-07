@@ -157,8 +157,6 @@ void midipeer_t::handle(peer_cmd::shutdown_t & /*cmd*/) {
 // ===========================================================================
 
 void midipeer_t::process_midi_packet(const rtpmidid::midi_packet_t &packet) {
-  packets_recv++;
-
   const auto t_before_send = std::chrono::steady_clock::now();
   const auto until_send_ns =
       std::chrono::duration_cast<std::chrono::nanoseconds>(

@@ -143,12 +143,20 @@ function handleWsEvent(ev: JsonRpcResponse) {
       break;
     }
 
-    case "router.peer_updated":
+    case "router.peer_updated": {
+      // Lightweight stats-only update: {id, stats: {recv, sent}}
+      const p = params as {
+        id: number;
+        stats: { recv: number; sent: number };
+      };
       daemonStore.reduce({
-        type: "peer_added",
-        peer: params as Record<string, unknown>,
+        type: "peer_stats",
+        peer_id: Number(p.id),
+        recv: p.stats.recv,
+        sent: p.stats.sent,
       });
       break;
+    }
 
     case "mdns.announcement_changed": {
       // Full mDNS snapshot — reload into store

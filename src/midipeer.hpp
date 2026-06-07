@@ -127,8 +127,6 @@ protected:
 public:
   std::shared_ptr<midirouter_t> router;
   midipeer_id_t peer_id = 0;
-  std::atomic<int> packets_sent{0};
-  std::atomic<int> packets_recv{0};
 
   midipeer_t() = default;
   virtual ~midipeer_t();

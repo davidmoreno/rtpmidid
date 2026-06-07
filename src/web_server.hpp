@@ -7,7 +7,7 @@
 #pragma once
 
 #include "rtpmidid/utils.hpp"
-#include "dm_json_status.hpp"
+#include "stats_collector.hpp"
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -73,6 +73,7 @@ public:
   std::shared_ptr<rtpmidid::mdns_rtpmidi_t> mdns;
   std::shared_ptr<connection_db_manager_t> connection_db;
   std::shared_ptr<device_registry_t> device_registry;
+  stats_collector_t stats_collector;
 
   web_server_t() = default;
   ~web_server_t();

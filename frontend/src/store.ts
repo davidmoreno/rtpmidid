@@ -16,6 +16,7 @@ export type DaemonEvent =
   | { type: "status_snapshot"; status: StatusResult }
   | { type: "peer_added"; peer: Record<string, unknown> }
   | { type: "peer_removed"; peer_id: number }
+  | { type: "peer_stats"; peer_id: number; recv: number; sent: number }
   | { type: "edge_added"; from: number; to: number }
   | { type: "edge_removed"; from: number; to: number }
   | { type: "mdns_discovered"; remote: MdnsRemote }
@@ -107,6 +108,22 @@ function createDaemonStore() {
         // Remove edges referencing this peer
         for (const p of state.peers) {
           p.send_to = p.send_to.filter((tid) => tid !== event.peer_id);
+        }
+        break;
+      }
+
+      case "peer_stats": {
+        // Lightweight: update just the stats counters on an existing peer
+        const idx = state.peers.findIndex((p) => p.id === event.peer_id);
+        if (idx >= 0) {
+          const updated = { ...state.peers[idx] };
+          updated.recv = event.recv;
+          updated.sent = event.sent;
+          updated.raw = {
+            ...updated.raw,
+            stats: { recv: event.recv, sent: event.sent },
+          };
+          state.peers[idx] = updated;
         }
         break;
       }

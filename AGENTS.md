@@ -21,6 +21,7 @@ Userspace daemon bridging ALSA MIDI ↔ RTP-MIDI (`src/`, GPLv3) plus
 | Factory / spawn | `src/peer_factory.cpp`, `src/peer_spawn.cpp` |
 | Identity / DB | `src/device_identity.cpp`, `src/connection_db.cpp`, `src/device_registry.cpp` |
 | Control / Web | `src/control_rpc.cpp`, `src/control_socket.cpp`, `src/web_server.cpp` |
+| Stats collector | `src/stats_collector.cpp`, `src/event_subscription.cpp` |
 | Event loop / RTP | `lib/poller.cpp`, `lib/rtppeer.cpp`, `lib/rtpclient.cpp` |
 | JSON | `lib/dm_json/runtime.cpp`, `src/dm_json_*.hpp` |
 
@@ -33,6 +34,7 @@ Userspace daemon bridging ALSA MIDI ↔ RTP-MIDI (`src/`, GPLv3) plus
 | Peer types | [docs/architecture/peer-types.md](docs/architecture/peer-types.md) |
 | Threads / poller | [docs/architecture/event-loop.md](docs/architecture/event-loop.md) |
 | Actor queues | [docs/architecture/concurrency.md](docs/architecture/concurrency.md) |
+| Mechanical sympathy | [docs/architecture/mechanical-sympathy.md](docs/architecture/mechanical-sympathy.md) |
 | INI (full) | [docs/development/configuration.md](docs/development/configuration.md) |
 | JSON-RPC | [docs/development/control-protocol.md](docs/development/control-protocol.md) |
 | dm-json | [docs/development/dm-json.md](docs/development/dm-json.md) |

@@ -234,6 +234,24 @@ void web_server_t::start() {
   }
   running_.store(true, std::memory_order_release);
   try {
+    // Wire stats collector to router callbacks before starting threads
+    if (router) {
+      router->on_peer_sent = stats_collector.sent_callback();
+      router->on_peer_recv = stats_collector.recv_callback();
+      router->get_stats_sent = [this](peer_id_t pid) {
+        return stats_collector.get_sent(pid);
+      };
+      router->get_stats_recv = [this](peer_id_t pid) {
+        return stats_collector.get_recv(pid);
+      };
+      router->on_peer_registered = [this](peer_id_t pid) {
+        stats_collector.register_peer(pid);
+      };
+      router->on_peer_unregistered = [this](peer_id_t pid) {
+        stats_collector.unregister_peer(pid);
+      };
+    }
+    stats_collector.start();
     thread_ = std::thread(&web_server_t::thread_main, this);
   } catch (const std::exception &e) {
     running_.store(false, std::memory_order_release);
@@ -327,6 +345,7 @@ void web_server_t::thread_main() {
       if (ws.is_open())
         ws.send(json);
     });
+    stats_collector.register_subscriber(subs);
 
     // RAII guards for signal → event forwarding.
     // Each connection_t disconnects automatically on destruction.
@@ -341,7 +360,6 @@ void web_server_t::thread_main() {
       ::rtpmidid::connection_t<const std::string &, const std::string &,
                                 const std::string &>
           mdns_removed;
-      ::rtpmidid::connection_t<peer_id_t> peer_stats;
     };
     auto guards = std::make_shared<signal_guards_t>();
 
@@ -379,21 +397,6 @@ void web_server_t::thread_main() {
             evt.from = static_cast<uint64_t>(from);
             evt.to = static_cast<uint64_t>(to);
             subs->emit("router.edge_removed", dmjson::to_json(evt));
-          });
-
-      // Stats-changed signal: throttled at source (~200ms), fires on MIDI path.
-      // We throttle again here (per-subscriber) as a safety net.
-      guards->peer_stats = router->peer_stats_changed.connect(
-          [subs, router = router](peer_id_t pid) {
-            // Get the full peer row; this call is on the router thread so
-            // status_rows() executes inline (no queue dispatch).
-            auto rows = router->status_rows();
-            for (const auto &r : rows) {
-              if (r.id && static_cast<peer_id_t>(*r.id) == pid) {
-                subs->emit("router.peer_updated", dmjson::to_json(r));
-                break;
-              }
-            }
           });
     }
 

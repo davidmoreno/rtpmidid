@@ -78,7 +78,6 @@ peer_device_alsa_seq_t::~peer_device_alsa_seq_t() {
 }
 
 void peer_device_alsa_seq_t::send_midi(midipeer_id_t from, const mididata_t &data) {
-  packets_recv += 1;
   DEBUG("[MIDI_FLOW] local_alsa_peer {}: send_midi() called, from_peer_id={}, size={} bytes",
         peer_id, from, data.size());
   auto readerdata = rtpmidid::io_bytes_reader(data);

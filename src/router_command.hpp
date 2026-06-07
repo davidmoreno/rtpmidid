@@ -107,11 +107,6 @@ struct signal_peer_event_t {
   midipeer_event_e evt{midipeer_event_e::CONNECTED_ROUTER};
 };
 
-/** Fires when a peer's packet counters change (HIGH→NORMAL deferred). */
-struct signal_peer_stats_changed_t {
-  peer_id_t peer_id{0};
-};
-
 // ===========================================================================
 // Read APIs (LOW priority) — each returns a typed value via std::any payload
 // ===========================================================================
@@ -174,7 +169,6 @@ using router_command_t =
                  router_cmd::signal_connected_t,
                  router_cmd::signal_disconnected_t,
                  router_cmd::signal_peer_event_t,
-                 router_cmd::signal_peer_stats_changed_t,
                  router_cmd::query_peer_count_t, router_cmd::query_peer_ids_t,
                  router_cmd::query_send_targets_t,
                  router_cmd::query_get_peer_t,
