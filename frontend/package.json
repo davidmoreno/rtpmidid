@@ -10,6 +10,8 @@
     "preact": "^10.25.4"
   },
   "devDependencies": {
+    "@parcel/packager-raw-url": "^2.16.4",
+    "@parcel/transformer-webmanifest": "^2.16.4",
     "@tailwindcss/postcss": "^4.1.4",
     "parcel": "^2.13.3",
     "postcss": "^8.5.3",
