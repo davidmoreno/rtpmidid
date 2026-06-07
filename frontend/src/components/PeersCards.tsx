@@ -431,6 +431,20 @@ export function PeersCards({
     setOutPulse(npOut);
   }, [peers]);
 
+  // Cooldown: clear IN/OUT LEDs 500 ms after the last pulse
+  const pulseCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (inPulse.size === 0 && outPulse.size === 0) return;
+    if (pulseCooldownRef.current) clearTimeout(pulseCooldownRef.current);
+    pulseCooldownRef.current = setTimeout(() => {
+      setInPulse(new Set());
+      setOutPulse(new Set());
+    }, 500);
+    return () => {
+      if (pulseCooldownRef.current) clearTimeout(pulseCooldownRef.current);
+    };
+  }, [inPulse, outPulse]);
+
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const pendingFavoriteScrollRef = useRef<string | null>(null);
   const [highlightIds, setHighlightIds] = useState<Set<string>>(() => new Set());
@@ -643,16 +657,20 @@ export function PeersCards({
       return true;
     });
 
-    return [...list].sort((a, b) =>
-      compareEndpointsForDevicesSort(
+    return [...list].sort((a, b) => {
+      // Favourites always first — use row id so registry-only rows also work
+      const fa = favoriteIds.has(a.id) ? 1 : 0;
+      const fb = favoriteIds.has(b.id) ? 1 : 0;
+      if (fa !== fb) return fb - fa;
+      return compareEndpointsForDevicesSort(
         a.sortEndpoint,
         b.sortEndpoint,
         sortKey,
         favoriteIds,
         isPeerConnected,
         byPeerId,
-      ),
-    );
+      );
+    });
   }, [
     mergedDevices,
     filters,
@@ -903,7 +921,7 @@ export function PeersCards({
         </div>
       </section>
 
-      <div class="grid gap-4">
+      <div class="grid gap-4 overflow-x-hidden [&>*]:min-w-0 [&>*]:max-w-full">
         {shown.map((row) => {
           const e = row.endpoint;
           const actionIdentity = row.connectIdentity;

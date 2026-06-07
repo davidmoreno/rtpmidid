@@ -116,7 +116,8 @@ function createDaemonStore() {
       }
 
       case "peer_stats": {
-        // Lightweight: update just the stats counters on an existing peer
+        // Lightweight: update just the stats counters on an existing peer.
+        // Create a new array so useEffects depending on [peers] re-fire.
         const idx = state.peers.findIndex((p) => p.id === event.peer_id);
         if (idx >= 0) {
           const updated = { ...state.peers[idx] };
@@ -126,7 +127,9 @@ function createDaemonStore() {
             ...updated.raw,
             stats: { recv: event.recv, sent: event.sent },
           };
-          state.peers[idx] = updated;
+          const nextPeers = [...state.peers];
+          nextPeers[idx] = updated;
+          state.peers = nextPeers;
         }
         break;
       }
