@@ -561,14 +561,13 @@ Add to the tabs array after "Connections".
 | 2e   | `lib/mdns_rtpmidi.cpp`   | Tagged mDNS events with `component=mdns` | ✅ |
 | 2f   | `src/connection_db.cpp`  | Tagged connection persistence with `component=database` | ✅ |
 
-### Phase 3 — Web UI
+### Phase 3 — Web UI ✅ COMPLETED
 
-| Step | Files                           | Description                                         |
-| ---- | ------------------------------- | --------------------------------------------------- |
-| 3a   | `frontend/src/tabs/LogsTab.tsx` | Log viewer component with filters, chips, OR, pause |
-| 3b   | `frontend/src/app.tsx`          | Register Logs tab                                   |
-| 3c   | Styles                          | Tag color CSS classes                               |
-| 3d   | Tests                           | `logs.query.test.ts` — filter parsing, OR logic     |
+| Step | Files                           | Description                                                    |
+| ---- | ------------------------------- | -------------------------------------------------------------- |
+| 3a   | `frontend/src/tabs/LogsTab.tsx` | Log viewer: tag chips, level toggles, text search, pause/auto-scroll |
+| 3b   | `frontend/src/app.tsx`          | Registered Logs tab between Peers and mDNS                     |
+| 3c   | `frontend/src/styles.css`       | Tag color CSS (peer=blue, component=green, connection=amber, session=purple) |
 
 ### Phase 4 — Polish (optional)
 

@@ -1255,4 +1255,60 @@
   .ui-wire-action-remote:hover {
     background-color: var(--color-badge-remote-hover-bg);
   }
+
+  /* Log viewer tag chips */
+  .ui-log-tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: var(--radius-sm);
+    padding: 0.125rem 0.375rem;
+    font-family: ui-monospace, monospace;
+    font-size: 0.625rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .ui-log-tag-peer {
+    color: var(--color-ring-highlight);
+    background-color: color-mix(in srgb, var(--color-ring-highlight) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-ring-highlight) 30%, transparent);
+  }
+  .ui-log-tag-component {
+    color: #059669;
+    background-color: color-mix(in srgb, #059669 15%, transparent);
+    border: 1px solid color-mix(in srgb, #059669 30%, transparent);
+  }
+  .ui-log-tag-connection {
+    color: #d97706;
+    background-color: color-mix(in srgb, #d97706 15%, transparent);
+    border: 1px solid color-mix(in srgb, #d97706 30%, transparent);
+  }
+  .ui-log-tag-session {
+    color: #7c3aed;
+    background-color: color-mix(in srgb, #7c3aed 15%, transparent);
+    border: 1px solid color-mix(in srgb, #7c3aed 30%, transparent);
+  }
+  .ui-log-tag-level {
+    color: var(--color-text-muted);
+    background-color: var(--color-surface-2);
+    border: 1px solid var(--color-border-muted);
+  }
+  .ui-log-tag-default {
+    color: var(--color-text-muted);
+    background-color: var(--color-surface-2);
+    border: 1px solid var(--color-border-muted);
+  }
+
+  /* Log level row backgrounds */
+  .ui-log-level-debug { --log-row-bg: transparent; }
+  .ui-log-level-info  { --log-row-bg: transparent; }
+  .ui-log-level-warn  {
+    color: #92400e;
+    background-color: color-mix(in srgb, #f59e0b 8%, var(--color-surface, transparent));
+  }
+  .ui-log-level-error {
+    color: #991b1b;
+    background-color: color-mix(in srgb, #ef4444 10%, var(--color-surface, transparent));
+  }
 }

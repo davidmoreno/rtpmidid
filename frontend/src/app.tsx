@@ -36,6 +36,7 @@ import { MdnsTab } from "./tabs/MdnsTab";
 import { DevicesTab } from "./tabs/DevicesTab";
 import { PeersTab } from "./tabs/PeersTab";
 import { SettingsTab } from "./tabs/SettingsTab";
+import { LogsTab } from "./tabs/LogsTab";
 import { parseStoredStatusRefreshMs } from "./statusRefresh";
 import { MidiMonitorStandalone } from "./components/MidiMonitorStandalone";
 import {
@@ -593,6 +594,11 @@ export function App() {
           highlightPeerId={highlightPeerId}
         />
       ),
+    },
+    {
+      id: "logs",
+      label: "Logs",
+      content: <LogsTab rpc={rpc} onStatus={setStatus} />,
     },
     {
       id: "mdns",
