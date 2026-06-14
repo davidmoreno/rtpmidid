@@ -43,24 +43,24 @@ peer_device_rawmidi_t::peer_device_rawmidi_t(const std::string &name_,
     : device(device_), name(name_) {
   if (name == "") {
     name = get_rawmidi_name(device);
-    INFO("Guessed name device={} name={}", name, device);
+    INFO("component=rawmidi Guessed name device={} name={}", name, device);
   }
 }
 
 void peer_device_rawmidi_t::open() {
   assert(fd < 0);
   buffer.fill(0);
-  INFO("Creating rawmidi peer=\"{}\", device={}", name, device);
+  INFO("component=rawmidi Creating rawmidi peer=\"{}\", device={}", name, device);
   fd = ::open(device.c_str(), O_RDWR | O_NONBLOCK);
   if (fd < 0) {
     if (fd == ENOENT) {
-      WARNING("Device {} does not exist. Try to create as pipe.", device);
+      WARNING("component=rawmidi Device {} does not exist. Try to create as pipe.", device);
       if (mkfifo(device.c_str(), 0666) == 0) {
         fd = ::open(device.c_str(), O_RDWR | O_NONBLOCK);
       }
     }
     if (fd < 0) {
-      ERROR("Error opening rawmidi {}: {}", device, strerror(errno));
+      ERROR("component=rawmidi Error opening rawmidi {}: {}", device, strerror(errno));
       return;
     }
   }
@@ -68,7 +68,7 @@ void peer_device_rawmidi_t::open() {
     fd_listener =
         rtpmidid::poller.add_fd_in(fd, [this](int fd) { read_midi(); });
   } catch (const std::exception &e) {
-    ERROR("Error adding rawmidi {}: {}. Will allow writing, no reading.",
+    ERROR("component=rawmidi Error adding rawmidi {}: {}. Will allow writing, no reading.",
           device, e.what());
   }
 }
@@ -98,8 +98,8 @@ void peer_device_rawmidi_t::send_midi(midipeer_id_t from,
   }
   int ret = write(fd, data.start, data.size());
   if (ret < 0) {
-    ERROR("Error writing to rawmidi {}: {}", device, strerror(errno));
-    WARNING("Will not try again.");
+    ERROR("component=rawmidi Error writing to rawmidi {}: {}", device, strerror(errno));
+    WARNING("component=rawmidi Will not try again.");
   }
 }
 
@@ -143,7 +143,7 @@ void peer_device_rawmidi_t::event(midipeer_event_e event,
 void peer_device_rawmidi_t::connected(midipeer_id_t peer_id) {
   connection_count++;
   if (connection_count == 1) {
-    INFO("Open rawmidi {}", device);
+    INFO("component=rawmidi Open rawmidi {}", device);
     open();
   }
   DEBUG("Connected to rawmidi device={} count={}", device, connection_count);
@@ -152,7 +152,7 @@ void peer_device_rawmidi_t::connected(midipeer_id_t peer_id) {
 void peer_device_rawmidi_t::disconnected(midipeer_id_t peer_id) {
   connection_count--;
   if (connection_count == 0) {
-    INFO("Close rawmidi {}", device);
+    INFO("component=rawmidi Close rawmidi {}", device);
     close();
   }
   DEBUG("Disconnected to rawmidi device={} count={}", device, connection_count);
@@ -175,7 +175,7 @@ static std::string get_rawmidi_name(const std::string &device) {
 
       name = get_name_from_alsalib(card_id, device_id);
     } catch (const std::exception &e) {
-      WARNING("Error parsing device={} error={}", device, e.what());
+      WARNING("component=rawmidi Error parsing device={} error={}", device, e.what());
       DEBUG("CDpart={} Dindex={} C={} D={}", CDpart, Dindex,
             CDpart.substr(1, Dindex - 1),
             CDpart.substr(Dindex, CDpart.size() - Dindex));

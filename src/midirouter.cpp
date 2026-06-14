@@ -63,7 +63,7 @@ bool midirouter_t::sync_mode() const { return !router_running_.load(); }
 bool midirouter_t::enqueue(router_command_t &&cmd,
                            rtpmidid::queue_priority_e prio) {
   if (!queue_.enqueue(std::move(cmd), prio)) {
-    WARNING("Router queue full, dropping command (priority={})",
+    WARNING("component=router Queue full, dropping command (priority={})",
             static_cast<int>(prio));
     return false;
   }
@@ -161,7 +161,7 @@ peer_id_t midirouter_t::add_peer_impl(std::shared_ptr<midipeer_t> peer) {
   }
 
   peers_[pid] = peerconnection_t{pid, peer, {}};
-  INFO("Added peer type={} peer_id={}", peer->get_type(), pid);
+  INFO("peer_id={} component=router Added peer type={} peer_id={}", pid, peer->get_type(), pid);
 
   if (router_running_.load()) {
     peer->start_thread();
@@ -181,10 +181,10 @@ peer_id_t midirouter_t::add_peer_impl(std::shared_ptr<midipeer_t> peer) {
 }
 
 void midirouter_t::remove_peer_impl(peer_id_t peer_id) {
-  INFO("Remove peer_id={}", peer_id);
+  INFO("peer_id={} component=router Remove peer", peer_id);
 
   if (removing_peers_.find(peer_id) != removing_peers_.end()) {
-    WARNING("Already removing peer {}, skipping recursive removal", peer_id);
+    WARNING("peer_id={} component=router Already removing peer, skipping recursive removal", peer_id);
     return;
   }
   removing_peers_.insert(peer_id);
@@ -205,7 +205,7 @@ void midirouter_t::remove_peer_impl(peer_id_t peer_id) {
   try {
     peer_ptr->stop_thread();
   } catch (const std::exception &e) {
-    ERROR("Exception stopping peer thread: {}", e.what());
+    ERROR("peer_id={} component=router Exception stopping peer thread: {}", peer_id, e.what());
   }
 
   toremove = peers_.find(peer_id);
@@ -246,7 +246,7 @@ void midirouter_t::remove_peer_impl(peer_id_t peer_id) {
   toremove->second.peer->router = nullptr;
   const auto removed = peers_.erase(peer_id);
   if (removed) {
-    INFO("Removed peer {}", peer_id);
+    INFO("peer_id={} component=router Removed peer", peer_id);
     post_signal_peer_removed(peer_id);
     if (on_peer_unregistered)
       on_peer_unregistered(peer_id);
@@ -266,7 +266,7 @@ void midirouter_t::connect_impl(peer_id_t from, peer_id_t to) {
   auto from_it = peers_.find(from);
   auto to_it = peers_.find(to);
   if (from_it == peers_.end() || to_it == peers_.end()) {
-    WARNING("connect: unknown peer {} -> {}", from, to);
+    WARNING("component=router connect: unknown peer {} -> {}", from, to);
     return;
   }
 
@@ -283,7 +283,7 @@ void midirouter_t::connect_impl(peer_id_t from, peer_id_t to) {
   from_peer.peer->event(midipeer_event_e::CONNECTED_ROUTER, to);
   to_peer.peer->event(midipeer_event_e::CONNECTED_ROUTER, from);
 
-  INFO("Connect {} -> {}", from, to);
+  INFO("component=router Connect {} -> {}", from, to);
   post_signal_connected(from, to);
 }
 
@@ -291,7 +291,7 @@ void midirouter_t::disconnect_impl(peer_id_t from, peer_id_t to) {
   auto from_it = peers_.find(from);
   auto to_it = peers_.find(to);
   if (from_it == peers_.end() || to_it == peers_.end()) {
-    WARNING("disconnect: unknown peer {} -> {}", from, to);
+    WARNING("component=router disconnect: unknown peer {} -> {}", from, to);
     return;
   }
 
@@ -304,7 +304,7 @@ void midirouter_t::disconnect_impl(peer_id_t from, peer_id_t to) {
       from_peer.send_to.erase(it);
       from_peer.peer->event(midipeer_event_e::DISCONNECTED_ROUTER, to);
       to_peer.peer->event(midipeer_event_e::DISCONNECTED_ROUTER, from);
-      INFO("Disconnect {} -> {}", from, to);
+      INFO("component=router Disconnect {} -> {}", from, to);
       post_signal_disconnected(from, to);
       return;
     }
@@ -364,7 +364,7 @@ void midirouter_t::send_midi_inline(peer_id_t from, peer_id_t to,
                                     const uint8_t *data, size_t size) {
   auto from_it = peers_.find(from);
   if (from_it == peers_.end()) {
-    WARNING("Sending from an unknown peer {}!", from);
+    WARNING("component=router Sending from an unknown peer {}!", from);
     return;
   }
 
@@ -377,7 +377,7 @@ void midirouter_t::send_midi_inline(peer_id_t from, peer_id_t to,
   if (to != 0) {
     auto to_it = peers_.find(to);
     if (to_it == peers_.end()) {
-      WARNING("Sending to unknown peer {} -> {}", from, to);
+      WARNING("component=router Sending to unknown peer {} -> {}", from, to);
       return;
     }
     to_it->second.peer->send_midi(from, mididata);
@@ -493,7 +493,7 @@ std::vector<router_peer_row_t> midirouter_t::status_rows_impl() {
 void midirouter_t::handle(router_cmd::send_midi_t &cmd) {
   auto from_it = peers_.find(cmd.from);
   if (from_it == peers_.end()) {
-    WARNING("send_midi: unknown source peer {}", cmd.from);
+    WARNING("component=router send_midi: unknown source peer {}", cmd.from);
     return;
   }
 

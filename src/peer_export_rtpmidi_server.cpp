@@ -34,7 +34,7 @@ peer_export_rtpmidi_server_t::peer_export_rtpmidi_server_t(
     const std::string &name, const std::string &udp_port)
     : name_(name), server(name, udp_port) {
   if (!server.is_valid()) {
-    WARNING("peer_export_rtpmidi_server '{}' has no listening socket (port "
+    WARNING("component=rtpmidi_server peer_export_rtpmidi_server '{}' has no listening socket (port "
             "'{}' could not be bound); it will not accept connections.",
             name, udp_port);
   } else if (mdns) {
@@ -45,7 +45,7 @@ peer_export_rtpmidi_server_t::peer_export_rtpmidi_server_t(
       server.midi_event.connect([this](const rtpmidid::io_bytes_reader &data) {
         // DEBUG("Got data: {}", data.size());
         if (!router) {
-          WARNING("Bad configured peer");
+          WARNING("component=rtpmidi_server Bad configured peer");
           return;
         }
         // rtpmididns::mididata_t mididata(data.start, data.pos());

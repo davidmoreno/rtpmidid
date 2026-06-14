@@ -83,7 +83,7 @@ peer_import_alsa_rtp_t::~peer_import_alsa_rtp_t() {
   if (aseq) {
     aseq->remove_port(alsaport);
   }
-  INFO("Remove ALSA port: {}, peer_id: {}", alsaport, peer_id);
+  INFO("component=alsa_listener Remove ALSA port: {}, peer_id: {}", alsaport, peer_id);
   if (router && rtpmidiclientworker_peer_id != MIDIPEER_ID_INVALID) {
     router->enqueue_remove_peer(rtpmidiclientworker_peer_id);
     rtpmidiclientworker_peer_id = MIDIPEER_ID_INVALID;
@@ -99,7 +99,7 @@ void peer_import_alsa_rtp_t::add_endpoint(const std::string &hostname,
   for (auto &endpoint : endpoints) {
     if (endpoint.hostname == hostname && endpoint.port == port) {
       exists = true;
-      WARNING("Endpoint {}:{} already exists. May happen if several network "
+      WARNING("component=alsa_listener Endpoint {}:{} already exists. May happen if several network "
               "interfaces. Ignoring.",
               hostname, port);
       break;
@@ -113,7 +113,7 @@ void peer_import_alsa_rtp_t::add_endpoint(const std::string &hostname,
 void peer_import_alsa_rtp_t::connect_to_remote_server(
     const std::string &portname) {
   if (endpoints.size() == 0) {
-    WARNING("Unknown endpoints for this alsa waiter. Dont know where to "
+    WARNING("component=alsa_listener Unknown endpoints. Dont know where to "
             "connect.");
     connection_count = 0;
     aseq->disconnect_port(alsaport);
@@ -142,7 +142,7 @@ void peer_import_alsa_rtp_t::connect_to_remote_server(
   std::string err;
   auto peer = create_peer(req, ctx, &err);
   if (!peer) {
-    ERROR("alsa_listener client create failed: {}", err);
+    ERROR("component=alsa_listener client create failed: {}", err);
     connection_count = 0;
     aseq->disconnect_port(alsaport);
     return;
@@ -232,7 +232,7 @@ bool peer_import_alsa_rtp_t::control_peer_command(std::string_view cmd,
         return true;
       }
     }
-    ERROR("Try to remove endpoint {}:{} but not found", p.hostname, p.port);
+    ERROR("component=alsa_listener Try to remove endpoint {}:{} but not found", p.hostname, p.port);
     out_error = "Endpoint not found";
     return false;
   }

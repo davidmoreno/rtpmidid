@@ -32,7 +32,7 @@ peer_device_alsa_seq_t::peer_device_alsa_seq_t(const std::string &name_,
                                      int subscribe_from_port)
     : seq(seq_), name(name_) {
   port = seq->create_port(name);
-  INFO("Created alsapeer {}, port {}", name, port);
+  INFO("component=alsa_seq Created alsapeer {}, port {}", name, port);
 
   if (subscribe_from_client >= 0 && subscribe_from_port >= 0 &&
       subscribe_from_client <= 255 && subscribe_from_port <= 255) {
@@ -67,7 +67,7 @@ void peer_device_alsa_seq_t::attach_alsa_input() {
         aseq_t::port_t(static_cast<uint8_t>(subscribe_src_client_),
                        static_cast<uint8_t>(subscribe_src_port_)),
         aseq_t::port_t(seq->client_id, port));
-    INFO("ALSA subscribe {}:{} -> rtpmidid {}:{} ({})", subscribe_src_client_,
+    INFO("component=alsa_seq ALSA subscribe {}:{} -> rtpmidid {}:{} ({})", subscribe_src_client_,
          subscribe_src_port_, seq->client_id, port, name);
   }
 }
@@ -97,7 +97,7 @@ void peer_device_alsa_seq_t::send_midi(midipeer_id_t from, const mididata_t &dat
     DEBUG("[MIDI_FLOW] local_alsa_peer {}: Calling snd_seq_event_output()", this->peer_id);
     auto result = snd_seq_event_output(seq->seq, ev);
     if (result < 0) {
-      ERROR("[MIDI_FLOW] local_alsa_peer {}: snd_seq_event_output() error: {}",
+      ERROR("component=alsa_seq [MIDI_FLOW] local_alsa_peer {}: snd_seq_event_output() error: {}",
             this->peer_id, snd_strerror(result));
       snd_seq_drop_input(seq->seq);
       snd_seq_drop_output(seq->seq);
@@ -108,7 +108,7 @@ void peer_device_alsa_seq_t::send_midi(midipeer_id_t from, const mididata_t &dat
     DEBUG("[MIDI_FLOW] local_alsa_peer {}: Calling snd_seq_drain_output()", this->peer_id);
     result = snd_seq_drain_output(seq->seq);
     if (result < 0) {
-      ERROR("[MIDI_FLOW] local_alsa_peer {}: snd_seq_drain_output() error: {}",
+      ERROR("component=alsa_seq [MIDI_FLOW] local_alsa_peer {}: snd_seq_drain_output() error: {}",
             this->peer_id, snd_strerror(result));
       snd_seq_drop_input(seq->seq);
       snd_seq_drop_output(seq->seq);

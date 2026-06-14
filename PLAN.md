@@ -550,16 +550,16 @@ Add to the tabs array after "Connections".
 | 1f   | `src/main.cpp` + `settings.hpp` + `ini.cpp` + `default.ini` | `[log] buffer_capacity` config + resize at startup        |
 | 1g   | `tests/test_log_buffer.cpp` + `tests/CMakeLists.txt` | 18 test cases: push/wrap/query/filter/logfmt/LogQL              |
 
-### Phase 2 — Structured logging migration
+### Phase 2 — Structured logging migration ✅ COMPLETED
 
-| Step | Files | Description |
-|------|-------|-------------|
-| 2a   | `src/midirouter.cpp`     | Tag peer add/remove/connect/disconnect with `peer_id=` logfmt prefix |
-| 2b   | `lib/rtppeer.cpp`        | Tag RTP lifecycle with `peer_id=`, `component=rtp`, `session_id=` |
-| 2c   | `src/control_rpc.cpp`    | Tag endpoint.connect/disconnect, monitor.start/stop |
-| 2d   | `src/peer_*.cpp`         | Tag peer creation and errors |
-| 2e   | `src/mdns_rtpmidi.cpp`   | Tag mDNS events with `component=mdns` |
-| 2f   | `src/connection_db.cpp`  | Tag connection persistence with `component=database`, `connection_id=` |
+| Step | Files | Description | Status |
+|------|-------|-------------|--------|
+| 2a   | `src/midirouter.cpp`     | Tagged peer add/remove/connect/disconnect with `peer_id=`, `component=router` | ✅ |
+| 2b   | `lib/rtppeer.cpp`        | Tagged RTP lifecycle with `component=rtp` (CK, IN, OK, BY, latency) | ✅ |
+| 2c   | `src/control_rpc.cpp`    | Tagged monitor.start with `component=control` | ✅ |
+| 2d   | `src/peer_*.cpp`         | Tagged alsa_seq, rawmidi, alsa_listener, rtpmidi_server/client with `component=` | ✅ |
+| 2e   | `lib/mdns_rtpmidi.cpp`   | Tagged mDNS events with `component=mdns` | ✅ |
+| 2f   | `src/connection_db.cpp`  | Tagged connection persistence with `component=database` | ✅ |
 
 ### Phase 3 — Web UI
 

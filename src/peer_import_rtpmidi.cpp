@@ -32,7 +32,7 @@ peer_import_rtpmidi_t::peer_import_rtpmidi_t(
     std::shared_ptr<aseq_t> aseq_)
     : aseq(aseq_), server(name, port) {
   if (!server.is_valid()) {
-    WARNING("peer_import_rtpmidi '{}' has no listening socket (port '{}' could "
+    WARNING("component=rtpmidi_listener peer_import_rtpmidi '{}' has no listening socket (port '{}' could "
             "not be bound); it will not accept incoming connections.",
             name, port);
   } else if (mdns) {

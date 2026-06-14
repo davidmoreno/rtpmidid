@@ -328,7 +328,7 @@ static void tee_monitor_edges(control_rpc_context_t &ctx, peer_id_t target,
 
   ctx.router->connect_blocking(target, monitor_id);
 
-  INFO("monitor.start tee target_peer={} monitor_peer={}: {} incoming duplicate "
+  INFO("component=control monitor.start tee target_peer={} monitor_peer={}: "
        "edge(s) (from→monitor when from→target existed); always added "
        "outgoing target_peer→monitor_peer",
        target, monitor_id, incoming_tees);

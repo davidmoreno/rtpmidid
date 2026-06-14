@@ -109,7 +109,7 @@ connection_db_t::connection_db_t(std::string path) : db_(std::move(path)) {
   migrate_schema();
   if (!db_.is_open())
     return;
-  INFO("connection_db: opened");
+  INFO("component=database connection_db: opened");
 }
 
 void connection_db_t::save_connection(const stored_connection_t &connection) {
@@ -150,10 +150,10 @@ void connection_db_t::save_connection(const stored_connection_t &connection) {
   stmt->bind_int(4, merged.enabled ? 1 : 0);
 
   if (stmt->step() != SQLITE_DONE) {
-    ERROR("connection_db: save failed: {}",
+    ERROR("component=database connection_db: save failed: {}",
           sqlite3_errmsg(db_.raw()));
   } else {
-    INFO("connection_db: stored {} {} -> {} (enabled={})",
+    INFO("component=database connection_db: stored {} {} -> {} (enabled={})",
          connection_direction_to_wire(merged.direction), merged.side_a,
          merged.side_b, merged.enabled ? 1 : 0);
   }
@@ -175,10 +175,10 @@ void connection_db_t::remove_connection(const std::string &side_a,
   stmt->bind_text(2, side_b);
 
   if (stmt->step() != SQLITE_DONE) {
-    ERROR("connection_db: delete failed: {}",
+    ERROR("component=database connection_db: delete failed: {}",
           sqlite3_errmsg(db_.raw()));
   } else if (db_.changes() > 0) {
-    INFO("connection_db: deleted {} -> {}", side_a, side_b);
+    INFO("component=database connection_db: deleted {} -> {}", side_a, side_b);
   }
 }
 
@@ -256,7 +256,7 @@ void connection_db_manager_t::attach() {
   if (!db_ || !db_->is_open() || !router_)
     return;
 
-  INFO("connection_db: attached to router (persist + auto-reconnect enabled)");
+  INFO("component=database connection_db: attached to router (persist + auto-reconnect enabled)");
   connected_connection_ = router_->connected_event.connect(
       [this](peer_id_t from, peer_id_t to) { on_connected(from, to); });
   disconnected_connection_ = router_->disconnected_event.connect(
@@ -275,7 +275,7 @@ void connection_db_manager_t::attach_aseq(std::shared_ptr<aseq_t> aseq) {
     return;
   }
   aseq_ = std::move(aseq);
-  INFO("connection_db: attached to ALSA sequencer (pure-ALSA pair "
+  INFO("component=database connection_db: attached to ALSA sequencer (pure-ALSA pair "
        "auto-aconnect enabled)");
   aseq_port_added_connection_ = aseq_->added_port_announcement.connect(
       [this](const std::string & /*name*/, aseq_t::client_type_e /*type*/,
@@ -328,7 +328,7 @@ void connection_db_manager_t::apply_saved_connections() {
       });
 
   for (const auto &action : actions) {
-    INFO("connection_db: restoring directed edge peer {} -> {}", action.from,
+    INFO("component=database connection_db: restoring directed edge peer {} -> {}", action.from,
          action.to);
     router_->enqueue_connect(action.from, action.to);
   }
@@ -347,7 +347,7 @@ void connection_db_manager_t::try_record_pair(peer_id_t from, peer_id_t to) {
     row.side_b = id_to->serialize();
     row.direction = connection_direction_e::a2b;
     row.enabled = true;
-    INFO("connection_db: storing live router edge {} -> {}", row.side_a,
+    INFO("component=database connection_db: storing live router edge {} -> {}", row.side_a,
          row.side_b);
     db_->save_connection(row);
     std::lock_guard<std::mutex> lock(state_mutex_);
@@ -405,7 +405,7 @@ void connection_db_manager_t::on_disconnected(peer_id_t from, peer_id_t to) {
 
   if (const auto id_from = device_identity_for_peer(from)) {
     if (const auto id_to = device_identity_for_peer(to)) {
-      INFO("connection_db: removing live router edge {} -> {}",
+      INFO("component=database connection_db: removing live router edge {} -> {}",
            id_from->serialize(), id_to->serialize());
       db_->remove_connection(id_from->serialize(), id_to->serialize());
     }
@@ -438,7 +438,7 @@ void connection_db_manager_t::check_reconnects_for_all() {
   const auto saved =
       db_ && db_->is_open() ? db_->list_connections()
                             : std::vector<stored_connection_t>{};
-  INFO("connection_db: startup reconnect scan ({} peer(s), {} saved "
+  INFO("component=database connection_db: startup reconnect scan ({} peer(s), {} saved "
        "connection(s))",
        router_->peer_ids().size(), saved.size());
   apply_saved_connections();
@@ -463,10 +463,10 @@ void connection_db_manager_t::try_auto_aconnect_all_alsa_pairs() {
       continue;
     try {
       aseq_->connect_external(action.from, action.to);
-      INFO("connection_db: aconnect {}:{} -> {}:{}", action.from.client,
+      INFO("component=database connection_db: aconnect {}:{} -> {}:{}", action.from.client,
            action.from.port, action.to.client, action.to.port);
     } catch (const std::exception &e) {
-      ERROR("connection_db: aconnect failed: {}", e.what());
+      ERROR("component=database connection_db: aconnect failed: {}", e.what());
     }
   }
 }
@@ -500,7 +500,7 @@ void connection_db_manager_t::record_stable_pair(const std::string &side_a,
                                                  const std::string &side_b) {
   if (!db_ || !db_->is_open())
     return;
-  INFO("connection_db: store requested {} <-> {}", side_a, side_b);
+  INFO("component=database connection_db: store requested {} <-> {}", side_a, side_b);
   db_->record_connection(side_a, side_b);
   check_reconnects_for_all();
 }
@@ -509,7 +509,7 @@ void connection_db_manager_t::remove_stable_pair(const std::string &side_a,
                                                  const std::string &side_b) {
   if (!db_ || !db_->is_open())
     return;
-  INFO("connection_db: delete requested {} <-> {}", side_a, side_b);
+  INFO("component=database connection_db: delete requested {} <-> {}", side_a, side_b);
   auto a = side_a;
   auto b = side_b;
   if (b < a)

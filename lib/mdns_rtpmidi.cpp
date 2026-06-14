@@ -355,7 +355,7 @@ void rtpmidid::mdns_rtpmidi_t::setup_entry_group() {
 
 /// Asks the network mdns for entries.
 void rtpmidid::mdns_rtpmidi_t::connect_to_avahi() {
-  INFO("Connecting to Avahi");
+  INFO("component=mdns Connecting to Avahi");
   if (client != nullptr) {
     ERROR("Client already connected. Doing nothing!");
     return;
@@ -413,16 +413,16 @@ void rtpmidid::mdns_rtpmidi_t::client_callback(avahi_client_state_e state_) {
   case AVAHI_CLIENT_S_RUNNING:
     /* The server has startup successfully and registered its host
      * name on the network, so it's time to create our services */
-    INFO("Client running");
+    INFO("component=mdns Client running");
     setup_service_browser();
     setup_entry_group();
     break;
   case AVAHI_CLIENT_FAILURE: {
     auto avahi_errno = avahi_client_errno(client);
-    ERROR("Client failure: error=\"{}\" errno={}", avahi_strerror(avahi_errno),
+  ERROR("component=mdns Client failure: error=\"{}\" errno={}", avahi_strerror(avahi_errno),
           avahi_errno);
     if (avahi_errno == AVAHI_ERR_DISCONNECTED) {
-      WARNING("Disconnected, reconnecting...It may get blocked. ");
+    WARNING("component=mdns Disconnected, reconnecting...");
     }
     // avahi_simple_poll_quit(simple_poll);
   } break;
@@ -507,7 +507,7 @@ void rtpmidid::mdns_rtpmidi_t::browse_callback(const browse_callback_s &data) {
     }
     break;
   case AVAHI_BROWSER_REMOVE:
-    INFO("{} REMOVE: service=\"{}\" of type=\"{}\" in domain={} "
+    INFO("component=mdns {} REMOVE: service=\"{}\" of type=\"{}\" in domain={} "
          "flags={:08X} ",
          data.event, data.name, data.type, data.domain, (int)data.flags);
     if (data.flags & AVAHI_LOOKUP_RESULT_OUR_OWN) {
@@ -518,7 +518,7 @@ void rtpmidid::mdns_rtpmidi_t::browse_callback(const browse_callback_s &data) {
     break;
   case AVAHI_BROWSER_ALL_FOR_NOW:
   case AVAHI_BROWSER_CACHE_EXHAUSTED:
-    INFO("{}", data.event);
+    INFO("component=mdns {}", data.event);
     break;
   default:
     WARNING("AVAHI unknown event: {}", data.event);
@@ -535,7 +535,7 @@ void rtpmidid::mdns_rtpmidi_t::entry_group_callback(
   switch (state) {
   case AVAHI_ENTRY_GROUP_ESTABLISHED:
     /* The entry group has been established successfully */
-    INFO("AVAHI_ENTRY_GROUP_ESTABLISHED Group successfully established.");
+    INFO("component=mdns Entry group established");
     // announce_all();
     break;
   case AVAHI_ENTRY_GROUP_COLLISION: {
@@ -622,7 +622,7 @@ void rtpmidid::mdns_rtpmidi_t::announce_all() {
     ERROR("Failed to commit entry group: {}", avahi_strerror(ret));
     return;
   }
-  INFO("Announced {} services", announcements.size());
+  INFO("component=mdns Announced {} services", announcements.size());
 }
 
 void rtpmidid::mdns_rtpmidi_t::announce_rtpmidi(const std::string &name,

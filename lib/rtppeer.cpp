@@ -48,7 +48,7 @@ rtppeer_t::~rtppeer_t() {
     send_goodbye(CONTROL_PORT);
     send_goodbye(MIDI_PORT);
   }
-  DEBUG("~rtppeer '{}' (local) <-> '{}' (remote)", local_name, remote_name);
+  DEBUG("component=rtp ~rtppeer '{}' (local) <-> '{}' (remote)", local_name, remote_name);
 }
 
 void rtppeer_t::reset() {
@@ -147,7 +147,7 @@ void rtppeer_t::parse_command_ok(io_bytes_reader &buffer, port_e port) {
         "Response to connect from an unknown initiator. Not connecting.");
   }
 
-  INFO("Got confirmation from {}, initiator_id: {} ({}) ssrc: {}, "
+  INFO("component=rtp Got confirmation from {}, initiator_id: {} ({}) ssrc: {}, "
        "port: {}",
        remote_name, initiator_id,
        this->initiator_id == initiator_id ? "ok" : "nok", remote_ssrc, port);
@@ -188,7 +188,7 @@ void rtppeer_t::parse_command_in(io_bytes_reader &buffer, port_e port) {
         protocol);
   }
 
-  INFO("Got connection request from remote_name=\"{}\", initiator_id={:X}  "
+  INFO("component=rtp Got connection request from remote_name=\"{}\", initiator_id={:X}  "
        "ssrc={:X}, local_name=\"{}\", at port={}",
        remote_name, initiator_id, remote_ssrc, remote_name, port);
 
@@ -247,7 +247,7 @@ void rtppeer_t::parse_command_by(io_bytes_reader &buffer, port_e port) {
   DEBUG("Parse BY. status: {}, port {}| {:08b} & {:08b} = {:08b}", status, port,
         (uint8_t)(status), (uint8_t)mask, int(status) & mask);
 
-  INFO("Disconnect from {}, {} port. Status {} -> {}", remote_name, port,
+  INFO("component=rtp Disconnect from {}, {} port. Status {} -> {}", remote_name, port,
        status, nextstatus);
   status = nextstatus;
 
@@ -271,8 +271,8 @@ void rtppeer_t::parse_command_no(io_bytes_reader &buffer, port_e port) {
   status = (status_e)(((int)status) &
                       ~((int)(port == MIDI_PORT ? MIDI_CONNECTED
                                                 : CONTROL_CONNECTED)));
-  WARNING("Invitation Rejected (NO) : remote ssrc {:X}", remote_ssrc);
-  INFO("Disconnect from {}, {} port. Status {:X}", remote_name,
+  WARNING("component=rtp Invitation Rejected (NO) : remote ssrc {:X}", remote_ssrc);
+  INFO("component=rtp Disconnect from {}, {} port. Status {:X}", remote_name,
        port == MIDI_PORT ? "MIDI" : "Control", (int)status);
 
   status_change_event(DISCONNECTED_CONNECTION_REJECTED);
@@ -303,7 +303,7 @@ void rtppeer_t::parse_command_ck(io_bytes_reader &buffer, port_e port) {
     count = 2;
     latency = ck3 - ck1;
     waiting_ck = false;
-    INFO("Latency {}: {:.2f} ms (client / 2)", std::string_view(remote_name),
+    INFO("component=rtp Latency {}: {:.2f} ms (client / 2)", std::string_view(remote_name),
          latency / 10.0);
     ck_event(float(latency) / 10.0f);
     stats.add_stat(std::chrono::nanoseconds((int)latency * 100));
@@ -313,7 +313,7 @@ void rtppeer_t::parse_command_ck(io_bytes_reader &buffer, port_e port) {
     ck2 = buffer.read_uint64();
     // ck3 = buffer.read_uint64();
     latency = get_timestamp() - ck2;
-    INFO("Latency {}: {:.2f} ms (server / 3)", std::string_view(remote_name),
+    INFO("component=rtp Latency {}: {:.2f} ms (server / 3)", std::string_view(remote_name),
          latency / 10.0);
     // No need to send message
     stats.add_stat(std::chrono::nanoseconds((int)latency * 100));
@@ -321,7 +321,7 @@ void rtppeer_t::parse_command_ck(io_bytes_reader &buffer, port_e port) {
     return;
   }
   default:
-    ERROR("Bad CK count. Ignoring.");
+    ERROR("component=rtp Bad CK count. Ignoring.");
     return;
   }
 

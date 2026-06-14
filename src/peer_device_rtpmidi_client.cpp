@@ -49,7 +49,7 @@ peer_device_rtpmidi_client_t::peer_device_rtpmidi_client_t(
            dereference a null router shared_ptr (observed crash for
            "Peak-Peak MIDI 1" on MIDI_PORT). */
         if (!router) {
-          WARNING("peer_device_rtpmidi_client_t {} got status change {} before "
+          WARNING("component=rtpmidi_client peer_device_rtpmidi_client_t {} got status change {} before "
                   "being attached to a router; ignoring.",
                   peer->peer.remote_name, static_cast<int>(status));
           return;
