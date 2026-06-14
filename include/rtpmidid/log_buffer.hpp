@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <rtpmidid/signal.hpp>
 #include <atomic>
 #include <cstdint>
 #include <map>
@@ -141,6 +142,11 @@ private:
   std::atomic<uint64_t> seq_{1};
   size_t capacity_;
   mutable std::shared_mutex mutex_;
+
+public:
+  /// Fired on every push() from the logger thread.
+  /// Subscribers: WebSocket event forwarding.
+  signal_t<const log_entry_t &> on_new_entry;
 };
 
 /// Global ring buffer instance (defined in lib/logger.cpp).

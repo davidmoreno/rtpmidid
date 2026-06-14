@@ -226,6 +226,9 @@ void log_buffer_t::push(log_entry_t entry) {
   entry.seq = seq_.fetch_add(1, std::memory_order_relaxed);
 
   ring_[idx] = std::move(entry);
+
+  // Fire event (after assignment so the signal handler can read it)
+  on_new_entry(ring_[idx]);
 }
 
 void log_buffer_t::resize(size_t new_capacity) {

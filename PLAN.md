@@ -569,13 +569,13 @@ Add to the tabs array after "Connections".
 | 3b   | `frontend/src/app.tsx`          | Registered Logs tab between Peers and mDNS                     |
 | 3c   | `frontend/src/styles.css`       | Tag color CSS (peer=blue, component=green, connection=amber, session=purple) |
 
-### Phase 4 — Polish (optional)
+### Phase 4 — Polish (optional) ✅ COMPLETED
 
-| Step | Description                                              |
-| ---- | -------------------------------------------------------- |
-| 4a   | Event subscription `log.new_entry` for real-time push    |
-| 4b   | Export filtered logs as text (copy or download)          |
-| 4c   | Log entry detail popup on click (full message, all tags) |
+| Step | Description                                              | Status |
+| ---- | -------------------------------------------------------- | ------ |
+| 4a   | Event subscription `log.new_entry` for real-time push    | ✅ |
+| 4b   | Export filtered logs as text (copy or download)          | ✅ |
+| 4c   | Log entry detail popup on click (full message, all tags) | ✅ |
 
 ---
 

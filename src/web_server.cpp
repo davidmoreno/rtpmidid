@@ -22,6 +22,7 @@
 #include "midirouter.hpp"
 #include "settings.hpp"
 #include "webui_midi_monitor_peer.hpp"
+#include <rtpmidid/log_buffer.hpp>
 #include "dm_json_generated.hpp"
 #include "dm_json_rpc.hpp"
 #include "dm_json_status.hpp"
@@ -360,6 +361,7 @@ void web_server_t::thread_main() {
       ::rtpmidid::connection_t<const std::string &, const std::string &,
                                 const std::string &>
           mdns_removed;
+      ::rtpmidid::connection_t<const ::rtpmidid::log_entry_t &> log_new_entry;
     };
     auto guards = std::make_shared<signal_guards_t>();
 
@@ -423,6 +425,30 @@ void web_server_t::thread_main() {
             subs->emit("mdns.removed", dmjson::to_json(evt));
           });
     }
+
+    // Connect ring buffer → event channel (real-time log push)
+    guards->log_new_entry = ::rtpmidid::g_log_buffer.on_new_entry.connect(
+        [subs](const ::rtpmidid::log_entry_t &entry) {
+          auto tags = ::rtpmidid::parse_logfmt_tags(entry.message);
+          dmjson::writer_t w;
+          w.begin_object();
+          w.key("seq"); w.uint_value(entry.seq);
+          w.key("timestamp_us"); w.uint_value(entry.timestamp_us);
+          w.key("level"); w.int_value(entry.level);
+          w.key("file"); w.string_value(entry.file);
+          w.key("line"); w.int_value(entry.line);
+          w.key("message"); w.string_value(entry.message);
+          w.key("tags");
+          w.begin_object();
+          for (const auto &[k, v] : tags) {
+            w.key(k); w.string_value(v);
+          }
+          w.end_object();
+          w.end_object();
+          std::string json;
+          w.swap_into_string(json);
+          subs->emit("log.new_entry", json);
+        });
 
     // ── RPC dispatch ──────────────────────────────────────────────────
     control_rpc_context_t ctx{router, aseq, mdns, connection_db, device_registry,
