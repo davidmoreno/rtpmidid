@@ -755,6 +755,7 @@ export function PeersCards({
               onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
               placeholder="Search name, host, kind…"
               aria-label="Search devices"
+              autoFocus
             />
             <button
               type="button"

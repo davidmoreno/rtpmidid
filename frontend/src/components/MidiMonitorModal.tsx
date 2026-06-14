@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type { RpcClient } from "../rpc";
+import { useEscapeKey } from "../useEscapeKey";
 import { Button } from "./Button";
 import { MidiMonitorPanel } from "./MidiMonitorPanel";
 
@@ -90,6 +91,8 @@ export function MidiMonitorModal({
     setUuid(null);
     setErr("Monitor session ended (connection closed).");
   }, []);
+
+  useEscapeKey(stopSession);
 
   return (
     <div

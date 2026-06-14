@@ -23,11 +23,13 @@ export function Tabs({ tabs, active, onChange }: Props) {
           </button>
         ))}
       </div>
-      {tabs.map((t) => (
-        <div key={t.id} class={t.id === active ? "" : "hidden"}>
-          {t.content}
-        </div>
-      ))}
+      {tabs
+        .filter((t) => t.id === active)
+        .map((t) => (
+          <div key={t.id}>
+            {t.content}
+          </div>
+        ))}
     </div>
   );
 }
