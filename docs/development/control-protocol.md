@@ -64,6 +64,7 @@ Typical Web UI flow: `endpoint.connect` for immediate routing;
 | `connections.remove` | `{side_a, side_b}` | |
 | `connections.enable` | `{side_a, side_b}` | |
 | `connections.disable` | `{side_a, side_b}` | |
+| `log.query` | `{q?, since_seq?, since_us?, limit?}` | Query ring buffer logs (LogQL syntax: `{key="v"} \|= "text"`). `limit` default 100. |
 
 **Not supported:** `stats` (use `status`), `quit`/`exit`, bare `create`.
 
@@ -104,6 +105,7 @@ Event format:
 | `mdns.discovered` | `mdns_remote_row_t` | New mDNS remote discovered |
 | `mdns.removed` | `{"name": string, "address": string, "port": uint32}` | mDNS remote removed |
 | `mdns.announcement_changed` | `mdns_snapshot_t` (full state) | Own announcements or remotes changed (periodic) |
+| `log.new_entry` | `{seq, timestamp_us, level, file, line, message, tags}` | New log entry pushed to ring buffer (real-time) |
 
 Legacy server-initiated close events (still sent regardless of subscription):
 

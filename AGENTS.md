@@ -23,6 +23,7 @@ Userspace daemon bridging ALSA MIDI ↔ RTP-MIDI (`src/`, GPLv3) plus
 | Control / Web | `src/control_rpc.cpp`, `src/control_socket.cpp`, `src/web_server.cpp` |
 | Stats collector | `src/stats_collector.cpp`, `src/event_subscription.cpp` |
 | Event loop / RTP | `lib/poller.cpp`, `lib/rtppeer.cpp`, `lib/rtpclient.cpp` |
+| Log buffer | `lib/log_buffer.cpp`, `include/rtpmidid/log_buffer.hpp` |
 | JSON | `lib/dm_json/runtime.cpp`, `src/dm_json_*.hpp` |
 
 ## Documentation map

@@ -38,6 +38,7 @@ cli/rtpmidid-cli.py help . status
 | Connect to remote host | `connect` with hostname (and optional port/name) |
 | List ALSA ports | `midi.listAlsaSeq` |
 | List raw MIDI devices | `midi.listRawMidi` |
+| Query log buffer | `log.query` with optional LogQL `q` (e.g. `{level="error"}`) |
 
 Stop the daemon with `SIGINT` / `SIGTERM` (Ctrl+C or `systemctl stop`). There
 is no remote `quit` command.

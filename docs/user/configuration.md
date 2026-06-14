@@ -51,6 +51,17 @@ path=/var/lib/rtpmidid/rtpmidid.db
 Enables the **Devices** and **Connections** tabs in the Web UI and auto-reconnect
 after restart. Leave `path` empty to disable persistence.
 
+### [log] — queryable log buffer
+
+```ini
+[log]
+buffer_capacity=1024
+```
+
+Keeps the last N log entries in memory, accessible via the **Logs** tab in the
+Web UI or the `log.query` RPC method. Default capacity is 1024; valid range
+256–65536.
+
 ### [peer] — endpoints to create at startup (repeatable)
 
 ```ini

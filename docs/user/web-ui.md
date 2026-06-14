@@ -22,6 +22,7 @@ protected.
 | **Peers** | Live router view — active peers, packet counts, latency. |
 | **mDNS** | Services announced and discovered on the network. |
 | **Actions** | Quick connect/disconnect and utilities. |
+| **Logs** | Live view of daemon log entries with tag-based filtering (LogQL syntax). Click tags to filter, copy entries to clipboard. |
 | **Settings** | UI theme preferences. |
 | **About** | Version and daemon info. |
 

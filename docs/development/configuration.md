@@ -82,6 +82,15 @@ Empty `root` defaults to `frontend/dist` after argv/INI load.
 path=build/rtpmidid.db
 ```
 
+### [log]
+
+```ini
+[log]
+# Ring buffer capacity for queryable logs (RPC log.query + Web UI Logs tab).
+# Range: 256..65536.
+buffer_capacity=1024
+```
+
 Empty path disables DB features (no `devices.*` / `connections.*` persistence).
 
 ## settings_t

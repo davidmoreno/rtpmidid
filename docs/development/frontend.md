@@ -57,6 +57,7 @@ Fullscreen MIDI monitor: hash route `#monitor?uuid=…` →
 | mDNS | `tabs/MdnsTab.tsx` | `status` mDNS snapshot |
 | Actions | `tabs/ActionsTab.tsx` | Connect/disconnect/monitor actions |
 | Settings | `tabs/SettingsTab.tsx` | Theme appearance |
+| Logs | `tabs/LogsTab.tsx` | `log.query` RPC + `log.new_entry` event subscription |
 | About | `tabs/AboutTab.tsx` | Version info |
 
 ## Key modules
