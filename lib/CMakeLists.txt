@@ -11,7 +11,7 @@ add_library(
   STATIC
   rtpmidipacket.cpp rtppeer.cpp rtpclient.cpp rtpserver.cpp rtpserverpeer.cpp
   mdns_rtpmidi.cpp poller.cpp logger.cpp dns_resolver.cpp shutdown_signals.cpp
-  utils.cpp stats.cpp networkaddress.cpp udppeer.cpp
+  utils.cpp stats.cpp networkaddress.cpp udppeer.cpp log_buffer.cpp
 )
 
 
@@ -35,7 +35,7 @@ add_library(
   SHARED
   rtpmidipacket.cpp rtppeer.cpp rtpclient.cpp rtpserver.cpp rtpserverpeer.cpp
   mdns_rtpmidi.cpp poller.cpp logger.cpp dns_resolver.cpp shutdown_signals.cpp
-  utils.cpp stats.cpp networkaddress.cpp udppeer.cpp
+  utils.cpp stats.cpp networkaddress.cpp udppeer.cpp log_buffer.cpp
 )
 
 target_link_libraries(rtpmidid-shared ${AVAHI_LIBRARIES} pthread)

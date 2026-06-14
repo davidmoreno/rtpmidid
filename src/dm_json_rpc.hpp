@@ -291,4 +291,34 @@ struct mdns_removed_event_t {
   uint32_t port;
 };
 
+// ─── Log query (log_buffer ring buffer) ─────────────────────────────────
+
+// [dm-json]
+struct log_query_params_t {
+  std::optional<std::string> q;         // LogQL query string
+  std::optional<uint64_t>    since_seq; // return entries with seq > this
+  std::optional<uint64_t>    since_us;  // return entries newer than this (µs)
+  std::optional<int>         limit;     // max entries (default 100)
+};
+
+// [dm-json]
+struct log_query_entry_t {
+  uint64_t                           seq;
+  uint64_t                           timestamp_us;
+  int                                level;
+  std::string                        file;
+  int                                line;
+  std::string                        message;  // full logfmt line
+  std::map<std::string, std::string> tags;     // extracted key=value pairs
+};
+
+// [dm-json]
+struct log_query_result_t {
+  std::vector<log_query_entry_t> entries;
+  int                            total_matches;
+  int                            buffer_capacity;
+  uint64_t                       oldest_seq;
+  uint64_t                       newest_seq;
+};
+
 } // namespace rtpmididns

@@ -33,6 +33,7 @@
 #include "peer_factory.hpp"
 #include "peer_device_rawmidi.hpp"
 #include "midirouter.hpp"
+#include <rtpmidid/log_buffer.hpp>
 #include "midipeer.hpp"
 #include "settings.hpp"
 #include "stringpp.hpp"
@@ -168,6 +169,7 @@ static std::vector<rpc_help_entry_t> build_help_entries() {
       {"help", "Return help text"},
       {"subscribe", "Subscribe to event channels (e.g. router.peer_added)"},
       {"unsubscribe", "Unsubscribe from event channels"},
+      {"log.query", "Query ring buffer logs (LogQL syntax: {key=\"v\"} |= \"text\")"}
   };
 }
 
@@ -702,6 +704,32 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       auto p = parse_rpc_params<unsubscribe_params_t>(params);
       ctx.subscriptions->unsubscribe(p.channels);
       return respond_ok(env);
+    }
+    if (env.method == "log.query") {
+      auto p = parse_rpc_params<log_query_params_t>(params);
+      log_query_result_t result;
+      // Query the global ring buffer
+      auto entries = ::rtpmidid::g_log_buffer.query(
+          p.q.value_or(""),
+          p.since_seq.value_or(0),
+          p.since_us.value_or(0),
+          p.limit.value_or(100));
+      result.buffer_capacity = static_cast<int>(::rtpmidid::g_log_buffer.capacity());
+      result.oldest_seq = ::rtpmidid::g_log_buffer.oldest_seq();
+      result.newest_seq = ::rtpmidid::g_log_buffer.newest_seq();
+      result.total_matches = static_cast<int>(entries.size());
+      for (auto &entry : entries) {
+        log_query_entry_t qe;
+        qe.seq = entry.seq;
+        qe.timestamp_us = entry.timestamp_us;
+        qe.level = entry.level;
+        qe.file = entry.file;
+        qe.line = entry.line;
+        qe.message = entry.message;
+        qe.tags = ::rtpmidid::parse_logfmt_tags(entry.message);
+        result.entries.push_back(std::move(qe));
+      }
+      return respond(env, result);
     }
 
     std::smatch match;

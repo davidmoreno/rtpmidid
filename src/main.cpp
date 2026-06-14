@@ -37,6 +37,7 @@
 #include "rtpmidid/shutdown_signals.hpp"
 #include "rtpmidiremotehandler.hpp"
 #include "settings.hpp"
+#include <rtpmidid/log_buffer.hpp>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -323,6 +324,13 @@ int main(int argc, char **argv) {
         static_cast<rtpmidid::logger_level_t>(compile_time_min_enum));
   } else {
     rtpmidid::logger2.set_log_level(rtpmididns::settings.log_level);
+  }
+
+  // Resize ring log buffer from [log] INI settings
+  if (rtpmididns::settings.log.buffer_capacity >= 256 &&
+      rtpmididns::settings.log.buffer_capacity <= 65536) {
+    rtpmidid::g_log_buffer.resize(
+        static_cast<size_t>(rtpmididns::settings.log.buffer_capacity));
   }
 
   // Worker threads must not handle SIGINT/SIGTERM; only main does.

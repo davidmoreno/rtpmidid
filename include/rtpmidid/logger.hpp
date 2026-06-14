@@ -81,6 +81,10 @@ public:
   // Async log enqueue (non-blocking)
   bool enqueue_log(logger_level_t level, std::string message);
 
+  /// Push a plain-text entry to the ring buffer (called from log() template).
+  static void push_to_buffer(logger_level_t level, const char *filename,
+                             int lineno, std::string_view plain_msg);
+
   template <typename... Args>
   constexpr void log(logger_level_t level, const char *filename, int lineno,
                      FMT::format_string<Args...> message, Args... args) {
@@ -89,7 +93,20 @@ public:
       return;
     }
 
-    // Format message
+    // Format plain-text message for ring buffer (no ANSI)
+    {
+      buffer_t plain_buffer;
+      auto it = FMT::format_to(plain_buffer.begin(), "{}:{} ",
+                                basename(filename), lineno);
+      auto max_size = plain_buffer.size() - (it - plain_buffer.begin()) - 1;
+      auto res = FMT::format_to_n(it, max_size, message,
+                                  std::forward<Args>(args)...);
+      *res.out = '\0';
+      push_to_buffer(level, filename, lineno,
+                     std::string_view(plain_buffer.data()));
+    }
+
+    // Format ANSI-colored message for stdout
     auto it = log_preamble(level, filename, lineno);
     auto max_size = buffer.size() - (it - buffer.begin()) - 16;
     auto res =

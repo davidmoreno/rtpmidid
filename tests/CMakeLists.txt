@@ -249,3 +249,12 @@ if (NOT LIBS_ONLY)
   target_compile_options(test_event_subscription PUBLIC ${ALSA_CFLAGS_OTHER})
   target_compile_options(test_event_subscription PUBLIC ${AVAHI_CFLAGS_OTHER})
 endif (NOT LIBS_ONLY)
+
+#
+# Log buffer (ring buffer + logfmt + LogQL)
+#
+
+add_executable(test_log_buffer test_log_buffer.cpp)
+target_link_libraries(test_log_buffer rtpmidid-shared -pthread)
+target_link_libraries(test_log_buffer ${FMT_LIBRARIES})
+add_test(NAME test_log_buffer COMMAND test_log_buffer)

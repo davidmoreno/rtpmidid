@@ -18,6 +18,7 @@
  */
 
 #include <rtpmidid/logger.hpp>
+#include <rtpmidid/log_buffer.hpp>
 #include <rtpmidid/shutdown_signals.hpp>
 #include <algorithm>
 #include <rtpmidid/exceptions.hpp>
@@ -26,6 +27,24 @@
 
 namespace rtpmidid {
 rtpmidid::logger_t logger2;
+
+/// Global ring buffer for queryable logs (RPC + Web UI).
+/// Default capacity 1024; overridden at startup from [log] INI settings.
+log_buffer_t g_log_buffer(1024);
+
+void logger_t::push_to_buffer(logger_level_t level, const char *filename,
+                              int lineno, std::string_view plain_msg) {
+  using namespace std::chrono;
+  const auto now_us = duration_cast<microseconds>(
+      steady_clock::now().time_since_epoch()).count();
+  log_entry_t entry;
+  entry.timestamp_us = static_cast<uint64_t>(now_us);
+  entry.level = static_cast<int>(level);
+  entry.file = basename(filename);
+  entry.line = lineno;
+  entry.message = plain_msg;
+  g_log_buffer.push(std::move(entry));
+}
 static constexpr const char *ansi_color(logger_level_t level) {
   switch (level) {
   case DEBUG:

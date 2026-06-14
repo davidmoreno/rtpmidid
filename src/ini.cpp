@@ -102,7 +102,8 @@ void IniReader::parse_line(const std::string &origline) {
     section = trim_copy(line.substr(1, line.length() - 2));
 
     if (section == "general" || section == "web" || section == "database" ||
-        section == "alsa_hw_auto_export" || section == "rtpmidi_discover") {
+        section == "alsa_hw_auto_export" || section == "rtpmidi_discover" ||
+        section == "log") {
       return;
     }
     if (section == "peer") {
@@ -208,6 +209,12 @@ void IniReader::parse_line(const std::string &origline) {
     } else if (key == "name_negative_regex") {
       settings->alsa_hw_auto_export.name_negative = value;
       settings->alsa_hw_auto_export.name_negative_regex.emplace(value);
+    } else {
+      throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
+    }
+  } else if (section == "log") {
+    if (key == "buffer_capacity") {
+      settings->log.buffer_capacity = std::atoi(value.c_str());
     } else {
       throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
     }

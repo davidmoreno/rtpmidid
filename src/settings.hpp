@@ -88,6 +88,12 @@ struct settings_t {
     std::string path;
   };
   database_t database;
+
+  /** Ring buffer log (see [log] in ini). */
+  struct log_t {
+    int buffer_capacity = 1024;
+  };
+  log_t log;
 };
 
 extern settings_t settings; // NOLINT
