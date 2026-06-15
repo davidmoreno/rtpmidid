@@ -480,7 +480,9 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       auto peer = create_peer_from_string(p.identity, factory_context(ctx), &err);
       if (!peer)
         throw std::runtime_error(err.empty() ? "create failed" : err);
-      ctx.router->add_peer(*peer);
+      const auto pid = ctx.router->add_peer(*peer);
+      if (pid == 0)
+        throw std::runtime_error("router.add_peer failed (port subscription rejected?)");
       return respond(env, (*peer)->status());
     }
     if (env.method == "router.create.list")

@@ -63,12 +63,18 @@ void peer_device_alsa_seq_t::attach_alsa_input() {
 
   if (subscribe_src_client_ >= 0 && subscribe_src_port_ >= 0 &&
       !alsa_source_subscription_) {
-    alsa_source_subscription_ = seq->connect(
-        aseq_t::port_t(static_cast<uint8_t>(subscribe_src_client_),
-                       static_cast<uint8_t>(subscribe_src_port_)),
-        aseq_t::port_t(seq->client_id, port));
-    INFO("component=alsa_seq ALSA subscribe {}:{} -> rtpmidid {}:{} ({})", subscribe_src_client_,
-         subscribe_src_port_, seq->client_id, port, name);
+    try {
+      alsa_source_subscription_ = seq->connect(
+          aseq_t::port_t(static_cast<uint8_t>(subscribe_src_client_),
+                         static_cast<uint8_t>(subscribe_src_port_)),
+          aseq_t::port_t(seq->client_id, port));
+      INFO("component=alsa_seq ALSA subscribe {}:{} -> rtpmidid {}:{} ({})", subscribe_src_client_,
+           subscribe_src_port_, seq->client_id, port, name);
+    } catch (const std::exception &e) {
+      WARNING("component=alsa_seq Cannot subscribe from {}:{} (read-only port?): {} "
+              "peer will be output-only",
+              subscribe_src_client_, subscribe_src_port_, e.what());
+    }
   }
 }
 
@@ -88,11 +94,17 @@ void peer_device_alsa_seq_t::send_midi(midipeer_id_t from, const mididata_t &dat
   // mididata_to_evs_f is still live when ALSA flushes it (important for SysEx
   // events whose data.ext.ptr points into that frame).
   std::scoped_lock lock(seq->output_mutex);
-  mididata_encoder.mididata_to_evs_f(readerdata, [this, from](snd_seq_event_t *ev) {
+  const int dest_client = subscribe_src_client_;
+  const int dest_port = subscribe_src_port_;
+  mididata_encoder.mididata_to_evs_f(readerdata, [this, from, dest_client, dest_port](snd_seq_event_t *ev) {
     DEBUG("[MIDI_FLOW] local_alsa_peer {}: Encoding MIDI to ALSA event, type={}, port={}",
           this->peer_id, ev->type, this->port);
     snd_seq_ev_set_source(ev, this->port);
-    snd_seq_ev_set_subs(ev); // to all subscribers
+    if (dest_client >= 0 && dest_port >= 0) {
+      snd_seq_ev_set_dest(ev, dest_client, dest_port);
+    } else {
+      snd_seq_ev_set_subs(ev); // to all subscribers
+    }
     snd_seq_ev_set_direct(ev);
     DEBUG("[MIDI_FLOW] local_alsa_peer {}: Calling snd_seq_event_output()", this->peer_id);
     auto result = snd_seq_event_output(seq->seq, ev);

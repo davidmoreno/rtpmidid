@@ -61,7 +61,10 @@ peer_id_t ensure_peer_for_identity(const peer_factory_context_t &ctx,
   auto peer = create_peer_from_string(side_str, ctx, &err);
   if (!peer)
     throw std::runtime_error(err.empty() ? "failed to create peer" : err);
-  return router->add_peer(*peer);
+  const auto pid = router->add_peer(*peer);
+  if (pid == 0)
+    throw std::runtime_error("router.add_peer failed for '" + side_str + "'");
+  return pid;
 }
 
 void spawn_import_rtpmidi_connection(const peer_factory_context_t &ctx,
