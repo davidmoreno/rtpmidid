@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <rect x="0" y="0" width="128" height="128" fill="black"/>
+  <text x="64" y="88" text-anchor="middle" dominant-baseline="central"
+        font-family="monospace" font-weight="900" font-size="48"
+        fill="white" letter-spacing="-0.02em">ALSA</text>
+</svg>

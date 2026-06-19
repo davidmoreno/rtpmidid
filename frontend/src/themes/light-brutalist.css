@@ -124,3 +124,11 @@
 
   --ring-offset: #ffffff;
 }
+
+/* Brutalist dither effect on brand icons — high-contrast B&W threshold */
+[data-theme="light-brutalist"] .ui-brand-icon {
+  filter: contrast(4) brightness(0.85) saturate(0);
+  image-rendering: crisp-edges;
+  mix-blend-mode: luminosity;
+  opacity: 0.85;
+}

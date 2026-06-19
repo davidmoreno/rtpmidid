@@ -1219,6 +1219,24 @@
     color: var(--color-chip-fg);
   }
 
+  /**
+   * Device brand icon — small logo next to the device name.
+   * B&W SVG by design; brutalist themes add a dither filter.
+   */
+  .ui-brand-icon {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface-2);
+    padding: 2px;
+    /* Default: no filter. Brutalist themes override with dither. */
+    filter: none;
+  }
+
   .ui-wire-chip-local {
     border: var(--border-width) solid var(--color-badge-local-border);
     background-color: var(--color-badge-local-bg);

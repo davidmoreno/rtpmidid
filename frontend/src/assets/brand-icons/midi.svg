@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <rect x="0" y="0" width="128" height="128" fill="black"/>
+  <!-- 5-pin DIN connector -->
+  <circle cx="64" cy="64" r="48" fill="none" stroke="white" stroke-width="6"/>
+  <!-- Center pin -->
+  <circle cx="64" cy="64" r="7" fill="white"/>
+  <!-- 5 pins around semicircle -->
+  <circle cx="64" cy="26" r="5" fill="white"/>
+  <circle cx="34" cy="43" r="5" fill="white"/>
+  <circle cx="94" cy="43" r="5" fill="white"/>
+  <circle cx="34" cy="86" r="5" fill="white"/>
+  <circle cx="94" cy="86" r="5" fill="white"/>
+  <!-- "MIDI" text below -->
+  <text x="64" y="115" text-anchor="middle" dominant-baseline="central"
+        font-family="monospace" font-weight="900" font-size="11"
+        fill="white" letter-spacing="0.15em">MIDI</text>
+</svg>

@@ -28,6 +28,7 @@ import {
   endpointFromRouterPeer,
 } from "../endpoints";
 import { identityFromAlsaAddress, identityFromPeerRow } from "../deviceIdentity";
+import { matchBrandIcon } from "../deviceIcons";
 import {
   compareEndpointsForDevicesSort,
   groupForEndpoint,
@@ -320,6 +321,63 @@ function Led({
       {label}
     </span>
   );
+}
+
+/**
+ * Small brand icon shown next to the device label.
+ * Falls back to a generic MIDI icon when no brand matches.
+ */
+/** Generic MIDI 5-pin DIN icon (fallback when no brand matches). */
+function MidiDinIcon() {
+  return (
+    <svg
+      class="ui-brand-icon"
+      viewBox="0 0 128 128"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      {/* Outer circle (DIN connector) */}
+      <circle cx="64" cy="64" r="54" stroke="currentColor" stroke-width="6" fill="none" />
+      {/* Center pin */}
+      <circle cx="64" cy="64" r="8" fill="currentColor" />
+      {/* 5 pins arranged in a semicircle */}
+      <circle cx="64" cy="30" r="5" fill="currentColor" />
+      <circle cx="40" cy="50" r="5" fill="currentColor" />
+      <circle cx="88" cy="50" r="5" fill="currentColor" />
+      <circle cx="40" cy="78" r="5" fill="currentColor" />
+      <circle cx="88" cy="78" r="5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function BrandDeviceIcon({
+  label,
+  sub,
+  identity,
+}: {
+  label: string;
+  sub: string;
+  identity: string;
+}) {
+  const icon = useMemo(
+    () => matchBrandIcon(label, sub, identity),
+    [label, sub, identity],
+  );
+
+  if (icon) {
+    return (
+      <img
+        src={icon.url}
+        alt={icon.label}
+        title={icon.label}
+        class="ui-brand-icon"
+      />
+    );
+  }
+
+  // Final fallback: generic MIDI DIN icon for unknown devices
+  return <MidiDinIcon />;
 }
 
 type Props = {
@@ -1102,6 +1160,11 @@ export function PeersCards({
                           <IconEye />
                         </button>
                       ) : null}
+                      <BrandDeviceIcon
+                        label={row.label}
+                        sub={row.sub}
+                        identity={row.connectIdentity ?? e?.identity ?? row.registry?.identity ?? ""}
+                      />
                       <span class="min-w-0 truncate font-mono text-sm font-black ui-text">
                         {row.label}
                       </span>

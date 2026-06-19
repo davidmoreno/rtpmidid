@@ -125,6 +125,13 @@
   --ring-offset: #18181b;
 }
 
+/* Brutalist dither effect on brand icons — high-contrast B&W threshold with glow */
+[data-theme="dark-brutalist"] .ui-brand-icon {
+  filter: contrast(4) brightness(1.2) saturate(0);
+  image-rendering: crisp-edges;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.15);
+}
+
 [data-theme="dark-brutalist"] .ui-header-bar {
   --color-fg: #18181b;
   --color-fg-muted: #3f3f46;
