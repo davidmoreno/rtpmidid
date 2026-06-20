@@ -4,7 +4,6 @@ import {
   connectionCombinedLatencyMs,
   ConnectionLatencyHoverCell,
 } from "./LatencyBar";
-import { CONFIRM_SKIP_HINT, runWithConfirm } from "../confirmAction";
 
 type SortKey =
   | "type"
@@ -261,7 +260,7 @@ function DbStarCell({
     ? () => onRemove!(row)
     : () => onAdd!(row);
   const title = saved
-    ? `Stop remembering this connection. ${CONFIRM_SKIP_HINT}`
+    ? "Stop remembering this connection"
     : "Remember this connection (auto-reconnect when devices come online)";
   const aria = saved
     ? "Stop remembering this connection"
@@ -270,15 +269,7 @@ function DbStarCell({
   const onStarClick = (ev: MouseEvent) => {
     ev.preventDefault();
     ev.stopPropagation();
-    if (saved) {
-      runWithConfirm(
-        ev,
-        `Stop remembering "${row.from.label}" ${row.direction} "${row.to.label}"?`,
-        handler,
-      );
-    } else {
-      handler();
-    }
+    handler();
   };
 
   return (

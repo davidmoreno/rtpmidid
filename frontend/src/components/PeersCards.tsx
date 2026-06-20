@@ -1041,21 +1041,13 @@ export function PeersCards({
                         aria-pressed={favoriteIds.has(row.id)}
                         title={
                           favoriteIds.has(row.id)
-                            ? `Remove from favorites. ${CONFIRM_SKIP_HINT}`
+                            ? "Remove from favorites"
                             : "Add to favorites (stored in this browser)"
                         }
                         onClick={(ev) => {
                           ev.preventDefault();
                           ev.stopPropagation();
-                          if (favoriteIds.has(row.id)) {
-                            runWithConfirm(
-                              ev,
-                              `Remove "${row.label}" from favorites?`,
-                              () => toggleFavorite(row.id),
-                            );
-                          } else {
-                            toggleFavorite(row.id);
-                          }
+                          toggleFavorite(row.id);
                         }}
                       >
                         {favoriteIds.has(row.id) ? (
@@ -1102,7 +1094,7 @@ export function PeersCards({
                           <IconEye />
                         </button>
                       ) : null}
-                      <span class="min-w-0 truncate font-mono text-sm font-black ui-text">
+                      <span class="min-w-0 truncate font-mono text-sm font-black ui-text" title={"identity: " + row.id}>
                         {row.label}
                       </span>
                     </div>
