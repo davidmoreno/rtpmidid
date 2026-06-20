@@ -372,6 +372,10 @@ void web_server_t::thread_main() {
                                 const std::string &>
           mdns_removed;
       ::rtpmidid::connection_t<const ::rtpmidid::log_entry_t &> log_new_entry;
+      ::rtpmidid::connection_t<const std::string &, aseq_t::client_type_e,
+                                const aseq_t::port_t &>
+          device_updated_added;
+      ::rtpmidid::connection_t<const aseq_t::port_t &> device_updated_removed;
     };
     auto guards = std::make_shared<signal_guards_t>();
 
@@ -433,6 +437,61 @@ void web_server_t::thread_main() {
             evt.address = address;
             evt.port = static_cast<uint32_t>(std::stoul(port_str.empty() ? "0" : port_str));
             subs->emit("mdns.removed", dmjson::to_json(evt));
+          });
+    }
+
+    // Connect ALSA sequencer port changes → event channel.
+    // Cache identities at add time so remove uses the exact same string,
+    // even if the port is already gone when PORT_EXIT fires.
+    auto port_identities =
+        std::make_shared<std::map<aseq_t::port_t, std::string>>();
+
+    if (aseq) {
+      guards->device_updated_added = aseq->added_port_announcement.connect(
+          [subs, aseq = aseq,
+           port_identities](const std::string &name, aseq_t::client_type_e,
+                              const aseq_t::port_t &port) {
+            (void)name;
+            auto row = aseq->get_port_row(port.client, port.port);
+            if (!row)
+              return;
+            // row->identity is already built by get_port_row → port_identity()
+            const auto &identity_str = row->identity;
+            device_updated_event_t evt;
+            auto it = port_identities->find(port);
+            if (it != port_identities->end()) {
+              // Already seen: name change → send updated
+              if (it->second != identity_str) {
+                it->second = identity_str;
+                evt.action = "updated";
+              } else {
+                return; // unchanged, skip
+              }
+            } else {
+              (*port_identities)[port] = identity_str;
+              evt.action = "added";
+            }
+            evt.identity = identity_str;
+            subs->emit("device.updated", dmjson::to_json(evt));
+          });
+
+      guards->device_updated_removed = aseq->removed_port_announcement.connect(
+          [subs, port_identities](const aseq_t::port_t &port) {
+            device_updated_event_t evt;
+            evt.action = "removed";
+            auto it = port_identities->find(port);
+            if (it != port_identities->end()) {
+              evt.identity = it->second;
+              port_identities->erase(it);
+            } else {
+              // Fallback: port disappeared before we saw it added.
+              // Still emit with best-effort numeric id so the frontend
+              // can try to clean up stale entries.
+              // Use same common function as add/list for consistency
+              evt.identity = aseq_t::port_identity(
+                  port.client, port.port, "", "");
+            }
+            subs->emit("device.updated", dmjson::to_json(evt));
           });
     }
 

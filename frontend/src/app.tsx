@@ -15,10 +15,8 @@ import {
   type WireLocalChoice,
 } from "./midiEnumerate";
 import {
-  parseMidiAlsaSeqResult,
-  parseMidiRawmidiResult,
-  type MidiAlsaSeqEntry,
-  type MidiRawmidiEntry,
+  parseDeviceList,
+  type DeviceRow,
 } from "./midiEnumerate";
 import {
   identityFromForm,
@@ -37,7 +35,6 @@ import { DevicesTab } from "./tabs/DevicesTab";
 import { PeersTab } from "./tabs/PeersTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 import { LogsTab } from "./tabs/LogsTab";
-import { parseStoredStatusRefreshMs } from "./statusRefresh";
 import { MidiMonitorStandalone } from "./components/MidiMonitorStandalone";
 import {
   parseConnectionsListResult,
@@ -71,6 +68,7 @@ const SUBSCRIBE_CHANNELS = [
   "mdns.discovered",
   "mdns.removed",
   "mdns.announcement_changed",
+  "device.updated",
 ];
 
 /**
@@ -177,6 +175,16 @@ function handleWsEvent(ev: JsonRpcResponse) {
       });
       break;
     }
+
+    case "device.updated": {
+      const p = params as { action: "added" | "removed" | "updated"; identity: string };
+      daemonStore.reduce({
+        type: "device_updated",
+        action: p.action,
+        identity: p.identity,
+      });
+      break;
+    }
   }
 }
 
@@ -204,8 +212,7 @@ export function App() {
   );
   const endpointHighlightClearTimer = useRef<number | undefined>(undefined);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const [alsaSeq, setAlsaSeq] = useState<MidiAlsaSeqEntry[]>([]);
-  const [rawmidi, setRawmidi] = useState<MidiRawmidiEntry[]>([]);
+  const [rawmidi, setRawmidi] = useState<DeviceRow[]>([]);
   const [alsaSubs, setAlsaSubs] = useState<unknown[]>([]);
   const [savedConnections, setSavedConnections] = useState<
     PersistedConnectionRow[]
@@ -248,19 +255,22 @@ export function App() {
     }
   }, [rpc]);
 
-  /** Fetch ALSA MIDI lists on demand (tab switch or initial load). */
+  /** Fetch auxiliary MIDI lists on demand (tab switch or initial load). */
   const loadMidiLists = useCallback(async () => {
     try {
-      const [rAlsa, rRaw, rSubs] = await Promise.all([
-        rpc.call("midi.listAlsaSeq", {}),
-        rpc.call("midi.listRawMidi", {}),
+      const [rDevices, rSubs] = await Promise.all([
+        rpc.call("device.list", {}),
         rpc.call("midi.listAlsaSubscriptions", {}),
       ]);
-      setAlsaSeq(parseMidiAlsaSeqResult(rAlsa) ?? []);
-      setRawmidi(parseMidiRawmidiResult(rRaw) ?? []);
+      const allDevices = parseDeviceList(rDevices) ?? [];
+      // Split into ALSA seq and raw MIDI for component state.
+      const alsaPorts = allDevices.filter((d) => d.type === "alsa_seq");
+      const rawPorts = allDevices.filter((d) => d.type === "rawmidi");
+      daemonStore.seedAlsaSeq(alsaPorts);
+      setRawmidi(rawPorts);
       setAlsaSubs(Array.isArray(rSubs) ? (rSubs as unknown[]) : []);
     } catch (e) {
-      console.debug("midi list fetch failed", e);
+      console.error("midi list fetch failed", e);
     }
   }, [rpc]);
 
@@ -341,34 +351,15 @@ export function App() {
     };
   }, [rpc]);
 
-  // Periodic full-status polling — feeds latency history graph.
+  // Fetch auxiliary data on tab switch to Devices/Connections.
+  // Skip initial mount — onSessionReady handles the first load after
+  // WS connects; this effect only refreshes on subsequent tab switches.
+  const tabMounted = useRef(false);
   useEffect(() => {
-    if (connState?.phase !== "connected") return;
-    const ms = parseStoredStatusRefreshMs(
-      typeof localStorage !== "undefined"
-        ? localStorage.getItem("rtpmidid-status-refresh-ms")
-        : null,
-    );
-    if (ms <= 0) return; // user disabled refresh
-
-    const id = window.setInterval(() => {
-      rpc
-        .call("status", {})
-        .then((result) => {
-          const statusResult = result as StatusResult;
-          daemonStore.loadSnapshot(statusResult);
-          setLastRefresh(new Date());
-        })
-        .catch(() => {
-          // silently ignore — next poll will retry
-        });
-    }, ms);
-
-    return () => window.clearInterval(id);
-  }, [rpc, connState?.phase]);
-
-  // Fetch auxiliary data on tab switch to Devices/Connections
-  useEffect(() => {
+    if (!tabMounted.current) {
+      tabMounted.current = true;
+      return;
+    }
     if (tab !== "devices" && tab !== "connections") return;
     void loadMidiLists();
   }, [tab, loadMidiLists]);
@@ -507,11 +498,9 @@ export function App() {
     [rpc],
   );
 
-  /** Called after user actions to re-sync the full state. */
+  /** Called after user actions to re-sync auxiliary data (DB/registry). */
   const onAfterAction = useCallback(async () => {
     try {
-      const statusResult = (await rpc.call("status", {})) as StatusResult;
-      daemonStore.loadSnapshot(statusResult);
       setLastRefresh(new Date());
       setStatus("");
       await loadConnectionsDb();
@@ -519,7 +508,7 @@ export function App() {
     } catch (e) {
       setStatus(String(e));
     }
-  }, [rpc, loadConnectionsDb, loadDevicesRegistry]);
+  }, [loadConnectionsDb, loadDevicesRegistry]);
 
   const statsRows = useMemo(() => {
     const edgesN = edges.length;
@@ -546,7 +535,7 @@ export function App() {
           lastRefresh={lastRefresh}
           peers={peers}
           mdnsRemotes={mdnsParsed.remotes}
-          alsaSeq={alsaSeq}
+          alsaSeq={daemonState.alsaSeq}
           rawmidi={rawmidi}
           alsaSubs={alsaSubs}
           registryDevices={registryDevices}
@@ -574,7 +563,7 @@ export function App() {
           rpc={rpc}
           peers={peers}
           mdnsRemotes={mdnsParsed.remotes}
-          alsaSeq={alsaSeq}
+          alsaSeq={daemonState.alsaSeq}
           rawmidi={rawmidi}
           registryDevices={registryDevices}
           registryEnabled={registryEnabled}

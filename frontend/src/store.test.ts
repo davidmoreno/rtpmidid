@@ -1,5 +1,62 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { daemonStore, type DaemonState } from "./store";
+import { daemonStore } from "./store";
+import { deviceFromIdentity } from "./midiEnumerate";
+import type { DeviceRow } from "./midiEnumerate";
+
+// ── Direct unit tests for identity matching ─────────────────────────
+
+function identityPrefix(identity: string): string {
+  const colon = identity.indexOf(":");
+  return colon > 0 ? identity.slice(0, colon) : "";
+}
+function identityFields(identity: string): Record<string, string> {
+  const colon = identity.indexOf(":");
+  const tail = colon > 0 ? identity.slice(colon + 1) : identity;
+  const fields: Record<string, string> = {};
+  for (const part of tail.split(",")) {
+    const eq = part.indexOf("=");
+    if (eq <= 0) continue;
+    fields[part.slice(0, eq)] = part.slice(eq + 1);
+  }
+  return fields;
+}
+function deviceMatchesIdentity(entry: DeviceRow, identity: string): boolean {
+  if (identityPrefix(identity) !== identityPrefix(entry.identity)) return false;
+  const want = identityFields(identity);
+  const have = identityFields(entry.identity);
+  for (const [k, v] of Object.entries(want)) {
+    if (have[k] !== v) return false;
+  }
+  return true;
+}
+
+function entry(id: string): DeviceRow {
+  return deviceFromIdentity(id) ?? { identity: id, type: "", label: "" };
+}
+
+describe("deviceMatchesIdentity", () => {
+  it("matches partial identity (c/p only vs full)", () => {
+    const e = entry("alsa_seq:c=129,p=0,client=aseqdump,port=aseqdump");
+    expect(deviceMatchesIdentity(e, "alsa_seq:c=129,p=0")).toBe(true);
+  });
+
+  it("matches exact identity", () => {
+    const e = entry("alsa_seq:c=129,p=0,client=aseqdump,port=aseqdump");
+    expect(deviceMatchesIdentity(e, "alsa_seq:c=129,p=0,client=aseqdump,port=aseqdump")).toBe(true);
+  });
+
+  it("rejects partial on missing field", () => {
+    const e = entry("alsa_seq:c=129,p=0,client=aseqdump,port=aseqdump");
+    expect(deviceMatchesIdentity(e, "alsa_seq:c=129,p=0,client=wrong")).toBe(false);
+  });
+
+  it("rejects different type prefix", () => {
+    const e = entry("rawmidi:device=/dev/snd/midiC0D0");
+    expect(deviceMatchesIdentity(e, "alsa_seq:c=129,p=0")).toBe(false);
+  });
+});
+
+// ── Store tests ─────────────────────────────────────────────────────
 
 function emptyState(): DaemonState {
   return {
@@ -202,5 +259,68 @@ describe("daemonStore", () => {
       peer: { id: 2, name: "Q", type: "fake", stats: { recv: 0, sent: 0 }, send_to: [] },
     });
     expect(called).toBe(2); // not called after unsubscribe
+  });
+
+  it("removes alsa_seq device by partial identity (c/p match)", () => {
+    // Simulate initial device.list seeding with full identity
+    daemonStore.seedAlsaSeq([{
+      identity: "alsa_seq:c=129,p=0,client=aseqdump,port=aseqdump",
+      type: "alsa_seq",
+      label: "aseqdump",
+      client_name: "aseqdump",
+      port_name: "0",
+      client: 129,
+      port: 0,
+    }]);
+    expect(daemonStore.getState().alsaSeq).toHaveLength(1);
+
+    // Verify the stored identity before remove
+    const stored = daemonStore.getState().alsaSeq[0];
+    expect(stored.identity).toBe("alsa_seq:c=129,p=0,client=aseqdump,port=aseqdump");
+
+    // Simulate remove event with partial identity (no names)
+    daemonStore.reduce({
+      type: "device_updated",
+      action: "removed",
+      identity: "alsa_seq:c=129,p=0",
+    });
+
+    expect(daemonStore.getState().alsaSeq).toHaveLength(0);
+  });
+
+  it("removes alsa_seq device by full identity (exact match)", () => {
+    daemonStore.seedAlsaSeq([{
+      identity: "alsa_seq:c=129,p=0,client=aseqdump,port=aseqdump",
+      type: "alsa_seq",
+      label: "aseqdump",
+      client_name: "aseqdump",
+      port_name: "0",
+      client: 129,
+      port: 0,
+    }]);
+
+    daemonStore.reduce({
+      type: "device_updated",
+      action: "removed",
+      identity: "alsa_seq:c=129,p=0,client=aseqdump,port=aseqdump",
+    });
+
+    expect(daemonStore.getState().alsaSeq).toHaveLength(0);
+  });
+
+  it("does not remove device when type prefix differs", () => {
+    daemonStore.seedAlsaSeq([{
+      identity: "rawmidi:device=/dev/snd/midiC0D0",
+      type: "rawmidi",
+      label: "/dev/snd/midiC0D0",
+    }]);
+
+    daemonStore.reduce({
+      type: "device_updated",
+      action: "removed",
+      identity: "alsa_seq:c=129,p=0",
+    });
+
+    expect(daemonStore.getState().alsaSeq).toHaveLength(1);
   });
 });

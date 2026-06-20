@@ -247,6 +247,7 @@ std::vector<rawmidi_device_row_t> enumerate_rawmidi_devices() {
     row.device = path;
     row.label = friendly.empty() ? path : friendly;
     row.kind = "rawmidi";
+    row.identity = "rawmidi:device=" + path;
     arr.push_back(std::move(row));
   }
   globfree(&gl);

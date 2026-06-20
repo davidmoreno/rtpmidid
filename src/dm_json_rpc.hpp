@@ -291,6 +291,15 @@ struct mdns_removed_event_t {
   uint32_t port;
 };
 
+/** Payload for `device.updated` event — sent when any device (ALSA seq,
+ *  raw MIDI, etc.) appears or disappears. The identity string is a canonical
+ *  `type_prefix:key=value,...` (see device_identity_t). */
+// [dm-json]
+struct device_updated_event_t {
+  std::string action;   // "added" | "removed"
+  std::string identity;  // e.g. "alsa_seq:client=aseqdump,port=0"
+};
+
 // ─── Log query (log_buffer ring buffer) ─────────────────────────────────
 
 // [dm-json]

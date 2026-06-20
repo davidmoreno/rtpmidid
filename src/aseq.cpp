@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "./aseq.hpp"
+#include "device_identity_from_peer.hpp"
 #include <alsa/seq.h>
 #include <alsa/seq_event.h>
 #include <rtpmidid/logger.hpp>
@@ -171,6 +172,14 @@ void aseq_t::read_ready() {
         continue;
       }
 
+      // Skip internal system announce subscription (client 0, port 0).
+      // This is our own subscription for PORT_START/PORT_EXIT events and
+      // should not trigger peer creation via subscribe_event.
+      if (other->client == SND_SEQ_CLIENT_SYSTEM &&
+          other->port == SND_SEQ_PORT_SYSTEM_ANNOUNCE) {
+        continue;
+      }
+
       subscribe_event[me->port](port_t(other->client, other->port), name);
       if (me->client == other->client) {
         // This is an internal connection, should send subscribe from the other
@@ -189,6 +198,12 @@ void aseq_t::read_ready() {
 
       if (other->client != client_id && me->client != client_id) {
         INFO("This disconnection is not to me. Ignore.");
+        continue;
+      }
+
+      // Skip internal system announce unsubscription (client 0, port 0).
+      if (other->client == SND_SEQ_CLIENT_SYSTEM &&
+          other->port == SND_SEQ_PORT_SYSTEM_ANNOUNCE) {
         continue;
       }
 
@@ -249,6 +264,24 @@ void aseq_t::read_ready() {
       DEBUG("Client exit {}", port);
       removed_port_announcement(port);
     } break;
+    case SND_SEQ_EVENT_CLIENT_CHANGE: {
+      // Client properties changed (e.g. name was updated by PipeWire).
+      // Re-announce all exported ports of this client so the frontend
+      // can refresh labels via device.updated.
+      const auto cid = ev->data.addr.client;
+      const auto client_name = get_client_name_by_id(cid);
+      const auto type = get_client_type(&ev->data.addr);
+      reannounce_client_ports(cid, client_name, type);
+    } break;
+    case SND_SEQ_EVENT_PORT_CHANGE: {
+      // Single port properties changed (e.g. port name).
+      auto addr = port_t(ev->data.addr.client, ev->data.addr.port);
+      const auto client_name = get_client_name_by_id(addr.client);
+      const auto type = get_client_type(&ev->data.addr);
+      auto row = get_port_row(addr.client, addr.port);
+      if (row)
+        added_port_announcement(client_name, type, addr);
+    } break;
     default:
       static std::array<bool, SND_SEQ_EVENT_NONE + 1> warning_raised{};
       // assert(ev->type < warning_raised.size());
@@ -274,6 +307,26 @@ uint8_t aseq_t::create_port(const std::string &name, bool do_export) {
   }
 
   auto port = snd_seq_create_simple_port(seq, name.c_str(), caps, type);
+
+  // Lazy one-shot: subscribe to system announce using the first created port
+  // so we receive PORT_START / PORT_EXIT for all sequencer clients/ports.
+  if (!system_announce_subscribed_) {
+    system_announce_subscribed_ = true;
+    snd_seq_addr_t sender{}, dest{};
+    sender.client = SND_SEQ_CLIENT_SYSTEM;
+    sender.port = SND_SEQ_PORT_SYSTEM_ANNOUNCE;
+    dest.client = client_id;
+    dest.port = port;
+    snd_seq_port_subscribe_t *subs = nullptr;
+    snd_seq_port_subscribe_alloca(&subs);
+    snd_seq_port_subscribe_set_sender(subs, &sender);
+    snd_seq_port_subscribe_set_dest(subs, &dest);
+    if (snd_seq_subscribe_port(seq, subs) < 0) {
+      WARNING("Failed to subscribe to ALSA system announce port");
+    } else {
+      DEBUG("Subscribed to ALSA system announce via port {} for live port tracking", port);
+    }
+  }
 
   return port;
 }
@@ -899,11 +952,98 @@ std::vector<alsa_seq_port_row_t> aseq_t::enumerate_exported_ports() {
       row.port_name = pname;
       row.label = label;
       row.kind = kind_str;
+      row.identity = port_identity(cid, pid, cname, pname);
       arr.push_back(std::move(row));
     }
   }
 
   return arr;
+}
+
+std::optional<alsa_seq_port_row_t> aseq_t::get_port_row(int client, int port) const {
+  snd_seq_port_info_t *pinfo = nullptr;
+  snd_seq_port_info_alloca(&pinfo);
+  if (snd_seq_get_any_port_info(seq, client, port, pinfo) < 0)
+    return std::nullopt;
+
+  const unsigned cap = snd_seq_port_info_get_capability(pinfo);
+  if ((cap & SND_SEQ_PORT_CAP_NO_EXPORT) != 0)
+    return std::nullopt;
+
+  snd_seq_client_info_t *cinfo = nullptr;
+  snd_seq_client_info_alloca(&cinfo);
+  snd_seq_client_info_set_client(cinfo, client);
+  std::string cname;
+  std::string kind_str = "software";
+  if (snd_seq_query_next_client(seq, cinfo) >= 0) {
+    cname = snd_seq_client_info_get_name(cinfo);
+    const auto ctype_enum =
+        get_type_by_seq_type(snd_seq_client_info_get_type(cinfo));
+    switch (ctype_enum) {
+    case aseq_t::TYPE_HARDWARE:
+      kind_str = "hardware";
+      break;
+    case aseq_t::TYPE_SOFTWARE:
+      kind_str = "software";
+      break;
+    case aseq_t::TYPE_SYSTEM:
+      kind_str = "system";
+      break;
+    default:
+      break;
+    }
+  }
+
+  const std::string pname = snd_seq_port_info_get_name(pinfo);
+  const std::string label =
+      (cname == pname) ? cname : FMT::format("{} · {}", cname, pname);
+
+  alsa_seq_port_row_t row;
+  row.type = "alsa_seq";
+  row.id = FMT::format("{}:{}", client, port);
+  row.client = client;
+  row.port = port;
+  row.client_name = cname;
+  row.port_name = pname;
+  row.label = label;
+  row.kind = kind_str;
+  row.identity = port_identity(client, port, cname, pname);
+  return row;
+}
+
+std::string aseq_t::port_identity(int client, int port,
+                                  const std::string &client_name,
+                                  const std::string &port_name) {
+  // Always include numeric c/p for stable matching, plus names when available.
+  std::string out = FMT::format("alsa_seq:c={},p={}", client, port);
+  if (!client_name.empty()) {
+    out += ",client=";
+    out += device_identity_t::escape(client_name);
+  }
+  if (!port_name.empty()) {
+    out += ",port=";
+    out += device_identity_t::escape(port_name);
+  }
+  return out;
+}
+
+void aseq_t::reannounce_client_ports(int client,
+                                      const std::string &client_name,
+                                      client_type_e type) {
+  snd_seq_port_info_t *pinfo = nullptr;
+  snd_seq_port_info_alloca(&pinfo);
+  snd_seq_port_info_set_client(pinfo, client);
+  snd_seq_port_info_set_port(pinfo, -1);
+
+  while (snd_seq_query_next_port(seq, pinfo) >= 0) {
+    const unsigned cap = snd_seq_port_info_get_capability(pinfo);
+    if ((cap & SND_SEQ_PORT_CAP_NO_EXPORT) != 0)
+      continue;
+    const int pid = snd_seq_port_info_get_port(pinfo);
+    added_port_announcement(client_name, type,
+                            port_t{static_cast<uint8_t>(client),
+                                   static_cast<uint8_t>(pid)});
+  }
 }
 
 // TODO: these buffer sizes should probably be configurable or pinned to pool

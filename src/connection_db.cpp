@@ -164,6 +164,12 @@ void connection_db_t::remove_connection(const std::string &side_a,
   if (!db_.is_open())
     return;
 
+  // Normalise order to match canonicalized storage.
+  auto a = side_a;
+  auto b = side_b;
+  if (b < a)
+    std::swap(a, b);
+
   auto lock = db_.lock();
   auto stmt = db_.prepare(
       "DELETE FROM connections WHERE side_a = ? AND side_b = ?;",
@@ -171,14 +177,26 @@ void connection_db_t::remove_connection(const std::string &side_a,
   if (!stmt)
     return;
 
-  stmt->bind_text(1, side_a);
-  stmt->bind_text(2, side_b);
+  stmt->bind_text(1, a);
+  stmt->bind_text(2, b);
 
   if (stmt->step() != SQLITE_DONE) {
     ERROR("component=database connection_db: delete failed: {}",
           sqlite3_errmsg(db_.raw()));
   } else if (db_.changes() > 0) {
-    INFO("component=database connection_db: deleted {} -> {}", side_a, side_b);
+    INFO("component=database connection_db: deleted {} -> {}", a, b);
+  } else {
+    // Legacy: try the reverse order for rows saved before canonicalization
+    auto stmt2 = db_.prepare(
+        "DELETE FROM connections WHERE side_a = ? AND side_b = ?;",
+        "connection_db delete legacy");
+    if (stmt2) {
+      stmt2->bind_text(1, b);
+      stmt2->bind_text(2, a);
+      if (stmt2->step() == SQLITE_DONE && db_.changes() > 0) {
+        INFO("component=database connection_db: deleted (legacy order) {} -> {}", b, a);
+      }
+    }
   }
 }
 
@@ -347,6 +365,7 @@ void connection_db_manager_t::try_record_pair(peer_id_t from, peer_id_t to) {
     row.side_b = id_to->serialize();
     row.direction = connection_direction_e::a2b;
     row.enabled = true;
+    row = canonicalize_stored_connection(std::move(row));
     INFO("component=database connection_db: storing live router edge {} -> {}", row.side_a,
          row.side_b);
     db_->save_connection(row);

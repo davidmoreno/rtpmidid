@@ -9,6 +9,39 @@
 
 import type { StatusResult } from "./tabs/types";
 import { normalizePeers, parseMdns, type RouterPeer, type MdnsRemote } from "./model";
+import { deviceFromIdentity, type DeviceRow } from "./midiEnumerate";
+
+// ── Identity helpers ───────────────────────────────────────────────────────
+
+/** Check if a DeviceRow matches an identity string.
+ *  The type prefix must match, and every field present in `identity`
+ *  must also be present (same value) in `entry.identity`. */
+function deviceMatchesIdentity(entry: DeviceRow, identity: string): boolean {
+  if (identityPrefix(identity) !== identityPrefix(entry.identity)) return false;
+  const want = identityFields(identity);
+  const have = identityFields(entry.identity);
+  for (const [k, v] of Object.entries(want)) {
+    if (have[k] !== v) return false;
+  }
+  return true;
+}
+
+function identityPrefix(identity: string): string {
+  const colon = identity.indexOf(":");
+  return colon > 0 ? identity.slice(0, colon) : "";
+}
+
+function identityFields(identity: string): Record<string, string> {
+  const colon = identity.indexOf(":");
+  const tail = colon > 0 ? identity.slice(colon + 1) : identity;
+  const fields: Record<string, string> = {};
+  for (const part of tail.split(",")) {
+    const eq = part.indexOf("=");
+    if (eq <= 0) continue;
+    fields[part.slice(0, eq)] = part.slice(eq + 1);
+  }
+  return fields;
+}
 
 // ── Event types ────────────────────────────────────────────────────────────
 
@@ -20,7 +53,8 @@ export type DaemonEvent =
   | { type: "edge_added"; from: number; to: number }
   | { type: "edge_removed"; from: number; to: number }
   | { type: "mdns_discovered"; remote: MdnsRemote }
-  | { type: "mdns_removed"; name: string; address: string; port: number };
+  | { type: "mdns_removed"; name: string; address: string; port: number }
+  | { type: "device_updated"; action: "added" | "removed" | "updated"; identity: string };
 
 // ── Daemon state ───────────────────────────────────────────────────────────
 
@@ -30,6 +64,7 @@ export interface DaemonState {
   routerRaw: Record<string, unknown>[];
   mdns: ReturnType<typeof parseMdns>;
   web: { url: string; accessible: boolean };
+  alsaSeq: DeviceRow[];
 }
 
 // ── Store ──────────────────────────────────────────────────────────────────
@@ -43,6 +78,7 @@ function createDaemonStore() {
     routerRaw: [],
     mdns: { status: "—", announcements: [], remotes: [] },
     web: { url: "", accessible: false },
+    alsaSeq: [],
   };
 
   const listeners = new Set<Listener>();
@@ -73,6 +109,7 @@ function createDaemonStore() {
           routerRaw,
           mdns: parseMdns(st.mdns),
           web: (st.web as DaemonState["web"]) ?? { url: "", accessible: false },
+          alsaSeq: state.alsaSeq,
         };
         break;
       }
@@ -179,8 +216,36 @@ function createDaemonStore() {
         state.mdns = { ...state.mdns, remotes };
         break;
       }
+
+      case "device_updated": {
+        if (event.action === "added" || event.action === "updated") {
+          const row = deviceFromIdentity(event.identity);
+          if (!row) break;
+          const idx = state.alsaSeq.findIndex(
+            (p) => p.identity === row.identity,
+          );
+          if (idx >= 0) {
+            const next = [...state.alsaSeq];
+            next[idx] = row;
+            state.alsaSeq = next;
+          } else {
+            state.alsaSeq = [...state.alsaSeq, row];
+          }
+        } else {
+          state.alsaSeq = state.alsaSeq.filter(
+            (p) => !deviceMatchesIdentity(p, event.identity),
+          );
+        }
+        break;
+      }
     }
 
+    notify();
+  }
+
+  /** Apply the full initial alsaSeq list from `device.list`. */
+  function seedAlsaSeq(ports: DeviceRow[]) {
+    state.alsaSeq = ports;
     notify();
   }
 
@@ -189,7 +254,7 @@ function createDaemonStore() {
     reduce({ type: "status_snapshot", status });
   }
 
-  return { getState, subscribe, reduce, loadSnapshot };
+  return { getState, subscribe, reduce, loadSnapshot, seedAlsaSeq };
 }
 
 /** Singleton store for the daemon state. */

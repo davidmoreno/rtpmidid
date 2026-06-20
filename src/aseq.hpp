@@ -41,7 +41,9 @@ public:
     port_t(uint8_t client_, uint8_t port_) : client(client_), port(port_) {}
 
     bool operator<(const port_t &other) const {
-      return client < other.client && port < other.port;
+      if (client != other.client)
+        return client < other.client;
+      return port < other.port;
     }
     bool operator==(const port_t &other) const {
       return client == other.client && port == other.port;
@@ -109,6 +111,7 @@ public:
   std::map<int, rtpmidid::signal_t<port_t>> unsubscribe_event;
   std::map<int, rtpmidid::signal_t<snd_seq_event_t *>> midi_event;
   uint8_t client_id;
+  bool system_announce_subscribed_ = false;
   std::vector<rtpmidid::poller_t::listener_t> aseq_listener;
   rtpmidid::signal_t<const std::string &, aseq_t::client_type_e, const port_t &>
       added_port_announcement;
@@ -150,6 +153,16 @@ public:
 
   /** ALSA sequencer clients/ports (exported), excluding this process. For UI / RPC. */
   std::vector<alsa_seq_port_row_t> enumerate_exported_ports();
+  /** Build a single port row (used for live port-add events). */
+  std::optional<alsa_seq_port_row_t> get_port_row(int client, int port) const;
+  /** Common identity for a port — used by device.list, device.updated, etc. */
+  static std::string port_identity(int client, int port,
+                                   const std::string &client_name,
+                                   const std::string &port_name);
+  /** Re-fire added_port_announcement for every exported port of a client
+   *  (used after SND_SEQ_EVENT_CLIENT_CHANGE so the frontend refreshes labels). */
+  void reannounce_client_ports(int client, const std::string &client_name,
+                               client_type_e type);
   /** List current ALSA sequencer subscriptions (aconnect links). For UI / RPC. */
   std::vector<alsa_subscription_row_t> enumerate_subscriptions();
 };

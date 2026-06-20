@@ -185,6 +185,7 @@ struct alsa_seq_port_row_t {
   std::string port_name;
   std::string label;
   std::string kind;
+  std::string identity;  // "alsa_seq:client=name,port=name"
 };
 
 // [dm-json]
@@ -194,6 +195,7 @@ struct rawmidi_device_row_t {
   std::string device;
   std::string label;
   std::string kind;
+  std::string identity;  // "rawmidi:device=/dev/snd/midiC0D0"
 };
 
 } // namespace rtpmididns
