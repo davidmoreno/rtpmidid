@@ -26,6 +26,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 
 // #define DEBUG0 DEBUG
 #define DEBUG0(...)
@@ -56,6 +57,7 @@ public:
 
   // Must keep the connection, when deleted will be disconnected
   [[nodiscard]] connection_t connect(std::function<void(Args...)> const &&f) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto cid = max_id++;
     // Copy to next slots_ current slots_, as if in use will still be valid, and
     // later will be replaced.
@@ -67,6 +69,7 @@ public:
   }
 
   void disconnect(int id) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     DEBUG0("{}::signal_t::disconnect({})", (void *)this, id);
     slots_ = std::make_shared<VT>(*slots_);
     slots_->erase(id);
@@ -74,6 +77,7 @@ public:
   }
 
   void disconnect_all() {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     while (connections.begin() != connections.end()) {
       auto conn = connections.begin();
       DEBUG0("{}::signal_t::disconnect_all() {}", (void *)this,
@@ -109,6 +113,7 @@ public:
   }
 
   void replace_connection_ptr(int id, connection_t *ptr) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     DEBUG0("{}::replace_connection_ptr::({})", (void *)this, id);
     for (auto &f : connections) {
       DEBUG0("Got {}", f.first);
@@ -120,13 +125,17 @@ public:
     }
   }
 
-  size_t count() { return slots_->size(); }
+  size_t count() {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return slots_->size();
+  }
 
 private:
   int max_id = 1;
   std::shared_ptr<VT> slots_;
 
   std::map<int, connection_t *> connections{};
+  mutable std::recursive_mutex mutex_;
 };
 
 template <typename... Args> class connection_t {
