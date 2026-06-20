@@ -295,7 +295,7 @@ std::vector<log_entry_t> log_buffer_t::query(
   // Walk backwards from newest to oldest
   uint64_t start = wr;
   uint64_t scanned = 0;
-  const uint64_t total = std::min(capacity_, wr);
+  const uint64_t total = std::min(static_cast<uint64_t>(capacity_), wr);
 
   while (scanned < total && static_cast<int>(results.size()) < limit) {
     if (start == 0)
