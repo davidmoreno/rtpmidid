@@ -162,7 +162,7 @@ void poller_t::__remove_fd(int fd) {
   private_data->fd_events.erase(fd);
   if (is_open()) {
     auto r = epoll_ctl(private_data->epollfd, EPOLL_CTL_DEL, fd, NULL);
-    if (r == -1) {
+    if (r == -1 && errno != ENOENT) {
       ERROR("Cant remove from poller! fd: {}, error: {}", fd, strerror(errno));
       throw exception("Can't remove fd {} from poller: {} ({})", fd,
                       strerror(errno), errno);

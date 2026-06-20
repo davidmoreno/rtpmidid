@@ -46,6 +46,7 @@ struct AvahiWatch {
   void *userdata = nullptr;
   AvahiWatchCallback callback = nullptr;
   AvahiWatchEvent event = AVAHI_WATCH_IN;
+  rtpmidid::poller_t::listener_t poller_listener;
 };
 
 ENUM_FORMATTER_BEGIN(AvahiEntryGroupState)
@@ -95,11 +96,6 @@ ENUM_FORMATTER_ELEMENT(AvahiBrowserEvent::AVAHI_BROWSER_FAILURE,
                        "AVAHI_BROWSER_FAILURE");
 ENUM_FORMATTER_END();
 
-// FIXME! Hack needed as at poller_adapter_watch_new I'm getting the wrong
-// userdata pointer :(
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-rtpmidid::mdns_rtpmidi_t *current = nullptr;
-
 static void entry_group_callback(AvahiEntryGroup *g, AvahiEntryGroupState state,
                                  AVAHI_GCC_UNUSED void *userdata) {
   // NOLINTNEXTLINE
@@ -129,24 +125,28 @@ AvahiWatch *poller_adapter_watch_new(const AvahiPoll *api, int fd,
   wd->fd = fd;
   wd->userdata = userdata;
   wd->callback = callback;
-  rtpmidid::mdns_rtpmidi_t *mdns_rtpmidid = current;
-  // static_cast<rtpmidid::mdns_rtpmidi_t *>(userdata);
-  // DEBUG("mdns {}", (void *)userdata);
-  // DEBUG("mdns {}", (void *)mdns_rtpmidid);
-
   wd->event = event;
-  if (event == AVAHI_WATCH_IN) {
-    mdns_rtpmidid->watch_in_poller =
+
+  // Register with the poller and keep the listener_t inside the watch itself
+  // so that watch_free can stop the correct listener, even when multiple
+  // watches exist (IN and OUT on the same D-Bus socket).
+  if (event & AVAHI_WATCH_IN) {
+    wd->poller_listener =
         rtpmidid::poller.add_fd_in(fd, [wd](int _) {
           wd->callback(wd, wd->fd, AVAHI_WATCH_IN, wd->userdata);
         });
-  } else if (event == AVAHI_WATCH_OUT) {
-    mdns_rtpmidid->watch_out_poller =
-        rtpmidid::poller.add_fd_in(fd, [wd](int _) {
+  }
+  if (event & AVAHI_WATCH_OUT) {
+    wd->poller_listener =
+        rtpmidid::poller.add_fd_out(fd, [wd](int _) {
           wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
         });
-  } else {
-    DEBUG("Other event: {}", event);
+  }
+  if (event & (AVAHI_WATCH_HUP | AVAHI_WATCH_ERR)) {
+    wd->poller_listener =
+        rtpmidid::poller.add_fd_in(fd, [wd](int _) {
+          wd->callback(wd, wd->fd, wd->event, wd->userdata);
+        });
   }
 
   return wd;
@@ -154,24 +154,18 @@ AvahiWatch *poller_adapter_watch_new(const AvahiPoll *api, int fd,
 
 /// Update the events to wait for. More...
 void poller_adapter_watch_update(AvahiWatch *wd, AvahiWatchEvent event) {
-  if (!current) {
-    WARNING("Got a watch_update without a current mdns_rtpmidi_t");
-    return;
-  }
-  rtpmidid::mdns_rtpmidi_t *mdns_rtpmidid = current;
-  // rtpmidid::mdns_rtpmidi_t *mdns_rtpmidid =
-  //     static_cast<rtpmidid::mdns_rtpmidi_t *>(wd->userdata);
-  //
-
+  // Stop the old listener before registering a new one.
+  wd->poller_listener.stop();
   wd->event = event;
-  if (event == AVAHI_WATCH_IN) {
-    mdns_rtpmidid->watch_in_poller =
+
+  if (event & AVAHI_WATCH_IN) {
+    wd->poller_listener =
         rtpmidid::poller.add_fd_in(wd->fd, [wd](int _) {
           wd->callback(wd, wd->fd, AVAHI_WATCH_IN, wd->userdata);
         });
-  } else if (event == AVAHI_WATCH_OUT) {
-    mdns_rtpmidid->watch_out_poller =
-        rtpmidid::poller.add_fd_in(wd->fd, [wd](int _) {
+  } else if (event & AVAHI_WATCH_OUT) {
+    wd->poller_listener =
+        rtpmidid::poller.add_fd_out(wd->fd, [wd](int _) {
           wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
         });
   } else {
@@ -186,12 +180,7 @@ AvahiWatchEvent poller_adapter_watch_get_events(AvahiWatch *w) {
 
 /// Free a watch. More...
 void poller_adapter_watch_free(AvahiWatch *w) {
-  // rtpmidid::poller.remove_fd(w->fd);
-  // WARNING("TODO! If its only at program end, no problem.");
-  if (current) {
-    current->watch_in_poller.stop();
-    current->watch_out_poller.stop();
-  }
+  w->poller_listener.stop();
   // NOLINTNEXTLINE
   delete w;
 }
@@ -319,8 +308,6 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface,
 }
 
 rtpmidid::mdns_rtpmidi_t::mdns_rtpmidi_t() {
-  current = this;
-
   service_browser = nullptr;
   group = nullptr;
 
@@ -399,10 +386,7 @@ void rtpmidid::mdns_rtpmidi_t::close_avahi() {
   }
 }
 
-rtpmidid::mdns_rtpmidi_t::~mdns_rtpmidi_t() {
-  close_avahi();
-  current = nullptr;
-}
+rtpmidid::mdns_rtpmidi_t::~mdns_rtpmidi_t() { close_avahi(); }
 
 void rtpmidid::mdns_rtpmidi_t::client_callback(avahi_client_state_e state_) {
   AvahiClientState state = (AvahiClientState)state_;
