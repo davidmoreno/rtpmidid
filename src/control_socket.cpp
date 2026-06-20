@@ -19,6 +19,7 @@
 #include "control_rpc.hpp"
 #include "settings.hpp"
 #include <rtpmidid/shutdown_signals.hpp>
+#include <rtpmidid/threading_types.hpp>
 #include <algorithm>
 #include <cerrno>
 #include <cstddef>
@@ -120,6 +121,7 @@ void control_socket_t::stop() {
 }
 
 void control_socket_t::server_thread_main() {
+  rtpmidid::drop_realtime_scheduling();
   const int listen_fd = socket;
   if (listen_fd < 0) {
     return;

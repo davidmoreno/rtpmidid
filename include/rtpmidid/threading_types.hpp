@@ -25,6 +25,22 @@
 #include <memory>
 #include <vector>
 
+namespace rtpmidid {
+
+/**
+ * @short Drop real-time scheduling for the calling thread.
+ *
+ * Threads created by a process running SCHED_FIFO (via systemd
+ * CPUSchedulingPolicy=fifo) inherit that policy and priority.  Call
+ * this early in every thread that does not participate in the MIDI
+ * real-time path (web server, control socket, cron, DNS, stats, logs,
+ * device registry) so that a runaway non-critical thread cannot
+ * starve the poller / router / peer threads.
+ */
+void drop_realtime_scheduling();
+
+} // namespace rtpmidid
+
 namespace rtpmididns {
 // Forward declaration - actual definition in src/mididata.hpp
 class mididata_t;

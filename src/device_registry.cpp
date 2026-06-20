@@ -12,6 +12,7 @@
 
 #include "rtpmidid/logger.hpp"
 #include "rtpmidid/shutdown_signals.hpp"
+#include "rtpmidid/threading_types.hpp"
 #include <algorithm>
 #include <cstring>
 #include <utility>
@@ -214,6 +215,7 @@ bool device_registry_t::enqueue(device_registry_command_t &&cmd,
 }
 
 void device_registry_t::registry_thread_loop() {
+  rtpmidid::drop_realtime_scheduling();
   rtpmidid::block_shutdown_signals();
   g_current_registry_thread = this;
 

@@ -17,9 +17,19 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include "rtpmidid/threading_types.hpp"
+#include <pthread.h>
 #include <random>
+#include <sched.h>
 
 namespace rtpmidid {
+
+void drop_realtime_scheduling() {
+  struct sched_param param {};
+  param.sched_priority = 0;
+  if (pthread_setschedparam(pthread_self(), SCHED_OTHER, &param) != 0)
+    return; // best-effort; the thread will still work
+}
 
 uint32_t rand_u32(void) {
   static std::random_device random_device;

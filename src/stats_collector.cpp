@@ -19,6 +19,7 @@
 #include "event_subscription.hpp"
 #include <rtpmidid/dm_json/runtime.hpp>
 #include <rtpmidid/logger.hpp>
+#include <rtpmidid/threading_types.hpp>
 
 namespace rtpmididns {
 
@@ -101,6 +102,7 @@ std::function<void(peer_id_t)> stats_collector_t::recv_callback() {
 // ── Collector thread ───────────────────────────────────────────────────────
 
 void stats_collector_t::thread_loop() {
+  rtpmidid::drop_realtime_scheduling();
   while (running_.load(std::memory_order_acquire)) {
     // ── Drain the SPSC queue ────────────────────────────────────────
     stats_msg_t msg;

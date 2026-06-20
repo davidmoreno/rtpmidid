@@ -5,6 +5,7 @@
 
 #include "rtpmidid/logger.hpp"
 #include "rtpmidid/shutdown_signals.hpp"
+#include "rtpmidid/threading_types.hpp"
 
 namespace rtpmididns {
 
@@ -40,6 +41,7 @@ void cron_tasks_t::add_periodic(std::string name, std::chrono::seconds interval,
 }
 
 void cron_tasks_t::thread_loop() {
+  rtpmidid::drop_realtime_scheduling();
   rtpmidid::block_shutdown_signals();
   INFO("cron_tasks: thread started");
 

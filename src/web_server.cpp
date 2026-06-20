@@ -30,6 +30,7 @@
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/mdns_rtpmidi.hpp>
 #include <rtpmidid/shutdown_signals.hpp>
+#include <rtpmidid/threading_types.hpp>
 #include <rtpmidid/signal.hpp>
 
 #include <cctype>
@@ -271,6 +272,7 @@ void web_server_t::start() {
 }
 
 void web_server_t::thread_main() {
+  rtpmidid::drop_realtime_scheduling();
   rtpmidid::block_shutdown_signals();
 
   const std::string root = settings.web.root;
