@@ -262,7 +262,7 @@ describe("daemonStore", () => {
   });
 
   it("removes alsa_seq device by partial identity (c/p match)", () => {
-    // Simulate initial device.list seeding with full identity
+    // Simulate initial devices.list seeding with full identity
     daemonStore.seedAlsaSeq([{
       identity: "alsa_seq:c=129,p=0,client=aseqdump,port=aseqdump",
       type: "alsa_seq",

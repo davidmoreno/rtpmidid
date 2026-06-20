@@ -55,7 +55,7 @@ Typical Web UI flow: `endpoint.connect` for immediate routing;
 | `midi.listRawMidi` | `{}` | |
 | `monitor.start` | `{identity}` | → `{uuid, peer_id, target_peer_id}` |
 | `monitor.stop` | `{uuid}` | |
-| `devices.list` | `{}` | needs `[database]` |
+| `devices.list` | `{}` | Unified device list: ephemeral (`.source == "local"`) + registry (`.source` ∈ {discovered, ini, manual}) when DB enabled |
 | `devices.add_manual` | `{identity, name?}` | |
 | `devices.remove` | `{identity}` | |
 | `connections.list` | `{}` | |

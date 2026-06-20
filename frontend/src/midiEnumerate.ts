@@ -39,11 +39,11 @@ export function normalizeRtpMidiUdpPort(p: number | string): string {
 
 export function parseDeviceList(r: unknown): DeviceRow[] | null {
   if (r && typeof r === "object" && !Array.isArray(r) && "error" in r) {
-    console.error("device.list error:", r);
+    console.error("device list error:", r);
     return null;
   }
   if (!Array.isArray(r)) {
-    console.error("device.list result is not an array:", typeof r, r);
+    console.error("device list result is not an array:", typeof r, r);
     return null;
   }
   const out: DeviceRow[] = [];
@@ -104,6 +104,17 @@ function parseIdentityFields(tail: string): Record<string, string> {
     fields[part.slice(0, eq)] = part.slice(eq + 1);
   }
   return fields;
+}
+
+/** Pick local (ephemeral) ALSA/rawmidi rows from the unified `devices.list` result. */
+export function filterLocalDevices(devices: Array<{ identity: string; type?: string; source?: string }>): DeviceRow[] {
+  const out: DeviceRow[] = [];
+  for (const row of devices) {
+    if (row.source !== "local") continue;
+    const device = deviceFromIdentity(row.identity);
+    if (device) out.push(device);
+  }
+  return out;
 }
 
 /** Backward-compat: parse legacy midi.listAlsaSeq array. */

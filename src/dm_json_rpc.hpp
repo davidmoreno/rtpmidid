@@ -244,6 +244,9 @@ struct device_list_row_t {
 // [dm-json]
 struct devices_list_result_t {
   int32_t enabled = 0;
+  /** All known devices: ephemeral (ALSA seq / raw MIDI currently on the
+   *  host) plus persisted registry rows (when DB enabled).  Discriminate
+   *  with `source` — ephemeral entries use `source == "local"`. */
   std::vector<device_list_row_t> devices;
 };
 

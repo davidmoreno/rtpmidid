@@ -155,7 +155,7 @@ public:
   std::vector<alsa_seq_port_row_t> enumerate_exported_ports();
   /** Build a single port row (used for live port-add events). */
   std::optional<alsa_seq_port_row_t> get_port_row(int client, int port) const;
-  /** Common identity for a port — used by device.list, device.updated, etc. */
+  /** Common identity for a port — used by devices.list, device.updated, etc. */
   static std::string port_identity(int client, int port,
                                    const std::string &client_name,
                                    const std::string &port_name);

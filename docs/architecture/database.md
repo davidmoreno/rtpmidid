@@ -131,7 +131,7 @@ query.
 | `connections.list` | List all rows + match status |
 | `devices.add_manual` | Upsert manual device |
 | `devices.remove` | Delete manual entry |
-| `devices.list` | Merged registry view |
+| `devices.list` | Unified device list (ephemeral local + registry) |
 
 `endpoint.connect` may persist ALSA pairs when `[database]` is enabled.
 

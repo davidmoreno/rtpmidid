@@ -243,7 +243,7 @@ function createDaemonStore() {
     notify();
   }
 
-  /** Apply the full initial alsaSeq list from `device.list`. */
+  /** Apply the full initial alsaSeq list from `devices.list`. */
   function seedAlsaSeq(ports: DeviceRow[]) {
     state.alsaSeq = ports;
     notify();

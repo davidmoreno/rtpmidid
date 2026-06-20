@@ -58,8 +58,11 @@ name_negative_regex=^$    # checked first
 [alsa_hw_auto_export]
 name_positive_regex=.*
 name_negative_regex=(System|Timer|Announce)
-type=hardware    # hardware | software | system | all | none
+type=hardware    # hardware | software | system | all | none (code default: NONE)
 ```
+
+When the section is absent the code default is `NONE` (no auto-export).
+`default.ini` ships with `type=hardware`.
 
 ### [web]
 
@@ -97,9 +100,10 @@ Empty path disables DB features (no `devices.*` / `connections.*` persistence).
 
 ```cpp
 struct settings_t {
-    std::string alsa_name;
-    std::string control_filename;
-    rtpmidid::logger_level_t log_level;
+    std::string alsa_name = "rtpmidid";
+    bool alsa_network = true;
+    std::string control_filename = "/var/run/rtpmidid/control.sock";
+    rtpmidid::logger_level_t log_level = rtpmidid::logger_level_t::INFO;
 
     std::vector<ini_peer_t> ini_peers;       // { identity }
     std::vector<ini_connect_t> ini_connects; // { from, to, direction? }
@@ -107,6 +111,7 @@ struct settings_t {
     alsa_hw_auto_export_t alsa_hw_auto_export;
     web_t web;
     database_t database;
+    log_t log;
 };
 ```
 

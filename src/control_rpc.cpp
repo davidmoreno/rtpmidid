@@ -148,7 +148,6 @@ static std::vector<rpc_help_entry_t> build_help_entries() {
       {"connect", "Connect to a remote RTP-MIDI server (object {hostname, port?, name?})"},
       {"router.create.list", "List create peer identity format"},
       {"mdns.remove", "Delete an mDNS announcement"},
-      {"device.list", "List all devices (ALSA seq and raw MIDI) keyed by identity"},
       {"midi.listAlsaSeq", "List ALSA sequencer ports"},
       {"midi.listAlsaSubscriptions", "List ALSA sequencer subscriptions (aconnect links)"},
       {"midi.listRawMidi", "List raw MIDI devices"},
@@ -163,7 +162,7 @@ static std::vector<rpc_help_entry_t> build_help_entries() {
       {"connections.remove", "Remove a persisted connection from the database"},
       {"connections.enable", "Enable a persisted connection (reconnect)"},
       {"connections.disable", "Disable a persisted connection (no auto-reconnect)"},
-      {"devices.list", "List known devices (online/offline, source, last seen)"},
+      {"devices.list", "List known devices + local enumeration (online/offline, source, last seen)"},
       {"devices.add_manual",
        "Add a manual device (identity: key=value string, optional display name)"},
       {"devices.remove", "Remove a manual device from the registry"},
@@ -495,30 +494,6 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       ctx.mdns->remove_announcement(p.name, p.hostname.value_or(""), p.port);
       return respond_ok(env);
     }
-    if (env.method == "device.list") {
-      dmjson::writer_t w;
-      w.begin_array();
-      if (ctx.aseq) {
-        auto ports = ctx.aseq->enumerate_exported_ports();
-        for (auto &row : ports) {
-          w.array_item();
-          w.string_value(row.identity);
-        }
-        DEBUG("device.list: {} alsa seq ports", ports.size());
-      } else {
-        DEBUG("device.list: no ALSA sequencer available");
-      }
-      auto rawports = enumerate_rawmidi_devices();
-      for (auto &row : rawports) {
-        w.array_item();
-        w.string_value(row.identity);
-      }
-      DEBUG("device.list: {} raw MIDI devices", rawports.size());
-      w.end_array();
-      std::string json;
-      w.swap_into_string(json);
-      return dmjson::to_json(rpc_result_t{id_json(env), std::move(json)}) + "\n";
-    }
     if (env.method == "midi.listAlsaSeq") {
       if (!ctx.aseq)
         return respond(env, rpc_error_body_t{"ALSA sequencer not available"});
@@ -679,6 +654,33 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
     }
     if (env.method == "devices.list") {
       devices_list_result_t out{};
+
+      // Local ALSA seq + raw MIDI enumeration (always, no DB required).
+      if (ctx.aseq) {
+        for (const auto &row : ctx.aseq->enumerate_exported_ports()) {
+          device_list_row_t d;
+          d.identity = row.identity;
+          d.type = "alsa_seq";
+          d.name = row.port_name.empty() ? row.client_name : row.port_name;
+          d.source = "local";
+          d.online = 1;
+          out.devices.push_back(std::move(d));
+        }
+        DEBUG("devices.list: {} alsa seq ports",
+              ctx.aseq->enumerate_exported_ports().size());
+      }
+      for (const auto &row : enumerate_rawmidi_devices()) {
+        device_list_row_t d;
+        d.identity = row.identity;
+        d.type = "rawmidi";
+        d.name = row.label;
+        d.source = "local";
+        d.online = 1;
+        out.devices.push_back(std::move(d));
+      }
+      DEBUG("devices.list: {} local devices total", out.devices.size());
+
+      // DB-backed registry rows (requires [database]).
       if (!ctx.device_registry)
         return respond(env, out);
       out.enabled = 1;

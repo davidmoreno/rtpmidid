@@ -15,7 +15,7 @@ import {
   type WireLocalChoice,
 } from "./midiEnumerate";
 import {
-  parseDeviceList,
+  filterLocalDevices,
   type DeviceRow,
 } from "./midiEnumerate";
 import {
@@ -259,10 +259,15 @@ export function App() {
   const loadMidiLists = useCallback(async () => {
     try {
       const [rDevices, rSubs] = await Promise.all([
-        rpc.call("device.list", {}),
+        rpc.call("devices.list", {}),
         rpc.call("midi.listAlsaSubscriptions", {}),
       ]);
-      const allDevices = parseDeviceList(rDevices) ?? [];
+      const rawDevices = (rDevices && typeof rDevices === "object" && "devices" in rDevices)
+        ? (rDevices as Record<string, unknown>).devices
+        : [];
+      const allDevices = filterLocalDevices(
+        Array.isArray(rawDevices) ? rawDevices as Array<Record<string, unknown>> : []
+      );
       // Split into ALSA seq and raw MIDI for component state.
       const alsaPorts = allDevices.filter((d) => d.type === "alsa_seq");
       const rawPorts = allDevices.filter((d) => d.type === "rawmidi");

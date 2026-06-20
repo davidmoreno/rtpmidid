@@ -51,7 +51,7 @@ Fullscreen MIDI monitor: hash route `#monitor?uuid=…` →
 
 | Tab | File | Data sources |
 |-----|------|--------------|
-| Devices | `tabs/DevicesTab.tsx` | `status` + `devices.list` merged via `mergeDeviceList.ts` |
+| Devices | `tabs/DevicesTab.tsx` | `status` + `devices.list` (unified: ephemeral `source="local"` + registry) merged via `mergeDeviceList.ts` |
 | Connections | `tabs/ConnectionsTab.tsx` | `connections.list`, `ConnectionEditorDialog` |
 | Peers | `tabs/PeersTab.tsx` | `status` router rows |
 | mDNS | `tabs/MdnsTab.tsx` | `status` mDNS snapshot |
@@ -72,7 +72,7 @@ Must stay aligned with [`src/device_identity.cpp`](../../src/device_identity.cpp
 ### Device list merge
 
 `frontend/src/mergeDeviceList.ts` — combines live endpoint cards from `status`
-with offline registry rows from `devices.list`. Tags: Online/Offline, source
+with offline registry rows from `devices.list` (filtered by `source != "local"`). Tags: Online/Offline, source
 (Discovered, Config, Manual, Session).
 
 ### Persisted connections
