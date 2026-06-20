@@ -93,7 +93,10 @@ public:
   void refresh_from_router();
 
   void add_manual(device_identity_t identity, std::string display_name = {});
-  bool remove_manual(const std::string &identity_key);
+
+  /** Remove any device from the registry (not limited to manual source).
+   *  Returns true if the device was found and removed. */
+  bool remove_device(const std::string &identity_key);
 
   std::vector<device_record_t> list_devices() const;
   std::optional<device_record_t>
@@ -103,6 +106,10 @@ public:
 
   /** Prune stale, unreferenced discovered devices. Returns count removed. */
   size_t sweep_stale_discovered(int64_t max_age_seconds);
+
+  /** Immediately remove all offline discovered devices that are NOT
+   *  referenced by any saved connection. Returns count removed. */
+  size_t prune_unreferenced_offline();
 
   rtpmidid::signal_t<> changed_event;
 
@@ -142,9 +149,10 @@ private:
   void handle(observe_peer_t &cmd);
   void handle(mark_offline_t &cmd);
   void handle(add_manual_t &cmd);
-  void handle(remove_manual_t &cmd);
+  void handle(remove_device_t &cmd);
   void handle(refresh_from_router_t &cmd);
   void handle(sweep_stale_t &cmd);
+  void handle(prune_unreferenced_offline_t &cmd);
   void handle(set_referenced_provider_t &cmd);
   void handle(query_list_devices_t &cmd);
   void handle(query_find_by_key_t &cmd);
@@ -153,10 +161,13 @@ private:
   void upsert_impl(device_record_t record, bool persist);
   void notify_changed();
   void observe_peer_impl(peer_id_t peer_id, device_source_e source);
+
+  /** Mark a peer offline and immediately prune the device if unreferenced. */
   void mark_offline_impl(peer_id_t peer_id);
-  bool remove_manual_impl(const std::string &identity_key);
+  bool remove_device_impl(const std::string &identity_key);
   std::vector<device_record_t> list_devices_impl();
   size_t sweep_stale_impl(int64_t max_age_seconds);
+  size_t prune_unreferenced_offline_impl();
 
   void on_connected(peer_id_t from, peer_id_t to);
   void on_disconnected(peer_id_t from, peer_id_t to);

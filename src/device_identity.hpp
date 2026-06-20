@@ -37,6 +37,15 @@ struct device_identity_t {
   std::optional<std::string> find(std::string_view key) const;
 
   bool operator==(const device_identity_t &o) const;
+
+  /**
+   * Returns a new identity with fields that do NOT define device identity
+   * stripped (e.g. port numbers). The canonical form deduplicates the same
+   * physical endpoint across port changes, daemon restarts, etc.
+   *
+   * Rules are type-prefix-specific and easy to adjust per-type.
+   */
+  std::string canonical_key() const;
 };
 
 } // namespace rtpmididns

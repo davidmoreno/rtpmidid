@@ -34,7 +34,7 @@ struct add_manual_t {
   std::string display_name;
 };
 
-struct remove_manual_t {
+struct remove_device_t {
   std::string identity_key;
   rtpmidid::reply_slot_t reply;
 };
@@ -59,14 +59,19 @@ struct query_find_by_key_t {
   rtpmidid::reply_slot_t reply;
 };
 
+struct prune_unreferenced_offline_t {
+  rtpmidid::reply_slot_t reply;
+};
+
 struct shutdown_t {};
 
 using device_registry_command_t =
     std::variant<seed_ini_t, observe_peer_t,
                  mark_offline_t, add_manual_t,
-                 remove_manual_t,
+                 remove_device_t,
                  refresh_from_router_t,
                  sweep_stale_t,
+                 prune_unreferenced_offline_t,
                  set_referenced_provider_t,
                  query_list_devices_t,
                  query_find_by_key_t, shutdown_t>;

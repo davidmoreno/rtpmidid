@@ -628,6 +628,9 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       if (!sa || !sb)
         throw std::runtime_error("Could not resolve stable ids");
       ctx.connection_db->remove_stable_pair(*sa, *sb);
+      // Immediately prune any offline devices that are no longer referenced
+      if (ctx.device_registry)
+        ctx.device_registry->prune_unreferenced_offline();
       return respond_ok(env);
     }
     if (env.method == "connections.enable" ||
@@ -644,6 +647,9 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
           *sa, *sb, env.method == "connections.enable");
       if (!ok)
         throw std::runtime_error("Connection not found in database");
+      // Disabling a connection may leave devices unreferenced
+      if (env.method == "connections.disable" && ctx.device_registry)
+        ctx.device_registry->prune_unreferenced_offline();
       return respond_ok(env);
     }
     if (env.method == "devices.list") {
@@ -687,8 +693,8 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       if (!ctx.device_registry)
         throw std::runtime_error("Device registry is not enabled");
       auto p = parse_rpc_params<devices_remove_params_t>(params);
-      if (!ctx.device_registry->remove_manual(p.identity))
-        throw std::runtime_error("Manual device not found (only manual entries can be removed)");
+      if (!ctx.device_registry->remove_device(p.identity))
+        throw std::runtime_error("Device not found in registry");
       return respond_ok(env);
     }
     if (env.method == "help")

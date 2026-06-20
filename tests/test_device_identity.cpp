@@ -112,6 +112,83 @@ void test_device_identity_parse_errors() {
   assert_parse_fails("type:duplicate=1,duplicate=2");
 }
 
+void test_canonical_key_strips_port_from_rtpmidi_client() {
+  const auto a = device_identity_t::parse(
+      "rtpmidi_client:hostname=rasppi32.local,port=36627,service=Hydra");
+  const auto b = device_identity_t::parse(
+      "rtpmidi_client:hostname=rasppi32.local,port=37740,service=Hydra");
+  ASSERT_TRUE(a.has_value());
+  ASSERT_TRUE(b.has_value());
+  ASSERT_EQUAL(a->canonical_key(), b->canonical_key());
+  ASSERT_EQUAL(a->canonical_key(),
+               "rtpmidi_client:hostname=rasppi32.local,service=Hydra");
+}
+
+void test_canonical_key_strips_port_from_rtpmidi_server() {
+  const auto a = device_identity_t::parse(
+      "rtpmidi_server:name=devel-Hydra,port=42372");
+  const auto b = device_identity_t::parse(
+      "rtpmidi_server:name=devel-Hydra,port=55545");
+  ASSERT_TRUE(a.has_value());
+  ASSERT_TRUE(b.has_value());
+  ASSERT_EQUAL(a->canonical_key(), b->canonical_key());
+  ASSERT_EQUAL(a->canonical_key(), "rtpmidi_server:name=devel-Hydra");
+}
+
+void test_canonical_key_preserves_client_port_when_no_name() {
+  // alsa_seq without name: client+port ARE the identity
+  const auto id = device_identity_t::parse("alsa_seq:client=Peak,port=In");
+  ASSERT_TRUE(id.has_value());
+  ASSERT_EQUAL(id->canonical_key(), "alsa_seq:client=Peak,port=In");
+}
+
+void test_canonical_key_strips_client_port_when_name_present() {
+  const auto id = device_identity_t::parse(
+      "alsa_seq:client=28,name=Hydra,port=0");
+  ASSERT_TRUE(id.has_value());
+  ASSERT_EQUAL(id->canonical_key(), "alsa_seq:name=Hydra");
+}
+
+void test_canonical_key_strips_hostname_port_from_alsa_listener() {
+  const auto id = device_identity_t::parse(
+      "alsa_listener:hostname=rasppi32.local,port=36627,"
+      "local_udp_port=12345,service=Hydra");
+  ASSERT_TRUE(id.has_value());
+  ASSERT_EQUAL(id->canonical_key(), "alsa_listener:service=Hydra");
+}
+
+void test_canonical_key_preserves_all_for_rawmidi() {
+  const auto id = device_identity_t::parse(
+      "rawmidi:device=/dev/snd/midiC4D0,name=MIDI Export");
+  ASSERT_TRUE(id.has_value());
+  ASSERT_EQUAL(id->canonical_key(),
+               "rawmidi:device=/dev/snd/midiC4D0,name=MIDI Export");
+}
+
+void test_canonical_key_strips_port_from_rtpmidi_multi() {
+  const auto id = device_identity_t::parse(
+      "rtpmidi_multi:name=devel,port=5004");
+  ASSERT_TRUE(id.has_value());
+  ASSERT_EQUAL(id->canonical_key(), "rtpmidi_multi:name=devel");
+}
+
+void test_canonical_key_preserves_all_for_alsa_multi() {
+  const auto id = device_identity_t::parse("alsa_multi:name=Network Export");
+  ASSERT_TRUE(id.has_value());
+  ASSERT_EQUAL(id->canonical_key(), "alsa_multi:name=Network Export");
+}
+
+void test_canonical_key_rtpmidi_session_preserves_hostname_service() {
+  // rtpmidi_session has no ephemeral fields defined.
+  // Note: colons in the hostname are escape-serialized.
+  const auto id = device_identity_t::parse(
+      "rtpmidi_session:hostname=::ffff:192.168.1.78,service=Hydra");
+  ASSERT_TRUE(id.has_value());
+  ASSERT_EQUAL(id->canonical_key(),
+               "rtpmidi_session:hostname=\\:\\:ffff\\:192.168.1.78,"
+               "service=Hydra");
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_device_identity_roundtrip_simple),
@@ -123,6 +200,15 @@ int main(int argc, char **argv) {
       TEST(test_device_identity_bracketed_preserved),
       TEST(test_device_identity_equality),
       TEST(test_device_identity_parse_errors),
+      TEST(test_canonical_key_strips_port_from_rtpmidi_client),
+      TEST(test_canonical_key_strips_port_from_rtpmidi_server),
+      TEST(test_canonical_key_preserves_client_port_when_no_name),
+      TEST(test_canonical_key_strips_client_port_when_name_present),
+      TEST(test_canonical_key_strips_hostname_port_from_alsa_listener),
+      TEST(test_canonical_key_preserves_all_for_rawmidi),
+      TEST(test_canonical_key_strips_port_from_rtpmidi_multi),
+      TEST(test_canonical_key_preserves_all_for_alsa_multi),
+      TEST(test_canonical_key_rtpmidi_session_preserves_hostname_service),
   };
 
   testcase.run(argc, argv);

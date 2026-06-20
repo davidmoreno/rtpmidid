@@ -43,10 +43,29 @@ std::optional<router_peer_row_t> status_row_for_peer(const midirouter_t &router,
   return std::nullopt;
 }
 
-bool is_referenced(const device_identity_t &identity,
-                   const std::vector<device_query_t> &referenced_queries) {
+/** Check whether @a identity is referenced by any saved connection query.
+ *  Canonicalizes both sides (ephemeral fields like port numbers stripped)
+ *  so the same physical device is matched regardless of port changes. */
+static bool is_referenced(
+    const device_identity_t &identity,
+    const std::vector<device_query_t> &referenced_queries) {
+  const auto canonical_dev = device_identity_t::parse(identity.canonical_key());
+  if (!canonical_dev)
+    return false;
   for (const auto &query : referenced_queries) {
-    if (query.matches(identity))
+    // Strip ephemeral fields from the query side too
+    const auto query_identity = device_identity_t::parse(query.serialize());
+    if (!query_identity)
+      continue;
+    const auto canonical_q =
+        device_identity_t::parse(query_identity->canonical_key());
+    if (!canonical_q)
+      continue;
+    // Build a temporary query from the canonical form
+    device_query_t cq;
+    cq.type_prefix = canonical_q->type_prefix;
+    cq.fields = canonical_q->fields;
+    if (cq.matches(*canonical_dev))
       return true;
   }
   return false;
@@ -138,8 +157,23 @@ device_registry_t::device_registry_t(std::shared_ptr<midirouter_t> router,
     : router_(std::move(router)), db_(std::move(db)) {
   if (db_ && db_->is_open()) {
     for (auto rec : db_->load_all()) {
-      const auto key = rec.identity_key();
-      devices_.emplace(key, std::move(rec));
+      const auto key = rec.identity.canonical_key();
+      // If multiple records canonicalize to the same key (e.g. same device
+      // on different ports), merge them: keep the first-seen timestamp and
+      // the higher-priority source.
+      auto it = devices_.find(key);
+      if (it == devices_.end()) {
+        rec.identity = *device_identity_t::parse(key);
+        devices_.emplace(key, std::move(rec));
+      } else {
+        auto &existing = it->second;
+        if (static_cast<int>(rec.source) > static_cast<int>(existing.source))
+          existing.source = rec.source;
+        existing.first_seen =
+            std::min(existing.first_seen, rec.first_seen);
+        existing.last_seen =
+            std::max(existing.last_seen, rec.last_seen);
+      }
     }
   }
 }
@@ -243,12 +277,12 @@ void device_registry_t::add_manual(device_identity_t identity,
           rtpmidid::queue_priority_e::NORMAL);
 }
 
-bool device_registry_t::remove_manual(const std::string &identity_key) {
+bool device_registry_t::remove_device(const std::string &identity_key) {
   return dispatch_query<bool>(
-      remove_manual_t{identity_key, {}},
+      remove_device_t{identity_key, {}},
       rtpmidid::queue_priority_e::NORMAL,
       [identity_key](device_registry_t &self) {
-        return self.remove_manual_impl(identity_key);
+        return self.remove_device_impl(identity_key);
       });
 }
 
@@ -291,6 +325,15 @@ size_t device_registry_t::sweep_stale_discovered(int64_t max_age_seconds) {
       });
 }
 
+size_t device_registry_t::prune_unreferenced_offline() {
+  return dispatch_query<size_t>(
+      prune_unreferenced_offline_t{{}},
+      rtpmidid::queue_priority_e::NORMAL,
+      [](device_registry_t &self) {
+        return self.prune_unreferenced_offline_impl();
+      });
+}
+
 void schedule_device_registry_cleanup(
     cron_tasks_t &cron, const std::shared_ptr<device_registry_t> &registry,
     std::chrono::seconds interval, int64_t max_age_seconds) {
@@ -305,7 +348,7 @@ void schedule_device_registry_cleanup(
 void device_registry_t::notify_changed() { changed_event(); }
 
 void device_registry_t::upsert_impl(device_record_t record, bool persist) {
-  const auto key = record.identity_key();
+  const auto key = record.identity.canonical_key();
   const auto now = now_unix();
   if (record.first_seen == 0)
     record.first_seen = now;
@@ -314,6 +357,8 @@ void device_registry_t::upsert_impl(device_record_t record, bool persist) {
 
   const auto it = devices_.find(key);
   if (it == devices_.end()) {
+    // Store with canonical identity (ephemeral fields stripped)
+    record.identity = *device_identity_t::parse(record.identity.canonical_key());
     devices_.emplace(key, std::move(record));
     if (persist && db_ && db_->is_open())
       db_->upsert(devices_.at(key));
@@ -353,7 +398,9 @@ void device_registry_t::observe_peer_impl(peer_id_t peer_id,
   rec.display_name = display_name_for(*identity, row->name);
   rec.online_peer_id = peer_id;
   rec.last_seen = now_unix();
-  peer_to_identity_[peer_id] = rec.identity_key();
+  // Map peer_id to canonical key so multiple peers (same device, different
+  // ports) map to a single device record.
+  peer_to_identity_[peer_id] = rec.identity.canonical_key();
   upsert_impl(std::move(rec), true);
 }
 
@@ -361,12 +408,31 @@ void device_registry_t::mark_offline_impl(peer_id_t peer_id) {
   const auto mapped = peer_to_identity_.find(peer_id);
   if (mapped == peer_to_identity_.end())
     return;
-  const auto it = devices_.find(mapped->second);
+  const std::string identity_key = mapped->second;
+  const auto it = devices_.find(identity_key);
   peer_to_identity_.erase(mapped);
   if (it == devices_.end())
     return;
   it->second.online_peer_id = std::nullopt;
   it->second.last_seen = now_unix();
+
+  // Immediately prune if this device is now offline and not referenced
+  // by any saved connection.
+  if (it->second.source == device_source_e::discovered) {
+    std::vector<device_query_t> referenced;
+    if (referenced_queries_provider_)
+      referenced = referenced_queries_provider_();
+    if (!is_referenced(it->second.identity, referenced)) {
+      DEBUG("device_registry: pruning unreferenced offline device {}",
+            identity_key);
+      devices_.erase(it);
+      if (db_ && db_->is_open())
+        db_->remove(identity_key);
+      notify_changed();
+      return;
+    }
+  }
+
   if (db_ && db_->is_open())
     db_->upsert(it->second);
   notify_changed();
@@ -397,9 +463,40 @@ size_t device_registry_t::sweep_stale_impl(int64_t max_age_seconds) {
   return stale.size();
 }
 
-bool device_registry_t::remove_manual_impl(const std::string &identity_key) {
+size_t device_registry_t::prune_unreferenced_offline_impl() {
+  std::vector<device_query_t> referenced;
+  if (referenced_queries_provider_)
+    referenced = referenced_queries_provider_();
+
+  std::vector<std::string> to_remove;
+  for (const auto &kv : devices_) {
+    const auto &rec = kv.second;
+    if (rec.source != device_source_e::discovered)
+      continue;
+    if (rec.online())
+      continue;
+    if (is_referenced(rec.identity, referenced))
+      continue;
+    to_remove.push_back(kv.first);
+  }
+
+  for (const auto &key : to_remove) {
+    devices_.erase(key);
+    if (db_ && db_->is_open())
+      db_->remove(key);
+  }
+
+  if (!to_remove.empty()) {
+    INFO("device_registry: pruned {} unreferenced offline device(s)",
+         to_remove.size());
+    notify_changed();
+  }
+  return to_remove.size();
+}
+
+bool device_registry_t::remove_device_impl(const std::string &identity_key) {
   const auto it = devices_.find(identity_key);
-  if (it == devices_.end() || it->second.source != device_source_e::manual)
+  if (it == devices_.end())
     return false;
   devices_.erase(it);
   if (db_ && db_->is_open())
@@ -449,8 +546,8 @@ void device_registry_t::handle(add_manual_t &cmd) {
   upsert_impl(std::move(rec), true);
 }
 
-void device_registry_t::handle(remove_manual_t &cmd) {
-  post_reply(cmd.reply, remove_manual_impl(cmd.identity_key));
+void device_registry_t::handle(remove_device_t &cmd) {
+  post_reply(cmd.reply, remove_device_impl(cmd.identity_key));
 }
 
 void device_registry_t::handle(refresh_from_router_t &) {
@@ -471,13 +568,18 @@ void device_registry_t::handle(refresh_from_router_t &) {
     rec.display_name = display_name_for(*identity, row.name);
     rec.online_peer_id = pid;
     rec.last_seen = now_unix();
-    peer_to_identity_[pid] = rec.identity_key();
+    peer_to_identity_[pid] = rec.identity.canonical_key();
     upsert_impl(std::move(rec), true);
   }
 }
 
 void device_registry_t::handle(sweep_stale_t &cmd) {
   const size_t pruned = sweep_stale_impl(cmd.max_age_seconds);
+  post_reply(cmd.reply, pruned);
+}
+
+void device_registry_t::handle(prune_unreferenced_offline_t &cmd) {
+  const size_t pruned = prune_unreferenced_offline_impl();
   post_reply(cmd.reply, pruned);
 }
 

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace rtpmididns {
@@ -193,6 +194,53 @@ std::optional<std::string> device_identity_t::find(std::string_view key) const {
 
 bool device_identity_t::operator==(const device_identity_t &o) const {
   return type_prefix == o.type_prefix && fields == o.fields;
+}
+
+namespace {
+
+// Ephemeral fields that do NOT contribute to device identity.
+// A device is the same physical endpoint regardless of these fields.
+const std::unordered_map<std::string_view, std::vector<std::string_view>>
+kEphemeralFields = {
+    {"rtpmidi_client", {"port"}},
+    {"rtpmidi_server", {"port"}},
+    {"rtpmidi_session", {}},          // hostname+service already canonical
+    {"rtpmidi_multi",   {"port"}},
+    {"alsa_listener",   {"hostname", "port", "local_udp_port"}},
+    {"alsa_seq",        {}},           // handled specially below
+    {"alsa_multi",      {}},
+    {"rawmidi",         {}},
+};
+
+bool is_strippable_field(const std::string &type_prefix,
+                         const std::string &key,
+                         bool has_name_field) {
+  const auto it = kEphemeralFields.find(type_prefix);
+  if (it == kEphemeralFields.end())
+    return false;
+  for (const auto &strip : it->second) {
+    if (strip == key)
+      return true;
+  }
+  // alsa_seq: strip client/port only when a name field identifies the device
+  if (type_prefix == "alsa_seq" && has_name_field) {
+    return key == "client" || key == "port";
+  }
+  return false;
+}
+
+} // namespace
+
+std::string device_identity_t::canonical_key() const {
+  const bool has_name = find("name").has_value();
+
+  device_identity_t canonical;
+  canonical.type_prefix = type_prefix;
+  for (const auto &f : fields) {
+    if (!is_strippable_field(type_prefix, f.key, has_name))
+      canonical.fields.push_back(f);
+  }
+  return canonical.serialize();
 }
 
 } // namespace rtpmididns

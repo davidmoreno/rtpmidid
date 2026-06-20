@@ -138,12 +138,19 @@ void test_registry_peer_removed_offline_still_listed() {
   device_registry_t registry(router);
   registry.attach();
 
+  // Set up a referenced ("favourited") query to protect the device
+  registry.set_referenced_queries_provider([]() {
+    return std::vector<device_query_t>{
+        *device_query_t::parse("alsa_seq:client=Peak")};
+  });
+
   auto peer = std::make_shared<fake_alsa_seq_peer_t>("peak-in");
   router->add_peer(peer);
   const std::string key = "alsa_seq:client=Peak,port=In";
 
   router->remove_peer(peer->peer_id);
 
+  // Referenced devices are kept even when the peer goes offline
   const auto rec = registry.find_by_identity_key(key);
   ASSERT_TRUE(rec.has_value());
   ASSERT_FALSE(rec->online());
