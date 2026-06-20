@@ -10,6 +10,14 @@
 @layer base {
   html {
     @apply antialiased;
+    background-color: var(--color-page-bg);
+    background-image: var(--page-bg-image);
+    background-attachment: fixed;
+    background-size: cover;
+  }
+  body {
+    margin: 0;
+    background-color: transparent;
   }
 }
 
