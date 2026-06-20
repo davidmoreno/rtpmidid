@@ -213,6 +213,16 @@ void web_server_t::stop() {
     p->stop();
   }
   if (thread_.joinable()) {
+    // Wait for the server thread to finish its internal httplib cleanup
+    // (ThreadPool::shutdown, etc.) before joining.  httplib::Server::stop()
+    // is non-blocking: it signals and returns, but thread_main() still has
+    // work to do — it can crash if joined while mid-cleanup.
+    for (int i = 0; i < 500; ++i) {
+      if (srv_.load(std::memory_order_acquire) == nullptr) {
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
     thread_.join();
   }
 
