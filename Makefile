@@ -47,6 +47,8 @@ help:
 	@echo " run-gdb  -- Run inside gdb, to capture backtrace of failures (bt). Useful for bug reports."
 	@echo " run-valgrin -- Run inside valgrind, to capture backtrace of failures (bt). Useful for bug reports."
 	@echo " capture  -- Capture packets with tcpdump. Add this to bug reports."
+	@echo " save-core -- Save latest rtpmidid core dump to build/core.rtpmidid (from systemd journal)"
+	@echo " core-info -- Show backtrace of latest rtpmidid core dump (from systemd journal)"
 	@echo " statemachines -- Generate the files for the state machines"
 	@echo
 	@echo "Variables:"
@@ -102,9 +104,18 @@ frontend:
 	}
 	cd frontend && (npm ci 2>/dev/null || npm install) && npm run build
 
-.PHONY: run run-valgrind run-gdb
+.PHONY: run run-valgrind run-gdb save-core core-info
 run: frontend build-dev
-	build/src/rtpmidid $(RTPMIDID_ARGS)
+	build/src/rtpmidid $(RTPMIDID_ARGS) || { \
+		STATUS=$$?; \
+		if [ $$STATUS -eq 139 ] || [ $$STATUS -eq 134 ]; then \
+			echo; \
+			echo "*** Crash detected (exit $$STATUS) ***"; \
+			echo "Run 'make save-core' to extract core dump to build/core.rtpmidid"; \
+			echo "Or 'make core-info' to see backtrace"; \
+		fi; \
+		exit $$STATUS; \
+	}
 
 run-gdb: build-dev
 	gdb build/src/rtpmidid -ex=r --command=scripts/malloc.gdb --args build/src/rtpmidid  $(RTPMIDID_ARGS)
@@ -112,6 +123,20 @@ run-gdb: build-dev
 run-valgrind: build-dev
 	valgrind --leak-check=full --show-leak-kinds=all --log-file=/tmp/rtpmidid.valgrind.log -- build/src/rtpmidid $(RTPMIDID_ARGS) || true
 	@echo "Logs at /tmp/rtpmidid.valgrind.log"
+
+# Extract latest rtpmidid core dump from systemd journal (no root needed for own processes).
+# Core dumps go to systemd-coredump, not files in CWD, because core_pattern is a pipe.
+.PHONY: save-core core-info
+save-core:
+	@echo "Extracting latest rtpmidid core dump → build/core.rtpmidid"
+	@coredumpctl dump rtpmidid -o build/core.rtpmidid 2>/dev/null && \
+		ls -lh build/core.rtpmidid || \
+		{ echo "No rtpmidid core dump found in systemd journal."; exit 1; }
+	@echo
+	@echo "To debug: gdb build/src/rtpmidid build/core.rtpmidid"
+
+core-info:
+	@coredumpctl info rtpmidid --no-pager 2>&1 | head -100
 
 PORT1 = $(shell echo | awk '{print ${PORT} + 1}')
 
