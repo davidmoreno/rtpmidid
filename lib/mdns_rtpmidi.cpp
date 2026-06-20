@@ -416,6 +416,9 @@ void rtpmidid::mdns_rtpmidi_t::client_callback(avahi_client_state_e state_) {
     INFO("component=mdns Client running");
     setup_service_browser();
     setup_entry_group();
+    // Re-announce any pending announcements that were queued before
+    // Avahi was ready (e.g. during startup).
+    announce_all();
     break;
   case AVAHI_CLIENT_FAILURE: {
     auto avahi_errno = avahi_client_errno(client);
@@ -423,6 +426,16 @@ void rtpmidid::mdns_rtpmidi_t::client_callback(avahi_client_state_e state_) {
           avahi_errno);
     if (avahi_errno == AVAHI_ERR_DISCONNECTED) {
     WARNING("component=mdns Disconnected, reconnecting...");
+    // Null out stale entry group and service browser so they get
+    // recreated on reconnect (AVAHI_CLIENT_S_RUNNING).
+    if (group) {
+      avahi_entry_group_free(group);
+      group = nullptr;
+    }
+    if (service_browser) {
+      avahi_service_browser_free(service_browser);
+      service_browser = nullptr;
+    }
     }
     // avahi_simple_poll_quit(simple_poll);
   } break;
