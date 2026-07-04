@@ -173,7 +173,7 @@ void monitor_session_stop(const std::shared_ptr<midirouter_t> &router,
     return;
   const midipeer_id_t mid = peer->peer_id;
   const std::string uuid = peer->session_uuid();
-  router->enqueue_remove_peer(mid);
+  router->remove_peer(mid);
   monitor_registry_unregister(uuid);
 }
 

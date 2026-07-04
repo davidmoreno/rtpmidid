@@ -997,45 +997,4 @@ void midirouter_t::peer_connection_loop(
   }
 }
 
-// ===========================================================================
-// Backwards-compatible enqueue_* aliases
-// ===========================================================================
-
-bool midirouter_t::enqueue_send_midi(peer_id_t from, const mididata_t &data) {
-  send_midi(from, data);
-  return true;
-}
-
-bool midirouter_t::enqueue_send_midi(peer_id_t from, peer_id_t to,
-                                     const mididata_t &data) {
-  send_midi(from, to, data);
-  return true;
-}
-
-bool midirouter_t::enqueue_connect(peer_id_t from, peer_id_t to) {
-  connect(from, to);
-  return true;
-}
-
-bool midirouter_t::enqueue_disconnect(peer_id_t from, peer_id_t to) {
-  disconnect(from, to);
-  return true;
-}
-
-bool midirouter_t::enqueue_remove_peer(peer_id_t peer_id) {
-  remove_peer(peer_id);
-  return true;
-}
-
-bool midirouter_t::enqueue_event(peer_id_t from, peer_id_t to,
-                                 midipeer_event_e evt) {
-  event(from, to, evt);
-  return true;
-}
-
-bool midirouter_t::enqueue_event(peer_id_t from, midipeer_event_e evt) {
-  event(from, evt);
-  return true;
-}
-
 } // namespace rtpmididns

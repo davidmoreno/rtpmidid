@@ -157,11 +157,9 @@ static std::vector<rpc_help_entry_t> build_help_entries() {
       {"connections.list", "List persisted connections (direction, enabled, query sides)"},
       {"connections.save",
        "Save a connection with direction (side_a/side_b: endpoint id or key=value query)"},
-      {"connections.add",
-       "Add a persisted connection (legacy: both directions, side_a/side_b)"},
       {"connections.remove", "Remove a persisted connection from the database"},
-      {"connections.enable", "Enable a persisted connection (reconnect)"},
-      {"connections.disable", "Disable a persisted connection (no auto-reconnect)"},
+      {"connections.set_enabled",
+       "Enable or disable a persisted connection (side_a, side_b, enabled)"},
       {"devices.list", "List known devices + local enumeration (online/offline, source, last seen)"},
       {"devices.add_manual",
        "Add a manual device (identity: key=value string, optional display name)"},
@@ -383,19 +381,19 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
     }
     if (env.method == "router.remove") {
       auto p = parse_rpc_params<router_remove_params_t>(params);
-      ctx.router->enqueue_remove_peer(static_cast<peer_id_t>(p.peer_id));
+      ctx.router->remove_peer(static_cast<peer_id_t>(p.peer_id));
       return respond_ok(env);
     }
     if (env.method == "router.connect") {
       auto p = parse_rpc_params<router_connect_params_t>(params);
-      ctx.router->enqueue_connect(static_cast<peer_id_t>(p.from),
-                                  static_cast<peer_id_t>(p.to));
+      ctx.router->connect(static_cast<peer_id_t>(p.from),
+                          static_cast<peer_id_t>(p.to));
       return respond_ok(env);
     }
     if (env.method == "router.disconnect") {
       auto p = parse_rpc_params<router_connect_params_t>(params);
-      ctx.router->enqueue_disconnect(static_cast<peer_id_t>(p.from),
-                                     static_cast<peer_id_t>(p.to));
+      ctx.router->disconnect(static_cast<peer_id_t>(p.from),
+                             static_cast<peer_id_t>(p.to));
       return respond_ok(env);
     }
     if (env.method == "endpoint.connect") {
@@ -450,8 +448,8 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
         throw std::runtime_error(
             "Could not resolve online peers for disconnect (check device "
             "identities match the Devices tab)");
-      ctx.router->enqueue_disconnect(*pa, *pb);
-      ctx.router->enqueue_disconnect(*pb, *pa);
+      ctx.router->disconnect(*pa, *pb);
+      ctx.router->disconnect(*pb, *pa);
       return respond_ok(env);
     }
     if (env.method == "connect") {
@@ -599,24 +597,6 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       ctx.connection_db->save_stored_connection(std::move(row));
       return respond_ok(env);
     }
-    if (env.method == "connections.add") {
-      if (!ctx.connection_db)
-        throw std::runtime_error("Connection database is not enabled");
-      auto p = parse_rpc_params<connections_mutate_params_t>(params);
-      const auto sa = resolve_side_to_connection_side(p.side_a);
-      const auto sb = resolve_side_to_connection_side(p.side_b);
-      if (!sa || !sb)
-        throw std::runtime_error("Could not resolve stable ids");
-      if (*sa == *sb)
-        throw std::runtime_error("Both sides resolve to the same stable id");
-      stored_connection_t row;
-      row.side_a = *sa;
-      row.side_b = *sb;
-      row.direction = connection_direction_e::both;
-      row.enabled = true;
-      ctx.connection_db->save_stored_connection(std::move(row));
-      return respond_ok(env);
-    }
     if (env.method == "connections.remove") {
       if (!ctx.connection_db)
         throw std::runtime_error("Connection database is not enabled");
@@ -631,7 +611,8 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
         ctx.device_registry->prune_unreferenced_offline();
       return respond_ok(env);
     }
-    if (env.method == "connections.enable" ||
+    if (env.method == "connections.set_enabled" ||
+        env.method == "connections.enable" ||
         env.method == "connections.disable") {
       if (!ctx.connection_db)
         throw std::runtime_error("Connection database is not enabled");
@@ -640,12 +621,12 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       const auto sb = resolve_side_to_connection_side(p.side_b);
       if (!sa || !sb)
         throw std::runtime_error("Could not resolve connection sides");
-      const bool ok = ctx.connection_db->set_stored_enabled(
-          *sa, *sb, env.method == "connections.enable");
+      const bool enable = p.enabled.value_or(env.method == "connections.enable");
+      const bool ok = ctx.connection_db->set_stored_enabled(*sa, *sb, enable);
       if (!ok)
         throw std::runtime_error("Connection not found in database");
       // Disabling a connection may leave devices unreferenced
-      if (env.method == "connections.disable" && ctx.device_registry)
+      if (!enable && ctx.device_registry)
         ctx.device_registry->prune_unreferenced_offline();
       return respond_ok(env);
     }

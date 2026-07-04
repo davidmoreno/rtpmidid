@@ -180,6 +180,7 @@ struct connections_save_params_t {
 struct connections_enable_params_t {
   std::string side_a;
   std::string side_b;
+  std::optional<bool> enabled; // [dm-json: omit_if_null] required for set_enabled
 };
 
 // [dm-json]

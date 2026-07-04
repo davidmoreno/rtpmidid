@@ -85,7 +85,7 @@ peer_import_alsa_rtp_t::~peer_import_alsa_rtp_t() {
   }
   INFO("component=alsa_listener Remove ALSA port: {}, peer_id: {}", alsaport, peer_id);
   if (router && rtpmidiclientworker_peer_id != MIDIPEER_ID_INVALID) {
-    router->enqueue_remove_peer(rtpmidiclientworker_peer_id);
+    router->remove_peer(rtpmidiclientworker_peer_id);
     rtpmidiclientworker_peer_id = MIDIPEER_ID_INVALID;
   }
 }
@@ -158,7 +158,7 @@ void peer_import_alsa_rtp_t::connect_to_remote_server(
 
 void peer_import_alsa_rtp_t::disconnect_from_remote_server() {
   DEBUG("Disconnect from remote server at {}:{}", hostname, port);
-  router->enqueue_remove_peer(rtpmidiclientworker_peer_id);
+  router->remove_peer(rtpmidiclientworker_peer_id);
   // rtpclient = nullptr; // for me, this is dead
   local_name = "";
 }

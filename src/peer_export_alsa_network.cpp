@@ -119,7 +119,7 @@ void peer_export_alsa_network_t::remove_alsa_connection(
   }
   DEBUG("Removed ALSA port {}:{}, removing midipeer {}", port.client, port.port,
         tracked_peer_id);
-  router->enqueue_remove_peer(tracked_peer_id);
+  router->remove_peer(tracked_peer_id);
 }
 
 void peer_export_alsa_network_t::alsaseq_event(snd_seq_event_t *event) {
@@ -143,7 +143,7 @@ void peer_export_alsa_network_t::alsaseq_event(snd_seq_event_t *event) {
           return;
         }
         // Directed send: multi-listener has no broadcast send_to from RTP peers.
-        router->enqueue_send_midi(peer_id, dest_network_peer, mididata);
+        router->send_midi(peer_id, dest_network_peer, mididata);
       });
 }
 

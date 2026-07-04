@@ -323,7 +323,7 @@ void connection_db_manager_t::apply_saved_connections() {
   for (const auto &action : actions) {
     INFO("component=database connection_db: restoring directed edge peer {} -> {}", action.from,
          action.to);
-    router_->enqueue_connect(action.from, action.to);
+    router_->connect(action.from, action.to);
   }
 }
 

@@ -118,16 +118,6 @@ public:
     });
   }
 
-  // --- Backwards-compatible enqueue_* aliases (always go through queue) ---
-
-  bool enqueue_send_midi(peer_id_t from, const mididata_t &data);
-  bool enqueue_send_midi(peer_id_t from, peer_id_t to, const mididata_t &data);
-  bool enqueue_connect(peer_id_t from, peer_id_t to);
-  bool enqueue_disconnect(peer_id_t from, peer_id_t to);
-  bool enqueue_remove_peer(peer_id_t peer_id);
-  bool enqueue_event(peer_id_t from, peer_id_t to, midipeer_event_e evt);
-  bool enqueue_event(peer_id_t from, midipeer_event_e evt);
-
   // --- Test / shutdown helpers ---
 
   /** Drain the queue once on the calling thread (for deterministic tests). */

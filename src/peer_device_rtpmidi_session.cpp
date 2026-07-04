@@ -48,9 +48,9 @@ peer_device_rtpmidi_session_t::peer_device_rtpmidi_session_t(
               reason);
         rtpmidid::poller.call_later([this] {
           router->peer_connection_loop(peer_id, [this](auto other_peer) {
-            router->enqueue_remove_peer(other_peer->peer_id);
+            router->remove_peer(other_peer->peer_id);
           });
-          router->enqueue_remove_peer(peer_id);
+          router->remove_peer(peer_id);
         });
       });
 }
