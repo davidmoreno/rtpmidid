@@ -964,6 +964,15 @@ std::vector<router_peer_row_t> midirouter_t::status_rows() const {
       [](midirouter_t &r) { return r.status_rows_impl(); });
 }
 
+std::optional<router_peer_row_t>
+midirouter_t::status_row_for(peer_id_t peer_id) const {
+  for (const auto &row : status_rows()) {
+    if (row.id && static_cast<peer_id_t>(*row.id) == peer_id)
+      return row;
+  }
+  return std::nullopt;
+}
+
 void midirouter_t::peer_connection_loop(
     peer_id_t peer_id,
     std::function<void(std::shared_ptr<midipeer_t>)> func) {

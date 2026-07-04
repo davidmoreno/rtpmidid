@@ -243,4 +243,21 @@ std::string device_identity_t::canonical_key() const {
   return canonical.serialize();
 }
 
+std::string display_name_from_identity(
+    const device_identity_t &id,
+    const std::optional<std::string> &override_name) {
+  if (override_name && !override_name->empty())
+    return *override_name;
+  for (const char *key : {"name", "service", "device"}) {
+    if (const auto v = id.find(key))
+      return *v;
+  }
+  if (auto c = id.find("client")) {
+    if (auto p = id.find("port"))
+      return *c + ":" + *p;
+    return *c;
+  }
+  return id.serialize();
+}
+
 } // namespace rtpmididns

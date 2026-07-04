@@ -30,11 +30,6 @@ parse_alsa_seq_identity(const std::string &identity_key) {
   return std::make_pair(*client, *port);
 }
 
-void append_unique(std::vector<size_t> &out, size_t index) {
-  if (std::find(out.begin(), out.end(), index) == out.end())
-    out.push_back(index);
-}
-
 aseq_t::port_t port_from_row(const alsa_seq_port_row_t &row) {
   return aseq_t::port_t{static_cast<uint8_t>(row.client),
                         static_cast<uint8_t>(row.port)};

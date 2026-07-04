@@ -20,6 +20,17 @@
 #include "dm_json_status.hpp"
 #include "rtpmidid/rtppeer.hpp"
 
+#include <algorithm>
+#include <vector>
+
 namespace rtpmididns {
 rtp_peer_status_t rtp_peer_status_from(const rtpmidid::rtppeer_t &peer);
+
+/** Append @a value to @a out only if not already present. */
+template <typename T>
+void append_unique(std::vector<T> &out, T value) {
+  if (std::find(out.begin(), out.end(), value) == out.end())
+    out.push_back(std::move(value));
 }
+
+} // namespace rtpmididns

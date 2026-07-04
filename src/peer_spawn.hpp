@@ -20,9 +20,6 @@ peer_factory_context_t make_factory_context(
     const std::shared_ptr<midirouter_t> &router,
     const std::shared_ptr<rtpmidid::mdns_rtpmidi_t> &mdns);
 
-std::vector<online_device_t>
-collect_online_devices_from_router(const std::shared_ptr<midirouter_t> &router);
-
 peer_id_t ensure_peer_for_identity(const peer_factory_context_t &ctx,
                                    std::shared_ptr<midirouter_t> router,
                                    std::string_view side);

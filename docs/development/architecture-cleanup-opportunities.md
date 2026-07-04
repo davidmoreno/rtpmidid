@@ -1,6 +1,8 @@
 # Architecture Cleanup Opportunities
 
-> **Status**: Phase 1 ✅ | Phase 2 ⬜ | Phase 3 ⬜ | Phase 4 ⬜
+> **Status**: Phase 1 ✅ | Phase 2 ✅ | Phase 3 ✅ | Phase 4 ✅
+
+All cleanup phases complete.
 
 This report catalogs code smells, duplication, dead code, and API redundancy
 found during a full-codebase architecture audit. Findings are grouped by
@@ -16,7 +18,7 @@ For each finding:
 
 ## 1. RPC API Duplication — Merge or De-duplicate
 
-### 1.1 `connections.add` vs `connections.save`
+### 1.1 `connections.add` vs `connections.save` **[DONE]**
 
 **Detection**: line-by-line comparison of `control_rpc.cpp` handlers.
 
@@ -42,7 +44,7 @@ chain.
 
 ---
 
-### 1.2 `connections.enable` / `connections.disable` as separate methods
+### 1.2 `connections.enable` / `connections.disable` as separate methods **[DONE]**
 
 **Detection**: Both share a single `if` branch in `control_rpc.cpp`.
 
@@ -62,7 +64,7 @@ less method comparison in the dispatch chain.
 
 ---
 
-### 1.3 `connection_db_t` — legacy vs. new API duplication
+### 1.3 `connection_db_t` — legacy vs. new API duplication **[DONE]**
 
 **Detection**: Side-by-side comparison of `connection_db.hpp` public methods.
 
@@ -90,7 +92,7 @@ less method comparison in the dispatch chain.
 
 ---
 
-### 1.4 `collect_online_devices` duplicated between `connection_db_manager_t` and `peer_spawn`
+### 1.4 `collect_online_devices` duplicated between `connection_db_manager_t` and `peer_spawn` **[DONE]**
 
 **Detection**: Grep for identical pattern (scan `router->status_rows()`,
 build `online_device_t` from `compute_device_identity`).
@@ -136,7 +138,7 @@ The same pattern exists for `format_as(snd_seq_event_type)` in
 
 ---
 
-### 1.6 `device_registry_t` — `display_name_for` vs `display_name_from_identity`
+### 1.6 `device_registry_t` — `display_name_for` vs `display_name_from_identity` **[DONE]**
 
 **Detection**: Comparison of name resolution logic.
 
@@ -159,7 +161,7 @@ but the field-priority logic (`name`, `client`, `service` vs `service`, `name`,
 
 ## 2. Code Duplication — Identical Logic in Multiple Places
 
-### 2.1 `append_unique` — three identical copies
+### 2.1 `append_unique` — three identical copies **[DONE]**
 
 **Detection**: Grep for `append_unique` across all sources.
 
@@ -179,7 +181,7 @@ but the field-priority logic (`name`, `client`, `service` vs `service`, `name`,
 
 ---
 
-### 2.2 Peer identity lookup by `peer_id` — same pattern in two actors
+### 2.2 Peer identity lookup by `peer_id` — same pattern in two actors **[DONE]**
 
 **Detection**: Both `connection_db_manager_t::device_identity_for_peer()` and
 `device_registry_t::status_row_for_peer()` scan `router->status_rows()` by
@@ -372,7 +374,12 @@ parameters over multiple similar calls.
 
 ---
 
-### 4.2 `router.create` / `connect` / `endpoint.connect` — three connect paths
+### 4.2 `router.create` / `connect` / `endpoint.connect` — three connect paths **[DONE]**
+
+**Resolution**: The `connect` convenience handler now serialises the identity
+via `id.serialize()` and calls `create_peer_from_string()` — the same
+function used by `router.create {identity}`. Both paths share the same
+peer-factory resolution logic.
 
 **Current state**: Three RPC methods that create or connect peers:
 - `connect {hostname, port?, name?}` — convenience for remote RTP-MIDI
@@ -474,7 +481,7 @@ verify. A macro `DEFINE_POST_SIGNAL(name, signal, ...)` would reduce 40 lines to
 
 ---
 
-### 5.2 `midirouter_t::enqueue_*` backwards-compat aliases
+### 5.2 `midirouter_t::enqueue_*` backwards-compat aliases **[DONE]**
 
 **Files**: `src/midirouter.cpp` (lines 1011–1040),
 `src/midirouter.hpp` (lines 122–129).
@@ -498,7 +505,14 @@ remove the `enqueue_*` aliases.
 
 ---
 
-### 5.3 `control_rpc_dispatch_line` — giant if-else chain
+### 5.3 `control_rpc_dispatch_line` — giant if-else chain **[DONE]**
+
+**Resolution**: Replaced the linear O(n) if-else chain with an O(1)
+`std::unordered_map<std::string, rpc_handler_fn>` dispatch table. Each
+handler is a named free function, making them individually readable
+and testable. Peer commands (`<id>.<subcmd>`) are handled before the
+map lookup. Backwards-compatible aliases (`connections.enable`,
+`connections.disable`) map to the same handler as `connections.set_enabled`.
 
 **Files**: `src/control_rpc.cpp` (single 500+ line function).
 

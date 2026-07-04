@@ -48,6 +48,4 @@ std::optional<std::shared_ptr<midipeer_t>>
 create_peer_from_string(std::string_view identity, const peer_factory_context_t &ctx,
                         std::string *err = nullptr);
 
-std::string display_name_from_identity(const device_identity_t &id);
-
 } // namespace rtpmididns

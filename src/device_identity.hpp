@@ -48,4 +48,8 @@ struct device_identity_t {
   std::string canonical_key() const;
 };
 
+/** Human-readable display name from an identity, with optional override. */
+std::string display_name_from_identity(const device_identity_t &id,
+                                       const std::optional<std::string> &override_name = std::nullopt);
+
 } // namespace rtpmididns

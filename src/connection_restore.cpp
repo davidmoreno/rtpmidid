@@ -9,15 +9,6 @@
 
 namespace rtpmididns {
 
-namespace {
-
-void append_unique(std::vector<size_t> &out, size_t index) {
-  if (std::find(out.begin(), out.end(), index) == out.end())
-    out.push_back(index);
-}
-
-} // namespace
-
 std::vector<size_t> match_side_to_devices(
     const std::string &side, const std::vector<online_device_t> &online) {
   std::vector<size_t> matches;

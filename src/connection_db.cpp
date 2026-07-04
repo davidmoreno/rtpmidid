@@ -277,42 +277,11 @@ void connection_db_manager_t::attach_aseq(std::shared_ptr<aseq_t> aseq) {
       });
 }
 
-std::vector<online_device_t>
-connection_db_manager_t::collect_online_devices() const {
-  std::vector<online_device_t> out;
-  if (!router_)
-    return out;
-
-  for (const auto &row : router_->status_rows()) {
-    if (!row.id)
-      continue;
-    const auto identity = compute_device_identity(row);
-    if (!identity)
-      continue;
-    online_device_t device;
-    device.peer_id = static_cast<peer_id_t>(*row.id);
-    device.identity = *identity;
-    out.push_back(std::move(device));
-  }
-  return out;
-}
-
-std::optional<device_identity_t>
-connection_db_manager_t::device_identity_for_peer(peer_id_t peer_id) const {
-  if (!router_)
-    return std::nullopt;
-  for (const auto &row : router_->status_rows()) {
-    if (row.id && static_cast<peer_id_t>(*row.id) == peer_id)
-      return compute_device_identity(row);
-  }
-  return std::nullopt;
-}
-
 void connection_db_manager_t::apply_saved_connections() {
   if (!db_ || !db_->is_open() || !router_)
     return;
 
-  const auto online = collect_online_devices();
+  const auto online = collect_online_devices_from_router(router_);
   const auto saved = db_->list_connections();
   const auto actions = plan_connection_restore(
       saved, online, [this](peer_id_t from, peer_id_t to) {
@@ -331,8 +300,10 @@ void connection_db_manager_t::try_record_pair(peer_id_t from, peer_id_t to) {
   if (!db_ || !db_->is_open())
     return;
 
-  const auto id_from = device_identity_for_peer(from);
-  const auto id_to = device_identity_for_peer(to);
+  const auto row_from = router_->status_row_for(from);
+  const auto row_to = router_->status_row_for(to);
+  const auto id_from = row_from ? compute_device_identity(*row_from) : std::nullopt;
+  const auto id_to = row_to ? compute_device_identity(*row_to) : std::nullopt;
 
   if (id_from && id_to) {
     stored_connection_t row;
@@ -397,8 +368,10 @@ void connection_db_manager_t::on_disconnected(peer_id_t from, peer_id_t to) {
   if (!db_ || !db_->is_open())
     return;
 
-  if (const auto id_from = device_identity_for_peer(from)) {
-    if (const auto id_to = device_identity_for_peer(to)) {
+  if (const auto row_from = router_->status_row_for(from)) {
+    if (const auto row_to = router_->status_row_for(to)) {
+      const auto id_from = compute_device_identity(*row_from);
+      const auto id_to = compute_device_identity(*row_to);
       INFO("component=database connection_db: removing live router edge {} -> {}",
            id_from->serialize(), id_to->serialize());
       db_->remove_connection(id_from->serialize(), id_to->serialize());

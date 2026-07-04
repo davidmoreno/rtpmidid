@@ -34,4 +34,10 @@ std::vector<connect_action_t> plan_connection_restore(
     const std::vector<online_device_t> &online,
     const std::function<bool(peer_id_t, peer_id_t)> &has_edge);
 
+class midirouter_t;
+
+/** Collect online devices with their identities from a live router. */
+std::vector<online_device_t>
+collect_online_devices_from_router(const std::shared_ptr<midirouter_t> &router);
+
 } // namespace rtpmididns

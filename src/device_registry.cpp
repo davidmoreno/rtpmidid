@@ -24,26 +24,6 @@ namespace {
 
 thread_local device_registry_t *g_current_registry_thread = nullptr;
 
-std::string display_name_for(const device_identity_t &identity,
-                             const std::optional<std::string> &row_name) {
-  if (row_name && !row_name->empty())
-    return *row_name;
-  for (const char *key : {"name", "client", "service"}) {
-    if (const auto v = identity.find(key))
-      return *v;
-  }
-  return identity.serialize();
-}
-
-std::optional<router_peer_row_t> status_row_for_peer(const midirouter_t &router,
-                                                     peer_id_t peer_id) {
-  for (const auto &row : router.status_rows()) {
-    if (row.id && static_cast<peer_id_t>(*row.id) == peer_id)
-      return row;
-  }
-  return std::nullopt;
-}
-
 /** Check whether @a identity is referenced by any saved connection query.
  *  Canonicalizes both sides (ephemeral fields like port numbers stripped)
  *  so the same physical device is matched regardless of port changes. */
@@ -387,7 +367,7 @@ void device_registry_t::observe_peer_impl(peer_id_t peer_id,
                                           device_source_e source) {
   if (!router_)
     return;
-  const auto row = status_row_for_peer(*router_, peer_id);
+  const auto row = router_->status_row_for(peer_id);
   if (!row)
     return;
   const auto identity = compute_device_identity(*row);
@@ -397,7 +377,7 @@ void device_registry_t::observe_peer_impl(peer_id_t peer_id,
   device_record_t rec;
   rec.identity = *identity;
   rec.source = source;
-  rec.display_name = display_name_for(*identity, row->name);
+  rec.display_name = display_name_from_identity(*identity, row->name);
   rec.online_peer_id = peer_id;
   rec.last_seen = now_unix();
   // Map peer_id to canonical key so multiple peers (same device, different
@@ -524,7 +504,7 @@ void device_registry_t::handle(seed_ini_t &cmd) {
     device_record_t rec;
     rec.identity = identity;
     rec.source = device_source_e::ini;
-    rec.display_name = display_name_for(identity, std::nullopt);
+    rec.display_name = display_name_from_identity(identity, std::nullopt);
     upsert_impl(std::move(rec), true);
   }
 }
@@ -543,7 +523,7 @@ void device_registry_t::handle(add_manual_t &cmd) {
   rec.source = device_source_e::manual;
   rec.display_name =
       cmd.display_name.empty()
-          ? display_name_for(rec.identity, std::nullopt)
+          ? display_name_from_identity(rec.identity, std::nullopt)
           : std::move(cmd.display_name);
   upsert_impl(std::move(rec), true);
 }
@@ -567,7 +547,7 @@ void device_registry_t::handle(refresh_from_router_t &) {
     device_record_t rec;
     rec.identity = *identity;
     rec.source = device_source_e::discovered;
-    rec.display_name = display_name_for(*identity, row.name);
+    rec.display_name = display_name_from_identity(*identity, row.name);
     rec.online_peer_id = pid;
     rec.last_seen = now_unix();
     peer_to_identity_[pid] = rec.identity.canonical_key();

@@ -43,6 +43,7 @@
 #include <rtpmidid/logger.hpp>
 #include <rtpmidid/mdns_rtpmidi.hpp>
 #include <regex>
+#include <unordered_map>
 #include <unistd.h>
 
 namespace rtpmididns {
@@ -54,8 +55,6 @@ namespace {
 
 /**
  * Deserialise JSON into T, throwing std::runtime_error on failure.
- * Defined here (after all generated from_json declarations) so that ordinary
- * name lookup finds the right overload without depending on ADL.
  */
 template <typename T>
 T parse_rpc_params(std::string_view json) {
@@ -71,13 +70,11 @@ static std::string id_json(const dmjson::rpc::envelope_info_t &env) {
   return env.has_id ? env.id_json : "null";
 }
 
-// Finish a response by serialising a typed value via the generated to_json.
 template <typename T>
 static std::string respond(const dmjson::rpc::envelope_info_t &env, const T &value) {
   return dmjson::to_json(rpc_result_t{id_json(env), dmjson::to_json(value)}) + "\n";
 }
 
-// Finish a response with a vector of typed values.
 template <typename Row>
 static std::string respond_rows(const dmjson::rpc::envelope_info_t &env,
                                 const std::vector<Row> &rows) {
@@ -93,12 +90,10 @@ static std::string respond_rows(const dmjson::rpc::envelope_info_t &env,
   return dmjson::to_json(rpc_result_t{id_json(env), std::move(arr_json)}) + "\n";
 }
 
-// Finish a response with `["ok"]`.
 static std::string respond_ok(const dmjson::rpc::envelope_info_t &env) {
   return dmjson::to_json(rpc_result_t{id_json(env), R"(["ok"])"}) + "\n";
 }
 
-// Finish an error response.
 static std::string respond_error(const dmjson::rpc::envelope_info_t &env,
                                  std::string_view msg) {
   return dmjson::to_json(rpc_error_envelope_t{id_json(env), std::string(msg)}) + "\n";
@@ -182,7 +177,6 @@ static peer_id_t ensure_peer_for_side(control_rpc_context_t &ctx,
   return ensure_peer_for_identity(factory_context(ctx), ctx.router, side);
 }
 
-/** Match an online router peer only — never create peers (used for disconnect). */
 static std::optional<peer_id_t>
 peer_id_for_disconnect_side(control_rpc_context_t &ctx, std::string_view side) {
   if (!ctx.router)
@@ -286,8 +280,7 @@ static void unpersist_endpoint_pair(control_rpc_context_t &ctx,
 
 static void maybe_persist_direct_endpoint_connection(
     control_rpc_context_t &ctx, const std::string &from_endpoint,
-    const std::string &to_endpoint, bool bidi,
-    const std::vector<router_peer_row_t> &rows) {
+    const std::string &to_endpoint, bool bidi) {
   if (!ctx.connection_db)
     return;
   const auto sa = resolve_side_to_connection_side(from_endpoint);
@@ -304,8 +297,7 @@ static void maybe_persist_direct_endpoint_connection(
 }
 
 static void tee_monitor_edges(control_rpc_context_t &ctx, peer_id_t target,
-                              peer_id_t monitor_id,
-                              const std::shared_ptr<webui_midi_monitor_peer_t> &mon) {
+                              peer_id_t monitor_id) {
   const auto rows = router_rows_snapshot(ctx);
   unsigned incoming_tees = 0;
   for (const auto &r : rows) {
@@ -332,6 +324,533 @@ static void tee_monitor_edges(control_rpc_context_t &ctx, peer_id_t target,
        target, monitor_id, incoming_tees);
 }
 
+// ─── RPC handler function type ──────────────────────────────────────────
+
+using rpc_handler_fn = std::string (*)(control_rpc_context_t &,
+                                       const dmjson::rpc::envelope_info_t &env,
+                                       std::string_view params);
+
+// ─── Individual RPC handlers ────────────────────────────────────────────
+
+static std::string handle_status(control_rpc_context_t &ctx,
+                                 const dmjson::rpc::envelope_info_t &env,
+                                 std::string_view /*params*/) {
+  daemon_status_t ds;
+  ds.version = VERSION;
+  ds.settings.alsa_name = settings.alsa_name;
+  ds.settings.control_filename = settings.control_filename;
+  ds.router = ctx.router->status_rows();
+  ds.mdns = mdns_snapshot(ctx.mdns);
+
+  const auto &wl = settings.web.listen;
+  const int wp = settings.web.port;
+  const bool is_localhost =
+      wl == "127.0.0.1" || wl == "::1" || wl == "localhost";
+  ds.web.accessible = settings.web.enabled && !is_localhost;
+  if (ds.web.accessible) {
+    char hn[256]{};
+    gethostname(hn, sizeof(hn));
+    hn[sizeof(hn) - 1] = '\0';
+    std::string host = hn;
+    if (!host.empty() && host.back() == '.')
+      host.pop_back();
+    if (host.find('.') == std::string::npos)
+      host += ".local";
+    ds.web.url = "http://" + host + ":" + std::to_string(wp);
+  } else {
+    ds.web.url = "http://" + wl + ":" + std::to_string(wp);
+  }
+
+  return respond(env, ds);
+}
+
+static std::string handle_router_remove(control_rpc_context_t &ctx,
+                                        const dmjson::rpc::envelope_info_t &env,
+                                        std::string_view params) {
+  auto p = parse_rpc_params<router_remove_params_t>(params);
+  ctx.router->remove_peer(static_cast<peer_id_t>(p.peer_id));
+  return respond_ok(env);
+}
+
+static std::string handle_router_connect(control_rpc_context_t &ctx,
+                                         const dmjson::rpc::envelope_info_t &env,
+                                         std::string_view params) {
+  auto p = parse_rpc_params<router_connect_params_t>(params);
+  ctx.router->connect(static_cast<peer_id_t>(p.from),
+                      static_cast<peer_id_t>(p.to));
+  return respond_ok(env);
+}
+
+static std::string handle_router_disconnect(control_rpc_context_t &ctx,
+                                            const dmjson::rpc::envelope_info_t &env,
+                                            std::string_view params) {
+  auto p = parse_rpc_params<router_connect_params_t>(params);
+  ctx.router->disconnect(static_cast<peer_id_t>(p.from),
+                         static_cast<peer_id_t>(p.to));
+  return respond_ok(env);
+}
+
+static std::string handle_endpoint_connect(control_rpc_context_t &ctx,
+                                           const dmjson::rpc::envelope_info_t &env,
+                                           std::string_view params) {
+  auto p = parse_rpc_params<endpoint_connect_params_t>(params);
+  if (p.from.empty() || p.to.empty())
+    throw std::runtime_error("Need {from,to} device identity strings");
+  const bool bidi = p.bidi.value_or(true);
+
+  if (is_direct_alsa_side(p.from) && is_direct_alsa_side(p.to)) {
+    if (!ctx.aseq)
+      throw std::runtime_error("ALSA sequencer not available");
+    const auto from_port = alsa_port_from_identity(ctx.aseq, p.from);
+    const auto to_port = alsa_port_from_identity(ctx.aseq, p.to);
+    if (!from_port || !to_port)
+      throw std::runtime_error("Could not resolve ALSA ports from identity");
+    ctx.aseq->connect_external(*from_port, *to_port);
+    if (bidi)
+      ctx.aseq->connect_external(*to_port, *from_port);
+    maybe_persist_direct_endpoint_connection(ctx, p.from, p.to, bidi);
+    return respond_ok(env);
+  }
+
+  const auto pa = ensure_peer_for_side(ctx, p.from);
+  const auto pb = ensure_peer_for_side(ctx, p.to);
+  ctx.router->connect_blocking(pa, pb);
+  if (bidi)
+    ctx.router->connect_blocking(pb, pa);
+  return respond_ok(env);
+}
+
+static std::string handle_endpoint_disconnect(control_rpc_context_t &ctx,
+                                              const dmjson::rpc::envelope_info_t &env,
+                                              std::string_view params) {
+  auto p = parse_rpc_params<endpoint_disconnect_params_t>(params);
+  if (p.from.empty() || p.to.empty())
+    throw std::runtime_error("Need {from,to} device identity strings");
+
+  if (is_direct_alsa_side(p.from) && is_direct_alsa_side(p.to)) {
+    if (!ctx.aseq)
+      throw std::runtime_error("ALSA sequencer not available");
+    const auto from_port = alsa_port_from_identity(ctx.aseq, p.from);
+    const auto to_port = alsa_port_from_identity(ctx.aseq, p.to);
+    if (!from_port || !to_port)
+      throw std::runtime_error("Could not resolve ALSA ports from identity");
+    ctx.aseq->disconnect_external(*from_port, *to_port);
+    ctx.aseq->disconnect_external(*to_port, *from_port);
+    unpersist_endpoint_pair(ctx, p.from, p.to);
+    return respond_ok(env);
+  }
+
+  const auto pa = peer_id_for_disconnect_side(ctx, p.from);
+  const auto pb = peer_id_for_disconnect_side(ctx, p.to);
+  if (!pa || !pb)
+    throw std::runtime_error(
+        "Could not resolve online peers for disconnect (check device "
+        "identities match the Devices tab)");
+  ctx.router->disconnect(*pa, *pb);
+  ctx.router->disconnect(*pb, *pa);
+  return respond_ok(env);
+}
+
+static std::string handle_connect(control_rpc_context_t &ctx,
+                                  const dmjson::rpc::envelope_info_t &env,
+                                  std::string_view params) {
+  auto p = parse_rpc_params<connect_params_t>(params);
+  if (p.hostname.empty())
+    throw std::runtime_error("Need object {hostname, port?, name?}");
+  device_identity_t id;
+  id.type_prefix = "alsa_listener";
+  id.fields.push_back(
+      device_identity_field_t{"service", p.name.value_or(p.hostname), false});
+  id.fields.push_back(device_identity_field_t{"hostname", p.hostname, false});
+  id.fields.push_back(
+      device_identity_field_t{"port", p.port.value_or("5004"), false});
+  std::string err;
+  auto peer = create_peer_from_string(id.serialize(), factory_context(ctx), &err);
+  if (!peer)
+    throw std::runtime_error(err.empty() ? "connect failed" : err);
+  ctx.router->add_peer(*peer);
+  return respond_ok(env);
+}
+
+static std::string handle_router_create(control_rpc_context_t &ctx,
+                                        const dmjson::rpc::envelope_info_t &env,
+                                        std::string_view params) {
+  auto p = parse_rpc_params<router_create_params_t>(params);
+  if (p.identity.empty())
+    throw std::runtime_error("Need {identity}");
+  std::string err;
+  auto peer = create_peer_from_string(p.identity, factory_context(ctx), &err);
+  if (!peer)
+    throw std::runtime_error(err.empty() ? "create failed" : err);
+  const auto pid = ctx.router->add_peer(*peer);
+  if (pid == 0)
+    throw std::runtime_error("router.add_peer failed (port subscription rejected?)");
+  return respond(env, (*peer)->status());
+}
+
+static std::string handle_router_create_list(control_rpc_context_t &ctx,
+                                             const dmjson::rpc::envelope_info_t &env,
+                                             std::string_view /*params*/) {
+  return respond(env, build_router_create_list());
+}
+
+static std::string handle_mdns_remove(control_rpc_context_t &ctx,
+                                      const dmjson::rpc::envelope_info_t &env,
+                                      std::string_view params) {
+  if (!ctx.mdns)
+    throw std::runtime_error("mDNS not available");
+  auto p = parse_rpc_params<mdns_remove_params_t>(params);
+  ctx.mdns->remove_announcement(p.name, p.hostname.value_or(""), p.port);
+  return respond_ok(env);
+}
+
+static std::string handle_midi_list_alsa_seq(control_rpc_context_t &ctx,
+                                             const dmjson::rpc::envelope_info_t &env,
+                                             std::string_view /*params*/) {
+  if (!ctx.aseq)
+    return respond(env, rpc_error_body_t{"ALSA sequencer not available"});
+  return respond_rows(env, ctx.aseq->enumerate_exported_ports());
+}
+
+static std::string handle_midi_list_alsa_subscriptions(control_rpc_context_t &ctx,
+                                                       const dmjson::rpc::envelope_info_t &env,
+                                                       std::string_view /*params*/) {
+  if (!ctx.aseq)
+    return respond(env, rpc_error_body_t{"ALSA sequencer not available"});
+  return respond_rows(env, ctx.aseq->enumerate_subscriptions());
+}
+
+static std::string handle_midi_list_rawmidi(control_rpc_context_t & /*ctx*/,
+                                            const dmjson::rpc::envelope_info_t &env,
+                                            std::string_view /*params*/) {
+  return respond_rows(env, enumerate_rawmidi_devices());
+}
+
+static std::string handle_monitor_start(control_rpc_context_t &ctx,
+                                        const dmjson::rpc::envelope_info_t &env,
+                                        std::string_view params) {
+  if (!ctx.router)
+    throw std::runtime_error("router not available");
+  auto p = parse_rpc_params<monitor_start_params_t>(params);
+  if (p.identity.empty())
+    throw std::runtime_error("Need {identity}");
+  const peer_id_t target = ensure_peer_for_side(ctx, p.identity);
+  const std::string uuid = random_uuid_v4();
+  auto peer_base = make_webui_midi_monitor_peer(uuid, target);
+  auto mon = std::dynamic_pointer_cast<webui_midi_monitor_peer_t>(peer_base);
+  if (!mon)
+    throw std::runtime_error("internal: monitor peer");
+  const peer_id_t mid = ctx.router->add_peer(peer_base);
+  monitor_registry_register(uuid, mon);
+  tee_monitor_edges(ctx, target, mid);
+  if (const auto target_port = alsa_port_from_identity(ctx.aseq, p.identity)) {
+    setup_alsa_monitor_taps(
+        ctx.aseq, ctx.router, target_port->client, target_port->port, target,
+        mid, uuid,
+        [&](uint8_t client, uint8_t port) {
+          device_identity_t id;
+          if (!ctx.aseq)
+            throw std::runtime_error("ALSA sequencer not available");
+          const auto cn = ctx.aseq->get_client_name_by_id(client);
+          const auto pn = ctx.aseq->get_port_name(client, port);
+          if (cn.empty() || pn.empty())
+            throw std::runtime_error("Could not resolve ALSA names");
+          const auto sid = identity_from_alsa_names(cn, pn);
+          if (!sid)
+            throw std::runtime_error("Could not build ALSA identity");
+          return ensure_peer_for_side(ctx, sid->serialize());
+        });
+  }
+  monitor_start_result_t out{};
+  out.uuid = uuid;
+  out.peer_id = static_cast<uint64_t>(mid);
+  out.target_peer_id = static_cast<uint64_t>(target);
+  return respond(env, out);
+}
+
+static std::string handle_monitor_stop(control_rpc_context_t &ctx,
+                                       const dmjson::rpc::envelope_info_t &env,
+                                       std::string_view params) {
+  if (!ctx.router)
+    throw std::runtime_error("router not available");
+  auto p = parse_rpc_params<monitor_stop_params_t>(params);
+  auto mon = monitor_registry_lookup(p.uuid);
+  if (!mon)
+    throw std::runtime_error("Unknown monitor session");
+  teardown_alsa_monitor_taps(ctx.router, p.uuid);
+  monitor_session_stop(ctx.router, mon);
+  return respond_ok(env);
+}
+
+static std::string handle_connections_list(control_rpc_context_t &ctx,
+                                           const dmjson::rpc::envelope_info_t &env,
+                                           std::string_view /*params*/) {
+  connections_list_result_t out{};
+  if (!ctx.connection_db)
+    return respond(env, out);
+  out.enabled = 1;
+  const auto online = online_devices_snapshot(ctx);
+  for (const auto &p : ctx.connection_db->database().list_connections()) {
+    persisted_connection_row_t row;
+    row.side_a = p.side_a;
+    row.side_b = p.side_b;
+    row.direction = connection_direction_to_wire(p.direction);
+    row.enabled = p.enabled ? 1 : 0;
+    const auto ma = match_connection_side(p.side_a, online);
+    const auto mb = match_connection_side(p.side_b, online);
+    row.active_a = ma.active ? 1 : 0;
+    row.active_b = mb.active ? 1 : 0;
+    row.peer_a = ma.peer_id;
+    row.peer_b = mb.peer_id;
+    out.connections.push_back(std::move(row));
+  }
+  return respond(env, out);
+}
+
+static std::string handle_connections_save(control_rpc_context_t &ctx,
+                                           const dmjson::rpc::envelope_info_t &env,
+                                           std::string_view params) {
+  if (!ctx.connection_db)
+    throw std::runtime_error("Connection database is not enabled");
+  auto p = parse_rpc_params<connections_save_params_t>(params);
+  const auto sa = resolve_side_to_connection_side(p.side_a);
+  const auto sb = resolve_side_to_connection_side(p.side_b);
+  if (!sa || !sb)
+    throw std::runtime_error("Could not resolve connection sides");
+  if (*sa == *sb)
+    throw std::runtime_error("Both sides resolve to the same identity");
+  stored_connection_t row;
+  row.side_a = *sa;
+  row.side_b = *sb;
+  row.direction = connection_direction_from_wire(p.direction);
+  row.enabled = p.enabled != 0;
+  ctx.connection_db->save_stored_connection(std::move(row));
+  return respond_ok(env);
+}
+
+static std::string handle_connections_remove(control_rpc_context_t &ctx,
+                                             const dmjson::rpc::envelope_info_t &env,
+                                             std::string_view params) {
+  if (!ctx.connection_db)
+    throw std::runtime_error("Connection database is not enabled");
+  auto p = parse_rpc_params<connections_mutate_params_t>(params);
+  const auto sa = resolve_side_to_connection_side(p.side_a);
+  const auto sb = resolve_side_to_connection_side(p.side_b);
+  if (!sa || !sb)
+    throw std::runtime_error("Could not resolve stable ids");
+  ctx.connection_db->remove_stable_pair(*sa, *sb);
+  if (ctx.device_registry)
+    ctx.device_registry->prune_unreferenced_offline();
+  return respond_ok(env);
+}
+
+static std::string handle_connections_set_enabled(control_rpc_context_t &ctx,
+                                                  const dmjson::rpc::envelope_info_t &env,
+                                                  std::string_view params) {
+  if (!ctx.connection_db)
+    throw std::runtime_error("Connection database is not enabled");
+  auto p = parse_rpc_params<connections_enable_params_t>(params);
+  const auto sa = resolve_side_to_connection_side(p.side_a);
+  const auto sb = resolve_side_to_connection_side(p.side_b);
+  if (!sa || !sb)
+    throw std::runtime_error("Could not resolve connection sides");
+  const bool enable = p.enabled.value_or(env.method == "connections.enable");
+  const bool ok = ctx.connection_db->set_stored_enabled(*sa, *sb, enable);
+  if (!ok)
+    throw std::runtime_error("Connection not found in database");
+  if (!enable && ctx.device_registry)
+    ctx.device_registry->prune_unreferenced_offline();
+  return respond_ok(env);
+}
+
+static std::string handle_devices_list(control_rpc_context_t &ctx,
+                                       const dmjson::rpc::envelope_info_t &env,
+                                       std::string_view /*params*/) {
+  devices_list_result_t out{};
+
+  if (ctx.aseq) {
+    for (const auto &row : ctx.aseq->enumerate_exported_ports()) {
+      device_list_row_t d;
+      d.identity = row.identity;
+      d.type = "alsa_seq";
+      d.name = row.port_name.empty() ? row.client_name : row.port_name;
+      d.source = "local";
+      d.online = 1;
+      out.devices.push_back(std::move(d));
+    }
+    DEBUG("devices.list: {} alsa seq ports",
+          ctx.aseq->enumerate_exported_ports().size());
+  }
+  for (const auto &row : enumerate_rawmidi_devices()) {
+    device_list_row_t d;
+    d.identity = row.identity;
+    d.type = "rawmidi";
+    d.name = row.label;
+    d.source = "local";
+    d.online = 1;
+    out.devices.push_back(std::move(d));
+  }
+  DEBUG("devices.list: {} local devices total", out.devices.size());
+
+  if (!ctx.device_registry)
+    return respond(env, out);
+  out.enabled = 1;
+  for (const auto &d : ctx.device_registry->list_devices()) {
+    device_list_row_t row;
+    row.identity = d.identity_key();
+    row.type = d.identity.type_prefix;
+    row.name = d.display_name.empty() ? d.identity.type_prefix : d.display_name;
+    for (const auto &f : d.identity.fields) {
+      if (f.key == "name" || f.key == "service" || f.key == "client") {
+        if (!f.value.empty())
+          row.name = f.value;
+      }
+    }
+    row.source = device_source_to_wire(d.source);
+    row.first_seen = d.first_seen;
+    row.last_seen = d.last_seen;
+    row.online = d.online() ? 1 : 0;
+    if (d.online_peer_id)
+      row.peer_id = static_cast<uint64_t>(*d.online_peer_id);
+    out.devices.push_back(std::move(row));
+  }
+  return respond(env, out);
+}
+
+static std::string handle_devices_add_manual(control_rpc_context_t &ctx,
+                                             const dmjson::rpc::envelope_info_t &env,
+                                             std::string_view params) {
+  if (!ctx.device_registry)
+    throw std::runtime_error("Device registry is not enabled");
+  auto p = parse_rpc_params<devices_add_manual_params_t>(params);
+  const auto id = device_identity_t::parse(p.identity);
+  if (!id)
+    throw std::runtime_error("Invalid device identity (expected key=value form)");
+  std::string display = p.name.value_or("");
+  ctx.device_registry->add_manual(*id, display);
+  return respond_ok(env);
+}
+
+static std::string handle_devices_remove(control_rpc_context_t &ctx,
+                                         const dmjson::rpc::envelope_info_t &env,
+                                         std::string_view params) {
+  if (!ctx.device_registry)
+    throw std::runtime_error("Device registry is not enabled");
+  auto p = parse_rpc_params<devices_remove_params_t>(params);
+  if (!ctx.device_registry->remove_device(p.identity))
+    throw std::runtime_error("Device not found in registry");
+  return respond_ok(env);
+}
+
+static std::string handle_help(control_rpc_context_t & /*ctx*/,
+                               const dmjson::rpc::envelope_info_t &env,
+                               std::string_view /*params*/) {
+  return respond_rows(env, build_help_entries());
+}
+
+static std::string handle_subscribe(control_rpc_context_t &ctx,
+                                    const dmjson::rpc::envelope_info_t &env,
+                                    std::string_view params) {
+  if (!ctx.subscriptions)
+    throw std::runtime_error("Subscriptions not available on this transport");
+  auto p = parse_rpc_params<subscribe_params_t>(params);
+  ctx.subscriptions->subscribe(p.channels);
+  return respond_ok(env);
+}
+
+static std::string handle_unsubscribe(control_rpc_context_t &ctx,
+                                      const dmjson::rpc::envelope_info_t &env,
+                                      std::string_view params) {
+  if (!ctx.subscriptions)
+    throw std::runtime_error("Subscriptions not available on this transport");
+  auto p = parse_rpc_params<unsubscribe_params_t>(params);
+  ctx.subscriptions->unsubscribe(p.channels);
+  return respond_ok(env);
+}
+
+static std::string handle_log_query(control_rpc_context_t & /*ctx*/,
+                                    const dmjson::rpc::envelope_info_t &env,
+                                    std::string_view params) {
+  auto p = parse_rpc_params<log_query_params_t>(params);
+  log_query_result_t result;
+  auto entries = ::rtpmidid::g_log_buffer.query(
+      p.q.value_or(""),
+      p.since_seq.value_or(0),
+      p.since_us.value_or(0),
+      p.limit.value_or(100));
+  result.buffer_capacity = static_cast<int>(::rtpmidid::g_log_buffer.capacity());
+  result.oldest_seq = ::rtpmidid::g_log_buffer.oldest_seq();
+  result.newest_seq = ::rtpmidid::g_log_buffer.newest_seq();
+  result.total_matches = static_cast<int>(entries.size());
+  for (auto &entry : entries) {
+    log_query_entry_t qe;
+    qe.seq = entry.seq;
+    qe.timestamp_us = entry.timestamp_us;
+    qe.level = entry.level;
+    qe.file = entry.file;
+    qe.line = entry.line;
+    qe.message = entry.message;
+    qe.tags = ::rtpmidid::parse_logfmt_tags(entry.message);
+    result.entries.push_back(std::move(qe));
+  }
+  return respond(env, result);
+}
+
+// ─── Dispatch table ─────────────────────────────────────────────────────
+
+// Entries are sorted for readability; lookup is O(1) via unordered_map.
+static const std::unordered_map<std::string, rpc_handler_fn> kRpcHandlers = {
+    {"status",                    handle_status},
+    {"help",                      handle_help},
+
+    // Router topology
+    {"router.remove",             handle_router_remove},
+    {"router.connect",            handle_router_connect},
+    {"router.disconnect",         handle_router_disconnect},
+    {"router.create",             handle_router_create},
+    {"router.create.list",        handle_router_create_list},
+
+    // Endpoint-level connect/disconnect
+    {"endpoint.connect",          handle_endpoint_connect},
+    {"endpoint.disconnect",       handle_endpoint_disconnect},
+
+    // Convenience
+    {"connect",                   handle_connect},
+
+    // mDNS
+    {"mdns.remove",               handle_mdns_remove},
+
+    // MIDI enumeration
+    {"midi.listAlsaSeq",          handle_midi_list_alsa_seq},
+    {"midi.listAlsaSubscriptions",handle_midi_list_alsa_subscriptions},
+    {"midi.listRawMidi",          handle_midi_list_rawmidi},
+
+    // Web UI MIDI monitor
+    {"monitor.start",             handle_monitor_start},
+    {"monitor.stop",              handle_monitor_stop},
+
+    // Persisted connections
+    {"connections.list",          handle_connections_list},
+    {"connections.save",          handle_connections_save},
+    {"connections.remove",        handle_connections_remove},
+    {"connections.set_enabled",   handle_connections_set_enabled},
+    // Backwards-compatible aliases for enable/disable
+    {"connections.enable",        handle_connections_set_enabled},
+    {"connections.disable",       handle_connections_set_enabled},
+
+    // Device registry
+    {"devices.list",              handle_devices_list},
+    {"devices.add_manual",        handle_devices_add_manual},
+    {"devices.remove",            handle_devices_remove},
+
+    // Event subscriptions
+    {"subscribe",                 handle_subscribe},
+    {"unsubscribe",               handle_unsubscribe},
+
+    // Log query
+    {"log.query",                 handle_log_query},
+};
+
 } // namespace
 
 std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_view line_in) {
@@ -345,406 +864,7 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       env.has_params ? env.params_json : std::string_view("{}");
 
   try {
-    if (env.method == "status") {
-      daemon_status_t ds;
-      ds.version = VERSION;
-      ds.settings.alsa_name = settings.alsa_name;
-      ds.settings.control_filename = settings.control_filename;
-      ds.router = ctx.router->status_rows();
-      ds.mdns = mdns_snapshot(ctx.mdns);
-
-      // PWA / shareable web URL (mDNS .local when not localhost-only)
-      const auto &wl = settings.web.listen;
-      const int wp = settings.web.port;
-      const bool is_localhost =
-          wl == "127.0.0.1" || wl == "::1" || wl == "localhost";
-      ds.web.accessible = settings.web.enabled && !is_localhost;
-      if (ds.web.accessible) {
-        char hn[256]{};
-        gethostname(hn, sizeof(hn));
-        hn[sizeof(hn) - 1] = '\0';
-        std::string host = hn;
-        // Strip any trailing dot (some setups include it)
-        if (!host.empty() && host.back() == '.') {
-          host.pop_back();
-        }
-        // Don't append .local if hostname already contains a dot (FQDN)
-        if (host.find('.') == std::string::npos) {
-          host += ".local";
-        }
-        ds.web.url = "http://" + host + ":" + std::to_string(wp);
-      } else {
-        ds.web.url = "http://" + wl + ":" + std::to_string(wp);
-      }
-
-      return respond(env, ds);
-    }
-    if (env.method == "router.remove") {
-      auto p = parse_rpc_params<router_remove_params_t>(params);
-      ctx.router->remove_peer(static_cast<peer_id_t>(p.peer_id));
-      return respond_ok(env);
-    }
-    if (env.method == "router.connect") {
-      auto p = parse_rpc_params<router_connect_params_t>(params);
-      ctx.router->connect(static_cast<peer_id_t>(p.from),
-                          static_cast<peer_id_t>(p.to));
-      return respond_ok(env);
-    }
-    if (env.method == "router.disconnect") {
-      auto p = parse_rpc_params<router_connect_params_t>(params);
-      ctx.router->disconnect(static_cast<peer_id_t>(p.from),
-                             static_cast<peer_id_t>(p.to));
-      return respond_ok(env);
-    }
-    if (env.method == "endpoint.connect") {
-      auto p = parse_rpc_params<endpoint_connect_params_t>(params);
-      if (p.from.empty() || p.to.empty())
-        throw std::runtime_error("Need {from,to} device identity strings");
-      const bool bidi = p.bidi.value_or(true);
-
-      if (is_direct_alsa_side(p.from) && is_direct_alsa_side(p.to)) {
-        if (!ctx.aseq)
-          throw std::runtime_error("ALSA sequencer not available");
-        const auto from_port = alsa_port_from_identity(ctx.aseq, p.from);
-        const auto to_port = alsa_port_from_identity(ctx.aseq, p.to);
-        if (!from_port || !to_port)
-          throw std::runtime_error("Could not resolve ALSA ports from identity");
-        ctx.aseq->connect_external(*from_port, *to_port);
-        if (bidi)
-          ctx.aseq->connect_external(*to_port, *from_port);
-        const auto rows = router_rows_snapshot(ctx);
-        maybe_persist_direct_endpoint_connection(ctx, p.from, p.to, bidi, rows);
-        return respond_ok(env);
-      }
-
-      const auto pa = ensure_peer_for_side(ctx, p.from);
-      const auto pb = ensure_peer_for_side(ctx, p.to);
-      ctx.router->connect_blocking(pa, pb);
-      if (bidi)
-        ctx.router->connect_blocking(pb, pa);
-      return respond_ok(env);
-    }
-    if (env.method == "endpoint.disconnect") {
-      auto p = parse_rpc_params<endpoint_disconnect_params_t>(params);
-      if (p.from.empty() || p.to.empty())
-        throw std::runtime_error("Need {from,to} device identity strings");
-
-      if (is_direct_alsa_side(p.from) && is_direct_alsa_side(p.to)) {
-        if (!ctx.aseq)
-          throw std::runtime_error("ALSA sequencer not available");
-        const auto from_port = alsa_port_from_identity(ctx.aseq, p.from);
-        const auto to_port = alsa_port_from_identity(ctx.aseq, p.to);
-        if (!from_port || !to_port)
-          throw std::runtime_error("Could not resolve ALSA ports from identity");
-        ctx.aseq->disconnect_external(*from_port, *to_port);
-        ctx.aseq->disconnect_external(*to_port, *from_port);
-        unpersist_endpoint_pair(ctx, p.from, p.to);
-        return respond_ok(env);
-      }
-
-      const auto pa = peer_id_for_disconnect_side(ctx, p.from);
-      const auto pb = peer_id_for_disconnect_side(ctx, p.to);
-      if (!pa || !pb)
-        throw std::runtime_error(
-            "Could not resolve online peers for disconnect (check device "
-            "identities match the Devices tab)");
-      ctx.router->disconnect(*pa, *pb);
-      ctx.router->disconnect(*pb, *pa);
-      return respond_ok(env);
-    }
-    if (env.method == "connect") {
-      auto p = parse_rpc_params<connect_params_t>(params);
-      if (p.hostname.empty())
-        throw std::runtime_error("Need object {hostname, port?, name?}");
-      device_identity_t id;
-      id.type_prefix = "alsa_listener";
-      id.fields.push_back(
-          device_identity_field_t{"service", p.name.value_or(p.hostname), false});
-      id.fields.push_back(device_identity_field_t{"hostname", p.hostname, false});
-      id.fields.push_back(
-          device_identity_field_t{"port", p.port.value_or("5004"), false});
-      std::string err;
-      auto peer = create_peer({id}, factory_context(ctx), &err);
-      if (!peer)
-        throw std::runtime_error(err.empty() ? "connect failed" : err);
-      ctx.router->add_peer(*peer);
-      return respond_ok(env);
-    }
-    if (env.method == "router.create") {
-      auto p = parse_rpc_params<router_create_params_t>(params);
-      if (p.identity.empty())
-        throw std::runtime_error("Need {identity}");
-      std::string err;
-      auto peer = create_peer_from_string(p.identity, factory_context(ctx), &err);
-      if (!peer)
-        throw std::runtime_error(err.empty() ? "create failed" : err);
-      const auto pid = ctx.router->add_peer(*peer);
-      if (pid == 0)
-        throw std::runtime_error("router.add_peer failed (port subscription rejected?)");
-      return respond(env, (*peer)->status());
-    }
-    if (env.method == "router.create.list")
-      return respond(env, build_router_create_list());
-    if (env.method == "mdns.remove") {
-      if (!ctx.mdns)
-        throw std::runtime_error("mDNS not available");
-      auto p = parse_rpc_params<mdns_remove_params_t>(params);
-      ctx.mdns->remove_announcement(p.name, p.hostname.value_or(""), p.port);
-      return respond_ok(env);
-    }
-    if (env.method == "midi.listAlsaSeq") {
-      if (!ctx.aseq)
-        return respond(env, rpc_error_body_t{"ALSA sequencer not available"});
-      return respond_rows(env, ctx.aseq->enumerate_exported_ports());
-    }
-    if (env.method == "midi.listAlsaSubscriptions") {
-      if (!ctx.aseq)
-        return respond(env, rpc_error_body_t{"ALSA sequencer not available"});
-      return respond_rows(env, ctx.aseq->enumerate_subscriptions());
-    }
-    if (env.method == "midi.listRawMidi")
-      return respond_rows(env, enumerate_rawmidi_devices());
-    if (env.method == "monitor.start") {
-      if (!ctx.router)
-        throw std::runtime_error("router not available");
-      auto p = parse_rpc_params<monitor_start_params_t>(params);
-      if (p.identity.empty())
-        throw std::runtime_error("Need {identity}");
-      const peer_id_t target = ensure_peer_for_side(ctx, p.identity);
-      const std::string uuid = random_uuid_v4();
-      auto peer_base = make_webui_midi_monitor_peer(uuid, target);
-      auto mon =
-          std::dynamic_pointer_cast<webui_midi_monitor_peer_t>(peer_base);
-      if (!mon)
-        throw std::runtime_error("internal: monitor peer");
-      const peer_id_t mid = ctx.router->add_peer(peer_base);
-      monitor_registry_register(uuid, mon);
-      tee_monitor_edges(ctx, target, mid, mon);
-      if (const auto target_port = alsa_port_from_identity(ctx.aseq, p.identity)) {
-        setup_alsa_monitor_taps(
-            ctx.aseq, ctx.router, target_port->client, target_port->port, target,
-            mid, uuid,
-            [&](uint8_t client, uint8_t port) {
-              device_identity_t id;
-              if (!ctx.aseq)
-                throw std::runtime_error("ALSA sequencer not available");
-              const auto cn = ctx.aseq->get_client_name_by_id(client);
-              const auto pn = ctx.aseq->get_port_name(client, port);
-              if (cn.empty() || pn.empty())
-                throw std::runtime_error("Could not resolve ALSA names");
-              const auto sid = identity_from_alsa_names(cn, pn);
-              if (!sid)
-                throw std::runtime_error("Could not build ALSA identity");
-              return ensure_peer_for_side(ctx, sid->serialize());
-            });
-      }
-      monitor_start_result_t out{};
-      out.uuid = uuid;
-      out.peer_id = static_cast<uint64_t>(mid);
-      out.target_peer_id = static_cast<uint64_t>(target);
-      return respond(env, out);
-    }
-    if (env.method == "monitor.stop") {
-      if (!ctx.router)
-        throw std::runtime_error("router not available");
-      auto p = parse_rpc_params<monitor_stop_params_t>(params);
-      auto mon = monitor_registry_lookup(p.uuid);
-      if (!mon)
-        throw std::runtime_error("Unknown monitor session");
-      teardown_alsa_monitor_taps(ctx.router, p.uuid);
-      monitor_session_stop(ctx.router, mon);
-      return respond_ok(env);
-    }
-    if (env.method == "connections.list") {
-      connections_list_result_t out{};
-      if (!ctx.connection_db) {
-        return respond(env, out);
-      }
-      out.enabled = 1;
-      const auto online = online_devices_snapshot(ctx);
-      for (const auto &p : ctx.connection_db->database().list_connections()) {
-        persisted_connection_row_t row;
-        row.side_a = p.side_a;
-        row.side_b = p.side_b;
-        row.direction = connection_direction_to_wire(p.direction);
-        row.enabled = p.enabled ? 1 : 0;
-        const auto ma = match_connection_side(p.side_a, online);
-        const auto mb = match_connection_side(p.side_b, online);
-        row.active_a = ma.active ? 1 : 0;
-        row.active_b = mb.active ? 1 : 0;
-        row.peer_a = ma.peer_id;
-        row.peer_b = mb.peer_id;
-        out.connections.push_back(std::move(row));
-      }
-      return respond(env, out);
-    }
-    if (env.method == "connections.save") {
-      if (!ctx.connection_db)
-        throw std::runtime_error("Connection database is not enabled");
-      auto p = parse_rpc_params<connections_save_params_t>(params);
-      const auto rows = router_rows_snapshot(ctx);
-      const auto sa = resolve_side_to_connection_side(p.side_a);
-      const auto sb = resolve_side_to_connection_side(p.side_b);
-      if (!sa || !sb)
-        throw std::runtime_error("Could not resolve connection sides");
-      if (*sa == *sb)
-        throw std::runtime_error("Both sides resolve to the same identity");
-      stored_connection_t row;
-      row.side_a = *sa;
-      row.side_b = *sb;
-      row.direction = connection_direction_from_wire(p.direction);
-      row.enabled = p.enabled != 0;
-      ctx.connection_db->save_stored_connection(std::move(row));
-      return respond_ok(env);
-    }
-    if (env.method == "connections.remove") {
-      if (!ctx.connection_db)
-        throw std::runtime_error("Connection database is not enabled");
-      auto p = parse_rpc_params<connections_mutate_params_t>(params);
-      const auto sa = resolve_side_to_connection_side(p.side_a);
-      const auto sb = resolve_side_to_connection_side(p.side_b);
-      if (!sa || !sb)
-        throw std::runtime_error("Could not resolve stable ids");
-      ctx.connection_db->remove_stable_pair(*sa, *sb);
-      // Immediately prune any offline devices that are no longer referenced
-      if (ctx.device_registry)
-        ctx.device_registry->prune_unreferenced_offline();
-      return respond_ok(env);
-    }
-    if (env.method == "connections.set_enabled" ||
-        env.method == "connections.enable" ||
-        env.method == "connections.disable") {
-      if (!ctx.connection_db)
-        throw std::runtime_error("Connection database is not enabled");
-      auto p = parse_rpc_params<connections_enable_params_t>(params);
-      const auto sa = resolve_side_to_connection_side(p.side_a);
-      const auto sb = resolve_side_to_connection_side(p.side_b);
-      if (!sa || !sb)
-        throw std::runtime_error("Could not resolve connection sides");
-      const bool enable = p.enabled.value_or(env.method == "connections.enable");
-      const bool ok = ctx.connection_db->set_stored_enabled(*sa, *sb, enable);
-      if (!ok)
-        throw std::runtime_error("Connection not found in database");
-      // Disabling a connection may leave devices unreferenced
-      if (!enable && ctx.device_registry)
-        ctx.device_registry->prune_unreferenced_offline();
-      return respond_ok(env);
-    }
-    if (env.method == "devices.list") {
-      devices_list_result_t out{};
-
-      // Local ALSA seq + raw MIDI enumeration (always, no DB required).
-      if (ctx.aseq) {
-        for (const auto &row : ctx.aseq->enumerate_exported_ports()) {
-          device_list_row_t d;
-          d.identity = row.identity;
-          d.type = "alsa_seq";
-          d.name = row.port_name.empty() ? row.client_name : row.port_name;
-          d.source = "local";
-          d.online = 1;
-          out.devices.push_back(std::move(d));
-        }
-        DEBUG("devices.list: {} alsa seq ports",
-              ctx.aseq->enumerate_exported_ports().size());
-      }
-      for (const auto &row : enumerate_rawmidi_devices()) {
-        device_list_row_t d;
-        d.identity = row.identity;
-        d.type = "rawmidi";
-        d.name = row.label;
-        d.source = "local";
-        d.online = 1;
-        out.devices.push_back(std::move(d));
-      }
-      DEBUG("devices.list: {} local devices total", out.devices.size());
-
-      // DB-backed registry rows (requires [database]).
-      if (!ctx.device_registry)
-        return respond(env, out);
-      out.enabled = 1;
-      for (const auto &d : ctx.device_registry->list_devices()) {
-        device_list_row_t row;
-        row.identity = d.identity_key();
-        row.type = d.identity.type_prefix;
-        row.name = d.display_name.empty() ? d.identity.type_prefix : d.display_name;
-        for (const auto &f : d.identity.fields) {
-          if (f.key == "name" || f.key == "service" || f.key == "client") {
-            if (!f.value.empty())
-              row.name = f.value;
-          }
-        }
-        row.source = device_source_to_wire(d.source);
-        row.first_seen = d.first_seen;
-        row.last_seen = d.last_seen;
-        row.online = d.online() ? 1 : 0;
-        if (d.online_peer_id)
-          row.peer_id = static_cast<uint64_t>(*d.online_peer_id);
-        out.devices.push_back(std::move(row));
-      }
-      return respond(env, out);
-    }
-    if (env.method == "devices.add_manual") {
-      if (!ctx.device_registry)
-        throw std::runtime_error("Device registry is not enabled");
-      auto p = parse_rpc_params<devices_add_manual_params_t>(params);
-      const auto id = device_identity_t::parse(p.identity);
-      if (!id)
-        throw std::runtime_error("Invalid device identity (expected key=value form)");
-      std::string display = p.name.value_or("");
-      ctx.device_registry->add_manual(*id, display);
-      return respond_ok(env);
-    }
-    if (env.method == "devices.remove") {
-      if (!ctx.device_registry)
-        throw std::runtime_error("Device registry is not enabled");
-      auto p = parse_rpc_params<devices_remove_params_t>(params);
-      if (!ctx.device_registry->remove_device(p.identity))
-        throw std::runtime_error("Device not found in registry");
-      return respond_ok(env);
-    }
-    if (env.method == "help")
-      return respond_rows(env, build_help_entries());
-    if (env.method == "subscribe") {
-      if (!ctx.subscriptions)
-        throw std::runtime_error("Subscriptions not available on this transport");
-      auto p = parse_rpc_params<subscribe_params_t>(params);
-      ctx.subscriptions->subscribe(p.channels);
-      return respond_ok(env);
-    }
-    if (env.method == "unsubscribe") {
-      if (!ctx.subscriptions)
-        throw std::runtime_error("Subscriptions not available on this transport");
-      auto p = parse_rpc_params<unsubscribe_params_t>(params);
-      ctx.subscriptions->unsubscribe(p.channels);
-      return respond_ok(env);
-    }
-    if (env.method == "log.query") {
-      auto p = parse_rpc_params<log_query_params_t>(params);
-      log_query_result_t result;
-      // Query the global ring buffer
-      auto entries = ::rtpmidid::g_log_buffer.query(
-          p.q.value_or(""),
-          p.since_seq.value_or(0),
-          p.since_us.value_or(0),
-          p.limit.value_or(100));
-      result.buffer_capacity = static_cast<int>(::rtpmidid::g_log_buffer.capacity());
-      result.oldest_seq = ::rtpmidid::g_log_buffer.oldest_seq();
-      result.newest_seq = ::rtpmidid::g_log_buffer.newest_seq();
-      result.total_matches = static_cast<int>(entries.size());
-      for (auto &entry : entries) {
-        log_query_entry_t qe;
-        qe.seq = entry.seq;
-        qe.timestamp_us = entry.timestamp_us;
-        qe.level = entry.level;
-        qe.file = entry.file;
-        qe.line = entry.line;
-        qe.message = entry.message;
-        qe.tags = ::rtpmidid::parse_logfmt_tags(entry.message);
-        result.entries.push_back(std::move(qe));
-      }
-      return respond(env, result);
-    }
-
+    // Peer commands: <id>.<subcmd>
     std::smatch match;
     if (std::regex_match(env.method, match, PEER_COMMAND_RE)) {
       const auto peer_id = static_cast<peer_id_t>(std::stoul(match[1].str()));
@@ -757,6 +877,11 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
         return respond_error(env, perr);
       return dmjson::to_json(rpc_result_t{id_json(env), std::string(inner.view())}) + "\n";
     }
+
+    // Named RPC methods: O(1) lookup
+    auto it = kRpcHandlers.find(env.method);
+    if (it != kRpcHandlers.end())
+      return it->second(ctx, env, params);
 
     return respond_error(env, FMT::format("Unknown method '{}'", env.method));
   } catch (const std::exception &e) {

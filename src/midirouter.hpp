@@ -102,6 +102,8 @@ public:
   std::vector<peer_id_t> peer_ids() const;
   std::vector<peer_id_t> send_targets_for(peer_id_t from) const;
   std::vector<router_peer_row_t> status_rows() const;
+  /** Return the full status row for a single peer by id. */
+  std::optional<router_peer_row_t> status_row_for(peer_id_t peer_id) const;
 
   void peer_connection_loop(peer_id_t peer_id,
                             std::function<void(std::shared_ptr<midipeer_t>)>);

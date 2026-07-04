@@ -53,21 +53,6 @@ resolve_alsa_client_port(const peer_factory_context_t &ctx,
 
 } // namespace
 
-std::string display_name_from_identity(const device_identity_t &id) {
-  if (auto v = id.find("service"))
-    return *v;
-  if (auto v = id.find("name"))
-    return *v;
-  if (auto v = id.find("device"))
-    return *v;
-  if (auto c = id.find("client")) {
-    if (auto p = id.find("port"))
-      return FMT::format("{}:{}", *c, *p);
-    return *c;
-  }
-  return id.serialize();
-}
-
 std::optional<std::shared_ptr<midipeer_t>>
 create_peer(peer_create_request_t req, const peer_factory_context_t &ctx,
             std::string *err) {

@@ -101,10 +101,6 @@ private:
   };
   std::vector<pending_pair_t> pending_records_;
 
-  std::vector<online_device_t> collect_online_devices() const;
-  std::optional<device_identity_t>
-  device_identity_for_peer(peer_id_t peer_id) const;
-
   void apply_saved_connections();
   void try_record_pair(peer_id_t from, peer_id_t to);
   void try_finalize_pending_for(peer_id_t peer_id);
