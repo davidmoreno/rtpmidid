@@ -654,7 +654,7 @@ static std::string handle_connections_set_enabled(control_rpc_context_t &ctx,
   const auto sb = resolve_side_to_connection_side(p.side_b);
   if (!sa || !sb)
     throw std::runtime_error("Could not resolve connection sides");
-  const bool enable = p.enabled.value_or(env.method == "connections.enable");
+  const bool enable = p.enabled.value_or(true);
   const bool ok = ctx.connection_db->set_stored_enabled(*sa, *sb, enable);
   if (!ok)
     throw std::runtime_error("Connection not found in database");
@@ -834,9 +834,6 @@ static const std::unordered_map<std::string, rpc_handler_fn> kRpcHandlers = {
     {"connections.save",          handle_connections_save},
     {"connections.remove",        handle_connections_remove},
     {"connections.set_enabled",   handle_connections_set_enabled},
-    // Backwards-compatible aliases for enable/disable
-    {"connections.enable",        handle_connections_set_enabled},
-    {"connections.disable",       handle_connections_set_enabled},
 
     // Device registry
     {"devices.list",              handle_devices_list},
