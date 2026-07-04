@@ -67,13 +67,6 @@ stored_connection_t canonicalize_stored_connection(stored_connection_t connectio
   return connection;
 }
 
-std::pair<std::string, std::string>
-connection_db_t::normalize_sides(std::string a, std::string b) {
-  if (b < a)
-    std::swap(a, b);
-  return {std::move(a), std::move(b)};
-}
-
 void connection_db_t::migrate_schema() {
   if (!db_.is_open())
     return;
@@ -244,25 +237,6 @@ std::vector<stored_connection_t> connection_db_t::list_connections() const {
     row.enabled = stmt->column_int(3) != 0;
     if (!row.side_a.empty() && !row.side_b.empty())
       out.push_back(std::move(row));
-  }
-  return out;
-}
-
-void connection_db_t::record_connection(const std::string &side_a,
-                                          const std::string &side_b) {
-  const auto sides = normalize_sides(side_a, side_b);
-  stored_connection_t row;
-  row.side_a = sides.first;
-  row.side_b = sides.second;
-  row.direction = connection_direction_e::both;
-  row.enabled = true;
-  save_connection(row);
-}
-
-std::vector<connection_pair_t> connection_db_t::get_connections() const {
-  std::vector<connection_pair_t> out;
-  for (const auto &row : list_connections()) {
-    out.push_back(connection_pair_t{row.side_a, row.side_b});
   }
   return out;
 }
@@ -514,15 +488,6 @@ bool connection_db_manager_t::set_stored_enabled(const std::string &side_a,
   if (ok && enabled)
     check_reconnects_for_all();
   return ok;
-}
-
-void connection_db_manager_t::record_stable_pair(const std::string &side_a,
-                                                 const std::string &side_b) {
-  if (!db_ || !db_->is_open())
-    return;
-  INFO("component=database connection_db: store requested {} <-> {}", side_a, side_b);
-  db_->record_connection(side_a, side_b);
-  check_reconnects_for_all();
 }
 
 void connection_db_manager_t::remove_stable_pair(const std::string &side_a,

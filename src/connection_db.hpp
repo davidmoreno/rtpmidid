@@ -37,12 +37,6 @@ struct stored_connection_t {
 /** Sort side_a/side_b lexicographically; flip direction when sides swap. */
 stored_connection_t canonicalize_stored_connection(stored_connection_t connection);
 
-/** Legacy row without direction metadata. */
-struct connection_pair_t {
-  std::string side_a;
-  std::string side_b;
-};
-
 class connection_db_t {
   NON_COPYABLE_NOR_MOVABLE(connection_db_t)
 
@@ -58,17 +52,11 @@ public:
                    bool enabled);
   std::vector<stored_connection_t> list_connections() const;
 
-  /** Legacy API: stores direction=both with sorted sides. */
-  void record_connection(const std::string &side_a, const std::string &side_b);
-  std::vector<connection_pair_t> get_connections() const;
-
 private:
   std::string path_;
   sqlite_db_t db_;
 
   void migrate_schema();
-  static std::pair<std::string, std::string> normalize_sides(std::string a,
-                                                             std::string b);
 };
 
 struct online_device_t;
@@ -88,7 +76,6 @@ public:
   connection_db_t &database() { return *db_; }
   const connection_db_t &database() const { return *db_; }
 
-  void record_stable_pair(const std::string &side_a, const std::string &side_b);
   void remove_stable_pair(const std::string &side_a, const std::string &side_b);
   void save_stored_connection(stored_connection_t connection);
   bool set_stored_enabled(const std::string &side_a, const std::string &side_b,

@@ -282,17 +282,4 @@ bool midipeer_t::request_internal_latency_stats(
 
 } // namespace rtpmididns
 
-const char *format_as(rtpmididns::midipeer_event_e event) {
-  switch (event) {
-  case rtpmididns::midipeer_event_e::CONNECTED_ROUTER:
-    return "CONNECTED_ROUTER";
-  case rtpmididns::midipeer_event_e::DISCONNECTED_ROUTER:
-    return "DISCONNECTED_ROUTER";
-  case rtpmididns::midipeer_event_e::CONNECTED_PEER:
-    return "CONNECTED_PEER";
-  case rtpmididns::midipeer_event_e::DISCONNECTED_PEER:
-    return "DISCONNECTED_PEER";
-  default:
-    return "UNKNOWN";
-  }
-}
+

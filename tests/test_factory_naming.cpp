@@ -70,14 +70,6 @@ void test_peer_kind_identity_prefixes() {
   ASSERT_EQUAL(peer_kind_identity_prefix(peer_kind_e::webui_monitor)[0], '\0');
 }
 
-void test_peer_kind_classification_flags() {
-  ASSERT_TRUE(peer_kind_is_device(peer_kind_e::device_alsa_seq));
-  ASSERT_FALSE(peer_kind_is_device(peer_kind_e::export_rtpmidi_server));
-  ASSERT_TRUE(peer_kind_is_export(peer_kind_e::export_alsa_network));
-  ASSERT_TRUE(peer_kind_is_import(peer_kind_e::import_alsa_rtp));
-  ASSERT_FALSE(peer_kind_is_import(peer_kind_e::device_rawmidi));
-}
-
 void test_factory_export_rtpmidi_server_type() {
   std::string err;
   auto peer = create_peer_from_string("rtpmidi_server:name=factory-test,port=50210",
@@ -111,7 +103,6 @@ int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_peer_kind_wire_roundtrip_all_kinds),
       TEST(test_peer_kind_identity_prefixes),
-      TEST(test_peer_kind_classification_flags),
       TEST(test_factory_export_rtpmidi_server_type),
       TEST(test_factory_export_rtpmidi_server_device_identity),
       TEST(test_factory_rtpmidi_client_type),

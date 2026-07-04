@@ -57,22 +57,6 @@ const char *peer_kind_identity_prefix(peer_kind_e kind) {
   return "";
 }
 
-std::optional<const char *>
-peer_kind_rpc_create_key(peer_kind_e kind) {
-  switch (kind) {
-  case peer_kind_e::device_alsa_seq:
-    return "peer_device_alsa_seq_t";
-  case peer_kind_e::device_rawmidi:
-    return "local_rawmidi_t";
-  case peer_kind_e::device_rtpmidi_client:
-    return "peer_device_rtpmidi_client_t";
-  case peer_kind_e::export_rtpmidi_server:
-    return "peer_export_rtpmidi_server_t";
-  default:
-    return std::nullopt;
-  }
-}
-
 std::optional<peer_kind_e> peer_kind_from_identity_prefix(std::string_view prefix) {
   if (prefix == "alsa_seq")
     return peer_kind_e::device_alsa_seq;
@@ -115,23 +99,6 @@ std::optional<peer_kind_e> peer_kind_from_wire_type(std::string_view wire) {
   if (wire == "webui_midi_monitor_peer_t")
     return peer_kind_e::webui_monitor;
   return std::nullopt;
-}
-
-bool peer_kind_is_device(peer_kind_e kind) {
-  return kind == peer_kind_e::device_alsa_seq ||
-         kind == peer_kind_e::device_rawmidi ||
-         kind == peer_kind_e::device_rtpmidi_client ||
-         kind == peer_kind_e::device_rtpmidi_session;
-}
-
-bool peer_kind_is_export(peer_kind_e kind) {
-  return kind == peer_kind_e::export_alsa_network ||
-         kind == peer_kind_e::export_rtpmidi_server;
-}
-
-bool peer_kind_is_import(peer_kind_e kind) {
-  return kind == peer_kind_e::import_rtpmidi ||
-         kind == peer_kind_e::import_alsa_rtp;
 }
 
 } // namespace rtpmididns

@@ -85,49 +85,8 @@ struct mdns_remove_params_t {
 };
 
 // [dm-json]
-struct export_rawmidi_error_t {
-  std::string error;
-  std::map<std::string, std::string> params;
-};
-
-// [dm-json]
-struct export_rawmidi_params_t {
-  std::string device;
-  std::optional<std::string> name;            // [dm-json: omit_if_null]
-  std::optional<std::string> local_udp_port;   // [dm-json: omit_if_null]
-  std::optional<std::string> remote_udp_port;  // [dm-json: omit_if_null]
-  std::optional<std::string> hostname;         // [dm-json: omit_if_null]
-};
-
-// [dm-json]
 struct router_create_params_t {
   std::string identity;
-};
-
-// [dm-json]
-struct create_local_rawmidi_params_t {
-  std::string name;
-  std::string device;
-};
-
-// [dm-json]
-struct create_network_rtpmidi_client_params_t {
-  std::string name;
-  std::string hostname;
-  std::string port;
-};
-
-// [dm-json]
-struct create_network_rtpmidi_listener_params_t {
-  std::string name;
-  uint16_t udp_port;
-};
-
-// [dm-json]
-struct create_local_alsa_peer_params_t {
-  std::string name;
-  std::optional<int32_t> alsa_client; // [dm-json: omit_if_null]
-  std::optional<int32_t> alsa_port;   // [dm-json: omit_if_null]
 };
 
 /** router.create.list — nested type name -> field -> description */
@@ -146,12 +105,6 @@ struct listener_add_endpoint_params_t {
 struct listener_remove_endpoint_params_t {
   std::string hostname;
   std::string port;
-};
-
-// [dm-json]
-struct listener_help_entry_t {
-  std::string name;
-  std::string description;
 };
 
 // [dm-json]

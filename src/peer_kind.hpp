@@ -32,16 +32,8 @@ const char *peer_kind_wire_type(peer_kind_e kind);
 /** Primary device-identity type prefix for Phase 2 (`key=value` grammar). */
 const char *peer_kind_identity_prefix(peer_kind_e kind);
 
-/** `router.create.*` schema key when this kind is user-instantiable. */
-std::optional<const char *>
-peer_kind_rpc_create_key(peer_kind_e kind);
-
 std::optional<peer_kind_e> peer_kind_from_wire_type(std::string_view wire);
 
 std::optional<peer_kind_e> peer_kind_from_identity_prefix(std::string_view prefix);
-
-bool peer_kind_is_device(peer_kind_e kind);
-bool peer_kind_is_export(peer_kind_e kind);
-bool peer_kind_is_import(peer_kind_e kind);
 
 } // namespace rtpmididns

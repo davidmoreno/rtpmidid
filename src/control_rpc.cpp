@@ -603,7 +603,6 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       if (!ctx.connection_db)
         throw std::runtime_error("Connection database is not enabled");
       auto p = parse_rpc_params<connections_mutate_params_t>(params);
-      const auto rows = router_rows_snapshot(ctx);
       const auto sa = resolve_side_to_connection_side(p.side_a);
       const auto sb = resolve_side_to_connection_side(p.side_b);
       if (!sa || !sb)
@@ -622,7 +621,6 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       if (!ctx.connection_db)
         throw std::runtime_error("Connection database is not enabled");
       auto p = parse_rpc_params<connections_mutate_params_t>(params);
-      const auto rows = router_rows_snapshot(ctx);
       const auto sa = resolve_side_to_connection_side(p.side_a);
       const auto sb = resolve_side_to_connection_side(p.side_b);
       if (!sa || !sb)
@@ -638,7 +636,6 @@ std::string control_rpc_dispatch_line(control_rpc_context_t &ctx, std::string_vi
       if (!ctx.connection_db)
         throw std::runtime_error("Connection database is not enabled");
       auto p = parse_rpc_params<connections_enable_params_t>(params);
-      const auto rows = router_rows_snapshot(ctx);
       const auto sa = resolve_side_to_connection_side(p.side_a);
       const auto sb = resolve_side_to_connection_side(p.side_b);
       if (!sa || !sb)

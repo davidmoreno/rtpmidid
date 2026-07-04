@@ -177,4 +177,3 @@ public:
 
 } // namespace rtpmididns
 
-const char *format_as(rtpmididns::midipeer_event_e event);
