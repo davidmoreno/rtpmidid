@@ -8,12 +8,14 @@ RUN dnf install -y \
     gcc-c++ \
     avahi-devel \
     alsa-lib-devel \
+    sqlite-devel \
     python3 \
     pandoc \
     git \
     systemd-rpm-macros \
     nodejs \
     npm \
+    fmt-devel \
     && dnf clean all
 
 # Create a non-root user for building

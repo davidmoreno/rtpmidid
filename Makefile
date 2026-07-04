@@ -210,6 +210,7 @@ install-rtpmidid: build man
 	mkdir -p $(ETC)/rtpmidid/
 	cp default.ini $(ETC)/rtpmidid/
 	perl -0pi -e 's|^root=frontend/dist$$|root=$(INSTALL_PREFIX)/share/rtpmidid/html|m' $(ETC)/rtpmidid/default.ini || true
+	perl -0pi -e 's|^path=build/rtpmidid\.db$$|path=/var/lib/rtpmidid/rtpmidid.db|m' $(ETC)/rtpmidid/default.ini || true
 	mkdir -p $(USR)/share/doc/rtpmidid/
 	cp README.md $(USR)/share/doc/rtpmidid/
 	cp LICENSE-daemon.txt $(USR)/share/doc/rtpmidid/LICENSE.txt

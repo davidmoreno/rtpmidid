@@ -103,13 +103,14 @@ void connection_db_t::migrate_schema() {
   }
 }
 
-connection_db_t::connection_db_t(std::string path) : db_(std::move(path)) {
+connection_db_t::connection_db_t(std::string path)
+    : path_(path), db_(std::move(path)) {
   if (!db_.is_open())
     return;
   migrate_schema();
   if (!db_.is_open())
     return;
-  INFO("component=database connection_db: opened");
+  INFO("component=database connection_db: opened {}", path_);
 }
 
 void connection_db_t::save_connection(const stored_connection_t &connection) {

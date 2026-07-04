@@ -63,6 +63,7 @@ public:
   std::vector<connection_pair_t> get_connections() const;
 
 private:
+  std::string path_;
   sqlite_db_t db_;
 
   void migrate_schema();

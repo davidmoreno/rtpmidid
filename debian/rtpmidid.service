@@ -11,6 +11,7 @@ ExecStart=/usr/bin/rtpmidid --ini=/etc/rtpmidid/default.ini
 Restart=on-failure
 RuntimeDirectory=rtpmidid
 RuntimeDirectoryMode=0755
+StateDirectory=rtpmidid
 # realtime, so more precise
 CPUSchedulingPolicy=fifo 
 # no need for max priority (20)
