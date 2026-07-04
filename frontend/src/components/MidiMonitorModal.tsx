@@ -21,6 +21,8 @@ export function MidiMonitorModal({
 }: Props) {
   const [uuid, setUuid] = useState<string | null>(null);
   const uuidRef = useRef<string | null>(null);
+  /** Guard to prevent double-calling monitor.stop (from stopSession + cleanup). */
+  const stoppedRef = useRef(false);
   const [err, setErr] = useState<string>("");
 
   useEffect(() => {
@@ -51,20 +53,22 @@ export function MidiMonitorModal({
     return () => {
       const u = uuidRef.current;
       uuidRef.current = null;
-      if (u) void rpc.call("monitor.stop", { uuid: u }).catch(() => {});
+      if (u && !stoppedRef.current)
+        void rpc.call("monitor.stop", { uuid: u }).catch(() => {});
     };
   }, [rpc]);
 
   const stopSession = useCallback(async () => {
     const u = uuidRef.current;
-    uuidRef.current = null;
-    if (u) {
-      try {
-        onStatus("");
-        await rpc.call("monitor.stop", { uuid: u });
-      } catch (e) {
-        onStatus(String(e));
-      }
+    if (!u || stoppedRef.current) return;
+    try {
+      onStatus("");
+      await rpc.call("monitor.stop", { uuid: u });
+      stoppedRef.current = true;
+    } catch (e) {
+      onStatus(String(e));
+      // Don't close the modal on error — let the user retry or see the message.
+      return;
     }
     onClose();
   }, [rpc, onClose, onStatus]);
@@ -87,7 +91,6 @@ export function MidiMonitorModal({
   }, [identity, rpc, onStatus]);
 
   const onMonitorSessionEnded = useCallback(() => {
-    uuidRef.current = null;
     setUuid(null);
     setErr("Monitor session ended (connection closed).");
   }, []);

@@ -20,10 +20,10 @@ export function MidiMonitorStandalone({
     try {
       onStatus("");
       await rpc.call("monitor.stop", { uuid });
+      onExit();
     } catch (e) {
       onStatus(String(e));
     }
-    onExit();
   }, [uuid, rpc, onExit, onStatus]);
 
   const onSessionEnded = useCallback(() => {

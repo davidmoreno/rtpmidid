@@ -45,6 +45,20 @@ bool is_web_ephemeral_display_name(const std::string &name) {
   return name.starts_with("WEB · ") || name.starts_with("WEB:");
 }
 
+/** Returns true if the peer has an active network session (RTP connected). */
+bool has_active_network_session(const midipeer_t &peer) {
+  const auto row = peer.status();
+  if (row.peer && row.peer->status == "3")
+    return true;
+  if (row.peers) {
+    for (const auto &p : *row.peers) {
+      if (p.status == "3")
+        return true;
+    }
+  }
+  return false;
+}
+
 } // namespace
 
 midirouter_t::midirouter_t() = default;
@@ -196,8 +210,10 @@ void midirouter_t::remove_peer_impl(peer_id_t peer_id) {
   }
 
   auto peer_ptr = toremove->second.peer;
-  if (auto mon =
-          std::dynamic_pointer_cast<webui_midi_monitor_peer_t>(peer_ptr)) {
+  const bool is_monitor =
+      std::dynamic_pointer_cast<webui_midi_monitor_peer_t>(peer_ptr) != nullptr;
+  if (is_monitor) {
+    auto mon = std::dynamic_pointer_cast<webui_midi_monitor_peer_t>(peer_ptr);
     mon->clear_ws_binary_sink();
     monitor_registry_unregister(mon->session_uuid());
   }
@@ -215,8 +231,9 @@ void midirouter_t::remove_peer_impl(peer_id_t peer_id) {
   }
 
   // Tear down outgoing edges (fires DISCONNECTED_ROUTER like disconnect()).
+  std::vector<peer_id_t> outgoing;
   {
-    const auto outgoing = toremove->second.send_to;
+    outgoing = toremove->second.send_to;
     for (auto to_id : outgoing) {
       disconnect_impl(peer_id, to_id);
     }
@@ -250,6 +267,31 @@ void midirouter_t::remove_peer_impl(peer_id_t peer_id) {
     post_signal_peer_removed(peer_id);
     if (on_peer_unregistered)
       on_peer_unregistered(peer_id);
+  }
+
+  // Clean up peers that were connected to the removed peer and are now
+  // isolated (e.g. a device connected only to a monitor).
+  {
+    std::set<peer_id_t> affected(outgoing.begin(), outgoing.end());
+    affected.insert(inbound_from.begin(), inbound_from.end());
+    for (auto aff_id : affected) {
+      if (aff_id == peer_id) continue;
+      maybe_remove_ephemeral_web_peer(aff_id);
+    }
+    // When a monitor peer is removed, also clean up device peers that
+    // were connected to it and are now isolated with an active RTP session.
+    if (is_monitor) {
+      for (auto aff_id : affected) {
+        if (aff_id == peer_id) continue;
+        auto it = peers_.find(aff_id);
+        if (it == peers_.end()) continue;
+        if (!peer_is_router_isolated(aff_id)) continue;
+        if (!has_active_network_session(*it->second.peer)) continue;
+        INFO("peer_id={} component=router Cleaning up isolated network peer "
+             "after monitor removal", aff_id);
+        remove_peer_impl(aff_id);
+      }
+    }
   }
 
   removing_peers_.erase(peer_id);
