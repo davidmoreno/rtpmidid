@@ -26,10 +26,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "json.hpp"
 #include "local_rawmidi_peer.hpp"
 #include "mididata.hpp"
 #include "midirouter.hpp"
+#include "peer_status_jsondm.hpp"
 #include "stringpp.hpp"
 #include <alsa/rawmidi.h>
 
@@ -82,13 +82,12 @@ void local_rawmidi_peer_t::close() {
 
 local_rawmidi_peer_t::~local_rawmidi_peer_t() { close(); }
 
-json_t local_rawmidi_peer_t::status() {
-  json_t j{
-      {"name", name},
-      {"device", device},
-      {"status", fd >= 0 ? "open" : "closed"} //
-  };
-  return j;
+peer_status_variant_t local_rawmidi_peer_t::status() {
+  rawmidi_peer_status_t s;
+  s.name = name;
+  s.device = device;
+  s.status = fd >= 0 ? "open" : "closed";
+  return s;
 }
 
 void local_rawmidi_peer_t::send_midi(midipeer_id_t from,

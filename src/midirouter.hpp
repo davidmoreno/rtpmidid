@@ -17,7 +17,6 @@
  */
 
 #pragma once
-#include "json_fwd.hpp"
 #include "midipeer.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/utils.hpp"
@@ -69,7 +68,7 @@ public:
   // the router.
   void clear();
 
-  json_t status();
+  std::vector<peer_status_variant_t> status();
 
   // For the given type of the for_each, by default midipeer_t.
   template <typename T = midipeer_t>

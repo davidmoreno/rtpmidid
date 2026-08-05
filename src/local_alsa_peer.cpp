@@ -18,10 +18,10 @@
 
 #include "local_alsa_peer.hpp"
 #include "aseq.hpp"
-#include "json.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
+#include "peer_status_jsondm.hpp"
 #include "rtpmidid/iobytes.hpp"
 
 using namespace rtpmididns;
@@ -66,9 +66,9 @@ void local_alsa_peer_t::send_midi(midipeer_id_t from, const mididata_t &data) {
   });
 }
 
-json_t local_alsa_peer_t::status() {
-  return json_t{
-      {"name", name}, {"port", port},
-      //
-  };
+peer_status_variant_t local_alsa_peer_t::status() {
+  alsa_peer_status_t s;
+  s.name = name;
+  s.port = port;
+  return s;
 }

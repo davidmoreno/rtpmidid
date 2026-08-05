@@ -19,9 +19,9 @@
 #include "local_alsa_listener.hpp"
 #include "aseq.hpp"
 #include "factory.hpp"
-#include "json.hpp"
 #include "local_alsa_peer.hpp"
 #include "mididata.hpp"
+#include "peer_status_jsondm.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/rtpclient.hpp"
 
@@ -160,70 +160,76 @@ void local_alsa_listener_t::send_midi(midipeer_id_t from,
   });
 }
 
-json_t local_alsa_listener_t::status() {
-  json_t jendpoints;
+peer_status_variant_t local_alsa_listener_t::status() {
+  alsa_listener_status_t s;
   for (auto &endpoint : endpoints) {
-    jendpoints.push_back(
-        json_t{{"hostname", endpoint.hostname}, {"port", endpoint.port}});
+    s.endpoints.push_back(
+        listener_endpoint_t{endpoint.hostname, endpoint.port});
   }
-  std::string status;
   if (connection_count > 0)
-    status = "CONNECTED";
+    s.status = "CONNECTED";
   else
-    status = "WAITING";
+    s.status = "WAITING";
 
-  return json_t{
-      //
-      {"name",
-       FMT::format("{} <-> {}", local_name == "" ? "[WATING]" : local_name,
-                   remote_name)},
-      {"endpoints", jendpoints},
-      {"connection_count", connection_count},
-      {"status", status}
-      //
-  };
+  s.name = FMT::format("{} <-> {}", local_name == "" ? "[WATING]" : local_name,
+                       remote_name);
+  s.connection_count = connection_count;
+  return s;
 }
 
-json_t local_alsa_listener_t::command(const std::string &cmd,
-                                      const json_t &data) {
-  if (cmd == "add_endpoint") {
-    std::string hostname = data["hostname"];
-    std::string port;
-    if (data["port"].is_number()) {
-      port = std::to_string(data["port"].get<int>());
-    } else {
-      port = data["port"];
+std::string local_alsa_listener_t::command(const std::string &cmd,
+                                           std::string_view params_json) {
+  if (cmd == "add_endpoint" || cmd == "remove_endpoint") {
+    endpoint_params_t params;
+    try {
+      jsondm::deserialize(params_json, params);
+    } catch (const jsondm::exception &) {
+      std::string out;
+      jsondm::serialize(peer_error_t{"Invalid endpoint params"}, out);
+      return out;
     }
-    add_endpoint(hostname, port);
-    return json_t{"ok"};
-  }
-  if (cmd == "remove_endpoint") {
-    std::string hostname = data["hostname"];
-    std::string port;
-    if (data["port"].is_number()) {
-      port = std::to_string(data["port"].get<int>());
-    } else {
-      port = data["port"];
+    std::string port = std::visit(
+        [](const auto &p) -> std::string {
+          if constexpr (std::is_same_v<std::decay_t<decltype(p)>, int>) {
+            return std::to_string(p);
+          } else {
+            return p;
+          }
+        },
+        params.port);
+    if (cmd == "add_endpoint") {
+      add_endpoint(params.hostname, port);
+      std::string out;
+      jsondm::serialize(std::vector<std::string>{"ok"}, out);
+      return out;
     }
     for (auto it = endpoints.begin(); it != endpoints.end(); ++it) {
-      if (it->hostname == hostname && it->port == port) {
-        DEBUG("Removing endpoint {}:{} from {}", hostname, port, remote_name);
+      if (it->hostname == params.hostname && it->port == port) {
+        DEBUG("Removing endpoint {}:{} from {}", params.hostname, port,
+              remote_name);
         endpoints.erase(it);
-        return json_t{"ok"};
+        std::string out;
+        jsondm::serialize(std::vector<std::string>{"ok"}, out);
+        return out;
       }
-      ERROR("Try to remove endpoint {}:{} but not found", hostname, port);
+      ERROR("Try to remove endpoint {}:{} but not found", params.hostname,
+            port);
     }
-    return json_t{"error", "Endpoint not found"};
+    std::string out;
+    jsondm::serialize(peer_error_t{"Endpoint not found"}, out);
+    return out;
   }
   if (cmd == "help") {
-    return json_t{{
-        {{"name", "add_endpoint"},
-         {"description", "Add an endpoint to connect to"}},
-        {{"name", "remove_endpoint"},
-         {"description", "Remove an endpoint to connect to"}},
-    }};
+    std::string out;
+    jsondm::serialize(
+        std::vector<command_help_t>{
+            {"add_endpoint", "Add an endpoint to connect to"},
+            {"remove_endpoint", "Remove an endpoint to connect to"},
+        },
+        out);
+    return out;
   }
 
-  return midipeer_t::command(cmd, data);
+  return midipeer_t::command(cmd, params_json);
 }
 } // namespace rtpmididns

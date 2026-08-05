@@ -5,3 +5,5 @@ dump.*
 !.clang-format
 packaging/dist/
 packaging/publish/
+build-*
+__pycache__

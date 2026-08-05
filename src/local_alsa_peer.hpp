@@ -42,7 +42,7 @@ public:
 
   local_alsa_peer_t(const std::string &name, std::shared_ptr<aseq_t> seq);
   ~local_alsa_peer_t() override;
-  json_t status() override;
+  peer_status_variant_t status() override;
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   const char *get_type() const override { return "local_alsa_peer_t"; }
 };

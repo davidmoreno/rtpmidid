@@ -18,10 +18,10 @@
 
 #include "../src/aseq.hpp"
 #include "../src/factory.hpp"
-#include "../src/json.hpp"
 #include "../src/mididata.hpp"
 #include "../src/midirouter.hpp"
 #include "../src/network_rtpmidi_listener.hpp"
+#include "../src/peer_status_jsondm.hpp"
 #include "../src/settings.hpp"
 #include "../tests/test_case.hpp"
 #include "local_alsa_listener.hpp"
@@ -29,6 +29,7 @@
 #include "rtpmidid/udppeer.hpp"
 #include "test_utils.hpp"
 #include <memory>
+#include <rtpmidid/jsondm.hpp>
 #include <rtpmidid/mdns_rtpmidi.hpp>
 #include <rtpmidid/rtpclient.hpp>
 
@@ -117,8 +118,10 @@ void test_send_receive_messages() {
       rtpmididns::aseq_t::port_t{test_client_id, 0}); // Connect to network
   poller_wait_until([&router]() { return router->peers.size() == 3; });
 
-  rtpmididns::json_t status = router->status();
-  DEBUG("{}", status.dump(2));
+  auto status = router->status();
+  std::string _dbg1;
+  jsondm::serialize(status, _dbg1);
+  DEBUG("{}", _dbg1);
 
   ASSERT_EQUAL(router->peers.size(), 3);
 
@@ -140,7 +143,9 @@ void test_send_receive_messages() {
   });
 
   status = router->status();
-  DEBUG("{}", status.dump(2));
+  std::string _dbg2;
+  jsondm::serialize(status, _dbg2);
+  DEBUG("{}", _dbg2);
   ASSERT_EQUAL(router->peers.size(), 3);
 
   auto data = hex_to_bin("90 40 40");
@@ -169,7 +174,9 @@ void test_send_receive_messages() {
   DEBUG("Got ALSA seq for RTPPEER B at {}:{}", (int)device_id, (int)port_id_b);
 
   status = router->status();
-  DEBUG("{}", status.dump(2));
+  std::string _dbg3;
+  jsondm::serialize(status, _dbg3);
+  DEBUG("{}", _dbg3);
   //// 2 more peers: the rtpmidi_worker and the alsa_worker.
   ASSERT_EQUAL(router->peers.size(), 5);
 
@@ -186,7 +193,9 @@ void test_send_receive_messages() {
 
   poller_wait_for(100ms);
   status = router->status();
-  DEBUG("{}", status.dump(2));
+  std::string _dbg4;
+  jsondm::serialize(status, _dbg4);
+  DEBUG("{}", _dbg4);
   //// No more peers
   DEBUG("Found {} peers", router->peers.size());
   ASSERT_EQUAL(router->peers.size(), 5);
@@ -253,9 +262,13 @@ void test_send_receive_messages() {
   poller_wait_until([&]() { return midi_packets_alsa_a == 2; });
   ASSERT_EQUAL(midi_packets_alsa_a, 2);
 
-  DEBUG("Router: {}", router->status().dump(2));
+  std::string _dbg5;
+  jsondm::serialize(router->status(), _dbg5);
+  DEBUG("Router: {}", _dbg5);
   router->clear();
-  DEBUG("Router: {}", router->status().dump(2));
+  std::string _dbg6;
+  jsondm::serialize(router->status(), _dbg6);
+  DEBUG("Router: {}", _dbg6);
 
   DEBUG("END");
 }

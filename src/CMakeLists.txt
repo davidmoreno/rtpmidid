@@ -8,6 +8,9 @@ add_library(
   ini.cpp
   settings.cpp
   control_socket.cpp
+  control_commands_jsondm.cpp
+  control_status_jsondm.cpp
+  peer_status_jsondm.cpp
   stringpp.cpp
   hwautoannounce.cpp
 

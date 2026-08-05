@@ -19,13 +19,13 @@
 #include "local_alsa_multi_listener.hpp"
 #include "aseq.hpp"
 #include "factory.hpp"
-#include "json.hpp"
 #include "local_alsa_peer.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 #include "network_rtpmidi_listener.hpp"
 #include "network_rtpmidi_peer.hpp"
+#include "peer_status_jsondm.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/logger.hpp"
 #include <alsa/seqmid.h>
@@ -62,16 +62,15 @@ local_alsa_multi_listener_t::new_alsa_connection(const aseq_t::port_t &port,
         name, this->name);
 
   midipeer_id_t networkpeer_id = MIDIPEER_ID_INVALID;
-  router->for_each_peer<network_rtpmidi_listener_t>(
-      [&](auto *peer) {
-        if (peer->name_ == name) {
-          peer->use_count++;
-          networkpeer_id = peer->peer_id;
-          aseqpeers[port] = networkpeer_id;
-          DEBUG("One more user for peer: {}, count: {}", peer->peer_id,
-                peer->use_count);
-        }
-      });
+  router->for_each_peer<network_rtpmidi_listener_t>([&](auto *peer) {
+    if (peer->name_ == name) {
+      peer->use_count++;
+      networkpeer_id = peer->peer_id;
+      aseqpeers[port] = networkpeer_id;
+      DEBUG("One more user for peer: {}, count: {}", peer->peer_id,
+            peer->use_count);
+    }
+  });
 
   if (networkpeer_id == MIDIPEER_ID_INVALID) {
     std::shared_ptr<midipeer_t> networkpeer =
@@ -176,23 +175,16 @@ void local_alsa_multi_listener_t::send_midi(midipeer_id_t from,
     }
   }
 }
-json_t local_alsa_multi_listener_t::status() {
-  json_t connections{};
+peer_status_variant_t local_alsa_multi_listener_t::status() {
+  alsa_multi_listener_status_t s;
   for (auto &peer : aseqpeers) {
     auto port = peer.first;
     auto to = peer.second;
-    connections.push_back({
-        //
-        {"alsa", FMT::format("{}:{}", port.client, port.port)},
-        {"local", to} //
-    });
+    s.connections.push_back(
+        alsa_connection_t{FMT::format("{}:{}", port.client, port.port), to});
   }
-
-  return json_t{
-      {"name", name}, //
-      {"connections", connections}
-      //
-  };
+  s.name = name;
+  return s;
 }
 
 } // namespace rtpmididns

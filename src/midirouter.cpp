@@ -17,9 +17,9 @@
  */
 
 #include "midirouter.hpp"
-#include "json.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
+#include "peer_status_jsondm.hpp"
 #include "rtpmidid/logger.hpp"
 
 namespace rtpmididns {
@@ -170,23 +170,36 @@ void midirouter_t::disconnect(peer_id_t from, peer_id_t to) {
   INFO("Disconnect {} -> {}", from, to);
 }
 
-json_t midirouter_t::status() {
-  std::vector<json_t> routerdata;
-  for (auto peer : peers) {
+// Assigns the router-owned members to a peer status (not peer_error_t).
+struct peer_status_set_common_t {
+  uint32_t id;
+  std::vector<peer_id_t> send_to;
+  peer_stats_t stats;
+  const char *type;
+  void operator()(peer_error_t &) const {
+  } // error entries have no common members
+  template <class T> void operator()(T &s) const {
+    s.id = id;
+    s.send_to = send_to;
+    s.stats = stats;
+    s.type = type;
+  }
+};
+
+std::vector<peer_status_variant_t> midirouter_t::status() {
+  std::vector<peer_status_variant_t> routerdata;
+  for (auto &peer : peers) {
     try {
       auto status = peer.second.peer->status();
-      status["id"] = peer.first;
-      status["send_to"] = peer.second.send_to;
-      status["stats"] = {
-          //
-          {"recv", peer.second.peer->packets_recv},
-          {"sent", peer.second.peer->packets_sent} //
-      };
-      status["type"] = peer.second.peer->get_type();
-
-      routerdata.push_back(status);
+      std::visit(
+          peer_status_set_common_t{peer.first, peer.second.send_to,
+                                   peer_stats_t{peer.second.peer->packets_recv,
+                                                peer.second.peer->packets_sent},
+                                   peer.second.peer->get_type()},
+          status);
+      routerdata.push_back(std::move(status));
     } catch (const std::exception &exc) {
-      routerdata.push_back(json_t{{"error", exc.what()}});
+      routerdata.push_back(peer_error_t{exc.what()});
     }
   }
   return routerdata;

@@ -122,3 +122,20 @@ if (NOT LIBS_ONLY)
     target_include_directories(test_settings PUBLIC ${ALSA_INCLUDE_DIRS})
     target_compile_options(test_settings PUBLIC ${ALSA_CFLAGS_OTHER})
 endif (NOT LIBS_ONLY)
+
+if (NOT LIBS_ONLY)
+    add_executable(test_jsondm
+        test_jsondm.cpp test_utils.cpp
+        ../src/control_status_jsondm.cpp
+        ../src/peer_status_jsondm.cpp
+        ../src/control_commands_jsondm.cpp
+    )
+    target_link_libraries(test_jsondm -pthread rtpmidid-shared)
+    target_link_libraries(test_jsondm ${FMT_LIBRARIES})
+    add_test(NAME test_jsondm COMMAND test_jsondm)
+endif (NOT LIBS_ONLY)
+
+if (NOT LIBS_ONLY)
+    add_test(NAME test_json_dm_generator
+        COMMAND python3 ${CMAKE_SOURCE_DIR}/tests/test_json_dm_generator.py ${CMAKE_SOURCE_DIR})
+endif (NOT LIBS_ONLY)
