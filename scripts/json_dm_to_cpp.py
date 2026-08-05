@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/ bin / python3
 """
 json-dm code generator.
 
@@ -27,10 +27,11 @@ from dataclasses import dataclass, field
 
 MARKER_OBJECT = "/// [JSON-DM]"
 MARKER_ARRAY = "/// [JSON-DM-ARRAY]"
+MARKER_INI = "/// [INI-DM]"
 
-# ---------------------------------------------------------------------------
-# Tokenizer helpers
-# ---------------------------------------------------------------------------
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
+#Tokenizer helpers
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
 
 
 class ParseError(Exception):
@@ -149,7 +150,7 @@ def find_struct_after(text, marker_index):
             name = m.group(1)
             rest = text[i + m.end() : line_end]
             brace = rest.find("{")
-            # struct might open on a later line
+#struct might open on a later line
             j = i + m.end()
             while brace < 0 and j < n:
                 k = skip_comment(text, j)
@@ -211,7 +212,7 @@ def parse_struct_body(body):
                 "enum",
                 "union",
             ):
-                # end of a nested type definition
+#end of a nested type definition
                 cur = []
                 depth = 0
                 i += 1
@@ -220,7 +221,7 @@ def parse_struct_body(body):
                 depth = 1
                 cur.append(c)
             elif c == "}":
-                # closing the whole struct body (caller consumed it)
+#closing the whole struct body(caller consumed it)
                 cur.append(c)
                 depth = 1  # treat as nested; caller stops before this anyway
             elif c == ";":
@@ -237,10 +238,9 @@ def parse_struct_body(body):
         i += 1
     return stmts
 
-
-# ---------------------------------------------------------------------------
-# Member parsing
-# ---------------------------------------------------------------------------
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
+#Member parsing
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
 
 BUILTIN_RE = re.compile(
     r"^(std::)?(u?int(8|16|32|64)_t|size_t|ssize_t|bool|char|schar|uchar|short|"
@@ -265,11 +265,14 @@ NON_MEMBER_WORDS = {
 class Member:
     name: str
     type_text: str  # normalized (no whitespace)
-    category: str  # 'primitive' | 'string' | 'vector' | 'map' | 'optional' | 'variant' | 'struct'
+    category: str  # JSON: 'primitive'|'string'|'vector'|'map'|'optional'|'variant'|'struct'
     element: "Member | None" = None  # vector/optional element
     alternatives: list = field(default_factory=list)  # variant alternatives
     map_value: "Member | None" = None
     is_optional: bool = False
+    raw_type: str = ""  # un-normalized type text
+    kind: str = ""  # INI: scalar|optional_scalar|struct|vector_struct|optional_struct
+    ref: str = ""  # INI: qualified type to emit
 
 
 def normalize_type(t):
@@ -344,7 +347,7 @@ def classify_type(t, marked_set, context, aliases=None):
     if t == "":
         raise ParseError("empty member type")
     if "::" in t and t.startswith("std::") is False:
-        # namespace-qualified: keep as-is; simple name is last segment
+#namespace - qualified : keep as - is; simple name is last segment
         pass
     if BUILTIN_RE.match(t):
         return Member(name="", type_text=t, category="primitive")
@@ -392,7 +395,7 @@ def classify_type(t, marked_set, context, aliases=None):
                 category="map",
                 map_value=classify_type(value, marked_set, context, aliases),
             )
-    # user type: must be a marked JSON-DM struct
+#user type : must be a marked JSON - DM struct
     simple = t.split("::")[-1]
     if simple in marked_set:
         return Member(name="", type_text=t, category="struct")
@@ -402,18 +405,23 @@ def classify_type(t, marked_set, context, aliases=None):
     )
 
 
-def parse_member_stmt(stmt, marked_set, context, aliases=None):
-    """Parse one member declaration statement into a Member (name filled)."""
+def parse_ini_member_stmt(stmt, ini_full_names, context):
+    """Parse one member declaration for an /// [INI-DM] struct.
+
+    Returns a Member with kind/ref set for the INI emitters, or None for
+    non-member statements. Scalar members may be any type with a
+    jsondm::ini::to_value<T> specialization (strings, bools, regexes,
+    enums, ...).
+    """
     s = stmt.strip()
     if s == "":
         return None
     first_word = re.match(r"(\w+)", s)
     if first_word and first_word.group(1) in NON_MEMBER_WORDS:
-        return None  # nested type, using, etc. (struct bodies were skipped already)
+        return None
     if s.startswith("//") or s.startswith("/*") or s.startswith("#"):
         return None
-
-    # strip default initializer: first top-level '=' , '{' or '(' after the type
+#strip default initializer(same approach as parse_member_stmt)
     cut = -1
     depth = 0
     i = 0
@@ -431,15 +439,78 @@ def parse_member_stmt(stmt, marked_set, context, aliases=None):
         elif c in ">)]}":
             depth -= 1
         elif c in "= {(" and depth == 0 and c != " ":
-            # '=' or '{' or '(' starting the initializer
-            # ignore '{' only if we already have a type+name (brace init)
+            cut = i
+            break
+        i += 1
+    if cut >= 0:
+        s = s[:cut].strip()
+#declarator name : last identifier at angle depth 0
+    idents = []
+    depth = 0
+    i = 0
+    while i < len(s):
+        c = s[i]
+        if c.isalpha() or c == "_":
+            j = i
+            while j < len(s) and (s[j].isalnum() or s[j] == "_"):
+                j += 1
+            if depth == 0:
+                idents.append((i, s[i:j]))
+            i = j
+            continue
+        if c == "<":
+            depth += 1
+        elif c == ">":
+            depth -= 1
+        i += 1
+    if not idents:
+        raise ParseError(f"member '{s}' in {context}: no declarator name found")
+    name_pos, name = idents[-1]
+    raw_type = s[:name_pos].strip()
+    if raw_type == "":
+        raise ParseError(f"member '{s}' in {context}: missing type")
+    kind, ref = classify_ini_member(raw_type, ini_full_names, context)
+    return Member(name=name, type_text="", category="", raw_type=raw_type, kind=kind, ref=ref)
+
+
+def parse_member_stmt(stmt, marked_set, context, aliases=None):
+    """Parse one member declaration statement into a Member (name filled)."""
+    s = stmt.strip()
+    if s == "":
+        return None
+    first_word = re.match(r"(\w+)", s)
+    if first_word and first_word.group(1) in NON_MEMBER_WORDS:
+        return None  # nested type, using, etc. (struct bodies were skipped already)
+    if s.startswith("//") or s.startswith("/*") or s.startswith("#"):
+        return None
+
+#strip default initializer : first top - level '=', '{' or '(' after the type
+    cut = -1
+    depth = 0
+    i = 0
+    n = len(s)
+    while i < n:
+        c = s[i]
+        if c == '"':
+            i = skip_string(s, i)
+            continue
+        if c == "'":
+            i = skip_char(s, i)
+            continue
+        if c in "<([{":
+            depth += 1
+        elif c in ">)]}":
+            depth -= 1
+        elif c in "= {(" and depth == 0 and c != " ":
+#'=' or '{' or '(' starting the initializer
+#ignore '{' only if we already have a type + name(brace init)
             cut = i
             break
         i += 1
     if cut >= 0:
         s = s[:cut].strip()
 
-    # detect unsupported declarator forms (pointers, refs, arrays, functions)
+#detect unsupported declarator forms(pointers, refs, arrays, functions)
     depth = 0
     has_asterisk = False
     has_amp = False
@@ -465,7 +536,7 @@ def parse_member_stmt(stmt, marked_set, context, aliases=None):
     if has_asterisk or has_amp:
         raise ParseError(f"member '{s}' in {context}: pointer/reference not supported")
 
-    # find the declarator name: the last identifier at angle-bracket depth 0
+#find the declarator name : the last identifier at angle - bracket depth 0
     idents = []
     depth = 0
     i = 0
@@ -500,10 +571,9 @@ def parse_member_stmt(stmt, marked_set, context, aliases=None):
         )
     return m
 
-
-# ---------------------------------------------------------------------------
-# Code generation
-# ---------------------------------------------------------------------------
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
+#Code generation
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
 
 
 @dataclass
@@ -513,6 +583,7 @@ class StructInfo:
     array_mode: bool
     source_file: str
     marker_end: int = 0
+    ini_mode: bool = False
     members: list = field(default_factory=list)
 
 
@@ -523,7 +594,7 @@ def emit_serializer(si, indent="    "):
         lines.append(f"{indent}w.arr_begin();")
         for idx, m in enumerate(si.members):
             if m.category == "optional":
-                # array mode: no omission, null-or-value
+#array mode : no omission, null - or -value
                 lines.append(
                     f"{indent}{{ jsondm::Writer::member_guard g(w, {idx}); "
                     f"jsondm::write(w, v.{m.name}); }}"
@@ -591,18 +662,43 @@ def emit_deserializer(si, indent="    "):
 def generate_hpp(si, input_basename):
     decls = []
     for s in si:
-        decls.append(
-            f"template <> struct jsondm::serializer<{s.full_name}> {{\n"
-            f"  static void write(const {s.full_name} &, jsondm::Writer &);\n"
-            f"}};\n"
-            f"template <> struct jsondm::deserializer<{s.full_name}> {{\n"
-            f"  static void read(jsondm::Reader &, {s.full_name} &);\n"
-            f"}};"
-        )
+        if s.ini_mode:
+            has_struct = any(
+                m.kind in ("struct", "vector_struct", "optional_struct")
+                for m in s.members
+            )
+            if has_struct:
+                decls.append(
+                    f"template <> struct jsondm::ini_deserializer<{s.full_name}> {{\n"
+                    f"  static void read(jsondm::IniReader &, {s.full_name} &);\n"
+                    f"}};"
+                )
+            else:
+                decls.append(
+                    f"template <> struct jsondm::ini_deserializer<{s.full_name}> {{\n"
+                    f"  static void read(const jsondm::IniReader::Section &, "
+                    f"{s.full_name} &);\n"
+                    f"}};"
+                )
+            decls.append(
+                f"template <> struct jsondm::ini_serializer<{s.full_name}> {{\n"
+                f"  static void write(jsondm::IniWriter &, const {s.full_name} &);\n"
+                f"}};"
+            )
+        else:
+            decls.append(
+                f"template <> struct jsondm::serializer<{s.full_name}> {{\n"
+                f"  static void write(const {s.full_name} &, jsondm::Writer &);\n"
+                f"}};\n"
+                f"template <> struct jsondm::deserializer<{s.full_name}> {{\n"
+                f"  static void read(jsondm::Reader &, {s.full_name} &);\n"
+                f"}};"
+            )
     formatters = "\n".join(
         f"template <> struct FMT::formatter<{s.full_name}> : "
         f"jsondm::formatter_base<{s.full_name}> {{}};"
         for s in si
+        if not s.ini_mode
     )
     return f"""// Autogenerated by scripts/json_dm_to_cpp.py — do not edit.
 #pragma once
@@ -618,18 +714,44 @@ def generate_hpp(si, input_basename):
 def generate_cpp(si, hpp_name, extra_includes):
     parts = []
     for s in si:
-        parts.append(
-            f"void jsondm::serializer<{s.full_name}>::write(\n"
-            f"    const {s.full_name} &v, jsondm::Writer &w) {{\n"
-            f"{emit_serializer(s)}\n"
-            f"}}"
-        )
-        parts.append(
-            f"void jsondm::deserializer<{s.full_name}>::read(\n"
-            f"    jsondm::Reader &r, {s.full_name} &v) {{\n"
-            f"{emit_deserializer(s)}\n"
-            f"}}"
-        )
+        if s.ini_mode:
+            has_struct = any(
+                m.kind in ("struct", "vector_struct", "optional_struct")
+                for m in s.members
+            )
+            if has_struct:
+                parts.append(
+                    f"void jsondm::ini_deserializer<{s.full_name}>::read(\n"
+                    f"    jsondm::IniReader &r, {s.full_name} &v) {{\n"
+                    f"{emit_ini_deserializer(s)}\n"
+                    f"}}"
+                )
+            else:
+                parts.append(
+                    f"void jsondm::ini_deserializer<{s.full_name}>::read(\n"
+                    f"    const jsondm::IniReader::Section &sec, {s.full_name} &v) {{\n"
+                    f"{emit_ini_deserializer(s)}\n"
+                    f"}}"
+                )
+            parts.append(
+                f"void jsondm::ini_serializer<{s.full_name}>::write(\n"
+                f"    jsondm::IniWriter &w, const {s.full_name} &v) {{\n"
+                f"{emit_ini_serializer(s)}\n"
+                f"}}"
+            )
+        else:
+            parts.append(
+                f"void jsondm::serializer<{s.full_name}>::write(\n"
+                f"    const {s.full_name} &v, jsondm::Writer &w) {{\n"
+                f"{emit_serializer(s)}\n"
+                f"}}"
+            )
+            parts.append(
+                f"void jsondm::deserializer<{s.full_name}>::read(\n"
+                f"    jsondm::Reader &r, {s.full_name} &v) {{\n"
+                f"{emit_deserializer(s)}\n"
+                f"}}"
+            )
     extra = "\n".join(f'#include "{e}"' for e in sorted(extra_includes))
     if extra:
         extra += "\n"
@@ -656,10 +778,209 @@ def collect_user_types(m, out):
     for a in m.alternatives:
         collect_user_types(a, out)
 
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
+#INI support( /// [INI-DM] structs)
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
 
-# ---------------------------------------------------------------------------
-# Main pipeline
-# ---------------------------------------------------------------------------
+INI_SIMPLE_BUILTINS = {
+    "bool", "char", "schar", "uchar", "short", "ushort", "int", "uint",
+    "long", "ulong", "llong", "ullong", "float", "double",
+}
+
+
+def classify_ini_member(raw_type, ini_full_names, context):
+    """Light classification for INI members.
+
+    Returns (kind, ref) where kind in
+    scalar | optional_scalar | struct | vector_struct | optional_struct
+    and ref is the qualified C++ type to use in generated code.
+    """
+    t = raw_type.strip()
+
+    def unwrap(prefix):
+        p = prefix
+        if t.startswith(p) and t.endswith(">"):
+            return t[len(p):-1].strip()
+        return None
+
+    inner = unwrap("std::vector<") or unwrap("vector<")
+    if inner is not None:
+        if inner in ini_full_names:
+            return ("vector_struct", ini_full_names[inner])
+        raise ParseError(
+            f"member of {context}: INI vector elements must be /// [INI-DM] "
+            f"structs, got '{inner}'"
+        )
+    inner = unwrap("std::optional<") or unwrap("optional<")
+    if inner is not None:
+        if inner in ini_full_names:
+            return ("optional_struct", ini_full_names[inner])
+        return ("optional_scalar", inner)
+    if t in ini_full_names:
+        return ("struct", ini_full_names[t])
+    return ("scalar", t)
+
+
+def qualify_ini_type(t, enclosing_full):
+    """Qualify a simple identifier type with its enclosing struct."""
+    t = t.strip()
+    if re.match(r"^[A-Za-z_]\w*$", t) and t not in INI_SIMPLE_BUILTINS:
+        if enclosing_full:
+            return f"{enclosing_full}::{t}"
+    return t
+
+
+def ini_scalar_type(kind, ref, enclosing_full):
+    if kind in ("scalar", "optional_scalar"):
+        return qualify_ini_type(ref, enclosing_full)
+    return ref
+
+
+def emit_ini_deserializer(si, indent="    "):
+    enclosing = si.full_name.rsplit("::", 1)[0] if "::" in si.full_name else ""
+    has_struct = any(m.kind in ("struct", "vector_struct", "optional_struct")
+                     for m in si.members)
+    lines = []
+    if has_struct:
+        lines.append(f"{indent}r.for_each_run([&](std::string_view section,")
+        lines.append(f"{indent}                 const jsondm::IniReader::Section &sec) {{")
+#general : scalar members
+        scalars = [m for m in si.members if m.kind in ("scalar", "optional_scalar")]
+        if scalars:
+            lines.append(f'{indent}    if (section == "general") {{')
+            lines.append(f"{indent}        sec.for_each([&](std::string_view key,")
+            lines.append(f"{indent}                         std::string_view value, size_t line) {{")
+            for k, m in enumerate(scalars):
+                op = "if" if k == 0 else "else if"
+                t = ini_scalar_type(m.kind, m.ref, enclosing)
+                lines.append(
+                    f'{indent}            {op} (key == "{m.name}") '
+                    f"v.{m.name} = jsondm::ini::to_value<{t}>(value);"
+                )
+            lines.append(
+                f'{indent}            else throw jsondm::exception("{{}}:{{}}: Invalid key: {{}}", '
+                f"r.filename(), line, std::string(key));"
+            )
+            lines.append(f"{indent}        }});")
+            lines.append(f"{indent}    }}")
+        else:
+            lines.append(f'{indent}    if (section == "general") {{')
+            lines.append(f"{indent}        // no scalar members")
+            lines.append(f"{indent}    }}")
+#struct / vector / optional sections
+        first_branch = not scalars
+        for m in si.members:
+            if m.kind == "struct":
+                lines.append(
+                    f'{indent}    else if (section == "{m.name}") {{'
+                )
+                lines.append(
+                    f"{indent}        jsondm::ini_deserializer<{m.ref}>::read(sec, v.{m.name});"
+                )
+                lines.append(f"{indent}    }}")
+            elif m.kind == "vector_struct":
+                lines.append(
+                    f'{indent}    else if (section == "{m.name}") {{'
+                )
+                lines.append(f"{indent}        {m.ref} e;")
+                lines.append(
+                    f"{indent}        jsondm::ini_deserializer<{m.ref}>::read(sec, e);"
+                )
+                lines.append(
+                    f"{indent}        v.{m.name}.push_back(std::move(e));"
+                )
+                lines.append(f"{indent}    }}")
+            elif m.kind == "optional_struct":
+                lines.append(
+                    f'{indent}    else if (section == "{m.name}") {{'
+                )
+                lines.append(f"{indent}        {m.ref} e;")
+                lines.append(
+                    f"{indent}        jsondm::ini_deserializer<{m.ref}>::read(sec, e);"
+                )
+                lines.append(f"{indent}        v.{m.name} = std::move(e);")
+                lines.append(f"{indent}    }}")
+        lines.append(
+            f'{indent}    else throw jsondm::exception("{{}}:{{}}: Invalid section: {{}}", '
+            f"r.filename(), sec.line(), std::string(section));"
+        )
+        lines.append(f"{indent}}});")
+    else:
+        lines.append(f"{indent}sec.for_each([&](std::string_view key,")
+        lines.append(f"{indent}                 std::string_view value, size_t line) {{")
+        for k, m in enumerate(si.members):
+            op = "if" if k == 0 else "else if"
+            t = ini_scalar_type(m.kind, m.ref, enclosing)
+            lines.append(
+                f'{indent}    {op} (key == "{m.name}") '
+                f"v.{m.name} = jsondm::ini::to_value<{t}>(value);"
+            )
+        lines.append(
+            f'{indent}    else throw jsondm::exception("{{}}:{{}}: Invalid key: {{}}", '
+            f"sec.filename(), line, std::string(key));"
+        )
+        lines.append(f"{indent}}});")
+    return "\n".join(lines)
+
+
+def emit_ini_serializer(si, indent="    "):
+    enclosing = si.full_name.rsplit("::", 1)[0] if "::" in si.full_name else ""
+    has_struct = any(m.kind in ("struct", "vector_struct", "optional_struct")
+                     for m in si.members)
+    lines = []
+    if has_struct:
+        lines.append(f'{indent}w.section("general");')
+        for m in si.members:
+            if m.kind == "scalar":
+                t = ini_scalar_type(m.kind, m.ref, enclosing)
+                lines.append(
+                    f'{indent}w.key("{m.name}", jsondm::ini::to_text<{t}>(v.{m.name}));'
+                )
+            elif m.kind == "optional_scalar":
+                t = ini_scalar_type(m.kind, m.ref, enclosing)
+                lines.append(
+                    f'{indent}if (v.{m.name}) w.key("{m.name}", '
+                    f'jsondm::ini::to_text<{t}>(*v.{m.name}));'
+                )
+            elif m.kind == "struct":
+                lines.append(f'{indent}w.section("{m.name}");')
+                lines.append(
+                    f"{indent}jsondm::ini_serializer<{m.ref}>::write(w, v.{m.name});"
+                )
+            elif m.kind == "vector_struct":
+                lines.append(
+                    f"{indent}for (const auto &e : v.{m.name}) {{"
+                )
+                lines.append(f"{indent}    w.section(\"{m.name}\");")
+                lines.append(
+                    f"{indent}    jsondm::ini_serializer<{m.ref}>::write(w, e);"
+                )
+                lines.append(f"{indent}}}")
+            elif m.kind == "optional_struct":
+                lines.append(f'{indent}if (v.{m.name}) {{')
+                lines.append(f"{indent}    w.section(\"{m.name}\");")
+                lines.append(
+                    f"{indent}    jsondm::ini_serializer<{m.ref}>::write(w, *v.{m.name});"
+                )
+                lines.append(f"{indent}}}")
+    else:
+        for m in si.members:
+            if m.kind == "scalar":
+                t = ini_scalar_type(m.kind, m.ref, enclosing)
+                lines.append(
+                    f'{indent}w.key("{m.name}", jsondm::ini::to_text<{t}>(v.{m.name}));'
+                )
+            elif m.kind == "optional_scalar":
+                t = ini_scalar_type(m.kind, m.ref, enclosing)
+                lines.append(
+                    f'{indent}if (v.{m.name}) w.key("{m.name}", '
+                    f'jsondm::ini::to_text<{t}>(*v.{m.name}));'
+                )
+    return "\n".join(lines)
+
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
+#Main pipeline
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
 
 
 def find_markers(text):
@@ -674,7 +995,9 @@ def find_markers(text):
             yield "object", m.start(1), m.end(1)
         elif token == "[JSON-DM-ARRAY]":
             yield "array", m.start(1), m.end(1)
-        elif "JSON-DM" in token:
+        elif token == "[INI-DM]":
+            yield "ini", m.start(1), m.end(1)
+        elif "JSON-DM" in token or "INI-DM" in token:
             raise ParseError(f"unknown JSON-DM marker: {token!r}")
 
 
@@ -698,7 +1021,7 @@ def compute_struct_context(text, marker_starts):
         c = text[i]
         j = skip_comment(text, i)
         if j != i:
-            # a comment spans [i, j); markers live inside it
+#a comment spans[i, j); markers live inside it
             for mp in marker_starts:
                 if i <= mp < j and mp not in contexts:
                     record(mp)
@@ -789,6 +1112,7 @@ def scan_inputs(inputs):
                     simple_name=name,
                     full_name=full_name,
                     array_mode=kind == "array",
+                    ini_mode=kind == "ini",
                     source_file=path,
                     marker_end=end,
                 )
@@ -798,13 +1122,19 @@ def scan_inputs(inputs):
 
 def parse_members_for(structs, simple_to_full, aliases):
     """Parse each struct's body into members."""
+    ini_full_names = {
+        s.simple_name: s.full_name for s in structs if s.ini_mode
+    }
     for si in structs:
         with open(si.source_file) as f:
             text = f.read()
         _, body_open = find_struct_after(text, si.marker_end)
         body, _ = struct_body_extent(text, body_open)
         for stmt in parse_struct_body(body):
-            m = parse_member_stmt(stmt, simple_to_full, si.full_name, aliases)
+            if si.ini_mode:
+                m = parse_ini_member_stmt(stmt, ini_full_names, si.full_name)
+            else:
+                m = parse_member_stmt(stmt, simple_to_full, si.full_name, aliases)
             if m is not None:
                 si.members.append(m)
 
@@ -819,7 +1149,7 @@ def main():
     structs, simple_to_full, aliases = scan_inputs(args.inputs)
     parse_members_for(structs, simple_to_full, aliases)
 
-    # group structs by input file; one generated pair per input
+#group structs by input file; one generated pair per input
     by_input = {}
     for si in structs:
         by_input.setdefault(si.source_file, []).append(si)

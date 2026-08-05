@@ -59,8 +59,34 @@ Pass every decorated header in one invocation (cross-header references are
 resolved across the input set). Generated files are committed:
 `<name>_jsondm.hpp` (specialization declarations + formatter adapters) and
 `<name>_jsondm.cpp` (definitions), added to `src/CMakeLists.txt`. Run the
-generator and commit the output whenever a decorated struct changes; the
-generator output is deterministic (byte-identical regeneration).
+generator, then `clang-format -i <name>_jsondm.{hpp,cpp}` (the generator
+output is deterministic but not formatted), and commit whenever a decorated
+struct changes.
+
+## INI config files (`/// [INI-DM]`)
+
+Config-file structs use a dedicated marker and generation path:
+
+```cpp
+/// [INI-DM]
+struct settings_t {
+  std::string alsa_name;
+  std::vector<rtpmidi_announce_t> rtpmidi_announce; // repeated [section]s
+};
+```
+
+- Root struct scalar members map to `[general]`; nested struct members map to
+  `[member_name]` sections; `std::vector<T>` members map to repeated sections;
+  `std::optional<T>` members map to optional sections.
+- Members may be any type with a `jsondm::ini::to_value<T>` / `to_text<T>`
+  conversion; config types like `std::regex` and enums get specializations
+  (see `src/settings.hpp`).
+- Pipeline: read the raw file text -> `jsondm::fill_hostname` (template
+  placeholders like `{{hostname}}` are filled before parsing) ->
+  `jsondm::IniReader` -> the generated `jsondm::ini_deserializer<T>`.
+  Errors carry `filename:line` context.
+- The hand-written INI parser is removed; `load_ini` uses the generated
+  backend (verified against `default.ini` semantics).
 
 ## API
 

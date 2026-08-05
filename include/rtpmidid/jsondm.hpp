@@ -866,6 +866,9 @@ template <class T> struct json_type_of<std::optional<T>> {
 
 template <typename T> struct serializer;
 template <typename T> struct deserializer;
+// INI backends: specialized by generated code for /// [INI-DM] structs.
+template <typename T> struct ini_serializer;
+template <typename T> struct ini_deserializer;
 
 // ---------------------------------------------------------------------------
 // fmt adapter base
@@ -1133,6 +1136,246 @@ template <class T> inline void deserialize(std::string_view in, T &v) {
   if (!r.at_end()) {
     r.fail("end of input", "trailing data");
   }
+}
+
+} // namespace jsondm
+
+// ---------------------------------------------------------------------------
+// INI support (config files). INI values are strings; generated INI code
+// converts them with jsondm::ini::to_value<T> (read) / to_text<T> (write).
+// ---------------------------------------------------------------------------
+
+namespace jsondm {
+namespace ini {
+
+template <class> inline constexpr bool always_false = false;
+
+namespace detail {
+template <class T, class = void> struct ini_is_arithmetic : std::false_type {};
+template <class T>
+struct ini_is_arithmetic<
+    T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>>>
+    : std::true_type {};
+} // namespace detail
+
+// Read conversion: string value -> member. Specialize for config-specific
+// types (std::regex, enums, ...) outside this header.
+template <class T> inline T to_value(std::string_view value) {
+  if constexpr (detail::ini_is_arithmetic<T>::value) {
+    T out{};
+    auto r = std::from_chars(value.data(), value.data() + value.size(), out);
+    if (r.ec != std::errc() || r.ptr != value.data() + value.size()) {
+      throw exception("Invalid number value: {}", std::string(value));
+    }
+    return out;
+  } else {
+    static_assert(always_false<T>,
+                  "no jsondm::ini::to_value specialization for this type");
+  }
+}
+template <> inline std::string to_value<std::string>(std::string_view v) {
+  return std::string(v);
+}
+template <> inline bool to_value<bool>(std::string_view v) {
+  return v == "true";
+}
+
+// Write conversion: member -> string value. Specialize similarly.
+template <class T> inline std::string to_text(const T &v) {
+  if constexpr (detail::ini_is_arithmetic<T>::value) {
+    char buf[32];
+    auto r = std::to_chars(buf, buf + sizeof(buf), v);
+    return std::string(buf, r.ptr);
+  } else {
+    static_assert(always_false<T>,
+                  "no jsondm::ini::to_text specialization for this type");
+  }
+}
+template <> inline std::string to_text<std::string>(const std::string &v) {
+  return v;
+}
+template <> inline std::string to_text<bool>(const bool &v) {
+  return v ? "true" : "false";
+}
+
+} // namespace ini
+
+// ---------------------------------------------------------------------------
+// IniWriter / IniReader: minimal INI dialect (sections, key=value, '#'
+// comments, repeated sections).
+// ---------------------------------------------------------------------------
+
+class IniWriter {
+public:
+  explicit IniWriter(std::string &out) : out_(out) {}
+  void section(std::string_view name) {
+    out_ += '[';
+    out_.append(name);
+    out_ += "]\n";
+  }
+  void key(std::string_view k, std::string_view v) {
+    out_.append(k);
+    out_ += '=';
+    out_.append(v);
+    out_ += '\n';
+  }
+
+private:
+  std::string &out_;
+};
+
+class IniReader {
+public:
+  struct entry {
+    std::string_view key;
+    std::string_view value;
+    size_t line = 0;
+  };
+  // One occurrence of a section: the entries between two section headers.
+  class Section {
+  public:
+    template <class F> void for_each(F &&f) const {
+      for (size_t i = begin_; i < end_; ++i) {
+        const auto &e = r_->entries_[i];
+        f(e.key, e.value, e.line);
+      }
+    }
+    size_t line() const {
+      return begin_ < end_ ? r_->entries_[begin_].line : header_line_;
+    }
+    std::string_view filename() const { return r_->filename_; }
+
+  private:
+    friend class IniReader;
+    const IniReader *r_ = nullptr;
+    size_t begin_ = 0;
+    size_t end_ = 0;
+    size_t header_line_ = 0;
+  };
+
+  explicit IniReader(std::string_view text, std::string_view filename = {})
+      : filename_(filename) {
+    parse(text);
+  }
+  std::string_view filename() const { return filename_; }
+
+  // One pass per occurrence of the named section.
+  template <class F> void for_each_section(std::string_view name, F &&f) const {
+    for (const auto &o : occurrences_) {
+      if (o.section == name) {
+        f(section_for(o));
+      }
+    }
+  }
+  // One pass per section occurrence, in file order.
+  template <class F> void for_each_run(F &&f) const {
+    for (const auto &o : occurrences_) {
+      f(o.section, section_for(o));
+    }
+  }
+
+private:
+  struct occurrence {
+    std::string_view section;
+    size_t begin = 0;
+    size_t end = 0;
+    size_t header_line = 0;
+  };
+  Section section_for(const occurrence &o) const {
+    Section s;
+    s.r_ = this;
+    s.begin_ = o.begin;
+    s.end_ = o.end;
+    s.header_line_ = o.header_line;
+    return s;
+  }
+  static std::string_view trim(std::string_view s) {
+    size_t b = 0;
+    while (b < s.size() && (s[b] == ' ' || s[b] == '\t' || s[b] == '\r'))
+      ++b;
+    size_t e = s.size();
+    while (e > b && (s[e - 1] == ' ' || s[e - 1] == '\t' || s[e - 1] == '\r'))
+      --e;
+    return s.substr(b, e - b);
+  }
+  void parse(std::string_view text) {
+    size_t pos = 0;
+    size_t line_no = 0;
+    occurrence current;
+    bool have_section = false;
+    while (pos <= text.size()) {
+      size_t nl = text.find('\n', pos);
+      std::string_view line = text.substr(
+          pos, (nl == std::string_view::npos ? text.size() : nl) - pos);
+      pos = (nl == std::string_view::npos) ? text.size() + 1 : nl + 1;
+      ++line_no;
+      auto hash = line.find('#');
+      if (hash != std::string_view::npos)
+        line = line.substr(0, hash);
+      line = trim(line);
+      if (line.empty())
+        continue;
+      if (line.front() == '[') {
+        if (line.back() != ']') {
+          throw exception("{}:{}: Invalid section: {}", filename_, line_no,
+                          std::string(line));
+        }
+        if (have_section) {
+          current.end = entries_.size();
+          occurrences_.push_back(current);
+        }
+        current = occurrence{line.substr(1, line.size() - 2), entries_.size(),
+                             entries_.size(), line_no};
+        have_section = true;
+      } else {
+        auto eq = line.find('=');
+        if (eq == std::string_view::npos) {
+          throw exception("{}:{}: Invalid line: {}", filename_, line_no,
+                          std::string(line));
+        }
+        auto key = trim(line.substr(0, eq));
+        auto value = trim(line.substr(eq + 1));
+        entries_.push_back(entry{key, value, line_no});
+      }
+    }
+    if (have_section) {
+      current.end = entries_.size();
+      occurrences_.push_back(current);
+    }
+  }
+  std::string_view filename_;
+  std::vector<entry> entries_;
+  std::vector<occurrence> occurrences_;
+};
+
+// Fills {{name}} placeholders in raw config text (before INI parsing).
+inline std::string fill_template(std::string_view text, std::string_view name,
+                                 std::string_view value) {
+  std::string needle = "{{";
+  needle += name;
+  needle += "}}";
+  std::string out;
+  out.reserve(text.size() + value.size());
+  size_t start = 0;
+  while (true) {
+    size_t at = text.find(needle, start);
+    if (at == std::string_view::npos) {
+      out.append(text.substr(start));
+      break;
+    }
+    out.append(text.substr(start, at - start));
+    out.append(value);
+    start = at + needle.size();
+  }
+  return out;
+}
+// Fills {{hostname}} with the machine hostname.
+inline std::string fill_hostname(std::string_view text) {
+  char hostname[256];
+  if (::gethostname(hostname, sizeof(hostname)) != 0) {
+    std::strncpy(hostname, "localhost", sizeof(hostname) - 1);
+  }
+  return fill_template(text, "hostname", hostname);
 }
 
 } // namespace jsondm

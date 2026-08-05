@@ -49,7 +49,7 @@ const char *const MSG_TOO_LONG =
 static const std::regex PEER_COMMAND_RE = std::regex("^(\\d*)\\.(.*)");
 
 control_socket_t::control_socket_t() {
-  std::string &socketfile = settings.control_filename;
+  std::string &socketfile = settings.control;
 
   int ret = unlink(socketfile.c_str());
   if (ret >= 0) {
@@ -238,7 +238,7 @@ static daemon_status_t cmd_status(control_socket_t &control) {
   daemon_status_t s;
   s.version = VERSION;
   s.settings.alsa_name = settings.alsa_name;
-  s.settings.control_filename = settings.control_filename;
+  s.settings.control_filename = settings.control;
   s.router = control.router->status();
   s.mdns = mdns_status(control.mdns);
   return s;

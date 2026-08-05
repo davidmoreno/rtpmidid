@@ -78,12 +78,12 @@
 
 ## 10. INI backend
 
-- [ ] 10.1 Implement the INI writer/reader backends over the shared traversal ops (object → section, scalar → `key = value`)
-- [ ] 10.2 Implement repeated sections from `std::vector<T>` members and optional sections from `std::optional<T>` members
-- [ ] 10.3 Implement INI error reporting with file name and line number (consistent with `ini_exception`)
-- [ ] 10.4 Decorate `settings_t` (and nested structs) with `/// [JSON-DM]`; generate and commit
-- [ ] 10.5 Compatibility tests: generated reader matches hand-written parser results on real configs (incl. repeated sections, whitespace, comments); generated writer output loadable by hand parser
-- [ ] 10.6 Keep the hand-written parser active until compatibility passes; only then switch and update `test_settings.cpp` expectations if any
+- [x] 10.1 Implement the INI writer/reader backends over the shared traversal ops (object → section, scalar → `key = value`)
+- [x] 10.2 Implement repeated sections from `std::vector<T>` members and optional sections from `std::optional<T>` members
+- [x] 10.3 Implement INI error reporting with file name and line number (consistent with `ini_exception`)
+- [x] 10.4 Decorate `settings_t` (and nested structs) with `/// [JSON-DM]`; generate and commit
+- [x] 10.5 Compatibility tests: generated reader matches hand-written parser results on real configs (incl. repeated sections, whitespace, comments); generated writer output loadable by hand parser
+- [x] 10.6 Keep the hand-written parser active until compatibility passes; only then switch and update `test_settings.cpp` expectations if any
 
 ## 11. Documentation and cleanup
 

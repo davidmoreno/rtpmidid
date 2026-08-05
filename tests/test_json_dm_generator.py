@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/ bin / python3
 """Tests for scripts/json_dm_to_cpp.py.
 
 Usage: test_json_dm_generator.py <repo_root>
@@ -52,7 +52,7 @@ def run_gen(tmp, *extra):
 def main():
     tmp = tempfile.mkdtemp(prefix="jsondm_gen_")
 
-    # --- fixture 1: happy path, all types --------------------------------
+#-- - fixture 1 : happy path, all types -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
     fixture = os.path.join(tmp, "src", "data.hpp")
     write(
         fixture,
@@ -115,7 +115,7 @@ struct point_t {
     check("if (i != 3)" in cpp or "if (i != 2)" in cpp, "array length check emitted")
     check("formatter<model::point_t>" in hpp, "formatter adapter emitted")
 
-    # --- fixture 2: fail-loud cases --------------------------------------
+#-- - fixture 2 : fail - loud cases -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
     bad_type = os.path.join(tmp, "src", "bad_type.hpp")
     write(
         bad_type,
@@ -173,7 +173,119 @@ struct x_t { int a; };
     r, _ = run_gen(tmp, "--input", const_member)
     check(r.returncode != 0, "const member fails loudly")
 
-    # --- deterministic output --------------------------------------------
+#-- - fixture 3 : INI mode(/// [INI-DM]) ------------------------------
+    ini_fixture = os.path.join(tmp, "src", "conf.hpp")
+    write(
+        ini_fixture,
+        """#pragma once
+#include <optional>
+#include <regex>
+#include <string>
+#include <vector>
+
+namespace jsondm {
+namespace ini {
+template <> inline std::regex to_value<std::regex>(std::string_view v) {
+  return std::regex(std::string(v));
+}
+template <> inline std::string to_text<std::regex>(const std::regex &) { return ""; }
+} // namespace ini
+} // namespace jsondm
+
+/// [INI-DM]
+struct conf_t {
+  std::string name = "default";
+  bool enabled = true;
+  std::regex filter = std::regex(".*");
+  /// [INI-DM]
+  struct section_t {
+    std::string host;
+    int port;
+  };
+  /// [INI-DM]
+  struct item_t {
+    std::string a;
+    std::string b;
+  };
+  section_t section;
+  std::vector<item_t> items;
+};
+""",
+    )
+    r, out = run_gen(tmp, "--input", ini_fixture)
+    check(r.returncode == 0, "ini struct generates")
+    ini_hpp = open(os.path.join(out, "conf_jsondm.hpp")).read()
+    ini_cpp = open(os.path.join(out, "conf_jsondm.cpp")).read()
+    check("ini_deserializer<conf_t>" in ini_hpp, "ini deserializer declared")
+    check("ini_serializer<conf_t>" in ini_hpp, "ini serializer declared")
+    check("jsondm::serializer<conf_t>" not in ini_hpp, "no JSON code for INI structs")
+    check('section == "general"' in ini_cpp, "general section handling")
+    check('section == "items"' in ini_cpp, "repeated section handling")
+    check("to_value<std::regex>" in ini_cpp, "regex converter emitted")
+    check('throw jsondm::exception("{}:{}: Invalid key' in ini_cpp,
+          "file:line error emitted")
+#INI end - to - end : compile + round - trip
+    ini_main = os.path.join(tmp, "ini_main.cpp")
+    write(
+        ini_main,
+        r"""#include "conf_jsondm.hpp"
+#include <cassert>
+#include <cstdio>
+#include <regex>
+#include <rtpmidid/jsondm.hpp>
+#include <string>
+
+int main() {
+    std::string cfg =
+        "[general]\nname=hello\nenabled=false\nfilter=server:port/\\d+\n"
+        "[section]\nhost=h\nport=5004\n"
+        "[items]\na=1\nb=2\n"
+        "[items]\na=3\nb=4\n";
+    std::string text = cfg;
+    jsondm::IniReader r(text, "conf.ini");
+    conf_t c;
+    jsondm::ini_deserializer<conf_t>::read(r, c);
+    assert(c.name == "hello");
+    assert(c.enabled == false);
+    assert(std::regex_search("server:port/123", c.filter));
+    assert(c.section.host == "h");
+    assert(c.section.port == 5004);
+    assert(c.items.size() == 2);
+    assert(c.items[1].a == "3");
+    // error on unknown key with file:line
+    bool threw = false;
+    try {
+        std::string bad = "[general]\nnope=1\n";
+        jsondm::IniReader rb(bad, "conf.ini");
+        conf_t cb;
+        jsondm::ini_deserializer<conf_t>::read(rb, cb);
+    } catch (const jsondm::exception &e) {
+        threw = true;
+        assert(std::string(e.what()).find("conf.ini") != std::string::npos);
+    }
+    assert(threw);
+    std::printf("INI OK\n");
+    return 0;
+}
+""",
+    )
+    compile_cmd = [
+        "g++", "-std=c++20", "-Wall", "-Werror",
+        f"-I{INCLUDE}", f"-I{out}", f"-I{os.path.join(tmp, 'src')}",
+        os.path.join(out, "conf_jsondm.cpp"), ini_main,
+        "-o", os.path.join(tmp, "ini_test_bin"),
+    ]
+    c = subprocess.run(compile_cmd, capture_output=True, text=True)
+    if c.returncode != 0:
+        check(False, "ini generated code compiles: " + c.stderr[-500:])
+    else:
+        check(True, "ini generated code compiles")
+        run = subprocess.run([os.path.join(tmp, "ini_test_bin")],
+                             capture_output=True, text=True)
+        check(run.returncode == 0 and "INI OK" in run.stdout,
+              "ini generated code round-trips")
+
+#-- - deterministic output -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
     r1, out1 = run_gen(tmp, "--input", fixture)
     r2, out2 = run_gen(tmp, "--input", fixture)
     check(
@@ -182,7 +294,7 @@ struct x_t { int a; };
         "regeneration is byte-identical",
     )
 
-    # --- end-to-end compile + round-trip ---------------------------------
+#-- - end - to - end compile + round - trip -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
     main_cpp = os.path.join(tmp, "main.cpp")
     write(
         main_cpp,

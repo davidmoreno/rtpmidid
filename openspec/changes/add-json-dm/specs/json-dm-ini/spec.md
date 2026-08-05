@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
-### Requirement: INI backend over shared traversal
-The INI backend SHALL reuse the format-agnostic traversal produced by the generator: a decorated struct SHALL map to INI sections and `key = value` lines. Scalar and string members SHALL serialize as `key = value`; a nested struct member SHALL serialize as its own `[section]`.
+### Requirement: INI backend via dedicated generation
+Structs decorated with `/// [INI-DM]` SHALL be generated with INI serializers/deserializers (a dedicated emitter alongside the JSON one; INI-DM structs SHALL NOT receive JSON code). A struct SHALL map to INI sections and `key = value` lines: scalar members of the root struct SHALL map to the `[general]` section; a nested struct member SHALL map to its own `[section]` named after the member; members may be of any type with a `jsondm::ini::to_value<T>`/`to_text<T>` conversion (config types such as `std::regex` and enums specialize the converters).
 
 #### Scenario: Scalar member round-trip
 - **WHEN** a struct with an `int` member `port` is serialized to INI and parsed back
@@ -34,7 +34,7 @@ A `std::optional<T>` member SHALL serialize to a section only when the optional 
 - **THEN** the corresponding section is emitted
 
 ### Requirement: Existing configuration compatibility
-The generated INI reader SHALL parse configuration files accepted by the current hand-written parser (`src/ini.cpp`) with equivalent resulting values, including tolerance for repeated sections, whitespace, and comments present in real user configs. The generated writer SHALL emit files loadable by the hand-written parser.
+The generated INI reader SHALL parse configuration files accepted by the former hand-written parser with equivalent resulting values, including tolerance for repeated sections, whitespace, comments, and the `{{hostname}}` placeholder (filled on the raw text before parsing). The generated writer SHALL emit files loadable by an INI parser. The hand-written parser SHALL be removed only after the generated reader passes the compatibility tests (verified on `default.ini` and the settings test suite).
 
 #### Scenario: Parses current config semantics
 - **WHEN** an INI file that the hand-written parser accepts is parsed by the generated reader
