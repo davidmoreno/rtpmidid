@@ -29,7 +29,6 @@ midipeer_t::~midipeer_t() {
   }
 }
 std::string midipeer_t::command(const std::string &cmd, std::string_view) {
-  ERROR("Unknown command: {}", cmd);
   if (cmd == "help") {
     return "{}";
   }
@@ -38,6 +37,7 @@ std::string midipeer_t::command(const std::string &cmd, std::string_view) {
     jsondm::serialize(status(), out);
     return out;
   }
+  ERROR("Unknown command: {}", cmd);
   return R"({"error": "Command not implemented"})";
 }
 } // namespace rtpmididns

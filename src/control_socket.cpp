@@ -16,13 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "control_socket.hpp"
-#include "factory.hpp"
-#include "settings.hpp"
-#include <sys/stat.h>
-#include <sys/un.h>
-
 #include "control_commands_jsondm.hpp"
-#include "control_socket.hpp"
 #include "control_status_jsondm.hpp"
 #include "factory.hpp"
 #include "midipeer.hpp"

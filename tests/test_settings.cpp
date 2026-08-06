@@ -136,6 +136,20 @@ void test_parse_ini(void) {
   }
   ASSERT_TRUE(threw);
 
+  // bool values are strict: only 'true' or 'false' (fail loud on typos)
+  settings = parse("[rtpmidi_discover]\nenabled=true\n");
+  ASSERT_EQUAL(settings.rtpmidi_discover.enabled, true);
+  for (auto bad : {"yes", "1", "tru", "FALSE", ""}) {
+    threw = false;
+    try {
+      parse(std::string("[rtpmidi_discover]\nenabled=") + bad + "\n");
+    } catch (const jsondm::exception &e) {
+      threw = true;
+      ASSERT_TRUE(std::string(e.what()).find("bool") != std::string::npos);
+    }
+    ASSERT_TRUE(threw);
+  }
+
   // writer round-trip (regex patterns cannot be extracted from std::regex,
   // so the round trip covers the writable members)
   settings = parse("[general]\nalsa_name=rtpmidid\nalsa_network=true\n"

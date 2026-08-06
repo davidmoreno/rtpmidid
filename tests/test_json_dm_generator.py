@@ -1,4 +1,4 @@
-#!/ bin / python3
+#!/usr/bin/env python3
 """Tests for scripts/json_dm_to_cpp.py.
 
 Usage: test_json_dm_generator.py <repo_root>

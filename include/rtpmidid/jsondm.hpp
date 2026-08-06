@@ -1177,7 +1177,12 @@ template <> inline std::string to_value<std::string>(std::string_view v) {
   return std::string(v);
 }
 template <> inline bool to_value<bool>(std::string_view v) {
-  return v == "true";
+  if (v == "true")
+    return true;
+  if (v == "false")
+    return false;
+  throw exception("Invalid bool value: {}. Expected 'true' or 'false'.",
+                  std::string(v));
 }
 
 // Write conversion: member -> string value. Specialize similarly.
