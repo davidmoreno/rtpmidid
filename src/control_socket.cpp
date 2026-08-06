@@ -16,15 +16,20 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "control_socket.hpp"
+#include "control_commands_jsondm.hpp"
+#include "control_status_jsondm.hpp"
 #include "factory.hpp"
+#include "midipeer.hpp"
+#include "peer_status_jsondm.hpp"
 #include "settings.hpp"
+#include "stringpp.hpp"
+#include <functional>
+#include <regex>
+#include <rtpmidid/jsondm.hpp>
+#include <rtpmidid/mdns_rtpmidi.hpp>
+#include <string_view>
 #include <sys/stat.h>
 #include <sys/un.h>
-
-#include "json.hpp"
-#include "midipeer.hpp"
-#include "stringpp.hpp"
-#include <rtpmidid/mdns_rtpmidi.hpp>
 
 namespace rtpmididns {
 // NOLINTNEXTLINE
@@ -34,13 +39,11 @@ const char *const MSG_CLOSE_CONN =
     "{\"event\": \"close\", \"detail\": \"Shutdown\", \"code\": 0}\n";
 const char *const MSG_TOO_LONG =
     "{\"event\": \"close\", \"detail\": \"Message too long\", \"code\": 1}\n";
-// const char *const MSG_UNKNOWN_COMMAND =
-//     "{\"error\": \"Unknown command\", \"code\": 2}";
 
 static const std::regex PEER_COMMAND_RE = std::regex("^(\\d*)\\.(.*)");
 
 control_socket_t::control_socket_t() {
-  std::string &socketfile = settings.control_filename;
+  std::string &socketfile = settings.control;
 
   int ret = unlink(socketfile.c_str());
   if (ret >= 0) {
@@ -115,10 +118,10 @@ void control_socket_t::data_ready(int fd) {
   char buf[1024];                           // NOLINT
   size_t l = recv(fd, buf, sizeof(buf), 0); // NOLINT
   auto remove_client = [&](int client_fd) {
-    auto it = std::find_if(clients.begin(), clients.end(),
-                           [client_fd](auto &client) {
-                             return client.fd == client_fd;
-                           });
+    auto it =
+        std::find_if(clients.begin(), clients.end(), [client_fd](auto &client) {
+          return client.fd == client_fd;
+        });
     if (it != clients.end()) {
       it->listener.stop();
       close(it->fd);
@@ -150,300 +153,423 @@ void control_socket_t::data_ready(int fd) {
   }
 }
 
-static std::string maybe_string(const json_t &j, const char *key,
-                                const char *def) {
-  if (j.is_object()) {
-    auto it = j.find(key);
-    if (it != j.end()) {
-      if (it->is_string()) {
-        return it->get<std::string>();
-      }
-      if (it->is_number_integer()) {
-        return std::to_string(it->get<int64_t>());
-      }
-      if (it->is_number_unsigned()) {
-        return std::to_string(it->get<uint64_t>());
-      }
-      if (it->is_number_float()) {
-        return std::to_string(it->get<double>());
-      }
-    }
+static mdns_status_t
+mdns_status(const std::shared_ptr<rtpmidid::mdns_rtpmidi_t> &mdns) {
+  mdns_status_t s;
+  if (!mdns) {
+    s.status = "Not available";
+    return s;
   }
-  return def;
-};
+  s.status = "Available";
+  for (auto &announcement : mdns->announcements) {
+    s.announcements.push_back({announcement.name, announcement.port});
+  }
+  for (auto &announcement : mdns->remote_announcements) {
+    s.remote_announcements.push_back(
+        {announcement.name, announcement.address, announcement.port});
+  }
+  return s;
+}
 
-namespace control_socket_ns {
-struct command_t {
+// ---------------------------------------------------------------------------
+// Typed command registry
+// ---------------------------------------------------------------------------
+
+struct command_entry_t {
   const char *name;
   const char *description;
-  std::function<json_t(rtpmididns::control_socket_t &, const json_t &)> func;
+  std::function<void(control_socket_t &, std::string_view params_json,
+                     std::string &result_out)>
+      run;
 };
-} // namespace control_socket_ns
 
-json_t mdns_status(const std::shared_ptr<rtpmidid::mdns_rtpmidi_t> &mdns) {
-  if (!mdns)
-    return json_t{"status", "Not available"};
+template <typename ParamsT, typename ResultT>
+command_entry_t make_command(const char *name, const char *description,
+                             ResultT (*func)(control_socket_t &,
+                                             const ParamsT &)) {
+  return {name, description,
+          [func](control_socket_t &c, std::string_view params_json,
+                 std::string &out) {
+            ParamsT params;
+            jsondm::deserialize(params_json, params);
+            jsondm::serialize(func(c, params), out);
+          }};
+}
+template <typename ResultT>
+command_entry_t make_command_noparams(const char *name, const char *description,
+                                      ResultT (*func)(control_socket_t &)) {
+  return {name, description,
+          [func](control_socket_t &c, std::string_view, std::string &out) {
+            jsondm::serialize(func(c), out);
+          }};
+}
+// Command whose params need hand-written parsing (legacy multi-form params).
+command_entry_t make_raw_command(const char *name, const char *description,
+                                 std::string (*func)(control_socket_t &,
+                                                     std::string_view)) {
+  return {name, description,
+          [func](control_socket_t &c, std::string_view params_json,
+                 std::string &out) { out = func(c, params_json); }};
+}
 
-  std::vector<json_t> announcements;
-  for (auto &announcement : mdns->announcements) {
-    announcements.push_back({
-        {"name", announcement.name},
-        {"port", announcement.port},
-    });
+// ---------------------------------------------------------------------------
+// Command handlers
+// ---------------------------------------------------------------------------
+
+static std::string port_to_string(const std::variant<std::string, int> &p) {
+  return std::visit(
+      [](const auto &v) -> std::string {
+        if constexpr (std::is_same_v<std::decay_t<decltype(v)>, int>) {
+          return std::to_string(v);
+        } else {
+          return v;
+        }
+      },
+      p);
+}
+
+static daemon_status_t cmd_status(control_socket_t &control) {
+  daemon_status_t s;
+  s.version = VERSION;
+  s.settings.alsa_name = settings.alsa_name;
+  s.settings.control_filename = settings.control;
+  s.router = control.router->status();
+  s.mdns = mdns_status(control.mdns);
+  return s;
+}
+
+static std::string cmd_router_remove(control_socket_t &control,
+                                     const remove_params_t &params) {
+  control.router->remove_peer(params.peer_id);
+  return "ok";
+}
+
+static std::string cmd_router_connect(control_socket_t &control,
+                                      const router_connect_params_t &params) {
+  control.router->connect(params.from, params.to);
+  return "ok";
+}
+
+static std::string
+cmd_router_disconnect(control_socket_t &control,
+                      const router_connect_params_t &params) {
+  control.router->disconnect(params.from, params.to);
+  return "ok";
+}
+
+static create_result_t cmd_router_create(control_socket_t &control,
+                                         const create_params_t &params) {
+  if (params.type == "local_rawmidi_t") {
+    if (!params.name || !params.device)
+      throw jsondm::exception(
+          "router.create: local_rawmidi_t needs name and device");
+    auto peer = make_rawmidi_peer(*params.name, *params.device);
+    control.router->add_peer(peer);
+    return peer->status();
+  } else if (params.type == "network_rtpmidi_client_t") {
+    if (!params.name || !params.hostname || !params.port)
+      throw jsondm::exception("router.create: network_rtpmidi_client_t needs "
+                              "name, hostname and port");
+    auto peer = make_network_rtpmidi_client(*params.name, *params.hostname,
+                                            port_to_string(*params.port));
+    control.router->add_peer(peer);
+    return peer->status();
+  } else if (params.type == "network_rtpmidi_listener_t") {
+    if (!params.name || !params.udp_port)
+      throw jsondm::exception(
+          "router.create: network_rtpmidi_listener_t needs name and udp_port");
+    auto peer = make_network_rtpmidi_listener(*params.name, *params.udp_port);
+    control.router->add_peer(peer);
+    return peer->status();
+  } else if (params.type == "local_alsa_peer_t") {
+    if (!params.name)
+      throw jsondm::exception("router.create: local_alsa_peer_t needs name");
+    auto peer = make_local_alsa_peer(*params.name, control.aseq);
+    control.router->add_peer(peer);
+    return peer->status();
+  } else if (params.type == "list") {
+    router_create_help_t help;
+    help.local_rawmidi_t =
+        router_create_help_entry_t{"Name of the peer", "Path to the device",
+                                   std::nullopt, std::nullopt, std::nullopt};
+    help.network_rtpmidi_client_t = router_create_help_entry_t{
+        "Name of the peer", std::nullopt, "Hostname of the server",
+        "Port of the server", std::nullopt};
+    help.network_rtpmidi_listener_t = router_create_help_entry_t{
+        "Name of the peer", std::nullopt, std::nullopt, std::nullopt,
+        "UDP port to listen [random]"};
+    help.local_alsa_peer_t =
+        router_create_help_entry_t{"Name of the peer", std::nullopt,
+                                   std::nullopt, std::nullopt, std::nullopt};
+    return help;
+  } else {
+    ERROR("Unknown peer type or non construtible yet: {}", params.type);
+    return command_error_t{"Unknown peer type"};
   }
+}
 
-  std::vector<json_t> remote_announcements;
-  for (auto &announcement : mdns->remote_announcements) {
-    remote_announcements.push_back({
-        {"name", announcement.name},
-        {"hostname", announcement.address},
-        {"port", announcement.port},
-    });
+static std::string cmd_mdns_remove(control_socket_t &control,
+                                   const mdns_remove_params_t &params) {
+  std::string hostname = params.hostname.value_or("");
+  control.mdns->remove_announcement(params.name, hostname, params.port);
+  return "ok";
+}
+
+static export_result_t
+cmd_export_rawmidi(control_socket_t &control,
+                   const export_rawmidi_params_t &params) {
+  if (!params.device || params.device->empty()) {
+    return export_error_t{
+        "Need device",
+        export_help_t{"Path to the device. Mandatory.", "Name of the peer",
+                      "Local UDP port", "Remote UDP port",
+                      "Hostname of the server if want to connect to. Else is "
+                      "a local listener."}};
   }
-
-  return json_t{
-      {"status", "Available"},
-      {"announcements", announcements},
-      {"remote_announcements", remote_announcements},
-  };
+  rtpmididns::settings_t::rawmidi_t rawmidi;
+  rawmidi.device = *params.device;
+  rawmidi.name = params.name.value_or("");
+  rawmidi.local_udp_port = params.local_udp_port.value_or("0");
+  rawmidi.remote_udp_port = params.remote_udp_port.value_or("0");
+  rawmidi.hostname = params.hostname.value_or("");
+  create_rawmidi_rtpclient_pair(control.router.get(), rawmidi);
+  return std::vector<std::string>{"ok"};
 }
 
 // NOLINTNEXTLINE
-const std::vector<control_socket_ns::command_t> COMMANDS{
-    {"status", "Return status of the daemon",
-     [](control_socket_t &control, const json_t &) {
-       return json_t{
-           {"version", rtpmididns::VERSION},
-           {"settings",
-            {
-                {"alsa_name", rtpmididns::settings.alsa_name},
-                {"control_filename", rtpmididns::settings.control_filename} //
-            }},
-           {"router", control.router->status()}, //
-           {"mdns", mdns_status(control.mdns)},  //
-       };
-     }},
-    {"router.remove", "Remove a peer from the router",
-     [](control_socket_t &control, const json_t &params) {
-       DEBUG("Params {}", params.dump());
-       peer_id_t peer_id = params[0];
-       DEBUG("Remove peer_id {}", peer_id);
-       control.router->remove_peer(peer_id);
-       return "ok";
-     }},
-    {"router.connect",
-     "Connects two peers at the router. Unidirectional connection.",
-     [](control_socket_t &control, const json_t &params) {
-       DEBUG("Params {}", params.dump());
-       peer_id_t from_peer_id = params["from"];
-       peer_id_t to_peer_id = params["to"];
-       DEBUG("Connect peers: {} -> {}", from_peer_id, to_peer_id);
-       control.router->connect(from_peer_id, to_peer_id);
-       return "ok";
-     }},
-    {"router.disconnect",
-     "Disconnects two peers at the router. Unidirectional connection.",
-     [](control_socket_t &control, const json_t &params) {
-       DEBUG("Params {}", params.dump());
-       peer_id_t from_peer_id = params["from"];
-       peer_id_t to_peer_id = params["to"];
-       DEBUG("Disconnect peers: {} -> {}", from_peer_id, to_peer_id);
-       control.router->disconnect(from_peer_id, to_peer_id);
-       return "ok";
-     }},
-    {"connect",
-     "Connect to a peer send params: [hostname] | [hostname, port] | [name, "
-     "hostname, port] | {\"name\": name, \"hostname\": hostname, \"port\": "
-     "port}",
-     [](control_socket_t &control, const json_t &params) {
-       std::string name, hostname, port;
-       bool error = false;
-       if (params.is_array()) {
-         switch (params.size()) {
-         case 1:
-           name = hostname = params[0];
-           port = "5004";
-           break;
-         case 2:
-           name = hostname = params[0];
-           port = params[1];
-           break;
-         case 3:
-           name = params[0];
-           hostname = params[1];
-           port = to_string(params[2]);
-           break;
-         default:
-           error = true;
-         }
-       } else if (params.is_object()) {
-         name = params["name"];
-         hostname = params["hostname"];
-         port = to_string(params["port"]);
+extern const std::vector<command_entry_t> COMMANDS;
 
-         if (name.empty() || hostname.empty() || port.empty()) {
-           error = true;
-         }
-       } else {
-         error = true;
-       }
-       if (error)
-         return json_t{"error",
-                       "Need 1 param (hostname:hostname:5004), 2 params "
-                       "(hostname:port), "
-                       "3 params (name,hostname,port) or a dict{name, "
-                       "hostname, port}"};
+static std::vector<command_help_t> cmd_help(control_socket_t &) {
+  std::vector<command_help_t> res;
+  for (const auto &cmd : COMMANDS) {
+    res.push_back({cmd.name, cmd.description});
+  }
+  return res;
+}
 
-       control.router->add_peer(make_local_alsa_listener(
-           control.router, name, hostname, port, control.aseq, "0"));
-       return json_t{"ok"};
-     }},
-    {"router.create", "Create a new peer of the specific type and params",
-     [](control_socket_t &control, const json_t &params) {
-       DEBUG("Create peer: {}", params.dump());
-       std::string type = params["type"];
-       if (type == "local_rawmidi_t") {
-         auto peer = make_rawmidi_peer(params["name"], params["device"]);
-         control.router->add_peer(peer);
-         return peer->status();
-       } else if (type == "network_rtpmidi_client_t") {
-         auto peer = make_network_rtpmidi_client(
-             params["name"], params["hostname"], to_string(params["port"]));
-         control.router->add_peer(peer);
-         return peer->status();
-       } else if (type == "network_rtpmidi_listener_t") {
-         auto peer =
-             make_network_rtpmidi_listener(params["name"], params["udp_port"]);
-         control.router->add_peer(peer);
-         return peer->status();
-       } else if (type == "local_alsa_peer_t") {
-         auto peer = make_local_alsa_peer(params["name"], control.aseq);
-         control.router->add_peer(peer);
-         return peer->status();
-       } else if (type == "list") {
-         return json_t{
-             {"local_rawmidi_t",
-              {{"name", "Name of the peer"}, {"device", "Path to the device"}}},
-             //
-             {"network_rtpmidi_client_t",
-              {{"name", "Name of the peer"},
-               {"hostname", "Hostname of the server"},
-               {"port", "Port of the server"}}},
-             //
-             {"network_rtpmidi_listener_t",
-              {{"name", "Name of the peer"},
-               {"udp_port", "UDP port to listen [random]"}}},
-             //
-             {"local_alsa_peer_t", {{"name", "Name of the peer"}}}
-             //
-         };
+static std::string cmd_connect(control_socket_t &control,
+                               std::string_view params_json) {
+  // Legacy accepts: [hostname] | [hostname,port] | [name,hostname,port] |
+  // {name,hostname,port}; name defaults to hostname, port defaults to 5004.
+  std::string name, hostname, port;
+  bool error = false;
+  try {
+    jsondm::Reader r(params_json);
+    auto t = r.peek_type();
+    if (t == jsondm::Reader::type::array) {
+      std::vector<std::string> parts;
+      r.arr_begin();
+      while (r.next_elem()) {
+        std::string s;
+        jsondm::read(r, s);
+        parts.push_back(s);
+      }
+      r.arr_end();
+      switch (parts.size()) {
+      case 1:
+        name = hostname = parts[0];
+        port = "5004";
+        break;
+      case 2:
+        name = hostname = parts[0];
+        port = parts[1];
+        break;
+      case 3:
+        name = parts[0];
+        hostname = parts[1];
+        port = parts[2];
+        break;
+      default:
+        error = true;
+      }
+    } else if (t == jsondm::Reader::type::object) {
+      connect_params_t p;
+      jsondm::deserialize(params_json, p);
+      name = p.name;
+      hostname = p.hostname;
+      port = p.port;
+      if (name.empty() || hostname.empty() || port.empty())
+        error = true;
+    } else {
+      error = true;
+    }
+  } catch (const jsondm::exception &) {
+    error = true;
+  }
+  if (error) {
+    std::string out;
+    jsondm::serialize(
+        command_error_t{"Need 1 param (hostname:hostname:5004), 2 params "
+                        "(hostname:port), 3 params (name,hostname,port) or "
+                        "a dict{name, hostname, port}"},
+        out);
+    return out;
+  }
+  control.router->add_peer(make_local_alsa_listener(
+      control.router, name, hostname, port, control.aseq, "0"));
+  std::string out;
+  jsondm::serialize(std::vector<std::string>{"ok"}, out);
+  return out;
+}
 
-       } else {
-         ERROR("Unknown peer type or non construtible yet: {}", type);
-         return json_t{{"error", "Unknown peer type"}};
-       }
-     }},
-    {"mdns.remove", "Delete a mdns announcement",
-     [](control_socket_t &control, const json_t &params) {
-       DEBUG("Params {}", params.dump());
-       std::string name = params["name"];
-       std::string hostname;
-       if (!params["hostname"].is_null()) {
-         hostname = params["hostname"];
-       }
-       int32_t port = params["port"];
-       DEBUG("Delete mdns announcement {}", name);
-       control.mdns->remove_announcement(name, hostname, port);
-       return "ok";
-     }},
-    {"export.rawmidi", "Exports a rawmidi device to ALSA",
-     [](control_socket_t &control, const json_t &params) {
-       // Just set the data into settings_t::rawmidi_t
-       rtpmididns::settings_t::rawmidi_t rawmidi;
-       DEBUG("Export rawmidi: {}", params.dump());
-
-       // if not device, return help with params
-       if (!params.is_object() || params["device"].is_null()) {
-         return json_t{{
-             //
-             {"error", "Need device"},
-             {"params",
-              {{"device", "Path to the device. Mandatory."},
-               {"name", "Name of the peer"},
-               {"local_udp_port", "Local UDP port"},
-               {"remote_udp_port", "Remote UDP port"},
-               {"hostname", "Hostname of the server if want to connect to. "
-                            "Else is a local listener."}}}
-             //
-         }};
-       }
-
-       rawmidi.device = params["device"];
-       rawmidi.name = maybe_string(params, "name", "");
-       rawmidi.local_udp_port = maybe_string(params, "local_udp_port", "0");
-       rawmidi.remote_udp_port = maybe_string(params, "remote_udp_port", "0");
-       rawmidi.hostname = maybe_string(params, "hostname", "");
-       create_rawmidi_rtpclient_pair(control.router.get(), rawmidi);
-       return json_t{"ok"};
-     }},
-    // Return some help text
-    {"help", "Return help text",
-     [](control_socket_t &control, const json_t &) {
-       auto res = std::vector<json_t>{};
-       for (const auto &cmd : COMMANDS) {
-         res.push_back({{"name", cmd.name}, {"description", cmd.description}});
-       }
-       return res;
-     }},
-    //
+// NOLINTNEXTLINE
+const std::vector<command_entry_t> COMMANDS{
+    make_command_noparams("status", "Return status of the daemon", cmd_status),
+    make_command("router.remove", "Remove a peer from the router",
+                 cmd_router_remove),
+    make_command("router.connect",
+                 "Connects two peers at the router. Unidirectional connection.",
+                 cmd_router_connect),
+    make_command(
+        "router.disconnect",
+        "Disconnects two peers at the router. Unidirectional connection.",
+        cmd_router_disconnect),
+    make_raw_command("connect",
+                     "Connect to a peer send params: [hostname] | "
+                     "[hostname, port] | [name, hostname, port] | {\"name\": "
+                     "name, \"hostname\": hostname, \"port\": port}",
+                     cmd_connect),
+    make_command("router.create",
+                 "Create a new peer of the specific type and params",
+                 cmd_router_create),
+    make_command("mdns.remove", "Delete a mdns announcement", cmd_mdns_remove),
+    make_raw_command(
+        "export.rawmidi", "Exports a rawmidi device to ALSA",
+        [](control_socket_t &c, std::string_view p) -> std::string {
+          export_rawmidi_params_t params;
+          try {
+            jsondm::deserialize(p, params);
+          } catch (const jsondm::exception &) {
+            std::string out;
+            jsondm::serialize(
+                export_error_t{"Need device",
+                               export_help_t{"Path to the device. "
+                                             "Mandatory.",
+                                             "Name of the peer",
+                                             "Local UDP port",
+                                             "Remote UDP port",
+                                             "Hostname of the server if "
+                                             "want to connect to. Else "
+                                             "is a local listener."}},
+                out);
+            return out;
+          }
+          std::string out;
+          jsondm::serialize(cmd_export_rawmidi(c, params), out);
+          return out;
+        }),
+    make_command_noparams("help", "Return help text", cmd_help),
 };
 
-std::string control_socket_t::parse_command(const std::string &command) {
-  // DEBUG("Parse command {}", command);
-  json_t js;
+// ---------------------------------------------------------------------------
+// Dispatch
+// ---------------------------------------------------------------------------
+
+// Returns the error string if the serialized result is an error object.
+static std::optional<std::string> extract_error(std::string_view res) {
   try {
-    js = json_t::parse(command);
-  } catch (const std::exception &e) {
-    return json_t{{"error", e.what()}}.dump();
+    jsondm::Reader r(res);
+    r.obj_begin();
+    while (r.next_key()) {
+      if (r.key() == "error") {
+        std::string e;
+        jsondm::read(r, e);
+        return e;
+      }
+      r.skip_value();
+    }
+  } catch (const jsondm::exception &) {
   }
-  std::string method = js["method"];
-  json_t retdata = {{"id", js["id"]}};
+  return std::nullopt;
+}
+
+static std::string compose_response(const std::optional<std::string> &id,
+                                    const char *kind,
+                                    std::string_view payload) {
+  std::string out;
+  jsondm::Writer w(out);
+  w.obj_begin();
+  {
+    jsondm::Writer::member_guard g(w, "id");
+    jsondm::write(w, id);
+  }
+  {
+    jsondm::Writer::member_guard g(w, kind);
+    w.append(payload);
+  }
+  w.obj_end();
+  w.flush();
+  return out;
+}
+
+std::string control_socket_t::parse_command(const std::string &command) {
+  std::string method;
+  std::optional<std::string> id;
+  std::string_view params_span;
+  try {
+    // pre-scan: read the method
+    {
+      jsondm::Reader pre(command);
+      pre.obj_begin();
+      while (pre.next_key()) {
+        if (pre.key() == "method") {
+          jsondm::read(pre, method);
+          break;
+        }
+        pre.skip_value();
+      }
+    }
+    // full parse: id + params (the method key is skipped as unknown)
+    {
+      jsondm::Reader r(command);
+      r.obj_begin();
+      while (r.next_key()) {
+        auto key = r.key();
+        if (key == "method") {
+          r.skip_value();
+        } else if (key == "id") {
+          jsondm::read(r, id);
+        } else if (key == "params") {
+          params_span = r.skip_value_span();
+        } else {
+          r.skip_value();
+        }
+      }
+      r.obj_end();
+    }
+  } catch (const std::exception &e) {
+    std::string out;
+    jsondm::serialize(command_error_t{e.what()}, out);
+    return out;
+  }
   try {
     for (const auto &cmd : COMMANDS) {
       if (cmd.name == method) {
-        auto res = cmd.func(*this, js["params"]);
-        retdata["result"] = res;
-
-        return retdata.dump();
+        std::string result;
+        cmd.run(*this, params_span, result);
+        return compose_response(id, "result", result);
       }
     }
-    // if matches the regex (^d*\..*), its a command to a peer
+    // if matches the regex (^\d*\..*), its a command to a peer
     std::smatch match;
     if (std::regex_match(method, match, PEER_COMMAND_RE)) {
       auto peer_id = std::stoi(match[1]);
       auto cmd = match[2];
-      // DEBUG("Peer command: {} -> {}", peer_id, cmd.to_string());
       auto peer = router->get_peer_by_id(peer_id);
       if (peer) {
-        auto res = peer->command(cmd, js["params"]);
-        if (res.contains("error")) {
-          retdata["error"] = res["error"];
-        } else {
-          retdata["result"] = res;
+        std::string res = peer->command(cmd, params_span);
+        if (auto err = extract_error(res)) {
+          return compose_response(id, "error", *err);
         }
-      } else {
-        retdata["error"] = FMT::format("Unknown peer '{}'", peer_id);
+        return compose_response(id, "result", res);
       }
-      return retdata.dump();
+      return compose_response(id, "error",
+                              FMT::format("Unknown peer '{}'", peer_id));
     }
-
-    retdata["error"] = FMT::format("Unknown method '{}'", method);
-    ERROR("Error running method: {}", std::string(retdata["error"]));
-    return retdata.dump();
+    return compose_response(id, "error",
+                            FMT::format("Unknown method '{}'", method));
   } catch (const std::exception &e) {
-    ERROR("Error running method: {}", e.what());
-    retdata["error"] = e.what();
-    return retdata.dump();
+    return compose_response(id, "error", e.what());
   }
 }
 } // namespace rtpmididns

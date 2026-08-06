@@ -70,13 +70,14 @@ public:
 
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   const char *get_type() const override { return "local_alsa_listener_t"; }
-  json_t status() override;
+  peer_status_variant_t status() override;
 
   void add_endpoint(const std::string &hostname, const std::string &port);
   void connect_to_remote_server(const std::string &portname);
   void disconnect_from_remote_server();
 
-  json_t command(const std::string &cmd, const json_t &data) override;
+  std::string command(const std::string &cmd,
+                      std::string_view params_json) override;
 };
 
 } // namespace rtpmididns

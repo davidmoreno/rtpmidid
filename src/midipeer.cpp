@@ -19,7 +19,7 @@
 #include "midipeer.hpp"
 #include "midirouter.hpp"
 
-#include "json.hpp"
+#include "peer_status_jsondm.hpp"
 
 namespace rtpmididns {
 
@@ -28,17 +28,17 @@ midipeer_t::~midipeer_t() {
     router->remove_peer(peer_id);
   }
 }
-json_t midipeer_t::command(const std::string &cmd, const json_t &data) {
-  ERROR("Unknown command: {}", cmd);
+std::string midipeer_t::command(const std::string &cmd, std::string_view) {
   if (cmd == "help") {
-    return {json_t::object({})};
+    return "{}";
   }
   if (cmd == "status") {
-    return status();
+    std::string out;
+    jsondm::serialize(status(), out);
+    return out;
   }
-  return json_t({
-      {"error", "Command not implemented"},
-  });
+  ERROR("Unknown command: {}", cmd);
+  return R"({"error": "Command not implemented"})";
 }
 } // namespace rtpmididns
 

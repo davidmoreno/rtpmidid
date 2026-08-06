@@ -17,9 +17,9 @@
  */
 #pragma once
 
-#include "json_fwd.hpp"
+#include "peer_status.hpp"
 #include "rtpmidid/rtppeer.hpp"
 
 namespace rtpmididns {
-json_t peer_status(rtpmidid::rtppeer_t &peer);
+peer_rtp_detail_t peer_status(rtpmidid::rtppeer_t &peer);
 }; // namespace rtpmididns

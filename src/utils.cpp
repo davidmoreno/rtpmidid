@@ -17,42 +17,30 @@
  */
 
 #include "utils.hpp"
-#include "json.hpp"
+#include "peer_status.hpp"
 #include "rtpmidid/rtppeer.hpp"
 
 namespace rtpmididns {
-json_t peer_status(rtpmidid::rtppeer_t &peer) {
+peer_rtp_detail_t peer_status(rtpmidid::rtppeer_t &peer) {
   auto stats = peer.stats.average_and_stddev();
-  return json_t{
-      //
-      {"latency_ms",
-       {
-           {"last", peer.latency / 10.0},
-           {"average", stats.average.count() / 1000.0},
-           {"stddev", stats.stddev.count() / 1000.0},
-       }},
-      {"status", std::to_string(peer.status)},
-      {"local",
-       {
-           {"sequence_number", peer.seq_nr},            //
-           {"sequence_number_ack", peer.seq_nr_ack},    //
-           {"name", peer.local_name},                   //
-           {"ssrc", peer.local_ssrc},                   //
-           {"port", peer.local_address.port()},         //
-           {"hostname", peer.local_address.hostname()}, //
-       }},                                              //
-      {
-          "remote",
-          {
-              //
-              {"name", peer.remote_name},                   //
-              {"sequence_number", peer.remote_seq_nr},      //
-              {"ssrc", peer.remote_ssrc},                   //
-              {"port", peer.remote_address.port()},         //
-              {"hostname", peer.remote_address.hostname()}, //
-          } //
-      }
-      //
+  peer_rtp_detail_t detail;
+  detail.latency_ms = peer_latency_ms_t{
+      peer.latency / 10.0,
+      stats.average.count() / 1000.0,
+      stats.stddev.count() / 1000.0,
   };
+  detail.status = std::to_string(peer.status);
+  detail.local = peer_local_t{
+      peer.seq_nr,     peer.seq_nr_ack,           peer.local_name,
+      peer.local_ssrc, peer.local_address.port(), peer.local_address.hostname(),
+  };
+  detail.remote = peer_remote_t{
+      peer.remote_name,
+      peer.remote_seq_nr,
+      peer.remote_ssrc,
+      peer.remote_address.port(),
+      peer.remote_address.hostname(),
+  };
+  return detail;
 }
 } // namespace rtpmididns

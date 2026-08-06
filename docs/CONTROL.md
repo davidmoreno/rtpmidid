@@ -17,6 +17,13 @@ parameters and a JSON answer is returned.
 
 In the future a full JSON RPC protocol might be used.
 
+## Implementation note
+
+Since 26.01, responses and command params are typed C++ structs decorated
+with `/// [JSON-DM]` and serialized by the json-dm runtime
+(see `docs/JSONDM.md`); nlohmann/json is no longer used. The wire protocol
+itself is unchanged and byte-compatible.
+
 ## CLI
 
 There is a very basic CLI at `cli/rtpmidid-cli.py` that receives command line

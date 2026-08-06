@@ -93,7 +93,7 @@ public:
 protected:
   void setup_local_alsa_multilistener() {
     // Create all the alsa network midipeers
-    for (const auto &announce : rtpmididns::settings.alsa_announces) {
+    for (const auto &announce : rtpmididns::settings.alsa_announce) {
       router->add_peer(
           rtpmididns::make_local_alsa_multi_listener(announce.name, aseq));
     }
@@ -101,7 +101,7 @@ protected:
 
   void setup_network_rtpmidi_multilistener() {
     // Create all the rtpmidi network midipeers
-    for (const auto &announce : rtpmididns::settings.rtpmidi_announces) {
+    for (const auto &announce : rtpmididns::settings.rtpmidi_announce) {
       router->add_peer(rtpmididns::make_network_rtpmidi_multi_listener(
           announce.name, announce.port, aseq));
     }

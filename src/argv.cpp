@@ -111,54 +111,54 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
   arguments.emplace_back("--port", //
                          "Opens local port as server. Default 5004.",
                          [settings](const std::string &value) {
-                           if (settings->rtpmidi_announces.size() == 0) {
-                             settings->rtpmidi_announces.emplace_back();
-                             settings->rtpmidi_announces.begin()->name =
+                           if (settings->rtpmidi_announce.size() == 0) {
+                             settings->rtpmidi_announce.emplace_back();
+                             settings->rtpmidi_announce.begin()->name =
                                  get_hostname();
                            }
-                           settings->rtpmidi_announces.begin()->port = value;
+                           settings->rtpmidi_announce.begin()->port = value;
                          });
   arguments.emplace_back( //
       "--name",           //
       "Forces the alsa and rtpmidi name", [settings](const std::string &value) {
-        if (settings->rtpmidi_announces.size() == 0) {
-          settings->rtpmidi_announces.emplace_back();
+        if (settings->rtpmidi_announce.size() == 0) {
+          settings->rtpmidi_announce.emplace_back();
         }
-        if (settings->alsa_announces.size() == 0) {
-          settings->alsa_announces.emplace_back();
+        if (settings->alsa_announce.size() == 0) {
+          settings->alsa_announce.emplace_back();
         }
 
-        settings->rtpmidi_announces.begin()->name = value;
-        settings->alsa_announces.begin()->name = value;
+        settings->rtpmidi_announce.begin()->name = value;
+        settings->alsa_announce.begin()->name = value;
         settings->alsa_name = value;
       });
   arguments.emplace_back( //
       "--alsa-name",      //
       "Forces the alsa name", [settings](const std::string &value) {
-        if (settings->alsa_announces.size() == 0) {
-          settings->alsa_announces.emplace_back();
+        if (settings->alsa_announce.size() == 0) {
+          settings->alsa_announce.emplace_back();
         }
-        settings->alsa_announces.begin()->name = value;
+        settings->alsa_announce.begin()->name = value;
       });
   arguments.emplace_back( //
       "--rtpmidid-name",  //
       "Forces the rtpmidi name", [settings](const std::string &value) {
-        if (settings->rtpmidi_announces.size() == 0) {
-          settings->rtpmidi_announces.emplace_back();
+        if (settings->rtpmidi_announce.size() == 0) {
+          settings->rtpmidi_announce.emplace_back();
         }
-        settings->rtpmidi_announces.begin()->name = value;
+        settings->rtpmidi_announce.begin()->name = value;
       });
-  arguments.emplace_back("--control",
-                         "Creates a control socket. Check CONTROL.md. Default "
-                         "`/var/run/rtpmidid/control.sock`",
-                         [settings](const std::string &value) {
-                           settings->control_filename = value;
-                         });
+  arguments.emplace_back(
+      "--control",
+      "Creates a control socket. Check CONTROL.md. Default "
+      "`/var/run/rtpmidid/control.sock`",
+      [settings](const std::string &value) { settings->control = value; });
   arguments.emplace_back("--log-level",
                          "Set log level: debug, info, warning, error (or 0-3). "
                          "Default: info",
                          [settings](const std::string &value) {
-                           settings->log_level = rtpmidid::str_to_log_level(value);
+                           settings->log_level =
+                               rtpmidid::str_to_log_level(value);
                          });
   arguments.emplace_back( //
       "--rtpmidi-discover",

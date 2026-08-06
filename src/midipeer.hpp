@@ -18,11 +18,13 @@
 
 #pragma once
 
-#include "json_fwd.hpp"
+#include "peer_status.hpp"
 #include "rtpmidid/formatterhelper.hpp"
 #include "rtpmidid/logger.hpp"
 #include "rtpmidid/utils.hpp"
 #include <limits>
+#include <memory>
+#include <string_view>
 
 namespace rtpmididns {
 
@@ -76,13 +78,14 @@ public:
   virtual ~midipeer_t();
 
   /**
-   *  @brief Returns the status of the
+   *  @brief Returns the status of the peer
    *
-   * Basic data can be get with utils::peer_status
+   * The typed per-peer status; the router assigns the common members
+   * (id, send_to, stats, type) afterwards.
    *
-   * @return  json_t
+   * @return peer_status_variant_t
    */
-  virtual json_t status() = 0;
+  virtual peer_status_variant_t status() = 0;
   /**
    * @brief Send a midi message to the peer
    *
@@ -102,11 +105,15 @@ public:
   /**
    * @brief Command as sent by the control interface
    *
+   * Params arrive as raw JSON (string_view); implementations parse them
+   * into their own typed structs and return the serialized result.
+   *
    * @param cmd The command
-   * @param data The data
-   * @return json_t The response
+   * @param params_json The params as JSON
+   * @return The serialized JSON response
    */
-  virtual json_t command(const std::string &cmd, const json_t &data);
+  virtual std::string command(const std::string &cmd,
+                              std::string_view params_json);
   /**
    * @brief Get the type of the peer
    */

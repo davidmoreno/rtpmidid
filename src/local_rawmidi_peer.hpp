@@ -47,7 +47,7 @@ public:
   void open();
   void close();
 
-  json_t status() override;
+  peer_status_variant_t status() override;
   void send_midi(midipeer_id_t from, const mididata_t &) override;
   void event(midipeer_event_e event, midipeer_id_t from) override;
   void connected(midipeer_id_t peer_id);

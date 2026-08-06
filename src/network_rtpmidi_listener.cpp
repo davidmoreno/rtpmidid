@@ -17,10 +17,10 @@
  */
 
 #include "network_rtpmidi_listener.hpp"
-#include "json.hpp"
 #include "mididata.hpp"
 #include "midipeer.hpp"
 #include "midirouter.hpp"
+#include "peer_status_jsondm.hpp"
 #include "rtpmidid/iobytes.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "utils.hpp"
@@ -67,18 +67,14 @@ void network_rtpmidi_listener_t::send_midi(midipeer_id_t from,
   server.send_midi_to_all_peers(mididata);
 }
 
-json_t network_rtpmidi_listener_t::status() {
-  std::vector<json_t> peers;
+peer_status_variant_t network_rtpmidi_listener_t::status() {
+  rtp_listener_status_t s;
+  s.name = name_;
+  s.port = server.port();
   for (auto &peer : server.peers) {
     auto &peerpeer = peer.peer;
-    peers.push_back(peer_status(*peerpeer));
+    s.peers.push_back(peer_status(*peerpeer));
   }
-  return json_t{
-      {"name", name_},         //
-      {"port", server.port()}, //
-      {"peers",                //
-       peers}
-      //
-  };
+  return s;
 }
 } // namespace rtpmididns
