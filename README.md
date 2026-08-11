@@ -179,6 +179,14 @@ name=Network Export
 
 ## Install and Build
 
+### Requirements
+
+Building requires a C++23 compiler: GCC >= 12.1 or Clang >= 16
+(`std::expected`, `std::move_only_function` and `std::format` are required;
+see the design notes in `openspec/changes/add-actor-architecture/`).
+`std::print` requires a recent libstdc++/libc++ as well. Other dependencies:
+ALSA, avahi-client, and a POSIX pthreads implementation.
+
 ### Docker
 
 Download `docker-compose.yaml` and `default.ini` from the repository, then run:

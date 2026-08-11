@@ -205,7 +205,7 @@ AvahiTimeout *poller_adapter_timeout_new(const AvahiPoll *api,
   AvahiTimeout *to = new AvahiTimeout();
   to->userdata = userdata;
   to->callback = callback;
-  to->timer_id = 0;
+  to->timer_id = rtpmidid::poller_t::timer_t();
   if (tv) {
     auto chrono_tv =
         std::chrono::milliseconds(tv->tv_sec * 1000 + tv->tv_usec / 1000);

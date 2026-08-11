@@ -71,15 +71,19 @@ public:
   bool is_open();
 };
 // Singleton for all events on the system.
-extern poller_t poller; // NOLINT
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+extern poller_t poller;
+// Every actor owns its own poller_t instance (see src/actor.hpp); the
+// global above is removed at cutover (task 8.1).
 
 class poller_t::timer_t {
   NON_COPYABLE(timer_t)
 public:
   int id;
+  poller_t *owner;
 
-  timer_t();
-  timer_t(int id_);
+  timer_t() : id(0), owner(nullptr){};
+  timer_t(poller_t *owner_, int id_);
   timer_t(timer_t &&) noexcept;
   ~timer_t();
   timer_t &operator=(timer_t &&other) noexcept;
@@ -90,31 +94,39 @@ class poller_t::listener_t {
   NON_COPYABLE(listener_t)
 public:
   int fd = -1;
+  poller_t *owner = nullptr;
 
-  listener_t(int fd_) : fd(fd_) { DEBUG0("Create from fd {}", fd); };
-  listener_t() { DEBUG0("Create without fd {}", fd); };
-  listener_t(listener_t &&other) noexcept : fd(other.fd) {
+  listener_t(poller_t *owner_, int fd_)
+      : fd(fd_), owner(owner_) {
+    DEBUG0("Create from fd {} with owner", fd);
+  };
+  listener_t() { DEBUG0("Create without fd"); };
+  listener_t(listener_t &&other) noexcept : fd(other.fd), owner(other.owner) {
     DEBUG0("Create from other {}", other.fd);
     other.fd = -1;
+    other.owner = nullptr;
   };
   // NOLINTNEXTLINE(bugprone-exception-escape)
   ~listener_t() {
-    if (fd >= 0)
-      poller.__remove_fd(fd);
+    if (fd >= 0 && owner != nullptr)
+      owner->__remove_fd(fd);
   }
 
   // NOLINTNEXTLINE(bugprone-exception-escape)
   listener_t &operator=(listener_t &&other) noexcept {
-    if (fd >= 0)
-      poller.__remove_fd(fd);
+    if (fd >= 0 && owner != nullptr)
+      owner->__remove_fd(fd);
     fd = other.fd;
+    owner = other.owner;
     other.fd = -1;
+    other.owner = nullptr;
     return *this;
   }
   void stop() {
-    if (fd >= 0)
-      poller.__remove_fd(fd);
+    if (fd >= 0 && owner != nullptr)
+      owner->__remove_fd(fd);
     fd = -1;
+    owner = nullptr;
   }
 
   explicit operator bool() const { return fd >= 0; }

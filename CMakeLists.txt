@@ -9,31 +9,23 @@ option(ENABLE_PCH "Enable precompiled headers" ON)
 option(USE_CLANG "Use clang compiler" OFF)
 # option force the linker, default mold, if not found lld, if not found default
 set(LDD "auto" CACHE STRING "Use ldd linker (mold | lld | auto)")
-# option to use C++20 instead of C++17. With C++20 no need for FMT
-set(CPP_VERSION "auto" CACHE STRING "Use given C++  version. 17 and 20 supported")
+# Required C++ standard: C++23 (std::expected, std::move_only_function, std::format).
+# Coroutines are deliberately NOT used (see design D15): hidden resumption points and
+# frame allocation add unpredictable latency to the control path.
+set(CPP_VERSION "23" CACHE STRING "Required C++ standard: 23")
 # option to force use fmt, depends on CPP20
 set(USE_FMT "auto" CACHE STRING "Use fmt library (ON | OFF | auto)")
 # option to set log level: 1=debug, 2=info, 3=warning, 4=error
 # Set from CLI with: cmake -DLOG_LEVEL=2 ..
 set(LOG_LEVEL "1" CACHE STRING "Set log level (1=debug, 2=info, 3=warning, 4=error)")
 
-# if CPP is "auto", check if C++20 is available and set it
-if (CPP_VERSION STREQUAL "auto" OR CPP_VERSION STREQUAL "auto")
-  message(STATUS "Checking for C++20 support")
-  include(CheckIncludeFileCXX)
-  CHECK_INCLUDE_FILE_CXX("format" HAVE_FORMAT)
-  if (HAVE_FORMAT)
-    set(CPP_VERSION "20")
-  else()
-    set(CPP_VERSION "17")
-  endif()
+if (NOT CPP_VERSION STREQUAL "23")
+  message(FATAL_ERROR "C++23 is required (CPP_VERSION=${CPP_VERSION}); configure with -DCPP_VERSION=23")
 endif()
 
-if (CPP_VERSION STREQUAL "20" AND USE_FMT STREQUAL "auto")
-  set(USE_FMT "OFF")
-endif()
+# C++23 has std::format; only use fmt if explicitly forced
 if (USE_FMT STREQUAL "auto")
-  set(USE_FMT "ON")
+  set(USE_FMT "OFF")
 endif()
 
 if (USE_FMT STREQUAL "ON")

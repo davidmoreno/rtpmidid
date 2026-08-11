@@ -24,6 +24,7 @@
 #include <array>
 #include <functional>
 #include <iterator>
+#include <print>
 #include <rtpmidid/exceptions.hpp>
 #include <string>
 #include <unistd.h>

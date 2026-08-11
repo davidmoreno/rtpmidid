@@ -21,6 +21,7 @@ add_library(
   rtpmidiremotehandler.cpp
   utils.cpp
   midi_normalizer.cpp
+  actor.cpp
 
   local_alsa_listener.cpp
   local_alsa_multi_listener.cpp

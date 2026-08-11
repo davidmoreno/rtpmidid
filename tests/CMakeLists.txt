@@ -3,6 +3,21 @@ target_link_libraries(test_rtppeer rtpmidid-shared)
 target_link_libraries(test_rtppeer ${FMT_LIBRARIES})
 add_test(NAME test_rtppeer COMMAND test_rtppeer)
 
+add_executable(test_queue test_queue.cpp)
+target_link_libraries(test_queue -pthread rtpmidid-shared)
+target_link_libraries(test_queue ${FMT_LIBRARIES})
+add_test(NAME test_queue COMMAND test_queue)
+
+add_executable(test_actor test_actor.cpp)
+target_link_libraries(test_actor -pthread rtpmidid-shared rtpmidid2-static)
+target_link_libraries(test_actor ${FMT_LIBRARIES})
+add_test(NAME test_actor COMMAND test_actor)
+
+add_executable(test_messages test_messages.cpp)
+target_link_libraries(test_messages -pthread rtpmidid-shared rtpmidid2-static)
+target_link_libraries(test_messages ${FMT_LIBRARIES})
+add_test(NAME test_messages COMMAND test_messages)
+
 add_executable(test_rtpserver test_rtpserver.cpp test_utils.cpp)
 target_link_libraries(test_rtpserver rtpmidid-shared -pthread)
 target_link_libraries(test_rtpserver ${FMT_LIBRARIES})

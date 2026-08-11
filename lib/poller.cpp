@@ -48,16 +48,7 @@ struct poller_private_data_t {
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 poller_t rtpmidid::poller;
 
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-static bool poller_initialized = false;
-
 poller_t::poller_t() : private_data(std::make_unique<poller_private_data_t>()) {
-  if (poller_initialized) {
-    throw exception("Poller already initialized. Can only use one poller "
-                    "(rtpmidid::poller).");
-  }
-  poller_initialized = true;
-
   private_data->epollfd = epoll_create1(0);
   if (private_data->epollfd < 0) {
     throw exception("Could not start epoll: {}", strerror(errno));
@@ -66,8 +57,6 @@ poller_t::poller_t() : private_data(std::make_unique<poller_private_data_t>()) {
 poller_t::~poller_t() {
   close();
   clear_timers();
-
-  poller_initialized = false;
 }
 
 bool poller_t::is_open() { return private_data->epollfd > 0; }
@@ -92,7 +81,7 @@ poller_t::listener_t poller_t::add_fd_inout(int fd,
     throw exception("Can't add fd {} to poller: {} ({})", fd, strerror(errno),
                     errno);
   }
-  return poller_t::listener_t(fd);
+  return poller_t::listener_t(this, fd);
 }
 
 poller_t::listener_t poller_t::add_fd_in(int fd, std::function<void(int)> f) {
@@ -107,7 +96,7 @@ poller_t::listener_t poller_t::add_fd_in(int fd, std::function<void(int)> f) {
     throw exception("Can't add fd {} to poller: {} ({}, ep {})", fd,
                     this->private_data->epollfd, strerror(errno), errno);
   }
-  return poller_t::listener_t(fd);
+  return poller_t::listener_t(this, fd);
 }
 
 poller_t::listener_t poller_t::add_fd_out(int fd, std::function<void(int)> f) {
@@ -122,7 +111,7 @@ poller_t::listener_t poller_t::add_fd_out(int fd, std::function<void(int)> f) {
     throw exception("Can't add fd {} to poller: {} ({})", fd, strerror(errno),
                     errno);
   }
-  return poller_t::listener_t(fd);
+  return poller_t::listener_t(this, fd);
 }
 
 poller_t::timer_t poller_t::add_timer_event(std::chrono::milliseconds ms,
@@ -151,7 +140,7 @@ poller_t::timer_t poller_t::add_timer_event(std::chrono::milliseconds ms,
 
   // DEBUG("Added timer {}. {} s ({} pending)", timer_id, ms.count() / 1000.0,
   //       private_data->timer_events.size());
-  return poller_t::timer_t(timer_id);
+  return poller_t::timer_t(this, timer_id);
 }
 
 void poller_t::call_later(std::function<void(void)> later_f) {
@@ -197,7 +186,8 @@ static int ms_to_now(std::chrono::steady_clock::time_point &tp) {
                  .count());
 }
 
-static void run_expired_timer_events(std::vector<timer_event_t> &events) {
+static void run_expired_timer_events(poller_t *poller,
+                                     std::vector<timer_event_t> &events) {
   // if (events.size()) {
   //   DEBUG("Next event in {} ms", ms_to_now(events[0].when));
   // }
@@ -205,7 +195,7 @@ static void run_expired_timer_events(std::vector<timer_event_t> &events) {
   while (events.size() > 0 && ms_to_now(events[0].when) <= 0) {
     // Will ensure remove via RTTI
     auto firstI = events.begin();
-    poller_t::timer_t id(firstI->id);
+    poller_t::timer_t id(poller, firstI->id);
     firstI->callback();
 
     // There is no need for this erase, as the operator= for the timer_t
@@ -269,35 +259,39 @@ void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
   }
 
   run_call_later_events(private_data.get());
-  run_expired_timer_events(private_data->timer_events);
+  run_expired_timer_events(this, private_data->timer_events);
   run_call_later_events(private_data.get());
 }
 
-poller_t::timer_t::timer_t() : id(0) {}
-poller_t::timer_t::timer_t(int id_) : id(id_) {}
-poller_t::timer_t::timer_t(poller_t::timer_t &&other) noexcept : id(other.id) {
+poller_t::timer_t::timer_t(poller_t *owner_, int id_) : id(id_), owner(owner_) {}
+poller_t::timer_t::timer_t(poller_t::timer_t &&other) noexcept
+    : id(other.id), owner(other.owner) {
   other.id = 0;
+  other.owner = nullptr;
 }
 poller_t::timer_t::~timer_t() {
-  if (id != 0) {
-    poller.remove_timer(*this);
+  if (id != 0 && owner != nullptr) {
+    owner->remove_timer(*this);
   }
 }
 poller_t::timer_t &
 poller_t::timer_t::operator=(poller_t::timer_t &&other) noexcept {
-  if (id != 0) {
-    poller.remove_timer(*this);
+  if (id != 0 && owner != nullptr) {
+    owner->remove_timer(*this);
   }
   id = other.id;
+  owner = other.owner;
   other.id = 0;
+  other.owner = nullptr;
 
   return *this;
 }
 
 void poller_t::timer_t::disable() {
-  if (id == 0) {
+  if (id == 0 || owner == nullptr) {
     return;
   }
-  poller.remove_timer(*this);
+  owner->remove_timer(*this);
   id = 0;
+  owner = nullptr;
 }
