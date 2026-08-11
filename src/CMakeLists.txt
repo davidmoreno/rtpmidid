@@ -22,6 +22,7 @@ add_library(
   utils.cpp
   midi_normalizer.cpp
   actor.cpp
+  router_actor.cpp
 
   local_alsa_listener.cpp
   local_alsa_multi_listener.cpp

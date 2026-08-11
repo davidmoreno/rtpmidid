@@ -30,18 +30,18 @@
 
 ## 4. Router actor (spec: midi-routing)
 
-- [ ] 4.1 Convert `midirouter_t` into an actor: registry map + `send_to` owned by the router thread, data lane (`midi_received`) and control lane
-- [ ] 4.2 Implement hot-path forwarding: lookup, single-threaded counters, fan-out with N−1 copies + 1 move; unknown-sender drop with warning
-- [ ] 4.3 Implement `spawn_peer`: construct actor from prepared bundle, spawn thread, register ids, post `registered{ids}`, reply to caller
-- [ ] 4.4 Implement `register_peer`/unregister for hosted ids (mailbox-handle mapping, multiple ids per mailbox)
-- [ ] 4.5 Implement connect/disconnect handlers with `peer_event` notifications to partners
-- [ ] 4.6 Implement remove/stop choreography: immediate topology cut, `stop`, `stopped` wait with deadline, join, ack; merge peer self-termination into the same path
-- [ ] 4.7 Implement escalation: stop-token raise, grace window, `reap_actor{jthread, reason}` to supervisor, warning ack
-- [ ] 4.8 Implement `actor_died` handling as implicit remove
-- [ ] 4.9 Implement requester-driven status gather: router answers `status_head` + scatters with `reply_to`, peers answer the requester directly, requester gathers under deadline (peer events shrink the set)
-- [ ] 4.10 Implement command relay and shutdown (bounded stop-all, join-all, ack)
-- [ ] 4.11 Implement `subscribe_events` and the `peer_event` fan-out to subscribers, with unsubscribe and mailbox-gone cleanup
-- [ ] 4.12 Pump-mode unit tests: forwarding fan-out, spawn/register handshake ordering, remove choreography, escalation path, requester-driven gather completion/timeout/peer-death/disconnect cases, subscription stream + catch-all drain
+- [x] 4.1 Convert `midirouter_t` into an actor: registry map + `send_to` owned by the router thread, data lane (`midi_received`) and control lane
+- [x] 4.2 Implement hot-path forwarding: lookup, single-threaded counters, fan-out with N−1 copies + 1 move; unknown-sender drop with warning
+- [x] 4.3 Implement `spawn_peer`: construct actor from prepared bundle, spawn thread, register ids, post `registered{ids}`, reply to caller
+- [x] 4.4 Implement `register_peer`/unregister for hosted ids (mailbox-handle mapping, multiple ids per mailbox)
+- [x] 4.5 Implement connect/disconnect handlers with `peer_event` notifications to partners
+- [x] 4.6 Implement remove/stop choreography: immediate topology cut, `stop`, `stopped` wait with deadline, join, ack; merge peer self-termination into the same path
+- [x] 4.7 Implement escalation: stop-token raise, grace window, `reap_actor{jthread, reason}` to supervisor, warning ack
+- [x] 4.8 Implement `actor_died` handling as implicit remove
+- [x] 4.9 Implement requester-driven status gather: router answers `status_head` + scatters with `reply_to`, peers answer the requester directly, requester gathers under deadline (peer events shrink the set)
+- [x] 4.10 Implement command relay and shutdown (bounded stop-all, join-all, ack)
+- [x] 4.11 Implement `subscribe_events` and the `peer_event` fan-out to subscribers, with unsubscribe and mailbox-gone cleanup
+- [x] 4.12 Pump-mode unit tests: forwarding fan-out, spawn/register handshake ordering, remove choreography, escalation path, requester-driven gather completion/timeout/peer-death/disconnect cases, subscription stream + catch-all drain
 
 ## 5. Peer actors
 

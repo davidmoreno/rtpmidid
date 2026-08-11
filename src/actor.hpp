@@ -104,6 +104,9 @@ public:
   virtual void on_data(data_message_t &&msg) { (void)msg; }
   /// Control-lane message handler (called on the actor thread only).
   virtual void on_control(control_message_t &&msg) { (void)msg; }
+  /// Called once per loop pass after draining (busy actors use this for
+  /// periodic work such as pending-table deadline checks).
+  virtual void on_loop() {}
 
   // --- selective control wait (D15) ---
 

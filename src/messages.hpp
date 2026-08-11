@@ -26,12 +26,14 @@
 
 #pragma once
 
+#include "peer_status.hpp"
 #include "rtpmidid/logger.hpp"
 #include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -282,8 +284,11 @@ struct stop_t {
   hdr_t hdr;
 };
 /// Posted by the actor wrapper after the loop exited (join is safe).
+/// Carries the actor's own id so the router can match it to a pending
+/// remove (stop choreography, design D7) or treat it as self-termination.
 struct stopped_t {
   hdr_t hdr;
+  peer_id_t peer_id = 0;
 };
 /// Fatal error: posted to the supervisor mailbox; loop exits.
 struct actor_died_t {
@@ -296,7 +301,14 @@ struct reap_actor_t {
   std::string reason;
 };
 /// Topology change notification (router -> subscribers/partners).
-enum class peer_event_kind_t : uint8_t { registered, removed, stopped, died };
+enum class peer_event_kind_t : uint8_t {
+  registered,
+  removed,
+  stopped,
+  died,
+  connected,
+  disconnected,
+};
 struct peer_event_t {
   peer_event_kind_t kind = peer_event_kind_t::registered;
   peer_id_t peer_id = 0;
@@ -307,11 +319,147 @@ struct control_payload_t {
   std::string text;
 };
 
+// --- router control-plane catalog (spec: midi-routing, design D7) --------
+
+class actor_t; // forward: spawn bundles construct actors on the router thread
+
+/// Register a hosted peer id (e.g. an ALSA port) mapped to an existing
+/// mailbox; the router assigns the id and acks it to the caller.
+struct register_peer_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+  mailbox_handle_t mailbox;
+  std::string type; // for status ("alsa", ...)
+  std::string meta; // extra info (name, port, ...)
+};
+/// Remove a hosted peer id without touching its hosting actor.
+struct unregister_peer_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+  peer_id_t peer_id = 0;
+};
+/// Spawn a standalone peer: the caller does all fallible preparation and
+/// posts this prepared bundle; the router constructs the actor, spawns its
+/// thread, registers its id, posts `registered{ids}` to the peer and acks
+/// the caller (design D7 spawn flow).
+struct spawn_peer_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+  /// Prepared move-only bundle: the router assigns the peer id first and
+  /// calls the factory with it, so the actor is born knowing its id (its
+  /// `stopped`/`actor_died` carry it back to the router).
+  std::move_only_function<std::shared_ptr<actor_t>(const mailbox_handle_t &,
+                                                   peer_id_t)>
+      factory;
+  std::string type;
+  std::string meta;
+};
+/// Router -> spawned peer: gate for wire traffic (design D7: a spawned
+/// peer does not process wire traffic until it receives this).
+struct registered_t {
+  std::vector<peer_id_t> ids;
+};
+/// Remove: immediate topology cut, `stop`, await `stopped` under deadline,
+/// join, ack (design D7 stop/remove choreography).
+struct remove_peer_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+  peer_id_t peer_id = 0;
+};
+struct connect_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+  peer_id_t from = 0;
+  peer_id_t to = 0;
+};
+struct disconnect_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+  peer_id_t from = 0;
+  peer_id_t to = 0;
+};
+/// Requester-driven status gather (design D7): the router answers with a
+/// status head carrying router-assigned members and scatters
+/// `peer_status_req{reply_to}` to each peer; peers answer the requester
+/// directly.
+struct peer_meta_t {
+  peer_id_t id = 0;
+  std::string type;
+  std::vector<peer_id_t> send_to;
+  peer_stats_t stats{0, 0};
+};
+struct status_req_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+};
+struct status_head_t {
+  hdr_t hdr;
+  std::vector<peer_meta_t> peers;
+  uint64_t router_data_drops = 0;
+  uint64_t router_control_drops = 0;
+};
+struct peer_status_req_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+  peer_id_t target = 0;
+};
+struct peer_status_resp_t {
+  hdr_t hdr;
+  peer_id_t peer_id = 0;
+  peer_status_variant_t status;
+};
+/// Peer command relay (design D7): the router relays the request only; the
+/// peer replies the typed result directly to the requester's `reply_to`.
+struct peer_command_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+  peer_id_t peer_id = 0;
+  std::string cmd;
+  std::string params_json;
+};
+struct peer_command_resp_t {
+  hdr_t hdr;
+  peer_id_t peer_id = 0;
+  std::string result_json;
+  bool is_error = false;
+};
+/// Topology event subscription (design D7): the router pushes `peer_event`
+/// to the subscriber's mailbox for each topology change.
+struct subscribe_events_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+};
+struct unsubscribe_events_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+};
+/// Bounded stop-all of spawned peers and ack (design D7 shutdown).
+struct stop_all_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+};
+/// Generic result ack.
+struct ack_t {
+  hdr_t hdr;
+  bool ok = true;
+  std::string error;
+};
+/// Assigned ids result for spawn/register requests.
+struct peer_ids_result_t {
+  hdr_t hdr;
+  std::vector<peer_id_t> ids;
+};
+
 /// Control-plane message: a small variant; never pays for inline MIDI
 /// storage (design D6). Move/copy-only, self-owning.
 struct control_message_t {
   std::variant<std::monostate, stop_t, stopped_t, actor_died_t, reap_actor_t,
-               peer_event_t, control_payload_t>
+               peer_event_t, control_payload_t, register_peer_t,
+               unregister_peer_t, spawn_peer_t, registered_t, remove_peer_t,
+               connect_t, disconnect_t, peer_meta_t, status_req_t,
+               status_head_t, peer_status_req_t, peer_status_resp_t,
+               peer_command_t, peer_command_resp_t, subscribe_events_t,
+               unsubscribe_events_t, stop_all_t, ack_t, peer_ids_result_t>
       v;
 
   control_message_t() = default;
@@ -322,8 +470,8 @@ struct control_message_t {
 inline control_message_t make_stop(hdr_t hdr = {}) {
   return control_message_t(stop_t{hdr});
 }
-inline control_message_t make_stopped(hdr_t hdr = {}) {
-  return control_message_t(stopped_t{hdr});
+inline control_message_t make_stopped(hdr_t hdr = {}, peer_id_t peer_id = 0) {
+  return control_message_t(stopped_t{hdr, peer_id});
 }
 inline control_message_t make_actor_died(actor_id_t id, std::string reason) {
   return control_message_t(actor_died_t{id, std::move(reason)});

@@ -154,6 +154,8 @@ bool actor_t::run_once(std::optional<std::chrono::milliseconds> timeout) {
   mailbox_->prepare();
   drain_with_policy();
 
+  on_loop();
+
   if (stopping_ || stop_source_.stop_requested()) {
     return false;
   }
@@ -310,7 +312,7 @@ void actor_t::post_exit_notice() {
     return;
   }
   if (fatal_reason_.empty()) {
-    config_.supervisor_mailbox->post_control(make_stopped(stop_hdr_));
+    config_.supervisor_mailbox->post_control(make_stopped(stop_hdr_, config_.id));
   } else {
     ERROR("Actor {} died: {}", config_.name, fatal_reason_);
     config_.supervisor_mailbox->post_control(
