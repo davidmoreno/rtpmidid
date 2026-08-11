@@ -54,7 +54,12 @@ public:
     control_listener_ = std::move(control);
   }
 
-  /// Trigger the ordered shutdown (called from the signalfd or externally).
+  /// Register the process-wide signal eventfd (written by the SIGTERM/
+  /// SIGINT handler) in this actor's poller.
+  void set_signal_fd(int fd) { signal_fd_ = fd; }
+
+  /// Trigger the ordered shutdown (called from the signal eventfd or
+  /// externally).
   void request_shutdown();
   bool shutdown_complete() const { return shutdown_complete_; }
 
@@ -79,8 +84,8 @@ private:
   void reaper_loop();
   void finalize();
 
-  int signalfd_ = -1;
-  rtpmidid::poller_t::listener_t signalfd_listener_;
+  int signal_fd_ = -1;
+  rtpmidid::poller_t::listener_t signal_fd_listener_;
   std::shared_ptr<router_actor_t> router_;
   std::shared_ptr<actor_t> control_listener_;
   std::vector<std::shared_ptr<actor_t>> managed_;

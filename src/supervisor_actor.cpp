@@ -19,9 +19,7 @@
 #include "supervisor_actor.hpp"
 #include "router_actor.hpp"
 #include "rtpmidid/logger.hpp"
-#include <csignal>
 #include <cstring>
-#include <sys/signalfd.h>
 #include <unistd.h>
 
 using namespace std::chrono_literals;
@@ -31,34 +29,22 @@ namespace rtpmididns {
 supervisor_actor_t::supervisor_actor_t(actor_config_t config)
     : actor_t(std::move(config)) {}
 
-void supervisor_actor_t::setup_signalfd() {
-  sigset_t mask;
-  sigemptyset(&mask);
-  sigaddset(&mask, SIGTERM);
-  sigaddset(&mask, SIGINT);
-  if (sigprocmask(SIG_BLOCK, &mask, nullptr) != 0) {
-    ERROR("Supervisor: sigprocmask failed: {}", strerror(errno));
-    return;
-  }
-  signalfd_ = ::signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
-  if (signalfd_ < 0) {
-    ERROR("Supervisor: signalfd failed: {}", strerror(errno));
-    return;
-  }
-  signalfd_listener_ = add_fd_in(signalfd_, [this](int) {
-    struct signalfd_siginfo info {};
-    while (::read(signalfd_, &info, sizeof(info)) == sizeof(info)) {
-      INFO("Supervisor: signal {} received; shutting down.", info.ssi_signo);
-      request_shutdown();
-    }
-  });
-}
-
 void supervisor_actor_t::on_start() {
   // The reaper joins delegated jthreads off-loop (D9): shutdown never
   // hangs on a wedged thread.
   reaper_ = std::thread([this] { reaper_loop(); });
-  setup_signalfd();
+  // The process-wide SIGTERM/SIGINT handler writes to an eventfd (the
+  // avahi/ALSA libraries reset the signal mask, so signalfd's mask-based
+  // wakeup is unreliable); this actor's poller services the eventfd.
+  if (signal_fd_ >= 0) {
+    signal_fd_listener_ = add_fd_in(signal_fd_, [this](int) {
+      uint64_t v = 0;
+      while (::read(signal_fd_, &v, sizeof(v)) == sizeof(v)) {
+      }
+      INFO("Supervisor: termination signal received; shutting down.");
+      request_shutdown();
+    });
+  }
 }
 
 void supervisor_actor_t::request_shutdown() {
