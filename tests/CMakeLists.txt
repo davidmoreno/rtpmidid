@@ -38,6 +38,11 @@ target_link_libraries(test_supervisor -pthread rtpmidid-shared rtpmidid2-static)
 target_link_libraries(test_supervisor ${FMT_LIBRARIES})
 add_test(NAME test_supervisor COMMAND test_supervisor)
 
+add_executable(test_control_socket test_control_socket.cpp)
+target_link_libraries(test_control_socket -pthread rtpmidid-shared rtpmidid2-static)
+target_link_libraries(test_control_socket ${FMT_LIBRARIES})
+add_test(NAME test_control_socket COMMAND test_control_socket)
+
 add_executable(test_rtpserver test_rtpserver.cpp test_utils.cpp)
 target_link_libraries(test_rtpserver rtpmidid-shared -pthread)
 target_link_libraries(test_rtpserver ${FMT_LIBRARIES})

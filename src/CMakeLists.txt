@@ -31,6 +31,7 @@ add_library(
   mdns_actor.cpp
   supervisor_actor.cpp
   alsa_actor.cpp
+  control_socket_actor.cpp
 
   local_alsa_listener.cpp
   local_alsa_multi_listener.cpp

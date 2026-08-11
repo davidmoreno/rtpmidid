@@ -65,10 +65,10 @@
 
 ## 7. Control socket async dispatch (spec: control-socket-jsondm delta)
 
-- [ ] 7.1 Implement the control listener actor: owns the listening socket, accepts clients, spawns one connection actor per client (normal priority) owning the client fd + mailbox
-- [ ] 7.2 Implement per-connection actors: read the client fd, parse commands, post typed requests (status/connect/disconnect/add/remove/peer commands) with `reply_to`, wait selectively with deadline, write responses byte-compatibly; optional `subscribe_events` for clients
-- [ ] 7.3 Implement deadline error responses (unresponsive router/peer) and clean stop on client disconnect (abandoned waits, late responses discarded)
-- [ ] 7.4 Re-run byte-compatibility tests against captured legacy control payloads; add per-connection isolation tests (stalled client does not block others)
+- [x] 7.1 Implement the control listener actor: owns the listening socket, accepts clients, spawns one connection actor per client (normal priority) owning the client fd + mailbox
+- [x] 7.2 Implement per-connection actors: read the client fd, parse commands, post typed requests (status/connect/disconnect/add/remove/peer commands) with `reply_to`, wait selectively with deadline, write responses byte-compatibly; optional `subscribe_events` for clients
+- [x] 7.3 Implement deadline error responses (unresponsive router/peer) and clean stop on client disconnect (abandoned waits, late responses discarded)
+- [x] 7.4 Re-run byte-compatibility tests against captured legacy control payloads; add per-connection isolation tests (stalled client does not block others)
 
 ## 8. Cutover and packaging
 
