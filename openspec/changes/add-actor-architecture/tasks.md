@@ -46,13 +46,13 @@
 ## 5. Peer actors
 
 - [x] 5.1 Define the peer actor base on `actor_t`: data lane handler (encode + send), `registered` gate for wire traffic (selective wait for `registered{ids}` under the system control deadline, self-terminate on timeout: post `stopped` and exit), stop hooks
-- [ ] 5.2 Port the network rtpmidi peer (connection) to the peer actor: socket in own poller, recv → `midi_received`, `midi_to_wire` → rtp encode + sendto, keepalive/reconnect timers actor-local
-- [ ] 5.3 Port the network listeners to prep-and-post actors: accept/control sockets in own poller, prepare bundles, post `spawn_peer`, forget; DNS resolution delegated to the worker (`dns_resolved` reply)
+- [x] 5.2 Port the network rtpmidi peer (connection) to the peer actor: socket in own poller, recv → `midi_received`, `midi_to_wire` → rtp encode + sendto, keepalive/reconnect timers actor-local
+- [x] 5.3 Port the network listeners to prep-and-post actors: accept/control sockets in own poller, prepare bundles, post `spawn_peer`, forget; DNS resolution delegated to the worker (`dns_resolved` reply)
 - [ ] 5.4 Implement the ALSA actor: seq fd ownership, event demux by source port → `midi_received`, `midi_to_wire.to` → seq output with EAGAIN/POLLOUT retry, port announce → `register_peer`/remove
 - [x] 5.5 Port the rawmidi peer to the peer actor (including the oversized-payload heap escape path)
 - [x] 5.6 Move peer status/command handling to message handlers producing the existing typed variants/results on the peer thread
-- [ ] 5.7 Pump-mode unit tests per peer family: recv→message, message→send, registered gating, EAGAIN retry, self-termination posting `stopped`
-- [ ] 5.8 Run existing integration/regression tests against the actor-based peers; fix wire-level discrepancies
+- [x] 5.7 Pump-mode unit tests per peer family: recv→message, message→send, registered gating, EAGAIN retry, self-termination posting `stopped`
+- [x] 5.8 Run existing integration/regression tests against the actor-based peers; fix wire-level discrepancies
 
 ## 6. Worker and supervisor
 

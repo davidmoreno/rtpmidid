@@ -165,6 +165,7 @@ public:
 protected:
   actor_config_t config_;
   std::shared_ptr<actor_mailbox_t> mailbox_;
+  bool stopping_ = false;
 
 private:
   void thread_main();
@@ -180,7 +181,6 @@ private:
   std::stop_source stop_source_;
   drain_policy_t drain_policy_ = drain_policy_t::data_first;
   bool started_once_ = false;
-  bool stopping_ = false;
   bool finished_ = false;
   std::string fatal_reason_;
   hdr_t stop_hdr_;

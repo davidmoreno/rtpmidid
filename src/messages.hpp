@@ -444,10 +444,33 @@ struct ack_t {
   bool ok = true;
   std::string error;
 };
-/// Assigned ids result for spawn/register requests.
+/// Assigned ids result for spawn/register requests. `mailbox` is filled by
+/// the router for spawns so the caller (e.g. a listener routing datagrams
+/// to its accepted peers) learns the spawned peer's mailbox.
 struct peer_ids_result_t {
   hdr_t hdr;
   std::vector<peer_id_t> ids;
+  mailbox_handle_t mailbox;
+};
+
+// --- network listener <-> peer routing (design D2; tasks 5.2, 5.3) --------
+
+/// RTP-MIDI port selector carried in routed datagrams.
+enum class udp_port_e : uint8_t { control, midi };
+
+/// Raw UDP datagram routed between network actors: a peer actor re-forwards
+/// datagrams the SO_REUSEPORT hash misdelivered to it, and the listener
+/// routes datagrams that landed on its accept sockets to the owning peer.
+struct udp_datagram_t {
+  udp_port_e port = udp_port_e::control;
+  std::vector<uint8_t> data;
+  std::string remote_ip; // numeric source address
+  uint16_t remote_port = 0; // source port (control base)
+};
+/// Peer -> listener: the connection ended; drop the routing entries.
+struct udp_peer_gone_t {
+  uint32_t initiator_id = 0;
+  uint32_t ssrc = 0;
 };
 
 // --- worker and DNS (design D10/D13) --------------------------------------
@@ -475,7 +498,7 @@ struct control_message_t {
                status_head_t, peer_status_req_t, peer_status_resp_t,
                peer_command_t, peer_command_resp_t, subscribe_events_t,
                unsubscribe_events_t, stop_all_t, ack_t, peer_ids_result_t,
-               worker_job_t, dns_resolved_t>
+               worker_job_t, dns_resolved_t, udp_datagram_t, udp_peer_gone_t>
       v;
 
   control_message_t() = default;

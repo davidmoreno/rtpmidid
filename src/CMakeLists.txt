@@ -26,6 +26,8 @@ add_library(
   peer_actor.cpp
   local_rawmidi_peer_actor.cpp
   worker_actor.cpp
+  network_rtpmidi_peer_actor.cpp
+  network_rtpmidi_listener_actor.cpp
 
   local_alsa_listener.cpp
   local_alsa_multi_listener.cpp

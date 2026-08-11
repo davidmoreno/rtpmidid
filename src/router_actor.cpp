@@ -126,7 +126,8 @@ void router_actor_t::handle_register_peer(register_peer_t &&m) {
   INFO("Router: registered hosted peer id={} type={}", id,
        peers_[id].type.empty() ? "?" : peers_[id].type);
   notify_subscribers(peer_event_t{peer_event_kind_t::registered, id});
-  m.reply_to->post_control(peer_ids_result_t{m.hdr, {id}});
+  m.reply_to->post_control(
+      peer_ids_result_t{m.hdr, {id}, peers_[id].mailbox});
 }
 
 void router_actor_t::handle_unregister_peer(unregister_peer_t &&m) {
@@ -178,7 +179,8 @@ void router_actor_t::handle_spawn_peer(spawn_peer_t &&m) {
        peers_[id].type.empty() ? "?" : peers_[id].type);
   // Gate: the peer waits for `registered` before handling wire traffic.
   peers_[id].mailbox->post_control(registered_t{{id}});
-  m.reply_to->post_control(peer_ids_result_t{m.hdr, {id}});
+  m.reply_to->post_control(
+      peer_ids_result_t{m.hdr, {id}, peers_[id].mailbox});
 }
 
 void router_actor_t::handle_remove_peer(remove_peer_t &&m) {

@@ -28,6 +28,11 @@ target_link_libraries(test_peer -pthread rtpmidid-shared rtpmidid2-static)
 target_link_libraries(test_peer ${FMT_LIBRARIES})
 add_test(NAME test_peer COMMAND test_peer)
 
+add_executable(test_network_actor test_network_actor.cpp)
+target_link_libraries(test_network_actor -pthread rtpmidid-shared rtpmidid2-static)
+target_link_libraries(test_network_actor ${FMT_LIBRARIES})
+add_test(NAME test_network_actor COMMAND test_network_actor)
+
 add_executable(test_rtpserver test_rtpserver.cpp test_utils.cpp)
 target_link_libraries(test_rtpserver rtpmidid-shared -pthread)
 target_link_libraries(test_rtpserver ${FMT_LIBRARIES})
