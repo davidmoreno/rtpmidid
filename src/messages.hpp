@@ -473,6 +473,42 @@ struct udp_peer_gone_t {
   uint32_t ssrc = 0;
 };
 
+// --- mdns actor (design D13; task 6.3) --------------------------------------
+
+struct mdns_announcement_info_t {
+  std::string name;
+  int32_t port = 0;
+};
+struct mdns_remote_info_t {
+  std::string name;
+  std::string address;
+  int32_t port = 0;
+};
+struct mdns_status_req_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+};
+struct mdns_status_resp_t {
+  hdr_t hdr;
+  bool available = false;
+  std::vector<mdns_announcement_info_t> announcements;
+  std::vector<mdns_remote_info_t> remote_announcements;
+};
+/// Announce/unannounce/remove an rtpmidi service (control-socket users).
+struct mdns_announce_t {
+  std::string name;
+  int32_t port = 0;
+};
+struct mdns_unannounce_t {
+  std::string name;
+  int32_t port = 0;
+};
+struct mdns_remove_t {
+  std::string name;
+  std::string hostname;
+  int32_t port = 0;
+};
+
 // --- worker and DNS (design D10/D13) --------------------------------------
 
 /// A blocking job for the worker actor (C++23 `std::move_only_function`;
@@ -498,7 +534,9 @@ struct control_message_t {
                status_head_t, peer_status_req_t, peer_status_resp_t,
                peer_command_t, peer_command_resp_t, subscribe_events_t,
                unsubscribe_events_t, stop_all_t, ack_t, peer_ids_result_t,
-               worker_job_t, dns_resolved_t, udp_datagram_t, udp_peer_gone_t>
+               worker_job_t, dns_resolved_t, udp_datagram_t, udp_peer_gone_t,
+               mdns_status_req_t, mdns_status_resp_t, mdns_announce_t,
+               mdns_unannounce_t, mdns_remove_t>
       v;
 
   control_message_t() = default;

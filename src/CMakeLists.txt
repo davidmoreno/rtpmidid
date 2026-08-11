@@ -28,6 +28,9 @@ add_library(
   worker_actor.cpp
   network_rtpmidi_peer_actor.cpp
   network_rtpmidi_listener_actor.cpp
+  mdns_actor.cpp
+  supervisor_actor.cpp
+  alsa_actor.cpp
 
   local_alsa_listener.cpp
   local_alsa_multi_listener.cpp

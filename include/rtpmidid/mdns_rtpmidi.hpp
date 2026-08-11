@@ -68,7 +68,11 @@ public:
   poller_t::timer_t reconnect_timer;
   int announce_suffix = 0;
 
-  mdns_rtpmidi_t();
+  /// The poller the avahi fds/timers are registered in: the owning actor's
+  /// poller in the actor architecture (default: the legacy global).
+  poller_t *poller_ptr = nullptr;
+
+  explicit mdns_rtpmidi_t(poller_t &poller = rtpmidid::poller);
   ~mdns_rtpmidi_t();
 
   void connect_to_avahi();

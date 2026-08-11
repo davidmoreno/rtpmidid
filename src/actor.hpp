@@ -145,6 +145,9 @@ public:
 
   const std::string &name() const { return config_.name; }
   actor_id_t id() const { return config_.id; }
+  /// The actor's own poller (its I/O surface: fds and timers are
+  /// registered here, never in a global).
+  rtpmidid::poller_t &poller() { return poller_; }
   std::shared_ptr<mailbox_type> mailbox() { return mailbox_; }
   /// Move the owned thread out (delegated reap, D9): the router hands a
   /// wedged peer's jthread to the supervisor's reaper this way.

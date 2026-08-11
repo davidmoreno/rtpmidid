@@ -48,7 +48,7 @@
 - [x] 5.1 Define the peer actor base on `actor_t`: data lane handler (encode + send), `registered` gate for wire traffic (selective wait for `registered{ids}` under the system control deadline, self-terminate on timeout: post `stopped` and exit), stop hooks
 - [x] 5.2 Port the network rtpmidi peer (connection) to the peer actor: socket in own poller, recv → `midi_received`, `midi_to_wire` → rtp encode + sendto, keepalive/reconnect timers actor-local
 - [x] 5.3 Port the network listeners to prep-and-post actors: accept/control sockets in own poller, prepare bundles, post `spawn_peer`, forget; DNS resolution delegated to the worker (`dns_resolved` reply)
-- [ ] 5.4 Implement the ALSA actor: seq fd ownership, event demux by source port → `midi_received`, `midi_to_wire.to` → seq output with EAGAIN/POLLOUT retry, port announce → `register_peer`/remove
+- [x] 5.4 Implement the ALSA actor: seq fd ownership, event demux by source port → `midi_received`, `midi_to_wire.to` → seq output with EAGAIN/POLLOUT retry, port announce → `register_peer`/remove
 - [x] 5.5 Port the rawmidi peer to the peer actor (including the oversized-payload heap escape path)
 - [x] 5.6 Move peer status/command handling to message handlers producing the existing typed variants/results on the peer thread
 - [x] 5.7 Pump-mode unit tests per peer family: recv→message, message→send, registered gating, EAGAIN retry, self-termination posting `stopped`
@@ -58,10 +58,10 @@
 
 - [x] 6.1 Implement the worker actor: FIFO control lane of function jobs, idle scheduling class, `stop` support
 - [x] 6.2 Move blocking work (DNS resolution) into the worker; closures post typed results back to requester mailboxes
-- [ ] 6.3 Implement the dedicated mdns actor: owns the avahi fds in its own poller at normal priority; serves status and announcement mutations (e.g. `mdns.remove`) via mailbox request/response to the control socket
-- [ ] 6.4 Implement the main supervisor actor: signalfd for SIGTERM/SIGINT (replacing raw handlers), `actor_died` collection, reap list joined on a dedicated background reaper thread (off-loop); at daemon exit, detach still-alive reaped threads with a warning
-- [ ] 6.5 Implement ordered shutdown: control → router (stop-all) → ALSA/worker/mdns, join with deadlines, reap fallback
-- [ ] 6.6 Unit tests: job execution and result routing, mdns request/response, shutdown ordering, reap path for a wedged thread
+- [x] 6.3 Implement the dedicated mdns actor: owns the avahi fds in its own poller at normal priority; serves status and announcement mutations (e.g. `mdns.remove`) via mailbox request/response to the control socket
+- [x] 6.4 Implement the main supervisor actor: signalfd for SIGTERM/SIGINT (replacing raw handlers), `actor_died` collection, reap list joined on a dedicated background reaper thread (off-loop); at daemon exit, detach still-alive reaped threads with a warning
+- [x] 6.5 Implement ordered shutdown: control → router (stop-all) → ALSA/worker/mdns, join with deadlines, reap fallback
+- [x] 6.6 Unit tests: job execution and result routing, mdns request/response, shutdown ordering, reap path for a wedged thread
 
 ## 7. Control socket async dispatch (spec: control-socket-jsondm delta)
 

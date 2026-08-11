@@ -137,12 +137,12 @@ AvahiWatch *poller_adapter_watch_new(const AvahiPoll *api, int fd,
   wd->event = event;
   if (event == AVAHI_WATCH_IN) {
     mdns_rtpmidid->watch_in_poller =
-        rtpmidid::poller.add_fd_in(fd, [wd](int _) {
+        mdns_rtpmidid->poller_ptr->add_fd_in(fd, [wd](int _) {
           wd->callback(wd, wd->fd, AVAHI_WATCH_IN, wd->userdata);
         });
   } else if (event == AVAHI_WATCH_OUT) {
     mdns_rtpmidid->watch_out_poller =
-        rtpmidid::poller.add_fd_in(fd, [wd](int _) {
+        mdns_rtpmidid->poller_ptr->add_fd_in(fd, [wd](int _) {
           wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
         });
   } else {
@@ -166,12 +166,12 @@ void poller_adapter_watch_update(AvahiWatch *wd, AvahiWatchEvent event) {
   wd->event = event;
   if (event == AVAHI_WATCH_IN) {
     mdns_rtpmidid->watch_in_poller =
-        rtpmidid::poller.add_fd_in(wd->fd, [wd](int _) {
+        mdns_rtpmidid->poller_ptr->add_fd_in(wd->fd, [wd](int _) {
           wd->callback(wd, wd->fd, AVAHI_WATCH_IN, wd->userdata);
         });
   } else if (event == AVAHI_WATCH_OUT) {
     mdns_rtpmidid->watch_out_poller =
-        rtpmidid::poller.add_fd_in(wd->fd, [wd](int _) {
+        mdns_rtpmidid->poller_ptr->add_fd_in(wd->fd, [wd](int _) {
           wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
         });
   } else {
@@ -213,7 +213,7 @@ AvahiTimeout *poller_adapter_timeout_new(const AvahiPoll *api,
     //   to->callback(to, to->userdata);
     //   to->timer_id = 0;
     // } else {
-    to->timer_id = rtpmidid::poller.add_timer_event(chrono_tv, [to] {
+    to->timer_id = current->poller_ptr->add_timer_event(chrono_tv, [to] {
       DEBUG("Timeout for to {} {}", (void *)to, to->timer_id.id);
       to->callback(to, to->userdata);
     });
@@ -225,24 +225,23 @@ AvahiTimeout *poller_adapter_timeout_new(const AvahiPoll *api,
 /// Update the absolute expiration time for a timeout, If tv is NULL, the
 /// timeout is disabled. More...
 void poller_adapter_timeout_update(AvahiTimeout *to, const struct timeval *tv) {
-  rtpmidid::poller.remove_timer(to->timer_id);
+  if (!current) {
+    return;
+  }
+  current->poller_ptr->remove_timer(to->timer_id);
   if (tv) {
     auto chrono_tv =
         std::chrono::milliseconds(tv->tv_sec * 1000 + tv->tv_usec / 1000);
-    // if (chrono_tv.count() <= 0) {
-    //   // DEBUG("Inmediate call, timeout <= 0");
-    //   to->callback(to, to->userdata);
-    //   to->timer_id = 0;
-    // } else {
-    to->timer_id = rtpmidid::poller.add_timer_event(
+    to->timer_id = current->poller_ptr->add_timer_event(
         chrono_tv, [to] { to->callback(to, to->userdata); });
-    // }
   }
 }
 
 /// Free a timeout. More...
 void poller_adapter_timeout_free(AvahiTimeout *to) {
-  rtpmidid::poller.remove_timer(to->timer_id);
+  if (current) {
+    current->poller_ptr->remove_timer(to->timer_id);
+  }
   // NOLINTNEXTLINE
   delete to;
 }
@@ -318,8 +317,9 @@ static void browse_callback(AvahiServiceBrowser *b, AvahiIfIndex interface,
   mr->browse_callback(data);
 }
 
-rtpmidid::mdns_rtpmidi_t::mdns_rtpmidi_t() {
+rtpmidid::mdns_rtpmidi_t::mdns_rtpmidi_t(poller_t &poller) {
   current = this;
+  poller_ptr = &poller;
 
   service_browser = nullptr;
   group = nullptr;

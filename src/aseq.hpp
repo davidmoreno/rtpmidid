@@ -107,7 +107,11 @@ public:
       added_port_announcement;
   rtpmidid::signal_t<const port_t &> removed_port_announcement;
 
-  aseq_t(std::string name);
+  /// The poller the seq fd is registered in: the owning actor's poller in
+  /// the actor architecture (default: the legacy global).
+  rtpmidid::poller_t *poller_ptr = nullptr;
+
+  explicit aseq_t(std::string name, rtpmidid::poller_t &poller = rtpmidid::poller);
   ~aseq_t();
 
   void read_ready();

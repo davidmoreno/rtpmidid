@@ -67,7 +67,9 @@ snd_seq_addr_t *get_my_ev_client_port(snd_seq_event_t *ev, uint8_t client_id) {
     return &connect.dest;
   }
 }
-aseq_t::aseq_t(std::string _name) : name(std::move(_name)), seq(nullptr) {
+aseq_t::aseq_t(std::string _name, rtpmidid::poller_t &poller)
+    : name(std::move(_name)), seq(nullptr) {
+  poller_ptr = &poller;
   snd_lib_error_set_handler(error_handler);
   if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_DUPLEX, SND_SEQ_NONBLOCK) <
       0) {
@@ -117,7 +119,7 @@ aseq_t::aseq_t(std::string _name) : name(std::move(_name)), seq(nullptr) {
     // fds.push_back(pfds[i].fd);
     // DEBUG("Adding fd {} as alsa seq", pfds[i].fd);
     aseq_listener.emplace_back(
-        rtpmidid::poller.add_fd_in(pfds[i].fd, [this](int) {
+        poller_ptr->add_fd_in(pfds[i].fd, [this](int) {
           // INFO("New event at alsa seq");
           this->read_ready();
         }));
