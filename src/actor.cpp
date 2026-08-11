@@ -141,6 +141,20 @@ void actor_t::thread_main() {
 }
 
 bool actor_t::pump() {
+  if (!started_once_) {
+    started_once_ = true;
+    try {
+      on_start();
+    } catch (const std::exception &e) {
+      fatal(std::string("on_start: ") + e.what());
+      finish();
+      return false;
+    } catch (...) {
+      fatal("on_start: unknown exception");
+      finish();
+      return false;
+    }
+  }
   const bool cont = run_once(std::chrono::milliseconds(0));
   if (!cont) {
     finish();
@@ -185,6 +199,10 @@ bool actor_t::run_once(std::optional<std::chrono::milliseconds> timeout) {
   }
   if (!mailbox_->idle()) {
     wait_ms = std::chrono::milliseconds(0);
+  }
+  // Stop-token check before sleeping: escalation latency is one iteration.
+  if (stop_source_.stop_requested()) {
+    return false;
   }
   poller_.wait(wait_ms);
   return !stopping_;

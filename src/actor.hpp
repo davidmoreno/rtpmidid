@@ -179,6 +179,7 @@ private:
   std::jthread thread_;
   std::stop_source stop_source_;
   drain_policy_t drain_policy_ = drain_policy_t::data_first;
+  bool started_once_ = false;
   bool stopping_ = false;
   bool finished_ = false;
   std::string fatal_reason_;

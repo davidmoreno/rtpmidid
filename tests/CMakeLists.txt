@@ -23,6 +23,11 @@ target_link_libraries(test_router -pthread rtpmidid-shared rtpmidid2-static)
 target_link_libraries(test_router ${FMT_LIBRARIES})
 add_test(NAME test_router COMMAND test_router)
 
+add_executable(test_peer test_peer.cpp)
+target_link_libraries(test_peer -pthread rtpmidid-shared rtpmidid2-static)
+target_link_libraries(test_peer ${FMT_LIBRARIES})
+add_test(NAME test_peer COMMAND test_peer)
+
 add_executable(test_rtpserver test_rtpserver.cpp test_utils.cpp)
 target_link_libraries(test_rtpserver rtpmidid-shared -pthread)
 target_link_libraries(test_rtpserver ${FMT_LIBRARIES})

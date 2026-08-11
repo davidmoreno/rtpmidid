@@ -23,6 +23,9 @@ add_library(
   midi_normalizer.cpp
   actor.cpp
   router_actor.cpp
+  peer_actor.cpp
+  local_rawmidi_peer_actor.cpp
+  worker_actor.cpp
 
   local_alsa_listener.cpp
   local_alsa_multi_listener.cpp

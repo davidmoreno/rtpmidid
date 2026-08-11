@@ -450,6 +450,21 @@ struct peer_ids_result_t {
   std::vector<peer_id_t> ids;
 };
 
+// --- worker and DNS (design D10/D13) --------------------------------------
+
+/// A blocking job for the worker actor (C++23 `std::move_only_function`;
+/// small closures stored inline; the worker never knows result types).
+struct worker_job_t {
+  std::move_only_function<void()> job;
+};
+/// Typed DNS resolution result posted back to the requester.
+struct dns_resolved_t {
+  hdr_t hdr;
+  std::string hostname;
+  std::string port;
+  std::vector<std::string> addresses; // empty = resolution failed
+};
+
 /// Control-plane message: a small variant; never pays for inline MIDI
 /// storage (design D6). Move/copy-only, self-owning.
 struct control_message_t {
@@ -459,7 +474,8 @@ struct control_message_t {
                connect_t, disconnect_t, peer_meta_t, status_req_t,
                status_head_t, peer_status_req_t, peer_status_resp_t,
                peer_command_t, peer_command_resp_t, subscribe_events_t,
-               unsubscribe_events_t, stop_all_t, ack_t, peer_ids_result_t>
+               unsubscribe_events_t, stop_all_t, ack_t, peer_ids_result_t,
+               worker_job_t, dns_resolved_t>
       v;
 
   control_message_t() = default;
