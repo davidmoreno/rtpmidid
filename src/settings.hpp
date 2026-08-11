@@ -31,6 +31,12 @@ struct settings_t {
   bool alsa_network = true;
   std::string control = "/var/run/rtpmidid/control.sock";
   rtpmidid::logger_level_t log_level = rtpmidid::logger_level_t::INFO;
+  /// Real-time scheduling for data-plane actors (peers, router): promotes
+  /// their threads to SCHED_FIFO at rt_priority (needs RLIMIT_RTPRIO or
+  /// CAP_SYS_NICE); on failure falls back to nice-based elevation with a
+  /// warning. Control/mdns run normal; the worker runs idle.
+  bool rt_enable = true;
+  int rt_priority = 10;
 
   // Datas a read from the ini file
   /// [INI-DM]

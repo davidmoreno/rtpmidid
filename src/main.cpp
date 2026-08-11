@@ -68,6 +68,9 @@ static void setup_static_peers(const std::shared_ptr<router_actor_t> &router,
         [worker, ct](const mailbox_handle_t &sup, peer_id_t pid) {
           return std::make_shared<network_rtpmidi_peer_actor_t>(
               actor_config_t{.name = ct.name.empty() ? ct.hostname : ct.name,
+                             .scheduling = scheduling_class_t::elevated,
+                             .rt_enabled = settings.rt_enable,
+                             .rt_priority = settings.rt_priority,
                              .id = pid,
                              .supervisor_mailbox = sup},
               ct.hostname, ct.port, ct.local_udp_port, worker);
@@ -88,6 +91,9 @@ static void setup_static_peers(const std::shared_ptr<router_actor_t> &router,
       }
       return std::make_shared<local_rawmidi_peer_actor_t>(
           actor_config_t{.name = rm.name.empty() ? rm.device : rm.name,
+                         .scheduling = scheduling_class_t::elevated,
+                         .rt_enabled = settings.rt_enable,
+                         .rt_priority = settings.rt_priority,
                          .id = pid,
                          .supervisor_mailbox = sup},
           rm.device, rm.name, fd);
@@ -155,6 +161,8 @@ int main(int argc, char **argv) {
   auto router = std::make_shared<router_actor_t>(
       actor_config_t{.name = "router",
                      .scheduling = scheduling_class_t::elevated,
+                     .rt_enabled = settings.rt_enable,
+                     .rt_priority = settings.rt_priority,
                      .supervisor_mailbox = sup_mb});
   auto worker = std::make_shared<worker_actor_t>(
       actor_config_t{.name = "worker", .supervisor_mailbox = sup_mb});

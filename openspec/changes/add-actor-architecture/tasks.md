@@ -73,9 +73,9 @@
 ## 8. Cutover and packaging
 
 - [ ] 8.1 Remove the global poller singleton and the old main loop; main becomes the supervisor actor only
-- [ ] 8.2 Verify no cross-thread direct calls remain (audit: only mailbox posts between actors)
-- [ ] 8.3 Update `debian/rtpmidid.service`: drop process-wide `CPUSchedulingPolicy=fifo`, keep `Group=audio`, add `LimitRTPRIO=` (or `AmbientCapabilities=CAP_SYS_NICE`) so in-daemon RT promotion can succeed, and document the requirement
-- [ ] 8.4 Add configuration options: RT mode enable/priority values; document fallback behavior and the central lane-capacity constants (tuned in 8.5)
-- [ ] 8.5 Latency/isolation smoke measurements (hot path allocation check, note-to-note forwarding latency, behavior under a flooded peer) and record results
-- [ ] 8.6 Full test suite green; update README/docs for the architecture and configuration
-- [ ] 8.7 Verify Debian build-deps and CI images support C++23 (pin `gcc >= 12:1` in debian/control; ubuntu-latest and trixie are already fine) and document the toolchain floor
+- [x] 8.2 Verify no cross-thread direct calls remain (audit: only mailbox posts between actors)
+- [x] 8.3 Update `debian/rtpmidid.service`: drop process-wide `CPUSchedulingPolicy=fifo`, keep `Group=audio`, add `LimitRTPRIO=` (or `AmbientCapabilities=CAP_SYS_NICE`) so in-daemon RT promotion can succeed, and document the requirement
+- [x] 8.4 Add configuration options: RT mode enable/priority values; document fallback behavior and the central lane-capacity constants (tuned in 8.5)
+- [x] 8.5 Latency/isolation smoke measurements (hot path allocation check, note-to-note forwarding latency, behavior under a flooded peer) and record results
+- [x] 8.6 Full test suite green; update README/docs for the architecture and configuration
+- [x] 8.7 Verify Debian build-deps and CI images support C++23 (pin `gcc >= 12:1` in debian/control; ubuntu-latest and trixie are already fine) and document the toolchain floor

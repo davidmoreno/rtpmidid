@@ -151,7 +151,10 @@ void poller_t::__remove_fd(int fd) {
   private_data->fd_events.erase(fd);
   if (is_open()) {
     auto r = epoll_ctl(private_data->epollfd, EPOLL_CTL_DEL, fd, NULL);
-    if (r == -1) {
+    if (r == -1 && errno != EBADF) {
+      // EBADF: the fd was already closed (e.g. an actor closed it in
+      // on_stop before its listener was destroyed); the kernel removed the
+      // epoll entry when the fd closed, so this is not an error.
       ERROR("Cant remove from poller! fd: {}, error: {}", fd, strerror(errno));
       throw exception("Can't remove fd {} from poller: {} ({})", fd,
                       strerror(errno), errno);

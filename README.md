@@ -187,6 +187,43 @@ see the design notes in `openspec/changes/add-actor-architecture/`).
 `std::print` requires a recent libstdc++/libc++ as well. Other dependencies:
 ALSA, avahi-client, and a POSIX pthreads implementation.
 
+### Architecture (actor model)
+
+Since the actor-architecture cutover the daemon runs as a set of actors:
+one thread + one private epoll poller + one mailbox each, communicating
+only through bounded message queues (see `docs/architecture.md` and the
+design in `openspec/changes/add-actor-architecture/design.md`).
+
+- The **router** is the single authority for the connection graph and the
+  MIDI hub (peers send `midi_received`, the router forwards
+  `midi_to_wire`). It also owns the peer lifecycle (spawn/remove with
+  deadlines and escalation).
+- Each **peer** (network RTP-MIDI connections, rawmidi devices, ALSA
+  ports) runs in its own actor owning its sockets/fds.
+- The **worker** runs blocking jobs (DNS resolution) at idle priority.
+- A dedicated **mdns actor** owns the avahi fds.
+- The **control socket** is a listener actor spawning one connection
+  actor per client; commands are asynchronous request/response with
+  requester-side deadlines.
+- **main** is the supervisor actor: signalfd/eventfd-driven SIGTERM/
+  SIGINT handling, `actor_died` collection, a background reaper thread
+  for wedged threads, and ordered shutdown.
+
+### Real-time scheduling
+
+Data-plane actors (peers, router) are eligible for SCHED_FIFO promotion
+(`rt_enable = true` by default, `rt_priority = 10`) performed in-daemon
+per thread; on failure they fall back to nice-based elevation with a
+warning. The control socket and mdns run at normal priority; the worker
+at SCHED_IDLE. The unit file grants `LimitRTPRIO=` (see
+`debian/rtpmidid.service`). Configure via `default.ini`:
+
+```ini
+[general]
+rt_enable=true
+rt_priority=10
+```
+
 ### Docker
 
 Download `docker-compose.yaml` and `default.ini` from the repository, then run:

@@ -11,10 +11,12 @@ ExecStart=/usr/bin/rtpmidid --ini=/etc/rtpmidid/default.ini
 Restart=on-failure
 RuntimeDirectory=rtpmidid
 RuntimeDirectoryMode=0755
-# realtime, so more precise
-CPUSchedulingPolicy=fifo 
-# no need for max priority (20)
-CPUSchedulingPriority=10 
+# Real-time scheduling is now an in-daemon per-thread policy (task 8.3):
+# the data-plane actors (peers, router) promote their own threads to
+# SCHED_FIFO at rt_priority when rt_enable is set. That promotion needs
+# RLIMIT_RTPRIO (or CAP_SYS_NICE): Group=audio alone does not raise the
+# real-time priority limit.
+LimitRTPRIO=10
 
 [Install]
 WantedBy=network.target
