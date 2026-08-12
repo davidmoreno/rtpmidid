@@ -48,6 +48,11 @@ void router_actor_t::forward_midi(data_message_t &&msg) {
     const auto to_id = from.send_to[i];
     auto dest = peers_.find(to_id);
     if (dest == peers_.end()) {
+      // The graph is the router's own map; a missing destination is an
+      // inconsistency (stale edge). Loud, rate-limited.
+      WARNING_RATE_LIMIT(5, "Router: forwarding from {} to missing peer {} "
+                            "(stale graph edge); message dropped.",
+                         msg.from, to_id);
       continue;
     }
     dest->second.stats.recv++;

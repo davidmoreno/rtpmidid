@@ -131,6 +131,38 @@ void test_late_response_discarded_via_pending_table() {
   ASSERT_FALSE(table.is_pending(2002));
 }
 
+void test_mailbox_data_lane_drops_are_counted() {
+  // A tiny data lane: a flooding producer loses messages per the drop
+  // policy, but the loss is observable through the drop counter.
+  auto mb = std::make_shared<test_mailbox_t>(4, 4);
+  uint8_t b[3] = {0x90, 60, 100};
+  auto payload = midi_payload_t::make(b, 3);
+  for (int i = 0; i < 10; i++) {
+    mb->post_data(data_message_t::midi_received(1, midi_payload_t(*payload)));
+  }
+  ASSERT_EQUAL(mb->data_drops(), 6ULL); // capacity 4, 10 posted, drop_oldest
+  // The freshest data survived (drop_oldest): the last 4 remain.
+  int popped = 0;
+  while (mb->pop_data()) {
+    popped++;
+  }
+  ASSERT_EQUAL(popped, 4);
+}
+
+void test_erased_post_to_non_accepting_mailbox_is_rejected() {
+  // A wiring bug: posting a message type the target actor does not accept
+  // through the type-erased handle must fail loudly (and return false),
+  // not be silently swallowed.
+  auto router_mb = std::make_shared<router_mailbox_t>();
+  mailbox_handle_t h{router_mb};
+  // mdns_status_req_t is not in the router's accepted control variant.
+  ASSERT_FALSE(h.post_control(mdns_status_req_t{hdr_t{1}, {}}));
+  ASSERT_TRUE(router_mb->idle());
+  // An accepted message posts fine through the erased handle.
+  ASSERT_TRUE(h.post_control(stop_t{hdr_t{2}}));
+  ASSERT_FALSE(router_mb->idle());
+}
+
 void test_hdr_envelope_roundtrip() {
   auto m = make_control_payload(0, "hello");
   ASSERT_TRUE(m.text == "hello");
@@ -150,6 +182,8 @@ int main(int argc, char **argv) {
       TEST(test_lane_assignment),
       TEST(test_late_response_discarded_via_pending_table),
       TEST(test_hdr_envelope_roundtrip),
+      TEST(test_mailbox_data_lane_drops_are_counted),
+      TEST(test_erased_post_to_non_accepting_mailbox_is_rejected),
   };
   testcase.run(argc, argv);
   return testcase.exit_code();

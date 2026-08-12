@@ -89,6 +89,14 @@ Interpretation:
   1536 B inline capacity (verified by counting `operator new` across
   pushes, displacing pushes and pops); oversized payloads (rawmidi sysex
   floods) use the bounded heap escape pool with drop+log+counter.
-- Dropped-message behavior under a flooded peer is observable via the
-  per-actor drop counters and rate-limited logs (design D3), so floods
-  degrade gracefully instead of blocking producers.
+- Dropped-message behavior is observable: per-lane drop counters (exposed
+  in status) plus rate-limited warnings when a lane is full and a message
+  is dropped — control-lane drops and data-lane drops are both logged.
+  Unexpected losses are loud: a message routed to an actor that does not
+  accept it (a wiring bug) logs every occurrence naming the message type;
+  the router warns on stale graph edges. Deliberately-silent drops are
+  only those the protocol defines as silent (late responses with unknown
+  correlation ids, spec: actor-message-protocol) and subscriber
+  drain-and-ignore. There is no dead-letter queue: bounded lanes with
+  drop policies are the design (D3), so floods degrade gracefully instead
+  of blocking producers.

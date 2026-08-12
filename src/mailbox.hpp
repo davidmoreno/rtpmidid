@@ -33,12 +33,25 @@
 #include "message_core.hpp"
 #include "queue.hpp"
 #include "rtpmidid/logger.hpp"
+#include <cxxabi.h>
 #include <memory>
 #include <typeindex>
 #include <typeinfo>
 #include <utility>
 
 namespace rtpmididns {
+
+/// Demangle a typeid name for readable log messages.
+inline std::string demangle_type(const char *mangled) {
+  int status = 0;
+  char *demangled = abi::__cxa_demangle(mangled, nullptr, nullptr, &status);
+  if (demangled == nullptr) {
+    return mangled;
+  }
+  std::string out(demangled);
+  std::free(demangled);
+  return out;
+}
 
 /**
  * Central lane-capacity constants (design D3): the single place to tune
@@ -146,7 +159,7 @@ public:
   template <typename M> bool post_data(M &&msg) {
     static_assert(std::is_same_v<std::decay_t<M>, DataT>,
                   "this mailbox does not accept that data message type");
-    return data_.push(std::forward<M>(msg));
+    return post_data_impl(std::forward<M>(msg));
   }
   /// Typed control post: only compiles for messages this actor accepts.
   template <typename M> bool post_control(M &&msg) {
@@ -209,7 +222,7 @@ public:
   /// Data post through the base: only mailboxes with a data lane accept it.
   bool post_data(data_message_t &&msg) override {
     if constexpr (std::is_same_v<DataT, data_message_t>) {
-      return data_.push(std::move(msg));
+      return post_data_impl(std::move(msg));
     } else {
       return false; // this mailbox has no data lane
     }
@@ -227,8 +240,12 @@ public:
         ((ok = ok || insert_alternative<I>(type, box)), ...);
       }(std::make_index_sequence<std::variant_size_v<ControlT>>());
       if (!ok) {
-        WARNING_RATE_LIMIT(5, "Mailbox: dropped a control message type it "
-                              "does not accept (wiring bug).");
+        // Not a flood: a wiring bug — a message was routed to an actor
+        // whose declared control variant does not accept it. Be loud
+        // about it every time, naming the offending message type.
+        WARNING("Mailbox: dropping a '{}' control message this actor does "
+                "not accept (wiring bug).",
+                demangle_type(box.type().name()));
       }
       return ok;
     } else {
@@ -237,6 +254,20 @@ public:
   }
 
 private:
+  template <typename M> bool post_data_impl(M &&msg) {
+    const auto drops_before = data_.drops();
+    const bool enqueued = data_.push(std::forward<M>(msg));
+    if (!enqueued || data_.drops() != drops_before) {
+      // A full data lane means a flooding producer: the drop policy
+      // (default drop_oldest keeps the freshest data) applies, but it is
+      // observable — count + rate-limited log.
+      WARNING_RATE_LIMIT(5, "Data lane full: a MIDI message was dropped "
+                            "({} dropped so far; a peer may be flooding).",
+                         data_.drops());
+    }
+    return enqueued;
+  }
+
   template <std::size_t I>
   bool insert_alternative(const std::type_index &type,
                           control_message_box_t &box) {
