@@ -21,7 +21,9 @@
 
 #pragma once
 
+#include "mailbox.hpp"
 #include "message_core.hpp"
+#include "peer_messages.hpp" // peer_command_t (relayed peer commands)
 #include "peer_status.hpp"
 #include <functional>
 #include <string>
@@ -123,5 +125,7 @@ using router_control_t =
                  unregister_peer_t, spawn_peer_t, remove_peer_t, connect_t,
                  disconnect_t, status_req_t, peer_command_t,
                  subscribe_events_t, unsubscribe_events_t, stop_all_t>;
+/// The router's mailbox.
+using router_mailbox_t = mailbox_t<data_message_t, router_control_t>;
 
 } // namespace rtpmididns

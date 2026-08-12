@@ -25,6 +25,7 @@
 #include "mdns_actor.hpp"
 #include "peer_actor.hpp"
 #include "test_case.hpp"
+#include "test_utils.hpp"
 #include "worker_actor.hpp"
 #include <cstring>
 #include <string>
@@ -63,7 +64,7 @@ static midi_payload_t small_payload(int tag) {
 // --- peer base: registered gate (5.1) ---------------------------------------
 
 void test_registered_gate_drops_pre_registration_traffic() {
-  auto router = std::make_shared<actor_mailbox_t>();
+  auto router = std::make_shared<test_mailbox_t>();
   fake_peer_t peer(actor_config_t{.name = "p", .id = 3,
                                   .supervisor_mailbox = router});
   // Wire traffic before `registered`: not processed (dropped).
@@ -86,7 +87,7 @@ void test_registered_gate_drops_pre_registration_traffic() {
 }
 
 void test_registered_gate_timeout_self_terminates() {
-  auto router = std::make_shared<actor_mailbox_t>();
+  auto router = std::make_shared<test_mailbox_t>();
   fake_peer_t peer(actor_config_t{.name = "p", .id = 7,
                                   .supervisor_mailbox = router});
   peer.set_registered_timeout(std::chrono::milliseconds(1));
@@ -103,10 +104,10 @@ void test_registered_gate_timeout_self_terminates() {
 // --- peer base: status/command as message handlers (5.6) ---------------------
 
 void test_peer_status_and_command_messages() {
-  auto router = std::make_shared<actor_mailbox_t>();
+  auto router = std::make_shared<test_mailbox_t>();
   fake_peer_t peer(actor_config_t{.name = "p", .id = 3,
                                   .supervisor_mailbox = router});
-  auto req = std::make_shared<actor_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
   peer.mailbox()->post_control(registered_t{{3}});
   peer.pump();
 
@@ -147,7 +148,7 @@ void test_peer_status_and_command_messages() {
 void test_rawmidi_actor_recv_to_message_and_message_to_send() {
   int sv[2] = {-1, -1};
   ASSERT_EQUAL(socketpair(AF_UNIX, SOCK_STREAM, 0, sv), 0);
-  auto router = std::make_shared<actor_mailbox_t>();
+  auto router = std::make_shared<test_mailbox_t>();
   local_rawmidi_peer_actor_t peer(
       actor_config_t{.name = "raw", .id = 4, .supervisor_mailbox = router},
       "testdev", "raw", sv[0]);
@@ -197,7 +198,7 @@ void test_worker_jobs_fifo_and_exception_isolation() {
 
 void test_worker_dns_resolution() {
   worker_actor_t worker(actor_config_t{.name = "w"});
-  auto req = std::make_shared<actor_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
   resolve_dns(worker, "localhost", "5004", req, 42);
   worker.pump();
   auto r = req->pop_control();

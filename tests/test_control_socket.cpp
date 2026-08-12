@@ -22,9 +22,9 @@
 /// block others).
 
 #include "control_socket_actor.hpp"
-#include "messages.hpp"
 #include "router_actor.hpp"
 #include "test_case.hpp"
+#include "test_utils.hpp"
 #include "worker_actor.hpp"
 #include <chrono>
 #include <cstring>
@@ -38,10 +38,10 @@ using namespace rtpmididns;
 
 // --- a peer that answers status and command requests ------------------------
 
-class answering_peer_t : public actor_t<std::monostate, control_message_t> {
+class answering_peer_t : public actor_t<std::monostate, test_control_t> {
 public:
   using actor_t::actor_t;
-  void on_control(control_message_t &&msg) override {
+  void on_control(test_control_t &&msg) override {
     std::visit(
         [this](auto &&m) {
           using T = std::decay_t<decltype(m)>;
@@ -114,7 +114,7 @@ static bool wait_until(const std::function<bool()> &f, int timeout_ms = 5000) {
 void test_control_socket_wire_roundtrip() {
   const std::string socket_path =
       "/tmp/rtpmidid-test-control-" + std::to_string(::getpid()) + ".sock";
-  auto supervisor = std::make_shared<actor_mailbox_t>();
+  auto supervisor = std::make_shared<test_mailbox_t>();
   auto router = std::make_shared<router_actor_t>(
       actor_config_t{.name = "router", .supervisor_mailbox = supervisor});
   auto worker = std::make_shared<worker_actor_t>(actor_config_t{.name = "w"});
@@ -125,7 +125,7 @@ void test_control_socket_wire_roundtrip() {
   auto peer = std::make_shared<answering_peer_t>(
       actor_config_t{.name = "p", .supervisor_mailbox = supervisor});
   peer->start();
-  auto req = std::make_shared<actor_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
   router->mailbox()->post_control(
       register_peer_t{hdr_t{1}, req, peer->mailbox(), "test", "p"});
   ASSERT_TRUE(wait_until([&] { return !req->idle(); }));
@@ -206,7 +206,7 @@ void test_control_socket_wire_roundtrip() {
 void test_stalled_client_does_not_block_others() {
   const std::string socket_path =
       "/tmp/rtpmidid-test-control-" + std::to_string(::getpid()) + "-b.sock";
-  auto supervisor = std::make_shared<actor_mailbox_t>();
+  auto supervisor = std::make_shared<test_mailbox_t>();
   auto router = std::make_shared<router_actor_t>(
       actor_config_t{.name = "router", .supervisor_mailbox = supervisor});
   auto worker = std::make_shared<worker_actor_t>(actor_config_t{.name = "w"});
@@ -214,8 +214,8 @@ void test_stalled_client_does_not_block_others() {
   worker->start();
 
   // A silent mailbox registered as a peer: status gathers wait on it.
-  auto silent = std::make_shared<actor_mailbox_t>();
-  auto req = std::make_shared<actor_mailbox_t>();
+  auto silent = std::make_shared<test_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
   router->mailbox()->post_control(
       register_peer_t{hdr_t{1}, req, silent, "test", "silent"});
   ASSERT_TRUE(wait_until([&] { return !req->idle(); }));

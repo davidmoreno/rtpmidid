@@ -23,7 +23,8 @@
 /// flowing during a parked wait).
 
 #include "actor.hpp"
-#include "messages.hpp"
+#include "test_utils.hpp"
+#include "test_utils.hpp"
 #include "test_case.hpp"
 #include <chrono>
 #include <string>
@@ -35,7 +36,7 @@ using namespace rtpmididns;
 // --- helper types -----------------------------------------------------------
 
 /// Records dispatched data/control messages; parks on a "req" payload.
-class recorder_actor_t : public actor_t<data_message_t, control_message_t> {
+class recorder_actor_t : public actor_t<data_message_t, test_control_t> {
 public:
   std::vector<std::string> events;
   std::optional<std::string> wait_result;
@@ -47,18 +48,18 @@ public:
   void on_data(data_message_t &&msg) override {
     events.push_back("D" + std::to_string(msg.from));
   }
-  void on_control(control_message_t &&msg) override {
+  void on_control(test_control_t &&msg) override {
     if (auto *p = std::get_if<control_payload_t>(&msg)) {
       events.push_back("C" + p->text);
       if (p->text == "req") {
         // Sequential request/response: park until the target arrives.
         wait_for(
-            [](const control_message_t &m) {
+            [](const test_control_t &m) {
               auto *q = std::get_if<control_payload_t>(&m);
               return q && q->text == "target";
             },
             std::chrono::milliseconds(wait_deadline_ms),
-            [this](std::optional<control_message_t> res) {
+            [this](std::optional<test_control_t> res) {
               if (res) {
                 wait_result = std::get<control_payload_t>(*res).text;
               } else {
@@ -73,11 +74,11 @@ public:
   }
 };
 
-class throwing_actor_t : public actor_t<data_message_t, control_message_t> {
+class throwing_actor_t : public actor_t<data_message_t, test_control_t> {
 public:
   std::vector<std::string> events;
   using actor_t::actor_t;
-  void on_control(control_message_t &&msg) override {
+  void on_control(test_control_t &&msg) override {
     auto *p = std::get_if<control_payload_t>(&msg);
     if (!p) {
       return;
@@ -126,7 +127,7 @@ void test_drain_control_progress_under_data_stream() {
 }
 
 void test_per_message_exception_isolation() {
-  auto supervisor = std::make_shared<actor_mailbox_t>();
+  auto supervisor = std::make_shared<test_mailbox_t>();
   throwing_actor_t actor(
       actor_config_t{.name = "t3", .supervisor_mailbox = supervisor});
   actor.mailbox()->post_control(make_control_payload(0, "ok1"));
@@ -139,7 +140,7 @@ void test_per_message_exception_isolation() {
 }
 
 void test_stop_handshake() {
-  auto supervisor = std::make_shared<actor_mailbox_t>();
+  auto supervisor = std::make_shared<test_mailbox_t>();
   recorder_actor_t actor(
       actor_config_t{.name = "t4", .supervisor_mailbox = supervisor});
   actor.request_stop();
@@ -154,7 +155,7 @@ void test_stop_handshake() {
 }
 
 void test_stop_token_escalation() {
-  auto supervisor = std::make_shared<actor_mailbox_t>();
+  auto supervisor = std::make_shared<test_mailbox_t>();
   recorder_actor_t actor(
       actor_config_t{.name = "t5", .supervisor_mailbox = supervisor});
   actor.request_stop_token();
@@ -234,9 +235,9 @@ void test_wait_for_catch_all_drain_in_order() {
   // message in order; events ignored elsewhere drain harmlessly.
   std::vector<peer_id_t> drained;
   actor.wait_for(
-      [](const control_message_t &) { return true; },
+      [](const test_control_t &) { return true; },
       std::chrono::milliseconds(100),
-      [&drained](std::optional<control_message_t> res) {
+      [&drained](std::optional<test_control_t> res) {
         if (res) {
           drained.push_back(std::get<peer_event_t>(*res).peer_id);
         }
@@ -273,7 +274,7 @@ void test_midi_flows_during_parked_wait() {
 }
 
 void test_threaded_actor_smoke() {
-  auto supervisor = std::make_shared<actor_mailbox_t>();
+  auto supervisor = std::make_shared<test_mailbox_t>();
   recorder_actor_t actor(
       actor_config_t{.name = "threaded", .supervisor_mailbox = supervisor});
   actor.start();

@@ -17,11 +17,30 @@
  */
 #pragma once
 
+#include "mailbox.hpp"
+#include "mdns_messages.hpp"
+#include "peer_messages.hpp"
+#include "router_messages.hpp"
+#include "worker_messages.hpp"
 #include <chrono>
 #include <functional>
 #include <vector>
 
 #include <rtpmidid/iobytes.hpp>
+
+namespace rtpmididns {
+/// Permissive control variant for tests: every message the test actors
+/// post or the test reply mailboxes receive. Each test could declare a
+/// narrower set; a shared one keeps the test files small.
+using test_control_t =
+    std::variant<stop_t, stopped_t, actor_died_t, reap_actor_t, peer_event_t,
+                 control_payload_t, registered_t, peer_status_req_t,
+                 peer_command_t, peer_status_resp_t, peer_command_resp_t,
+                 ack_t, peer_ids_result_t, status_head_t, mdns_status_resp_t,
+                 dns_resolved_t>;
+/// Permissive test mailbox (accepts the test control set + the data lane).
+using test_mailbox_t = mailbox_t<data_message_t, test_control_t>;
+} // namespace rtpmididns
 
 class test_client_t {
 public:

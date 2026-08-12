@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "mailbox.hpp"
 #include "message_core.hpp"
 #include <string>
 
@@ -27,5 +28,7 @@ struct alsa_remove_port_t {
 /// register acks land on small internal reply mailboxes, not here).
 using alsa_control_t =
     std::variant<stop_t, alsa_create_port_t, alsa_remove_port_t>;
+/// The ALSA actor's mailbox (has a data lane: it receives midi_to_wire).
+using alsa_mailbox_t = mailbox_t<data_message_t, alsa_control_t>;
 
 } // namespace rtpmididns

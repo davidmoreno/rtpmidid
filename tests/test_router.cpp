@@ -21,9 +21,9 @@
 /// driven status gather, subscriptions, command relay.
 
 #include "actor.hpp"
-#include "messages.hpp"
 #include "router_actor.hpp"
 #include "test_case.hpp"
+#include "test_utils.hpp"
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -33,7 +33,7 @@ using namespace rtpmididns;
 
 // --- helper: a peer that answers router requests ----------------------------
 
-class test_peer_t : public actor_t<data_message_t, control_message_t> {
+class test_peer_t : public actor_t<data_message_t, test_control_t> {
 public:
   std::mutex m;
   std::vector<std::string> events;
@@ -45,7 +45,7 @@ public:
 
   using actor_t::actor_t;
 
-  void on_control(control_message_t &&msg) override {
+  void on_control(test_control_t &&msg) override {
     if (wedged) {
       std::this_thread::sleep_for(std::chrono::milliseconds(300));
       return;
@@ -124,13 +124,13 @@ bool pump_until(Actor &actor, Pred &&pred, int timeout_ms = 5000) {
 }
 
 /// Pop and discard every control message in a mailbox (stale acks etc.).
-static void drain_mailbox(const std::shared_ptr<actor_mailbox_t> &mb) {
+static void drain_mailbox(const std::shared_ptr<test_mailbox_t> &mb) {
   while (mb->pop_control()) {
   }
 }
 
 static std::optional<peer_id_t> first_ack_id(
-    const std::shared_ptr<actor_mailbox_t> &req, uint64_t corr) {
+    const std::shared_ptr<test_mailbox_t> &req, uint64_t corr) {
   while (auto c = req->pop_control()) {
     if (auto *r = std::get_if<peer_ids_result_t>(&*c)) {
       if (r->hdr.corr == corr && !r->ids.empty()) {
@@ -144,10 +144,10 @@ static std::optional<peer_id_t> first_ack_id(
 // --- tests ------------------------------------------------------------------
 
 void test_forwarding_fanout() {
-  auto supervisor = std::make_shared<actor_mailbox_t>();
+  auto supervisor = std::make_shared<test_mailbox_t>();
   auto router = std::make_shared<router_actor_t>(
       actor_config_t{.name = "router", .supervisor_mailbox = supervisor});
-  auto req = std::make_shared<actor_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
   auto peerA = std::make_shared<test_peer_t>(actor_config_t{.name = "A"});
   auto peerB = std::make_shared<test_peer_t>(actor_config_t{.name = "B"});
   auto peerC = std::make_shared<test_peer_t>(actor_config_t{.name = "C"});
@@ -194,10 +194,10 @@ void test_forwarding_fanout() {
 }
 
 void test_spawn_handshake_ordering() {
-  auto supervisor = std::make_shared<actor_mailbox_t>();
+  auto supervisor = std::make_shared<test_mailbox_t>();
   auto router = std::make_shared<router_actor_t>(
       actor_config_t{.name = "router", .supervisor_mailbox = supervisor});
-  auto req = std::make_shared<actor_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
   std::shared_ptr<test_peer_t> spawned;
 
   spawn_peer_t sp;
@@ -244,10 +244,10 @@ void test_spawn_handshake_ordering() {
 }
 
 void test_remove_choreography_and_partner_events() {
-  auto supervisor = std::make_shared<actor_mailbox_t>();
+  auto supervisor = std::make_shared<test_mailbox_t>();
   auto router = std::make_shared<router_actor_t>(
       actor_config_t{.name = "router", .supervisor_mailbox = supervisor});
-  auto req = std::make_shared<actor_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
   auto partner = std::make_shared<test_peer_t>(actor_config_t{.name = "P"});
   std::shared_ptr<test_peer_t> spawned;
   router->mailbox()->post_control(register_peer_t{
@@ -297,12 +297,12 @@ void test_remove_choreography_and_partner_events() {
 }
 
 void test_escalation_reaps_wedged_peer() {
-  auto supervisor = std::make_shared<actor_mailbox_t>();
+  auto supervisor = std::make_shared<test_mailbox_t>();
   auto router = std::make_shared<router_actor_t>(
       actor_config_t{.name = "router", .supervisor_mailbox = supervisor});
   router->set_remove_deadline(std::chrono::milliseconds(10));
   router->set_escalation_grace(std::chrono::milliseconds(10));
-  auto req = std::make_shared<actor_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
   std::shared_ptr<test_peer_t> wedged;
   spawn_peer_t sp;
   sp.hdr = hdr_t{1};
@@ -341,7 +341,7 @@ void test_escalation_reaps_wedged_peer() {
 
 void test_requester_driven_status_gather() {
   auto router = std::make_shared<router_actor_t>(actor_config_t{.name = "r"});
-  auto req = std::make_shared<actor_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
   auto peerX = std::make_shared<test_peer_t>(actor_config_t{.name = "X"});
   auto peerY = std::make_shared<test_peer_t>(actor_config_t{.name = "Y"});
   router->mailbox()->post_control(
@@ -377,7 +377,7 @@ void test_requester_driven_status_gather() {
 
 void test_peer_death_mid_gather_shrinks_set() {
   auto router = std::make_shared<router_actor_t>(actor_config_t{.name = "r"});
-  auto req = std::make_shared<actor_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
   auto peerX = std::make_shared<test_peer_t>(actor_config_t{.name = "X"});
   router->mailbox()->post_control(
       register_peer_t{hdr_t{1}, req, peerX->mailbox(), "test", "X"});
@@ -401,8 +401,8 @@ void test_peer_death_mid_gather_shrinks_set() {
 
 void test_subscription_stream_and_unsubscribe() {
   auto router = std::make_shared<router_actor_t>(actor_config_t{.name = "r"});
-  auto req = std::make_shared<actor_mailbox_t>();
-  auto sub = std::make_shared<actor_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
+  auto sub = std::make_shared<test_mailbox_t>();
   router->mailbox()->post_control(subscribe_events_t{hdr_t{1}, sub});
   router->pump();
   router->mailbox()->post_control(
@@ -423,7 +423,7 @@ void test_subscription_stream_and_unsubscribe() {
 
 void test_command_relay() {
   auto router = std::make_shared<router_actor_t>(actor_config_t{.name = "r"});
-  auto req = std::make_shared<actor_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
   auto peer = std::make_shared<test_peer_t>(actor_config_t{.name = "p"});
   router->mailbox()->post_control(
       register_peer_t{hdr_t{1}, req, peer->mailbox(), "test", "p"});
@@ -445,10 +445,10 @@ void test_command_relay() {
 }
 
 void test_stop_all_bounded() {
-  auto supervisor = std::make_shared<actor_mailbox_t>();
+  auto supervisor = std::make_shared<test_mailbox_t>();
   auto router = std::make_shared<router_actor_t>(
       actor_config_t{.name = "router", .supervisor_mailbox = supervisor});
-  auto req = std::make_shared<actor_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
   std::vector<std::shared_ptr<test_peer_t>> spawned;
   for (int i = 0; i < 3; i++) {
     spawn_peer_t sp;

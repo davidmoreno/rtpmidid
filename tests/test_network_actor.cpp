@@ -22,11 +22,11 @@
 /// flowing in both directions, and listener routing cleanup.
 
 #include "actor.hpp"
-#include "messages.hpp"
 #include "network_rtpmidi_listener_actor.hpp"
 #include "network_rtpmidi_peer_actor.hpp"
 #include "router_actor.hpp"
 #include "test_case.hpp"
+#include "test_utils.hpp"
 #include "worker_actor.hpp"
 #include <chrono>
 #include <cstring>
@@ -50,7 +50,7 @@ static bool wait_until(const std::function<bool()> &f, int timeout_ms = 8000) {
 }
 
 void test_connect_handshake_and_midi_loop() {
-  auto supervisor = std::make_shared<actor_mailbox_t>();
+  auto supervisor = std::make_shared<test_mailbox_t>();
   auto router = std::make_shared<router_actor_t>(
       actor_config_t{.name = "router", .supervisor_mailbox = supervisor});
   auto worker = std::make_shared<worker_actor_t>(actor_config_t{.name = "w"});
@@ -66,7 +66,7 @@ void test_connect_handshake_and_midi_loop() {
   std::shared_ptr<network_rtpmidi_peer_actor_t> client;
   spawn_peer_t sp;
   sp.hdr = hdr_t{1};
-  sp.reply_to = std::make_shared<actor_mailbox_t>();
+  sp.reply_to = std::make_shared<test_mailbox_t>();
   sp.type = "network_rtpmidi_peer_t";
   sp.factory = [&client, worker](const mailbox_handle_t &sup, peer_id_t pid) {
     client = std::make_shared<network_rtpmidi_peer_actor_t>(
@@ -100,7 +100,7 @@ void test_connect_handshake_and_midi_loop() {
       accepted_id = id;
     }
   }
-  auto req = std::make_shared<actor_mailbox_t>();
+  auto req = std::make_shared<test_mailbox_t>();
   router->mailbox()->post_control(connect_t{hdr_t{2}, req, client_id, accepted_id});
   router->pump();
 

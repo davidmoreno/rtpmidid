@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "mailbox.hpp"
 #include "message_core.hpp"
 #include <cstdint>
 #include <string>
@@ -51,5 +52,7 @@ struct mdns_remove_t {
 using mdns_control_t =
     std::variant<stop_t, mdns_status_req_t, mdns_announce_t, mdns_unannounce_t,
                  mdns_remove_t, peer_ids_result_t, ack_t>;
+/// The mdns actor's mailbox.
+using mdns_mailbox_t = mailbox_t<std::monostate, mdns_control_t>;
 
 } // namespace rtpmididns

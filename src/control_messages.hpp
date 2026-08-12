@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "mailbox.hpp"
 #include "message_core.hpp"
 #include "mdns_messages.hpp"
 #include "network_messages.hpp"
@@ -27,5 +28,12 @@ using listener_control_t = std::variant<stop_t, peer_ids_result_t,
                                         udp_datagram_t>;
 /// The control listener: connection exit notices.
 using control_listener_control_t = std::variant<stop_t, stopped_t>;
+/// A control-socket connection actor's mailbox.
+using connection_mailbox_t = mailbox_t<std::monostate, connection_control_t>;
+/// A network listener's mailbox.
+using listener_mailbox_t = mailbox_t<std::monostate, listener_control_t>;
+/// The control listener's mailbox.
+using control_listener_mailbox_t =
+    mailbox_t<std::monostate, control_listener_control_t>;
 
 } // namespace rtpmididns

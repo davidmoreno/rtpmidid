@@ -28,7 +28,6 @@
 #include "control_socket_actor.hpp"
 #include "local_rawmidi_peer_actor.hpp"
 #include "mdns_actor.hpp"
-#include "messages.hpp"
 #include "network_rtpmidi_listener_actor.hpp"
 #include "network_rtpmidi_peer_actor.hpp"
 #include "router_actor.hpp"
@@ -52,7 +51,7 @@ extern const char *VERSION;
 /// does all fallible work before posting).
 static void spawn_static_peer(const std::shared_ptr<router_actor_t> &router,
                               spawn_peer_t &&sp) {
-  sp.reply_to = std::make_shared<actor_mailbox_t>();
+  sp.reply_to = std::make_shared<reply_mailbox_t>();
   router->mailbox()->post_control(std::move(sp));
 }
 

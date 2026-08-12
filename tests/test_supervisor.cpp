@@ -20,9 +20,9 @@
 /// off-loop; ordered shutdown stops managed actors and completes.
 
 #include "actor.hpp"
-#include "messages.hpp"
 #include "supervisor_actor.hpp"
 #include "test_case.hpp"
+#include "test_utils.hpp"
 #include <atomic>
 #include <chrono>
 #include <functional>
@@ -42,7 +42,7 @@ static bool wait_until(const std::function<bool()> &f, int timeout_ms = 5000) {
   return f();
 }
 
-class stoppable_actor_t : public actor_t<std::monostate, control_message_t> {
+class stoppable_actor_t : public actor_t<std::monostate, test_control_t> {
 public:
   std::atomic<int> on_stop_calls{0};
   std::atomic<bool> stopped{false};
@@ -53,7 +53,7 @@ public:
 void test_reaper_joins_delegated_threads() {
   auto supervisor = std::make_shared<supervisor_actor_t>(
       actor_config_t{.name = "sup", .supervisor_mailbox =
-                                         std::make_shared<actor_mailbox_t>()});
+                                         std::make_shared<test_mailbox_t>()});
   supervisor->pump(); // on_start: the reaper thread starts
   std::atomic<bool> finished{false};
   std::jthread t([&finished] {
@@ -69,7 +69,7 @@ void test_reaper_joins_delegated_threads() {
 }
 
 void test_ordered_shutdown_stops_managed() {
-  auto sup_mb = std::make_shared<actor_mailbox_t>();
+  auto sup_mb = std::make_shared<test_mailbox_t>();
   auto supervisor = std::make_shared<supervisor_actor_t>(
       actor_config_t{.name = "sup", .supervisor_mailbox = sup_mb});
   auto a1 = std::make_shared<stoppable_actor_t>(actor_config_t{

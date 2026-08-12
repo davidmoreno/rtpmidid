@@ -21,8 +21,8 @@
 /// drop, lane assignment, requester-side deadline handling.
 
 #include "mailbox.hpp"
-#include "messages.hpp"
 #include "test_case.hpp"
+#include "test_utils.hpp"
 #include <chrono>
 #include <cstring>
 #include <thread>
@@ -49,7 +49,7 @@ void test_payload_self_ownership_across_copies_and_moves() {
   ASSERT_TRUE(std::memcmp(moved.data(), src, 10) == 0);
 
   // A data message crossing a queue owns its payload.
-  auto mb = std::make_shared<actor_mailbox_t>();
+  auto mb = std::make_shared<test_mailbox_t>();
   {
     auto msg = data_message_t::midi_received(42, std::move(moved));
     mb->post_data(std::move(msg)); // producer destroyed here
@@ -94,7 +94,7 @@ void test_oversized_payload_heap_escape_and_pool_exhaustion() {
 }
 
 void test_lane_assignment() {
-  auto mb = std::make_shared<actor_mailbox_t>();
+  auto mb = std::make_shared<test_mailbox_t>();
   uint8_t b[2] = {0x90, 60};
   auto payload = midi_payload_t::make(b, 2);
   mb->post_data(data_message_t::midi_received(1, std::move(*payload)));
@@ -134,13 +134,11 @@ void test_late_response_discarded_via_pending_table() {
 void test_hdr_envelope_roundtrip() {
   auto m = make_control_payload(0, "hello");
   ASSERT_TRUE(m.text == "hello");
-  // The transport envelope carries the concrete message.
-  control_message_t transport{m};
   // Move-only control message (contains reap_actor with jthread): moves work.
   auto moved = std::move(m);
   ASSERT_TRUE(moved.text == "hello");
   // reap_actor carries a jthread (design D9).
-  control_message_t reap{reap_actor_t{std::jthread(), "wedged"}};
+  test_control_t reap{reap_actor_t{std::jthread(), "wedged"}};
   ASSERT_TRUE(std::holds_alternative<reap_actor_t>(reap));
 }
 

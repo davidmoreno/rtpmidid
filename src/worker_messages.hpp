@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "mailbox.hpp"
 #include "message_core.hpp"
 #include <functional>
 #include <string>
@@ -25,5 +26,7 @@ struct dns_resolved_t {
 
 /// The worker's accepted control messages: jobs only.
 using worker_control_t = std::variant<stop_t, worker_job_t>;
+/// The worker's mailbox.
+using worker_mailbox_t = mailbox_t<std::monostate, worker_control_t>;
 
 } // namespace rtpmididns

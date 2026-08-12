@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "mailbox.hpp"
 #include "message_core.hpp"
 #include "network_messages.hpp"
 #include "peer_status.hpp"
@@ -50,5 +51,7 @@ struct peer_command_resp_t {
 using peer_control_t =
     std::variant<stop_t, registered_t, peer_status_req_t, peer_command_t,
                  peer_event_t, dns_resolved_t, udp_datagram_t>;
+/// A (spawned or hosted) peer's mailbox.
+using peer_mailbox_t = mailbox_t<data_message_t, peer_control_t>;
 
 } // namespace rtpmididns

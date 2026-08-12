@@ -64,6 +64,12 @@ struct is_alternative<M, std::variant<Ts...>>
 template <typename M, typename Variant>
 inline constexpr bool is_alternative_v = is_alternative<M, Variant>::value;
 
+/// Is `T` a std::variant? (ControlT is usually a per-actor message variant;
+/// the generic mailbox also supports non-variant element types.)
+template <typename T> struct is_variant : std::false_type {};
+template <typename... Ts> struct is_variant<std::variant<Ts...>> : std::true_type {};
+template <typename T> inline constexpr bool is_variant_v = is_variant<T>::value;
+
 /// Request/response envelope (design D7): correlation id + optional reply
 /// mailbox handle for requester-driven flows.
 struct hdr_t {

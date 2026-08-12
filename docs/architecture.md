@@ -14,14 +14,19 @@ lane element type IS that variant (`actor_t<DataT, ControlT>` / the
 - An actor's `on_control` only ever sees — and only ever contains — the
   messages it accepts: the mdns actor's variant has no MIDI messages, the
   worker's has only jobs, the router's only routing/lifecycle commands.
-  The old single global `control_message_t` remains only as the transport
-  envelope for cross-actor handles.
+- There is no global message catalog and no global transport variant
+  (`src/messages.hpp` does not exist): each message type lives next to
+  its actor (router_messages.hpp, peer_messages.hpp, mdns_messages.hpp,
+  ...), and cross-actor posting through the type-erased
+  `mailbox_handle_t` (used for `reply_to` and other heterogeneous
+  handles) carries the message in a small `control_message_box_t` (type
+  identity + owned storage); the target mailbox matches it against its
+  own variant and drops with a warning if a wiring bug ever routes a
+  message to the wrong actor.
 - The type system enforces acceptance: posting a message an actor does
   not accept is a compile error on the typed path
   (`post_control<M>` `static_assert`s membership in the target's
-  variant); the type-erased `mailbox_handle_t` (used for `reply_to` and
-  other heterogeneous handles) validates at runtime and drops with a
-  warning if a wiring bug ever routes a message to the wrong actor.
+  variant); the erased path validates at runtime.
 - The queue template takes the accepted types directly
   (`mpsc_queue_t<DataT>` / `mpsc_queue_t<ControlT>`), so an actor's queue
   literally cannot hold a message class it does not accept.
