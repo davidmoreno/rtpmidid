@@ -29,7 +29,10 @@
 #pragma once
 
 #include "actor.hpp"
-#include "messages.hpp"
+#include "alsa_messages.hpp"
+#include "control_messages.hpp"
+#include "peer_messages.hpp"
+#include "router_messages.hpp"
 #include "rtpmidid/networkaddress.hpp"
 #include <unordered_map>
 

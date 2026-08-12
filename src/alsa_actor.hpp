@@ -26,8 +26,9 @@
 #pragma once
 
 #include "actor.hpp"
+#include "alsa_messages.hpp"
 #include "aseq.hpp"
-#include "messages.hpp"
+#include "router_messages.hpp"
 #include "midi_normalizer.hpp"
 #include <memory>
 #include <string>

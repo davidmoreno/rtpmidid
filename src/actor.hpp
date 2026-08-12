@@ -33,7 +33,6 @@
 #pragma once
 
 #include "mailbox.hpp"
-#include "messages.hpp"
 #include "rtpmidid/poller.hpp"
 #include <algorithm>
 #include <cerrno>

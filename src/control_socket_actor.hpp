@@ -29,7 +29,10 @@
 #pragma once
 
 #include "actor.hpp"
-#include "messages.hpp"
+#include "control_messages.hpp"
+#include "local_rawmidi_peer_actor.hpp"
+#include "network_rtpmidi_peer_actor.hpp"
+#include "router_actor.hpp"
 #include "worker_actor.hpp"
 #include <memory>
 #include <string>

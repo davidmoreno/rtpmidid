@@ -24,7 +24,10 @@
 #pragma once
 
 #include "actor.hpp"
-#include "messages.hpp"
+#include "alsa_messages.hpp"
+#include "mdns_messages.hpp"
+#include "network_rtpmidi_peer_actor.hpp"
+#include "router_messages.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
 #include "worker_actor.hpp"
 #include <memory>

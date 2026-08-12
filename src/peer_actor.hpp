@@ -29,7 +29,7 @@
 #pragma once
 
 #include "actor.hpp"
-#include "messages.hpp"
+#include "peer_messages.hpp"
 #include <chrono>
 #include <string>
 #include <vector>

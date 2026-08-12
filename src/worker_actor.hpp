@@ -25,7 +25,7 @@
 #pragma once
 
 #include "actor.hpp"
-#include "messages.hpp"
+#include "worker_messages.hpp"
 #include <arpa/inet.h>
 #include <functional>
 #include <netdb.h>

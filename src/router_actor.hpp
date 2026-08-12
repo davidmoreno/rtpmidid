@@ -27,7 +27,8 @@
 #pragma once
 
 #include "actor.hpp"
-#include "messages.hpp"
+#include "peer_messages.hpp"
+#include "router_messages.hpp"
 #include <chrono>
 #include <optional>
 #include <unordered_map>
