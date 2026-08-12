@@ -23,6 +23,14 @@ struct alsa_remove_port_t {
   mailbox_handle_t reply_to;
   peer_id_t peer_id = 0;
 };
+/// ALSA actor -> mdns actor: an ALSA client subscribed to (or left) an
+/// announced port; the mdns actor initiates/disconnects the rtpmidi
+/// connections to the discovered remotes for that port (the "Network
+/// Export" bridge: connecting an ALSA client starts the rtpmidi session).
+struct alsa_port_event_t {
+  peer_id_t port_id = 0;
+  bool subscribed = false;
+};
 
 /// The ALSA actor's accepted control messages: hosted-port commands (its
 /// register acks land on small internal reply mailboxes, not here).

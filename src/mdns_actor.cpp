@@ -206,6 +206,25 @@ void mdns_actor_t::on_control(mdns_control_t &&msg) {
             }
             return;
           }
+        } else if constexpr (std::is_same_v<T, alsa_port_event_t>) {
+          // "Network Export" bridge: wire/unwire the announced port to every
+          // discovered remote's client.
+          for (auto &[key, entry] : discovered_) {
+            if (entry.net_id == 0) {
+              continue;
+            }
+            if (m.subscribed) {
+              router_mailbox_->post_control(connect_t{
+                  hdr_t{0}, mailbox_handle(), m.port_id, entry.net_id});
+              router_mailbox_->post_control(connect_t{
+                  hdr_t{0}, mailbox_handle(), entry.net_id, m.port_id});
+            } else {
+              router_mailbox_->post_control(disconnect_t{
+                  hdr_t{0}, mailbox_handle(), m.port_id, entry.net_id});
+              router_mailbox_->post_control(disconnect_t{
+                  hdr_t{0}, mailbox_handle(), entry.net_id, m.port_id});
+            }
+          }
         } else if constexpr (std::is_same_v<T, ack_t>) {
           // A failed spawn: drop the discovery entry (the alsa port stays;
           // the network side could not be created).

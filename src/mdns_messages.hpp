@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "alsa_messages.hpp"
 #include "mailbox.hpp"
 #include "message_core.hpp"
 #include <cstdint>
@@ -51,7 +52,7 @@ struct mdns_remove_t {
 /// create-port/spawn requests.
 using mdns_control_t =
     std::variant<stop_t, mdns_status_req_t, mdns_announce_t, mdns_unannounce_t,
-                 mdns_remove_t, peer_ids_result_t, ack_t>;
+                 mdns_remove_t, peer_ids_result_t, ack_t, alsa_port_event_t>;
 /// The mdns actor's mailbox.
 using mdns_mailbox_t = mailbox_t<std::monostate, mdns_control_t>;
 

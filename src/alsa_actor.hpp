@@ -28,11 +28,13 @@
 #include "actor.hpp"
 #include "alsa_messages.hpp"
 #include "aseq.hpp"
+#include "mdns_messages.hpp" // mdns_mailbox_t (subscribe-bridge target)
 #include "router_messages.hpp"
 #include "midi_normalizer.hpp"
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace rtpmididns {
@@ -43,7 +45,8 @@ public:
 public:
   alsa_actor_t(actor_config_t config, std::string alsa_name,
                std::vector<std::string> announce_names,
-               std::shared_ptr<router_mailbox_t> router_mailbox);
+               std::shared_ptr<router_mailbox_t> router_mailbox,
+               std::shared_ptr<mdns_mailbox_t> mdns_mailbox = {});
 
   /// Create a hosted port now (before start) or at runtime; returns the
   /// router-assigned peer id via the given reply mailbox (or 0 if not
@@ -52,6 +55,12 @@ public:
 
   const std::string &alsa_name() const { return alsa_name_; }
   aseq_t *seq() const { return seq_.get(); }
+  /// The seq port numbers created from `alsa_announce` (for tests).
+  std::vector<uint8_t> announced_ports() const {
+    std::vector<uint8_t> v(announced_seq_ports_.begin(),
+                           announced_seq_ports_.end());
+    return v;
+  }
 
 protected:
   void on_start() override;
@@ -68,6 +77,10 @@ private:
   std::string alsa_name_;
   std::vector<std::string> announce_names_;
   std::shared_ptr<router_mailbox_t> router_mailbox_;
+  std::shared_ptr<mdns_mailbox_t> mdns_mailbox_;
+  /// Seq ports created from `alsa_announce`: connecting an ALSA client to
+  /// one of these initiates the rtpmidi session ("Network Export" bridge).
+  std::unordered_set<uint8_t> announced_seq_ports_;
   mididata_to_alsaevents_t mididata_decoder_;
   mididata_to_alsaevents_t mididata_encoder_;
   std::unique_ptr<aseq_t> seq_;
@@ -78,10 +91,14 @@ private:
   struct pending_register_t {
     std::shared_ptr<reply_mailbox_t> register_reply; // where the router ack lands
     mailbox_handle_t create_reply; // who asked for this port (may be null)
+    hdr_t create_hdr; // the create request's correlation id (echoed back)
   };
   std::unordered_map<uint8_t, pending_register_t> pending_ports_;
   struct port_connections_t {
     rtpmidid::signal_t<snd_seq_event_t *>::connection_t midi;
+    rtpmidid::signal_t<aseq_t::port_t, const std::string &>::connection_t
+        subscribe;
+    rtpmidid::signal_t<aseq_t::port_t>::connection_t unsubscribe;
   };
   std::unordered_map<uint8_t, port_connections_t> port_connections_;
   bool output_pending_ = false;

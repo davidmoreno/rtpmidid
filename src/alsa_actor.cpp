@@ -25,10 +25,12 @@ namespace rtpmididns {
 
 alsa_actor_t::alsa_actor_t(actor_config_t config, std::string alsa_name,
                            std::vector<std::string> announce_names,
-                           std::shared_ptr<router_mailbox_t> router_mailbox)
+                           std::shared_ptr<router_mailbox_t> router_mailbox,
+                           std::shared_ptr<mdns_mailbox_t> mdns_mailbox)
     : actor_t(std::move(config)), alsa_name_(std::move(alsa_name)),
       announce_names_(std::move(announce_names)),
-      router_mailbox_(std::move(router_mailbox)) {}
+      router_mailbox_(std::move(router_mailbox)),
+      mdns_mailbox_(std::move(mdns_mailbox)) {}
 
 void alsa_actor_t::on_start() {
   try {
@@ -41,7 +43,7 @@ void alsa_actor_t::on_start() {
     return;
   }
   for (auto &port_name : announce_names_) {
-    create_port(port_name);
+    announced_seq_ports_.insert(create_port(port_name));
   }
 }
 
@@ -87,6 +89,34 @@ void alsa_actor_t::register_port(uint8_t seq_port, const std::string &name) {
               }
             });
       });
+
+  // "Network Export" bridge: an ALSA client connecting to an announced
+  // port initiates the rtpmidi session to the discovered remotes.
+  port_connections_[seq_port].subscribe =
+      seq_->subscribe_event[seq_port].connect(
+      [this, seq_port](aseq_t::port_t, const std::string &) {
+        if (!announced_seq_ports_.count(seq_port) || !mdns_mailbox_) {
+          return;
+        }
+        auto it = port_to_id_.find(seq_port);
+        if (it != port_to_id_.end()) {
+          INFO("ALSA: client connected to announced port {}; initiating "
+               "rtpmidi session.",
+               seq_port);
+          mdns_mailbox_->post_control(alsa_port_event_t{it->second, true});
+        }
+      });
+  port_connections_[seq_port].unsubscribe =
+      seq_->unsubscribe_event[seq_port].connect(
+      [this, seq_port](aseq_t::port_t) {
+        if (!announced_seq_ports_.count(seq_port) || !mdns_mailbox_) {
+          return;
+        }
+        auto it = port_to_id_.find(seq_port);
+        if (it != port_to_id_.end()) {
+          mdns_mailbox_->post_control(alsa_port_event_t{it->second, false});
+        }
+      });
 }
 
 void alsa_actor_t::unregister_port(uint8_t seq_port) {
@@ -121,10 +151,12 @@ void alsa_actor_t::on_control(alsa_control_t &&msg) {
             }
             return;
           }
-          // The create request completes when the register ack arrives.
+          // The create request completes when the register ack arrives;
+          // echo the original correlation id so the requester can match it.
           if (m.reply_to) {
             auto &p = pending_ports_[seq_port];
             p.create_reply = std::move(m.reply_to);
+            p.create_hdr = m.hdr;
           }
           (void)0;
         } else if constexpr (std::is_same_v<T, alsa_remove_port_t>) {
@@ -195,10 +227,11 @@ void alsa_actor_t::on_loop() {
           id_to_port_[r->ids[0]] = it->first;
           port_to_id_[it->first] = r->ids[0];
         }
-        // Complete any pending create request with the assigned id.
+        // Complete any pending create request with the assigned id and
+        // the original correlation id (the requester matches on it).
         if (it->second.create_reply) {
           it->second.create_reply.post_control(peer_ids_result_t{
-              hdr_t{}, r->ids, mailbox()});
+              it->second.create_hdr, r->ids, mailbox()});
         }
         done = true;
         break;
