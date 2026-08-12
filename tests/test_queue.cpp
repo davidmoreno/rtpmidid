@@ -265,8 +265,8 @@ void test_mailbox_drain_interleaving() {
   mb.post_data(1);
   mb.post_data(2);
   mb.post_data(3);
-  mb.post_control("C1");
-  mb.post_control("C2");
+  mb.post_control(std::string("C1"));
+  mb.post_control(std::string("C2"));
   std::vector<std::string> order;
   mb.drain_data_first([&](int v) { order.push_back("D" + std::to_string(v)); },
                       [&](std::string s) { order.push_back(std::move(s)); });
@@ -277,8 +277,8 @@ void test_mailbox_drain_interleaving() {
 void test_mailbox_drain_control_progress_under_data_stream() {
   test_mailbox_t mb;
   mb.post_data(1);
-  mb.post_control("C1");
-  mb.post_control("C2");
+  mb.post_control(std::string("C1"));
+  mb.post_control(std::string("C2"));
   std::vector<std::string> order;
   int data_count = 0;
   // A continuous data stream: each handled data message refills the lane.
@@ -300,9 +300,9 @@ void test_mailbox_drain_control_progress_under_data_stream() {
 
 void test_mailbox_pop_matching_first_match_rest_preserved() {
   test_mailbox_t mb;
-  mb.post_control("A");
-  mb.post_control("B");
-  mb.post_control("C");
+  mb.post_control(std::string("A"));
+  mb.post_control(std::string("B"));
+  mb.post_control(std::string("C"));
   auto m = mb.pop_matching([](const std::string &s) { return s == "B"; });
   ASSERT_TRUE(m.has_value());
   ASSERT_EQUAL(*m, "B");
@@ -318,8 +318,8 @@ void test_mailbox_pop_matching_first_match_rest_preserved() {
 
 void test_mailbox_pop_matching_no_match() {
   test_mailbox_t mb;
-  mb.post_control("A");
-  mb.post_control("B");
+  mb.post_control(std::string("A"));
+  mb.post_control(std::string("B"));
   auto m = mb.pop_matching([](const std::string &s) { return s == "Z"; });
   ASSERT_FALSE(m.has_value());
   // Nothing was consumed.
@@ -337,7 +337,7 @@ void test_mailbox_one_doorbell_for_both_lanes() {
   mb.post_data(1);
   ASSERT_EQUAL(poll(&pfd, 1, 0), 1); // data lane arms the doorbell
   mb.prepare();
-  mb.post_control("hi");
+  mb.post_control(std::string("hi"));
   ASSERT_EQUAL(poll(&pfd, 1, 0), 1); // control lane arms the same doorbell
   mb.prepare();
 }

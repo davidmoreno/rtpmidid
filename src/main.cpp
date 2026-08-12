@@ -181,7 +181,7 @@ int main(int argc, char **argv) {
       router->mailbox(), alsa->mailbox(), worker);
 
   // Network rtpmidi listeners (accept sockets in their own pollers).
-  std::vector<std::shared_ptr<actor_t>> listeners;
+  std::vector<std::shared_ptr<actor_base_t>> listeners;
   for (auto &ann : settings.rtpmidi_announce) {
     const auto port = ann.port.empty() ? uint16_t(0) : uint16_t(std::stoul(ann.port));
     listeners.push_back(std::make_shared<network_rtpmidi_listener_actor_t>(

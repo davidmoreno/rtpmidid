@@ -24,8 +24,8 @@
 namespace rtpmididns {
 
 mdns_actor_t::mdns_actor_t(actor_config_t config,
-                           mailbox_handle_t router_mailbox,
-                           mailbox_handle_t alsa_mailbox,
+                           std::shared_ptr<router_mailbox_t> router_mailbox,
+                           std::shared_ptr<alsa_mailbox_t> alsa_mailbox,
                            std::shared_ptr<worker_actor_t> worker)
     : actor_t(std::move(config)), router_mailbox_(std::move(router_mailbox)),
       alsa_mailbox_(std::move(alsa_mailbox)), worker_(std::move(worker)) {}
@@ -103,7 +103,7 @@ void mdns_actor_t::on_discovered(const std::string &name,
   discovered_[name] = std::move(entry);
   // 1. Ask the ALSA actor for a hosted port; the reply carries the router id.
   alsa_mailbox_->post_control(alsa_create_port_t{
-      hdr_t{discovered_[name].corr}, mailbox(), name,
+      hdr_t{discovered_[name].corr}, mailbox_handle(), name,
       FMT::format("{}:{}", address, port)});
 }
 
@@ -118,11 +118,11 @@ void mdns_actor_t::on_removed(const std::string &name) {
   discovered_.erase(it);
   if (entry.net_id != 0 && router_mailbox_) {
     router_mailbox_->post_control(
-        remove_peer_t{hdr_t{0}, mailbox(), entry.net_id});
+        remove_peer_t{hdr_t{0}, mailbox_handle(), entry.net_id});
   }
   if (entry.alsa_id != 0 && alsa_mailbox_) {
     alsa_mailbox_->post_control(
-        alsa_remove_port_t{hdr_t{0}, mailbox(), entry.alsa_id});
+        alsa_remove_port_t{hdr_t{0}, mailbox_handle(), entry.alsa_id});
   }
 }
 
@@ -133,7 +133,7 @@ void mdns_actor_t::cleanup_entry(const std::string &name) {
   }
 }
 
-void mdns_actor_t::on_control(control_message_t &&msg) {
+void mdns_actor_t::on_control(mdns_control_t &&msg) {
   std::visit(
       [this](auto &&m) {
         using T = std::decay_t<decltype(m)>;
@@ -150,7 +150,7 @@ void mdns_actor_t::on_control(control_message_t &&msg) {
             }
           }
           if (m.reply_to) {
-            m.reply_to->post_control(std::move(resp));
+            m.reply_to.post_control(std::move(resp));
           }
         } else if constexpr (std::is_same_v<T, mdns_announce_t>) {
           if (mdns_) {
@@ -180,7 +180,7 @@ void mdns_actor_t::on_control(control_message_t &&msg) {
               entry.alsa_id = m.ids[0];
               spawn_peer_t sp;
               sp.hdr = hdr_t{entry.corr};
-              sp.reply_to = mailbox();
+              sp.reply_to = mailbox_handle();
               sp.type = "network_rtpmidi_peer_t";
               sp.meta = entry.name;
               sp.factory =
@@ -197,10 +197,10 @@ void mdns_actor_t::on_control(control_message_t &&msg) {
             } else if (entry.net_id == 0) {
               // Network client spawned: connect both ways.
               entry.net_id = m.ids[0];
-              router_mailbox_->post_control(
-                  connect_t{hdr_t{0}, mailbox(), entry.alsa_id, entry.net_id});
-              router_mailbox_->post_control(
-                  connect_t{hdr_t{0}, mailbox(), entry.net_id, entry.alsa_id});
+              router_mailbox_->post_control(connect_t{
+                  hdr_t{0}, mailbox_handle(), entry.alsa_id, entry.net_id});
+              router_mailbox_->post_control(connect_t{
+                  hdr_t{0}, mailbox_handle(), entry.net_id, entry.alsa_id});
               INFO("mdns: \"{}\" wired (alsa id {} <-> network id {}).", key,
                    entry.alsa_id, entry.net_id);
             }
@@ -215,8 +215,8 @@ void mdns_actor_t::on_control(control_message_t &&msg) {
               ERROR("mdns: spawn failed for \"{}\": {}; removing alsa port.",
                     key, m.error);
               if (alsa_mailbox_) {
-                alsa_mailbox_->post_control(
-                    alsa_remove_port_t{hdr_t{0}, mailbox(), entry.alsa_id});
+                alsa_mailbox_->post_control(alsa_remove_port_t{
+                    hdr_t{0}, mailbox_handle(), entry.alsa_id});
               }
               cleanup_entry(key);
               return;
@@ -224,7 +224,7 @@ void mdns_actor_t::on_control(control_message_t &&msg) {
           }
         }
       },
-      msg.v);
+      msg);
 }
 
 } // namespace rtpmididns

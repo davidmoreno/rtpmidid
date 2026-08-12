@@ -26,8 +26,8 @@ worker_actor_t::worker_actor_t(actor_config_t config)
   set_drain_policy(drain_policy_t::fifo);
 }
 
-void worker_actor_t::on_control(control_message_t &&msg) {
-  if (auto *job = std::get_if<worker_job_t>(&msg.v)) {
+void worker_actor_t::on_control(worker_control_t &&msg) {
+  if (auto *job = std::get_if<worker_job_t>(&msg)) {
     if (job->job) {
       // Blocking work runs here; the per-message isolation keeps a bad job
       // from killing the worker.

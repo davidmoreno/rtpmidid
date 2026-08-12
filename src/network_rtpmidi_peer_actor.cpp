@@ -36,7 +36,7 @@ namespace rtpmididns {
 network_rtpmidi_peer_actor_t::network_rtpmidi_peer_actor_t(
     actor_config_t config, rtpmidid::network_address_t client_address,
     rtpmidid::packet_t &&initial_datagram, uint16_t local_control_port,
-    mailbox_handle_t listener_mailbox)
+    std::shared_ptr<listener_mailbox_t> listener_mailbox)
     : peer_actor_t(std::move(config)), mode_(mode_t::acceptor),
       peer_(std::make_shared<rtpmidid::rtppeer_t>(name())),
       remote_base_addr_(std::move(client_address)),
@@ -433,12 +433,12 @@ void network_rtpmidi_peer_actor_t::send_to_wire(peer_id_t to, peer_id_t from,
   peer_->send_midi(reader);
 }
 
-void network_rtpmidi_peer_actor_t::on_control(control_message_t &&msg) {
-  if (auto *dg = std::get_if<udp_datagram_t>(&msg.v)) {
+void network_rtpmidi_peer_actor_t::on_control(peer_control_t &&msg) {
+  if (auto *dg = std::get_if<udp_datagram_t>(&msg)) {
     feed_routed_datagram(std::move(dg->data), dg->port);
     return;
   }
-  if (auto *dns = std::get_if<dns_resolved_t>(&msg.v)) {
+  if (auto *dns = std::get_if<dns_resolved_t>(&msg)) {
     dns_addresses_ = dns->addresses;
     dns_index_ = 0;
     try_next_address();

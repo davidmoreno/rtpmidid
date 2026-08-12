@@ -43,18 +43,21 @@ class router_actor_t;
 // ---------------------------------------------------------------------------
 /// One client connection (7.2/7.3): owns the client fd and mailbox.
 // ---------------------------------------------------------------------------
-class control_connection_actor_t : public actor_t {
+class control_connection_actor_t
+    : public actor_t<std::monostate, connection_control_t> {
+public:
+  using control_messages = connection_control_t;
 public:
   control_connection_actor_t(actor_config_t config, int client_fd,
-                             mailbox_handle_t router_mailbox,
-                             mailbox_handle_t mdns_mailbox,
+                             std::shared_ptr<router_mailbox_t> router_mailbox,
+                             std::shared_ptr<mdns_mailbox_t> mdns_mailbox,
                              std::shared_ptr<worker_actor_t> worker,
                              std::string version,
                              std::chrono::milliseconds request_deadline);
 
   void on_start() override;
   void on_stop() override;
-  void on_control(control_message_t &&msg) override;
+  void on_control(connection_control_t &&msg) override;
 
   /// For the listener: the connection ended (client closed).
   void notify_gone();
@@ -86,7 +89,7 @@ private:
 
   void gather_status(uint64_t corr);
   void re_park_gather(uint64_t corr);
-  void on_gather_step(uint64_t corr, std::optional<control_message_t> res);
+  void on_gather_step(uint64_t corr, std::optional<connection_control_t> res);
   void finish_gather(const pending_command_t &cmd, uint64_t corr);
 
   void wait_ack(const pending_command_t &cmd, uint64_t corr,
@@ -99,8 +102,8 @@ private:
   int client_fd_ = -1;
   rtpmidid::poller_t::listener_t client_listener_;
   std::string read_buffer_;
-  mailbox_handle_t router_mailbox_;
-  mailbox_handle_t mdns_mailbox_;
+  std::shared_ptr<router_mailbox_t> router_mailbox_;
+  std::shared_ptr<mdns_mailbox_t> mdns_mailbox_;
   std::shared_ptr<worker_actor_t> worker_;
   std::string version_;
   std::chrono::milliseconds request_deadline_{5000};
@@ -125,18 +128,21 @@ private:
 /// The control listener (7.1): owns the listening socket, spawns one
 /// connection actor per accepted client, tracks and joins them.
 // ---------------------------------------------------------------------------
-class control_listener_actor_t : public actor_t {
+class control_listener_actor_t
+    : public actor_t<std::monostate, control_listener_control_t> {
+public:
+  using control_messages = control_listener_control_t;
 public:
   control_listener_actor_t(actor_config_t config, std::string socket_path,
-                           mailbox_handle_t router_mailbox,
-                           mailbox_handle_t mdns_mailbox,
+                           std::shared_ptr<router_mailbox_t> router_mailbox,
+                           std::shared_ptr<mdns_mailbox_t> mdns_mailbox,
                            std::shared_ptr<worker_actor_t> worker,
                            std::string version,
                            std::chrono::milliseconds request_deadline = std::chrono::seconds(5));
 
   void on_start() override;
   void on_stop() override;
-  void on_control(control_message_t &&msg) override;
+  void on_control(control_listener_control_t &&msg) override;
 
 private:
   void accept_client();
@@ -144,8 +150,8 @@ private:
   std::string socket_path_;
   int listen_fd_ = -1;
   rtpmidid::poller_t::listener_t listener_;
-  mailbox_handle_t router_mailbox_;
-  mailbox_handle_t mdns_mailbox_;
+  std::shared_ptr<router_mailbox_t> router_mailbox_;
+  std::shared_ptr<mdns_mailbox_t> mdns_mailbox_;
   std::shared_ptr<worker_actor_t> worker_;
   std::string version_;
   std::chrono::milliseconds request_deadline_{5000};

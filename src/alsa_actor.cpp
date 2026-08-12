@@ -25,7 +25,7 @@ namespace rtpmididns {
 
 alsa_actor_t::alsa_actor_t(actor_config_t config, std::string alsa_name,
                            std::vector<std::string> announce_names,
-                           mailbox_handle_t router_mailbox)
+                           std::shared_ptr<router_mailbox_t> router_mailbox)
     : actor_t(std::move(config)), alsa_name_(std::move(alsa_name)),
       announce_names_(std::move(announce_names)),
       router_mailbox_(std::move(router_mailbox)) {}
@@ -64,9 +64,9 @@ void alsa_actor_t::register_port(uint8_t seq_port, const std::string &name) {
   if (!router_mailbox_) {
     return;
   }
-  auto reply = std::make_shared<actor_mailbox_t>();
+  auto reply = std::make_shared<reply_mailbox_t>();
   router_mailbox_->post_control(register_peer_t{
-      hdr_t{uint64_t(seq_port) + 1}, reply, mailbox(), "alsa", name});
+      hdr_t{uint64_t(seq_port) + 1}, reply, mailbox_handle(), "alsa", name});
   pending_ports_[seq_port].register_reply = reply;
 
   // Incoming seq events on this port -> midi_received{from=assigned id}.
@@ -103,22 +103,21 @@ void alsa_actor_t::unregister_port(uint8_t seq_port) {
   seq_->remove_port(seq_port);
 }
 
-void alsa_actor_t::on_control(control_message_t &&msg) {
+void alsa_actor_t::on_control(alsa_control_t &&msg) {
   std::visit(
       [this](auto &&m) {
         using T = std::decay_t<decltype(m)>;
         if constexpr (std::is_same_v<T, alsa_create_port_t>) {
           if (m.name.empty()) {
             if (m.reply_to) {
-              m.reply_to->post_control(
-                  peer_ids_result_t{m.hdr, {}, nullptr});
+              m.reply_to.post_control(peer_ids_result_t{m.hdr, {}, {}});
             }
             return;
           }
           const uint8_t seq_port = create_port(m.name);
           if (seq_port == 0) {
             if (m.reply_to) {
-              m.reply_to->post_control(peer_ids_result_t{m.hdr, {}, nullptr});
+              m.reply_to.post_control(peer_ids_result_t{m.hdr, {}, {}});
             }
             return;
           }
@@ -134,11 +133,11 @@ void alsa_actor_t::on_control(control_message_t &&msg) {
             unregister_port(it->second);
           }
           if (m.reply_to) {
-            m.reply_to->post_control(ack_t{m.hdr, true, {}});
+            m.reply_to.post_control(ack_t{m.hdr, true, {}});
           }
         }
       },
-      msg.v);
+      msg);
 }
 
 void alsa_actor_t::on_data(data_message_t &&msg) {
@@ -191,14 +190,14 @@ void alsa_actor_t::on_loop() {
   for (auto it = pending_ports_.begin(); it != pending_ports_.end();) {
     bool done = false;
     while (auto c = it->second.register_reply->pop_control()) {
-      if (auto *r = std::get_if<peer_ids_result_t>(&c->v)) {
+      if (auto *r = std::get_if<peer_ids_result_t>(&*c)) {
         if (!r->ids.empty()) {
           id_to_port_[r->ids[0]] = it->first;
           port_to_id_[it->first] = r->ids[0];
         }
         // Complete any pending create request with the assigned id.
         if (it->second.create_reply) {
-          it->second.create_reply->post_control(peer_ids_result_t{
+          it->second.create_reply.post_control(peer_ids_result_t{
               hdr_t{}, r->ids, mailbox()});
         }
         done = true;

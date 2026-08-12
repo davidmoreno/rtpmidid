@@ -35,12 +35,16 @@
 
 namespace rtpmididns {
 
-class router_actor_t : public actor_t {
+class router_actor_t : public actor_t<data_message_t, router_control_t> {
 public:
+  using control_messages = router_control_t;
   struct peer_record_t {
+    /// Erased mailbox handle: peers and hosted actors (e.g. ALSA) have
+    /// different lane types; the router posts data/control through it and
+    /// the target validates against its own accepted sets.
     mailbox_handle_t mailbox;
     /// Keep the actor object alive while its (router-owned) thread runs.
-    std::shared_ptr<actor_t> actor;
+    std::shared_ptr<actor_base_t> actor;
     /// Router-owned thread for spawned peers (absent for hosted ids).
     std::optional<std::jthread> thread;
     std::vector<peer_id_t> send_to;
@@ -69,7 +73,7 @@ public:
 
 protected:
   void on_data(data_message_t &&msg) override;
-  void on_control(control_message_t &&msg) override;
+  void on_control(router_control_t &&msg) override;
   void on_loop() override;
 
 private:
@@ -94,7 +98,12 @@ private:
   void erase_peer(peer_id_t id, peer_event_kind_t kind);
   void notify_partner(peer_id_t to, const peer_event_t &ev);
   void notify_subscribers(const peer_event_t &ev);
-  void post_to(peer_id_t id, control_message_t &&m);
+  template <typename M> void post_to(peer_id_t id, M &&m) {
+    auto it = peers_.find(id);
+    if (it != peers_.end() && it->second.mailbox) {
+      it->second.mailbox.post_control(std::forward<M>(m));
+    }
+  }
   void complete_pending_remove(peer_id_t id, bool ok, const std::string &error);
   void check_pending_removes();
   void ack(mailbox_handle_t reply_to, const hdr_t &hdr, bool ok,

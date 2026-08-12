@@ -59,7 +59,63 @@ inline constexpr drop_policy_t mailbox_control_drop_policy = drop_policy_t::drop
  * holds one reference and control-plane messages carry the others as
  * handles, so posting to a mailbox whose actor has terminated stays safe.
  */
-template <typename DataT, typename ControlT> class mailbox_t {
+template <typename DataT, typename ControlT> class mailbox_t;
+
+/**
+ * Type-erased mailbox interface (design D6): lets cross-actor handles post
+ * the shared transport messages to any mailbox. The concrete `mailbox_t`
+ * validates each message against its own accepted lane types and drops
+ * (with a warning) anything it does not accept.
+ */
+class mailbox_base_t {
+public:
+  virtual ~mailbox_base_t() = default;
+  /// Post a data message (midi_received/midi_to_wire); false if this
+  /// mailbox has no data lane for it.
+  virtual bool post_data(data_message_t &&msg) = 0;
+  /// Post a transport control message; false if this mailbox's control
+  /// lane does not accept that message type.
+  virtual bool post_transport(control_message_t &&msg) = 0;
+};
+
+// Definitions of the type-erased handle members (the transport envelope
+// and the mailbox base are complete here).
+template <typename M>
+bool mailbox_handle_t::post_control(M &&m) const {
+  static_assert(is_alternative_v<std::decay_t<M>, control_message_t>,
+                "not a control message type");
+  if (!mb_) {
+    return false;
+  }
+  return mb_->post_transport(control_message_t{std::forward<M>(m)});
+}
+inline bool mailbox_handle_t::post_data(data_message_t &&m) const {
+  return mb_ ? mb_->post_data(std::move(m)) : false;
+}
+
+/**
+ * The mailbox: joins N lanes under ONE shared wake source (one eventfd
+ * doorbell) so a successful enqueue on any lane arms the same doorbell and
+ * a burst of enqueues costs exactly one eventfd write (design D3/D14).
+ *
+ * v1 joins exactly two lanes: a data lane and a control lane, both bounded
+ * `mpsc_queue_t`s constructed with the shared waker. The lane element types
+ * are template parameters: each actor instantiates the mailbox with its own
+ * accepted data type (usually `data_message_t`, or `std::monostate` when it
+ * has no data lane) and its own control variant (only the control messages
+ * it accepts). The typed `post_control<M>`/`post_data<M>` only compile for
+ * accepted message types, so the type system enforces the per-actor
+ * acceptance sets.
+ *
+ * Producer API (any thread): post_data / post_control.
+ * Consumer API (actor thread only): prepare / pop_data / pop_control /
+ * pop_matching / idle / drain_data_first.
+ *
+ * Instances live in `std::shared_ptr<mailbox_t<...>>`: the owning actor
+ * holds one reference and control-plane messages carry the others as
+ * handles, so posting to a mailbox whose actor has terminated stays safe.
+ */
+template <typename DataT, typename ControlT> class mailbox_t : public mailbox_base_t {
 public:
   using data_message_type = DataT;
   using control_message_type = ControlT;
@@ -74,31 +130,21 @@ public:
 
   // --- producer API (any thread) ---
 
-  /// Returns whether the message was enqueued or dropped.
-  bool post_data(DataT &&msg) { return data_.push(std::move(msg)); }
-  bool post_data(const DataT &msg) { return data_.push(msg); }
+  /// Typed data post: only compiles for this mailbox's data lane type.
+  template <typename M> bool post_data(M &&msg) {
+    static_assert(std::is_same_v<std::decay_t<M>, DataT>,
+                  "this mailbox does not accept that data message type");
+    return data_.push(std::forward<M>(msg));
+  }
+  /// Typed control post: only compiles for messages this actor accepts.
+  template <typename M> bool post_control(M &&msg) {
+    static_assert(is_alternative_v<std::decay_t<M>, ControlT>,
+                  "this mailbox does not accept that control message type");
+    return post_control_impl(ControlT{std::forward<M>(msg)});
+  }
   /// Returns whether the message was enqueued or dropped. A full control
   /// lane is near-fatal: control messages are rare and some are load-bearing.
-  bool post_control(ControlT &&msg) {
-    const auto drops_before = control_.drops();
-    const bool enqueued = control_.push(std::move(msg));
-    if (!enqueued || control_.drops() != drops_before) {
-      WARNING_RATE_LIMIT(5, "Control lane full: a control message was dropped "
-                            "or displaced. This is near-fatal; check for a "
-                            "stalled or flooded actor.");
-    }
-    return enqueued;
-  }
-  bool post_control(const ControlT &msg) {
-    const auto drops_before = control_.drops();
-    const bool enqueued = control_.push(msg);
-    if (!enqueued || control_.drops() != drops_before) {
-      WARNING_RATE_LIMIT(5, "Control lane full: a control message was dropped "
-                            "or displaced. This is near-fatal; check for a "
-                            "stalled or flooded actor.");
-    }
-    return enqueued;
-  }
+  bool post_control(ControlT &&msg) { return post_control_impl(std::move(msg)); }
 
   // --- consumer API (actor thread only) ---
 
@@ -146,10 +192,72 @@ public:
     data_.drain(std::forward<OnData>(on_data));
   }
 
+  // --- erased producer API (via mailbox_base_t) ---
+
+  /// Data post through the base: only mailboxes with a data lane accept it.
+  bool post_data(data_message_t &&msg) override {
+    if constexpr (std::is_same_v<DataT, data_message_t>) {
+      return data_.push(std::move(msg));
+    } else {
+      return false; // this mailbox has no data lane
+    }
+  }
+
+  /// Transport control post through the base: converts the union variant
+  /// into this mailbox's narrow control variant, accepting only the
+  /// messages in the actor's declared set (a misdirected message is a
+  /// wiring bug: it is dropped and logged).
+  bool post_transport(control_message_t &&msg) override {
+    return std::visit(
+        [this](auto &&alt) -> bool {
+          using M = std::decay_t<decltype(alt)>;
+          if constexpr (!std::is_same_v<M, std::monostate> &&
+                        is_alternative_v<M, ControlT>) {
+            return post_control_impl(ControlT{std::move(alt)});
+          } else {
+            WARNING_RATE_LIMIT(5, "Mailbox: dropped a control message type it "
+                                  "does not accept (wiring bug).");
+            return false;
+          }
+        },
+        std::move(msg));
+  }
+
 private:
+  bool post_control_impl(ControlT &&msg) {
+    const auto drops_before = control_.drops();
+    const bool enqueued = control_.push(std::move(msg));
+    if (!enqueued || control_.drops() != drops_before) {
+      WARNING_RATE_LIMIT(5, "Control lane full: a control message was dropped "
+                            "or displaced. This is near-fatal; check for a "
+                            "stalled or flooded actor.");
+    }
+    return enqueued;
+  }
+
   eventfd_waker_t waker_; // declared first: the lanes bind to it
   mpsc_queue_t<DataT> data_;
   mpsc_queue_t<ControlT> control_;
 };
+
+// --- concrete per-actor mailbox types ---------------------------------------
+// Each actor owns a mailbox whose control lane is exactly its accepted
+// message set; the type system prevents posting anything else.
+
+/// Permissive mailbox (accepts every control message); used by tests and
+/// generic plumbing.
+using actor_mailbox_t = mailbox_t<data_message_t, control_message_t>;
+
+using router_mailbox_t = mailbox_t<data_message_t, router_control_t>;
+using peer_mailbox_t = mailbox_t<data_message_t, peer_control_t>;
+using mdns_mailbox_t = mailbox_t<std::monostate, mdns_control_t>;
+using worker_mailbox_t = mailbox_t<std::monostate, worker_control_t>;
+using alsa_mailbox_t = mailbox_t<data_message_t, alsa_control_t>;
+using connection_mailbox_t = mailbox_t<std::monostate, connection_control_t>;
+using listener_mailbox_t = mailbox_t<std::monostate, listener_control_t>;
+using control_listener_mailbox_t =
+    mailbox_t<std::monostate, control_listener_control_t>;
+using supervisor_mailbox_t = mailbox_t<std::monostate, supervisor_control_t>;
+using reply_mailbox_t = mailbox_t<std::monostate, reply_control_t>;
 
 } // namespace rtpmididns

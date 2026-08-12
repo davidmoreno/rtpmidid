@@ -38,7 +38,7 @@ using namespace rtpmididns;
 
 // --- a peer that answers status and command requests ------------------------
 
-class answering_peer_t : public actor_t {
+class answering_peer_t : public actor_t<std::monostate, control_message_t> {
 public:
   using actor_t::actor_t;
   void on_control(control_message_t &&msg) override {
@@ -48,17 +48,17 @@ public:
           if constexpr (std::is_same_v<T, peer_status_req_t>) {
             rtp_peer_status_t st;
             st.name = "answerer";
-            m.reply_to->post_control(
+            m.reply_to.post_control(
                 peer_status_resp_t{m.hdr, m.target, st});
           } else if constexpr (std::is_same_v<T, peer_command_t>) {
             std::string result = m.cmd == "status"
                                      ? R"({"name":"answerer"})"
                                      : R"({"error":"Command not implemented"})";
-            m.reply_to->post_control(peer_command_resp_t{
+            m.reply_to.post_control(peer_command_resp_t{
                 m.hdr, m.peer_id, result, m.cmd != "status"});
           }
         },
-        msg.v);
+        msg);
   }
 };
 
@@ -131,7 +131,7 @@ void test_control_socket_wire_roundtrip() {
   ASSERT_TRUE(wait_until([&] { return !req->idle(); }));
   peer_id_t peer_id = 0;
   while (auto c = req->pop_control()) {
-    if (auto *r = std::get_if<peer_ids_result_t>(&c->v)) {
+    if (auto *r = std::get_if<peer_ids_result_t>(&*c)) {
       peer_id = r->ids[0];
     }
   }

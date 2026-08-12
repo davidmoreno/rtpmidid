@@ -44,20 +44,30 @@
 namespace rtpmididns {
 
 // The mailbox joins two lanes of the types below; the template is declared
-// here and defined in mailbox.hpp (control messages carry shared_ptr
-// handles to it, so it must be at least declared at this point).
+// here and defined in mailbox.hpp. `mailbox_base_t` erases the lane types
+// for cross-actor handles (messages carry `shared_ptr` handles so posting
+// to a terminated actor's mailbox stays safe).
 template <typename DataT, typename ControlT> class mailbox_t;
-
-struct data_message_t;
-struct control_message_t;
-
-using actor_mailbox_t = mailbox_t<data_message_t, control_message_t>;
-/// Mailbox handle for control-plane use (design D6): `shared_ptr`, so
-/// posting to a terminated actor's mailbox stays safe.
-using mailbox_handle_t = std::shared_ptr<actor_mailbox_t>;
+class mailbox_base_t;
+class actor_base_t;
+template <typename DataT, typename ControlT> class actor_t;
 
 using peer_id_t = uint32_t;
 using actor_id_t = uint32_t;
+
+/**
+ * Compile-time trait: is `M` one of the alternatives of the `Variant`?
+ * Used to type-check which messages a queue/actor accepts (each actor
+ * declares its accepted control messages as a `std::variant`; the queue
+ * element type IS that variant, so posting a message the actor does not
+ * accept is a compile error on the typed path).
+ */
+template <typename M, typename Variant> struct is_alternative : std::false_type {};
+template <typename M, typename... Ts>
+struct is_alternative<M, std::variant<Ts...>>
+    : std::bool_constant<(std::is_same_v<M, Ts> || ...)> {};
+template <typename M, typename Variant>
+inline constexpr bool is_alternative_v = is_alternative<M, Variant>::value;
 
 /// Request/response envelope (design D7): correlation id + optional reply
 /// mailbox handle for requester-driven flows.
@@ -274,6 +284,39 @@ struct data_message_t {
   }
 };
 
+/**
+ * Type-erased mailbox handle (design D6): points at any actor mailbox and
+ * can post any control message (checked at compile time against the
+ * transport envelope; the target mailbox validates the message against
+ * its own accepted set and drops it — with a warning — if it does not
+ * accept it). Used for `reply_to` and other cross-actor handles where the
+ * concrete mailbox lane types are not known at the call site.
+ */
+class mailbox_handle_t {
+public:
+  mailbox_handle_t() = default;
+  mailbox_handle_t(std::shared_ptr<mailbox_base_t> mb)
+      : mb_(std::move(mb)) {}
+  template <typename Mailbox> mailbox_handle_t(std::shared_ptr<Mailbox> mb)
+      : mb_(std::move(mb)) {}
+
+  explicit operator bool() const { return mb_ != nullptr; }
+  bool operator==(std::nullptr_t) const { return mb_ == nullptr; }
+  bool operator!=(std::nullptr_t) const { return mb_ != nullptr; }
+  bool operator==(const mailbox_handle_t &o) const { return mb_ == o.mb_; }
+
+  /// Typed control post through the erased handle (defined in mailbox.hpp,
+  /// where the transport envelope is complete).
+  template <typename M> bool post_control(M &&m) const;
+
+  /// Data post (midi_received/midi_to_wire) through the erased handle.
+  bool post_data(data_message_t &&m) const;
+
+private:
+  std::shared_ptr<mailbox_base_t> mb_;
+};
+
+
 // ---------------------------------------------------------------------------
 // Control-plane catalog (design D7/D9; extended per capability as the
 // router, peers, worker and control socket are implemented).
@@ -321,8 +364,6 @@ struct control_payload_t {
 
 // --- router control-plane catalog (spec: midi-routing, design D7) --------
 
-class actor_t; // forward: spawn bundles construct actors on the router thread
-
 /// Register a hosted peer id (e.g. an ALSA port) mapped to an existing
 /// mailbox; the router assigns the id and acks it to the caller.
 struct register_peer_t {
@@ -347,9 +388,11 @@ struct spawn_peer_t {
   mailbox_handle_t reply_to;
   /// Prepared move-only bundle: the router assigns the peer id first and
   /// calls the factory with it, so the actor is born knowing its id (its
-  /// `stopped`/`actor_died` carry it back to the router).
-  std::move_only_function<std::shared_ptr<actor_t>(const mailbox_handle_t &,
-                                                   peer_id_t)>
+  /// `stopped`/`actor_died` carry it back to the router). Returns the
+  /// actor through the type-erased base: peers of any family (network,
+  /// rawmidi, ...) share the spawn path.
+  std::move_only_function<std::shared_ptr<actor_base_t>(const mailbox_handle_t &,
+                                                       peer_id_t)>
       factory;
   std::string type;
   std::string meta;
@@ -541,43 +584,85 @@ struct dns_resolved_t {
   std::vector<std::string> addresses; // empty = resolution failed
 };
 
-/// Control-plane message: a small variant; never pays for inline MIDI
-/// storage (design D6). Move/copy-only, self-owning.
-struct control_message_t {
-  std::variant<std::monostate, stop_t, stopped_t, actor_died_t, reap_actor_t,
-               peer_event_t, control_payload_t, register_peer_t,
-               unregister_peer_t, spawn_peer_t, registered_t, remove_peer_t,
-               connect_t, disconnect_t, peer_meta_t, status_req_t,
-               status_head_t, peer_status_req_t, peer_status_resp_t,
-               peer_command_t, peer_command_resp_t, subscribe_events_t,
-               unsubscribe_events_t, stop_all_t, ack_t, peer_ids_result_t,
-               worker_job_t, dns_resolved_t, udp_datagram_t, udp_peer_gone_t,
-               mdns_status_req_t, mdns_status_resp_t, mdns_announce_t,
-               mdns_unannounce_t, mdns_remove_t, alsa_create_port_t,
-               alsa_remove_port_t>
-      v;
+/// The transport control envelope: the union of every control message in
+/// the system. It is the inter-actor wire format only — each actor's
+/// mailbox control lane holds a narrow per-actor variant (see below) and
+/// converts/validates on receipt, so an actor never sees a message class
+/// it does not accept. Never pays for inline MIDI storage (design D6).
+using control_message_t =
+    std::variant<std::monostate, stop_t, stopped_t, actor_died_t, reap_actor_t,
+                 peer_event_t, control_payload_t, register_peer_t,
+                 unregister_peer_t, spawn_peer_t, registered_t, remove_peer_t,
+                 connect_t, disconnect_t, status_req_t, status_head_t,
+                 peer_status_req_t, peer_status_resp_t, peer_command_t,
+                 peer_command_resp_t, subscribe_events_t, unsubscribe_events_t,
+                 stop_all_t, ack_t, peer_ids_result_t, worker_job_t,
+                 dns_resolved_t, udp_datagram_t, udp_peer_gone_t,
+                 mdns_status_req_t, mdns_status_resp_t, mdns_announce_t,
+                 mdns_unannounce_t, mdns_remove_t, alsa_create_port_t,
+                 alsa_remove_port_t>;
 
-  control_message_t() = default;
-  template <typename T> control_message_t(T value) : v(std::move(value)) {}
-};
+// --- per-actor accepted control message sets -------------------------------
+// Each actor declares exactly the control messages it accepts; its mailbox
+// control lane element type IS this variant, so the mailbox only ever
+// holds (and the actor only ever sees) its own messages.
 
-// helpers to build typed control messages concisely
-inline control_message_t make_stop(hdr_t hdr = {}) {
-  return control_message_t(stop_t{hdr});
+/// The router: topology/peer lifecycle commands + peer exit notices.
+using router_control_t =
+    std::variant<stop_t, stopped_t, actor_died_t, register_peer_t,
+                 unregister_peer_t, spawn_peer_t, remove_peer_t, connect_t,
+                 disconnect_t, status_req_t, peer_command_t,
+                 subscribe_events_t, unsubscribe_events_t, stop_all_t>;
+/// Spawned/hosted peers: the registered gate, status/command requests,
+/// topology events, routed datagrams (network peers) and DNS results.
+using peer_control_t =
+    std::variant<stop_t, registered_t, peer_status_req_t, peer_command_t,
+                 peer_event_t, dns_resolved_t, udp_datagram_t>;
+/// The mdns actor: status/announcement commands + the replies to its
+/// create-port/spawn requests. No MIDI, no routing, nothing else.
+using mdns_control_t =
+    std::variant<stop_t, mdns_status_req_t, mdns_announce_t, mdns_unannounce_t,
+                 mdns_remove_t, peer_ids_result_t, ack_t>;
+/// The worker: blocking jobs only.
+using worker_control_t = std::variant<stop_t, worker_job_t>;
+/// The ALSA actor: hosted-port commands (its register acks land on small
+/// internal reply mailboxes, not here).
+using alsa_control_t =
+    std::variant<stop_t, alsa_create_port_t, alsa_remove_port_t>;
+/// A control-socket connection actor: the requester reply/event set.
+using connection_control_t =
+    std::variant<stop_t, ack_t, peer_ids_result_t, status_head_t,
+                 peer_status_resp_t, peer_command_resp_t, mdns_status_resp_t,
+                 dns_resolved_t, peer_event_t>;
+/// A network listener: spawn acks, peer-gone notices, status requests,
+/// and datagrams peers re-forward when the SO_REUSEPORT hash misdelivers
+/// them (the listener demuxes and routes them to the owning peer).
+using listener_control_t = std::variant<stop_t, peer_ids_result_t,
+                                        udp_peer_gone_t, peer_status_req_t,
+                                        udp_datagram_t>;
+/// The control listener: connection exit notices.
+using control_listener_control_t = std::variant<stop_t, stopped_t>;
+/// The main supervisor: exit notices, delegated reaps, stop-all acks.
+using supervisor_control_t =
+    std::variant<stop_t, stopped_t, actor_died_t, reap_actor_t, ack_t>;
+/// Internal per-port reply mailboxes (e.g. ALSA register acks).
+using reply_control_t = std::variant<peer_ids_result_t>;
+
+// helpers to build typed control messages concisely (return the concrete
+// struct; the posting side wraps it into its own control variant)
+inline stop_t make_stop(hdr_t hdr = {}) { return stop_t{hdr}; }
+inline stopped_t make_stopped(hdr_t hdr = {}, peer_id_t peer_id = 0) {
+  return stopped_t{hdr, peer_id};
 }
-inline control_message_t make_stopped(hdr_t hdr = {}, peer_id_t peer_id = 0) {
-  return control_message_t(stopped_t{hdr, peer_id});
+inline actor_died_t make_actor_died(actor_id_t id, std::string reason) {
+  return actor_died_t{id, std::move(reason)};
 }
-inline control_message_t make_actor_died(actor_id_t id, std::string reason) {
-  return control_message_t(actor_died_t{id, std::move(reason)});
+inline peer_event_t make_peer_event(peer_event_kind_t kind, peer_id_t peer_id) {
+  return peer_event_t{kind, peer_id};
 }
-inline control_message_t make_peer_event(peer_event_kind_t kind,
-                                         peer_id_t peer_id) {
-  return control_message_t(peer_event_t{kind, peer_id});
-}
-inline control_message_t make_control_payload(uint32_t tag,
+inline control_payload_t make_control_payload(uint32_t tag,
                                               std::string text = {}) {
-  return control_message_t(control_payload_t{tag, std::move(text)});
+  return control_payload_t{tag, std::move(text)};
 }
 
 } // namespace rtpmididns

@@ -44,6 +44,8 @@ namespace rtpmididns {
 
 class network_rtpmidi_peer_actor_t : public peer_actor_t {
 public:
+  using control_messages = peer_control_t;
+public:
   /// Acceptor mode: an accepted connection. `initial_datagram` is the IN
   /// packet that opened the connection; `local_control_port` is the
   /// listener's control port (midi = +1); the listener mailbox receives
@@ -51,7 +53,7 @@ public:
   network_rtpmidi_peer_actor_t(
       actor_config_t config, rtpmidid::network_address_t client_address,
       rtpmidid::packet_t &&initial_datagram, uint16_t local_control_port,
-      mailbox_handle_t listener_mailbox);
+      std::shared_ptr<listener_mailbox_t> listener_mailbox);
 
   /// Initiator mode: connect to a remote server. DNS runs on the worker.
   network_rtpmidi_peer_actor_t(actor_config_t config, std::string hostname,
@@ -62,7 +64,7 @@ public:
 
   void on_start() override;
   void on_stop() override;
-  void on_control(control_message_t &&msg) override;
+  void on_control(peer_control_t &&msg) override;
   void send_to_wire(peer_id_t to, peer_id_t from,
                     midi_payload_t &&payload) override;
   peer_status_variant_t status() override;
@@ -89,7 +91,7 @@ private:
   udp_socket_t midi_;    // port P+1
   rtpmidid::network_address_t remote_base_addr_; // the other side's control addr
   uint16_t local_control_port_ = 0;
-  mailbox_handle_t listener_mailbox_;
+  std::shared_ptr<listener_mailbox_t> listener_mailbox_;
   std::shared_ptr<worker_actor_t> worker_;
   std::string hostname_;
   std::string port_str_;

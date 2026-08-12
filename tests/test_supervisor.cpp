@@ -42,7 +42,7 @@ static bool wait_until(const std::function<bool()> &f, int timeout_ms = 5000) {
   return f();
 }
 
-class stoppable_actor_t : public actor_t {
+class stoppable_actor_t : public actor_t<std::monostate, control_message_t> {
 public:
   std::atomic<int> on_stop_calls{0};
   std::atomic<bool> stopped{false};

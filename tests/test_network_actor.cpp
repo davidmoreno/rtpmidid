@@ -141,7 +141,7 @@ void test_connect_handshake_and_midi_loop() {
 }
 
 void test_listener_peer_gone_cleanup() {
-  auto router_mb = std::make_shared<actor_mailbox_t>();
+  auto router_mb = std::make_shared<router_mailbox_t>();
   auto listener = std::make_shared<network_rtpmidi_listener_actor_t>(
       actor_config_t{.name = "l"}, "l", TEST_PORT + 1, router_mb);
   listener->pump(); // on_start: bind sockets

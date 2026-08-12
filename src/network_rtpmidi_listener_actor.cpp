@@ -31,7 +31,8 @@ namespace rtpmididns {
 
 network_rtpmidi_listener_actor_t::network_rtpmidi_listener_actor_t(
     actor_config_t config, std::string name, uint16_t control_port,
-    mailbox_handle_t router_mailbox, mailbox_handle_t alsa_mailbox)
+    std::shared_ptr<router_mailbox_t> router_mailbox,
+    std::shared_ptr<alsa_mailbox_t> alsa_mailbox)
     : actor_t(std::move(config)), name_(std::move(name)),
       control_port_(control_port), router_mailbox_(std::move(router_mailbox)),
       alsa_mailbox_(std::move(alsa_mailbox)) {}
@@ -133,7 +134,7 @@ void network_rtpmidi_listener_actor_t::route_or_spawn(
       const uint32_t initiator_id = r.read_uint32();
       if (auto it = by_initiator_.find(initiator_id);
           it != by_initiator_.end() && it->second) {
-        it->second->post_control(
+        it->second.post_control(
             udp_datagram_t{port, data, "", 0});
         return;
       }
@@ -148,7 +149,7 @@ void network_rtpmidi_listener_actor_t::route_or_spawn(
       r.seek(4);
       const uint32_t ssrc = r.read_uint32();
       if (auto it = by_ssrc_.find(ssrc); it != by_ssrc_.end() && it->second) {
-        it->second->post_control(udp_datagram_t{port, data, "", 0});
+        it->second.post_control(udp_datagram_t{port, data, "", 0});
       }
       return;
     }
@@ -157,7 +158,7 @@ void network_rtpmidi_listener_actor_t::route_or_spawn(
       r.seek(12);
       const uint32_t ssrc = r.read_uint32();
       if (auto it = by_ssrc_.find(ssrc); it != by_ssrc_.end() && it->second) {
-        it->second->post_control(udp_datagram_t{port, data, "", 0});
+        it->second.post_control(udp_datagram_t{port, data, "", 0});
       }
     }
   } catch (const std::exception &) {
@@ -171,7 +172,7 @@ void network_rtpmidi_listener_actor_t::spawn_peer(
   // spawn_peer to the router, then forgets. The peer mailbox is created
   // here so routing entries exist before the router even spawns (no race).
   auto client_address = std::move(from).dup();
-  auto peer_mailbox = std::make_shared<actor_mailbox_t>();
+  auto peer_mailbox = std::make_shared<peer_mailbox_t>();
 
   // Parse the client's initiator id and ssrc from the IN packet for the
   // routing tables.
@@ -220,10 +221,11 @@ void network_rtpmidi_listener_actor_t::spawn_peer(
     auto peer = std::make_shared<network_rtpmidi_peer_actor_t>(
         actor_config_t{.name = name_capture + "#" + std::to_string(pid),
                        .id = pid,
-                       .mailbox = peer_mailbox,
                        .supervisor_mailbox = sup},
         std::move(client_address), std::move(pkt), control_port_capture,
         listener_mailbox_capture);
+    // The listener pre-created this mailbox for datagram routing.
+    peer->set_mailbox(peer_mailbox);
     return peer;
   };
   router_mailbox_->post_control(std::move(sp));
@@ -285,7 +287,7 @@ void network_rtpmidi_listener_actor_t::handle_peer_gone(udp_peer_gone_t &&m) {
   }
 }
 
-void network_rtpmidi_listener_actor_t::on_control(control_message_t &&msg) {
+void network_rtpmidi_listener_actor_t::on_control(listener_control_t &&msg) {
   std::visit(
       [this](auto &&m) {
         using T = std::decay_t<decltype(m)>;
@@ -294,11 +296,11 @@ void network_rtpmidi_listener_actor_t::on_control(control_message_t &&msg) {
         } else if constexpr (std::is_same_v<T, udp_peer_gone_t>) {
           handle_peer_gone(std::move(m));
         } else if constexpr (std::is_same_v<T, peer_status_req_t>) {
-          m.reply_to->post_control(
+          m.reply_to.post_control(
               peer_status_resp_t{m.hdr, m.target, listener_status()});
         }
       },
-      msg.v);
+      msg);
 }
 
 peer_status_variant_t network_rtpmidi_listener_actor_t::listener_status() {

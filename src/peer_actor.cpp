@@ -30,14 +30,14 @@ void peer_actor_t::on_start() {
   // The data lane keeps flowing; wire traffic arriving before the gate is
   // dropped by on_data. On timeout the peer self-terminates.
   wait_for(
-      [](const control_message_t &m) {
-        return std::holds_alternative<registered_t>(m.v);
+      [](const peer_control_t &m) {
+        return std::holds_alternative<registered_t>(m);
       },
       registered_timeout_,
-      [this](std::optional<control_message_t> res) {
+      [this](std::optional<peer_control_t> res) {
         if (res) {
           registered_ = true;
-          registered_ids_ = std::get<registered_t>(res->v).ids;
+          registered_ids_ = std::get<registered_t>(*res).ids;
           INFO("Peer {}: registered with {} id(s).", name(),
                registered_ids_.size());
         } else {
@@ -63,7 +63,7 @@ void peer_actor_t::on_data(data_message_t &&msg) {
   send_to_wire(msg.to, msg.from, std::move(msg.payload));
 }
 
-void peer_actor_t::on_control(control_message_t &&msg) {
+void peer_actor_t::on_control(peer_control_t &&msg) {
   std::visit(
       [this](auto &&m) {
         using T = std::decay_t<decltype(m)>;
@@ -74,7 +74,7 @@ void peer_actor_t::on_control(control_message_t &&msg) {
           } catch (const std::exception &e) {
             s = peer_error_t{e.what()};
           }
-          m.reply_to->post_control(
+          m.reply_to.post_control(
               peer_status_resp_t{m.hdr, m.target, std::move(s)});
         } else if constexpr (std::is_same_v<T, peer_command_t>) {
           bool is_error = false;
@@ -85,7 +85,7 @@ void peer_actor_t::on_control(control_message_t &&msg) {
             result = FMT::format(R"({{"error": "{}"}})", e.what());
             is_error = true;
           }
-          m.reply_to->post_control(peer_command_resp_t{
+          m.reply_to.post_control(peer_command_resp_t{
               m.hdr, m.peer_id, std::move(result), is_error});
         } else if constexpr (std::is_same_v<T, registered_t>) {
           registered_ = true;
@@ -93,8 +93,9 @@ void peer_actor_t::on_control(control_message_t &&msg) {
         } else if constexpr (std::is_same_v<T, peer_event_t>) {
           on_peer_event(m);
         }
+        // dns_resolved_t / udp_datagram_t are handled by the network peer.
       },
-      msg.v);
+      msg);
 }
 
 std::string peer_actor_t::command_impl(const std::string &cmd,

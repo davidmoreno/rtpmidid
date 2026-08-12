@@ -35,14 +35,16 @@
 
 namespace rtpmididns {
 
-class network_rtpmidi_listener_actor_t : public actor_t {
+class network_rtpmidi_listener_actor_t : public actor_t<std::monostate, listener_control_t> {
+public:
+  using control_messages = listener_control_t;
 public:
   /// `control_port` 0 = ephemeral (midi = control + 1). Each accepted
   /// connection also gets an ALSA port (created through `alsa_mailbox`).
   network_rtpmidi_listener_actor_t(actor_config_t config, std::string name,
                                    uint16_t control_port,
-                                   mailbox_handle_t router_mailbox,
-                                   mailbox_handle_t alsa_mailbox = {});
+                                   std::shared_ptr<router_mailbox_t> router_mailbox,
+                                   std::shared_ptr<alsa_mailbox_t> alsa_mailbox = {});
 
   uint16_t control_port() const { return control_port_; }
   uint16_t midi_port() const { return control_port_ + 1; }
@@ -51,7 +53,7 @@ public:
 protected:
   void on_start() override;
   void on_stop() override;
-  void on_control(control_message_t &&msg) override;
+  void on_control(listener_control_t &&msg) override;
   void on_loop() override {}
 
 private:
@@ -74,8 +76,8 @@ private:
 
   std::string name_;
   uint16_t control_port_ = 0;
-  mailbox_handle_t router_mailbox_;
-  mailbox_handle_t alsa_mailbox_;
+  std::shared_ptr<router_mailbox_t> router_mailbox_;
+  std::shared_ptr<alsa_mailbox_t> alsa_mailbox_;
   udp_socket_t control_;
   udp_socket_t midi_;
   /// Routing: client initiator id / ssrc -> connection peer mailbox.

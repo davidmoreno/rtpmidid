@@ -96,8 +96,8 @@ void test_registered_gate_timeout_self_terminates() {
   // Self-terminated: `stopped` was posted to the router with the peer id.
   auto s = router->pop_control();
   ASSERT_TRUE(s.has_value());
-  ASSERT_TRUE(std::holds_alternative<stopped_t>(s->v));
-  ASSERT_EQUAL(std::get<stopped_t>(s->v).peer_id, 7u);
+  ASSERT_TRUE(std::holds_alternative<stopped_t>(*s));
+  ASSERT_EQUAL(std::get<stopped_t>(*s).peer_id, 7u);
 }
 
 // --- peer base: status/command as message handlers (5.6) ---------------------
@@ -117,8 +117,8 @@ void test_peer_status_and_command_messages() {
   peer.pump();
   auto resp = req->pop_control();
   ASSERT_TRUE(resp.has_value());
-  ASSERT_TRUE(std::holds_alternative<peer_status_resp_t>(resp->v));
-  auto &ps = std::get<peer_status_resp_t>(resp->v);
+  ASSERT_TRUE(std::holds_alternative<peer_status_resp_t>(*resp));
+  auto &ps = std::get<peer_status_resp_t>(*resp);
   ASSERT_EQUAL(ps.hdr.corr, 11ULL);
   ASSERT_EQUAL(ps.peer_id, 3u);
   ASSERT_TRUE(std::holds_alternative<rawmidi_peer_status_t>(ps.status));
@@ -129,8 +129,8 @@ void test_peer_status_and_command_messages() {
   peer.pump();
   auto cr = req->pop_control();
   ASSERT_TRUE(cr.has_value());
-  ASSERT_TRUE(std::holds_alternative<peer_command_resp_t>(cr->v));
-  auto &pc = std::get<peer_command_resp_t>(cr->v);
+  ASSERT_TRUE(std::holds_alternative<peer_command_resp_t>(*cr));
+  auto &pc = std::get<peer_command_resp_t>(*cr);
   ASSERT_EQUAL(pc.hdr.corr, 12ULL);
   ASSERT_FALSE(pc.is_error);
   // Unknown command: error result.
@@ -139,7 +139,7 @@ void test_peer_status_and_command_messages() {
   peer.pump();
   auto ce = req->pop_control();
   ASSERT_TRUE(ce.has_value());
-  ASSERT_TRUE(std::get<peer_command_resp_t>(ce->v).is_error);
+  ASSERT_TRUE(std::get<peer_command_resp_t>(*ce).is_error);
 }
 
 // --- rawmidi peer actor (5.5) ------------------------------------------------
@@ -202,8 +202,8 @@ void test_worker_dns_resolution() {
   worker.pump();
   auto r = req->pop_control();
   ASSERT_TRUE(r.has_value());
-  ASSERT_TRUE(std::holds_alternative<dns_resolved_t>(r->v));
-  auto &dns = std::get<dns_resolved_t>(r->v);
+  ASSERT_TRUE(std::holds_alternative<dns_resolved_t>(*r));
+  auto &dns = std::get<dns_resolved_t>(*r);
   ASSERT_EQUAL(dns.hdr.corr, 42ULL);
   ASSERT_TRUE(dns.hostname == "localhost");
   ASSERT_FALSE(dns.addresses.empty()); // 127.0.0.1 and/or ::1
@@ -213,8 +213,8 @@ void test_worker_dns_resolution() {
 // --- mdns discovery -> ALSA port + network client (fake router/alsa) --------
 
 void test_mdns_discovery_creates_alsa_port_and_client() {
-  auto router_mb = std::make_shared<actor_mailbox_t>();
-  auto alsa_mb = std::make_shared<actor_mailbox_t>();
+  auto router_mb = std::make_shared<router_mailbox_t>();
+  auto alsa_mb = std::make_shared<alsa_mailbox_t>();
   auto worker = std::make_shared<worker_actor_t>(actor_config_t{.name = "w"});
   auto mdns = std::make_shared<mdns_actor_t>(
       actor_config_t{.name = "mdns"}, router_mb, alsa_mb, worker);
@@ -225,28 +225,28 @@ void test_mdns_discovery_creates_alsa_port_and_client() {
   mdns->pump();
   auto req = alsa_mb->pop_control();
   ASSERT_TRUE(req.has_value());
-  ASSERT_TRUE(std::holds_alternative<alsa_create_port_t>(req->v));
-  auto &cp = std::get<alsa_create_port_t>(req->v);
+  ASSERT_TRUE(std::holds_alternative<alsa_create_port_t>(*req));
+  auto &cp = std::get<alsa_create_port_t>(*req);
   ASSERT_TRUE(cp.name == "Fancy Synth");
 
   // The ALSA actor replies with the assigned router id.
   mdns->mailbox()->post_control(
-      peer_ids_result_t{cp.hdr, {10}, nullptr});
+      peer_ids_result_t{cp.hdr, {10}, {}});
   mdns->pump();
   // Now the mdns actor spawns the network client via the router.
   auto spawn = router_mb->pop_control();
   ASSERT_TRUE(spawn.has_value());
-  ASSERT_TRUE(std::holds_alternative<spawn_peer_t>(spawn->v));
-  auto &sp = std::get<spawn_peer_t>(spawn->v);
+  ASSERT_TRUE(std::holds_alternative<spawn_peer_t>(*spawn));
+  auto &sp = std::get<spawn_peer_t>(*spawn);
   ASSERT_TRUE(sp.meta == "Fancy Synth");
 
   // The router acks the spawn.
-  mdns->mailbox()->post_control(peer_ids_result_t{sp.hdr, {20}, nullptr});
+  mdns->mailbox()->post_control(peer_ids_result_t{sp.hdr, {20}, {}});
   mdns->pump();
   // Bidirectional connect: alsa id 10 <-> net id 20.
   int connects = 0;
   while (auto c = router_mb->pop_control()) {
-    if (auto *ct = std::get_if<connect_t>(&c->v)) {
+    if (auto *ct = std::get_if<connect_t>(&*c)) {
       connects++;
       ASSERT_TRUE((ct->from == 10 && ct->to == 20) ||
                   (ct->from == 20 && ct->to == 10));
@@ -260,12 +260,12 @@ void test_mdns_discovery_creates_alsa_port_and_client() {
   bool saw_remove = false;
   bool saw_alsa_remove = false;
   while (auto c = router_mb->pop_control()) {
-    if (auto *rm = std::get_if<remove_peer_t>(&c->v)) {
+    if (auto *rm = std::get_if<remove_peer_t>(&*c)) {
       saw_remove = (rm->peer_id == 20);
     }
   }
   while (auto c = alsa_mb->pop_control()) {
-    if (auto *rm = std::get_if<alsa_remove_port_t>(&c->v)) {
+    if (auto *rm = std::get_if<alsa_remove_port_t>(&*c)) {
       saw_alsa_remove = (rm->peer_id == 10);
     }
   }

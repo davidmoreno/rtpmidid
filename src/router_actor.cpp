@@ -54,11 +54,11 @@ void router_actor_t::forward_midi(data_message_t &&msg) {
     try {
       if (i + 1 == n) {
         // N-1 copies + 1 move (design D2); inline payloads never allocate.
-        dest->second.mailbox->post_data(
+        dest->second.mailbox.post_data(
             data_message_t::midi_to_wire(to_id, msg.from,
                                          std::move(msg.payload)));
       } else {
-        dest->second.mailbox->post_data(
+        dest->second.mailbox.post_data(
             data_message_t::midi_to_wire(to_id, msg.from,
                                          midi_payload_t(msg.payload)));
       }
@@ -70,7 +70,7 @@ void router_actor_t::forward_midi(data_message_t &&msg) {
   }
 }
 
-void router_actor_t::on_control(control_message_t &&msg) {
+void router_actor_t::on_control(router_control_t &&msg) {
   std::visit(
       [this](auto &&m) {
         using T = std::decay_t<decltype(m)>;
@@ -101,9 +101,8 @@ void router_actor_t::on_control(control_message_t &&msg) {
         } else if constexpr (std::is_same_v<T, actor_died_t>) {
           handle_actor_died(std::move(m));
         }
-        // Everything else is not addressed to the router.
       },
-      msg.v);
+      msg);
 }
 
 void router_actor_t::on_loop() { check_pending_removes(); }
@@ -126,7 +125,7 @@ void router_actor_t::handle_register_peer(register_peer_t &&m) {
   INFO("Router: registered hosted peer id={} type={}", id,
        peers_[id].type.empty() ? "?" : peers_[id].type);
   notify_subscribers(peer_event_t{peer_event_kind_t::registered, id});
-  m.reply_to->post_control(
+  m.reply_to.post_control(
       peer_ids_result_t{m.hdr, {id}, peers_[id].mailbox});
 }
 
@@ -152,12 +151,12 @@ void router_actor_t::handle_spawn_peer(spawn_peer_t &&m) {
     return;
   }
   const auto id = max_id_++;
-  std::shared_ptr<actor_t> peer;
+  std::shared_ptr<actor_base_t> peer;
   try {
     // The router mailbox is the peer's supervisor (stopped/actor_died land
     // back here). The caller has done all fallible preparation; the id is
     // assigned before construction so the actor posts it back on exit.
-    peer = m.factory(mailbox(), id);
+    peer = m.factory(mailbox_handle(), id);
   } catch (const std::exception &e) {
     ack(m.reply_to, m.hdr, false,
         std::string("spawn_peer preparation failed: ") + e.what());
@@ -168,7 +167,7 @@ void router_actor_t::handle_spawn_peer(spawn_peer_t &&m) {
     return;
   }
   peer_record_t rec;
-  rec.mailbox = peer->mailbox();
+  rec.mailbox = peer->mailbox_handle();
   rec.actor = peer;
   peer->start();
   rec.thread = peer->take_thread(); // the router owns the thread (D9)
@@ -178,8 +177,8 @@ void router_actor_t::handle_spawn_peer(spawn_peer_t &&m) {
   INFO("Router: spawned peer id={} type={}", id,
        peers_[id].type.empty() ? "?" : peers_[id].type);
   // Gate: the peer waits for `registered` before handling wire traffic.
-  peers_[id].mailbox->post_control(registered_t{{id}});
-  m.reply_to->post_control(
+  peers_[id].mailbox.post_control(registered_t{{id}});
+  m.reply_to.post_control(
       peer_ids_result_t{m.hdr, {id}, peers_[id].mailbox});
 }
 
@@ -201,7 +200,7 @@ void router_actor_t::handle_remove_peer(remove_peer_t &&m) {
       pending_remove_t{m.hdr, m.reply_to,
                        std::chrono::steady_clock::now() + remove_deadline_,
                        false};
-  it->second.mailbox->post_control(stop_t{m.hdr});
+  it->second.mailbox.post_control(stop_t{m.hdr});
 }
 
 void router_actor_t::handle_connect(connect_t &&m) {
@@ -245,22 +244,22 @@ void router_actor_t::handle_status_req(status_req_t &&m) {
   }
   head.router_data_drops = mailbox()->data_drops();
   head.router_control_drops = mailbox()->control_drops();
-  m.reply_to->post_control(std::move(head));
+  m.reply_to.post_control(std::move(head));
   for (auto &[id, rec] : peers_) {
-    rec.mailbox->post_control(peer_status_req_t{m.hdr, m.reply_to, id});
+    rec.mailbox.post_control(peer_status_req_t{m.hdr, m.reply_to, id});
   }
 }
 
 void router_actor_t::handle_peer_command(peer_command_t &&m) {
   auto it = peers_.find(m.peer_id);
   if (it == peers_.end()) {
-    m.reply_to->post_control(
+    m.reply_to.post_control(
         peer_command_resp_t{m.hdr, m.peer_id, "{\"error\":\"Unknown peer\"}",
                             true});
     return;
   }
   // Relay only: the peer answers the requester directly (D7).
-  it->second.mailbox->post_control(peer_command_t{
+  it->second.mailbox.post_control(peer_command_t{
       m.hdr, m.reply_to, m.peer_id, std::move(m.cmd), std::move(m.params_json)});
 }
 
@@ -286,7 +285,7 @@ void router_actor_t::handle_stop_all(stop_all_t &&m) {
         pending_remove_t{m.hdr, m.reply_to,
                          std::chrono::steady_clock::now() + remove_deadline_,
                          false};
-    rec.mailbox->post_control(stop_t{m.hdr});
+    rec.mailbox.post_control(stop_t{m.hdr});
   }
   if (pending_removes_.empty()) {
     ack(m.reply_to, m.hdr, true);
@@ -380,7 +379,7 @@ void router_actor_t::check_pending_removes() {
     std::string reason = "peer did not stop within deadline";
     if (rec != peers_.end() && rec->second.thread.has_value()) {
       if (config_.supervisor_mailbox) {
-        config_.supervisor_mailbox->post_control(
+        config_.supervisor_mailbox.post_control(
             reap_actor_t{std::move(*rec->second.thread), reason});
       }
       rec->second.thread.reset();
@@ -424,29 +423,22 @@ void router_actor_t::erase_peer(peer_id_t id, peer_event_kind_t kind) {
 void router_actor_t::notify_partner(peer_id_t to, const peer_event_t &ev) {
   auto it = peers_.find(to);
   if (it != peers_.end() && it->second.mailbox) {
-    it->second.mailbox->post_control(ev);
+    it->second.mailbox.post_control(ev);
   }
 }
 
 void router_actor_t::notify_subscribers(const peer_event_t &ev) {
   for (auto &sub : subscribers_) {
     if (sub) {
-      sub->post_control(ev);
+      sub.post_control(ev);
     }
-  }
-}
-
-void router_actor_t::post_to(peer_id_t id, control_message_t &&m) {
-  auto it = peers_.find(id);
-  if (it != peers_.end() && it->second.mailbox) {
-    it->second.mailbox->post_control(std::move(m));
   }
 }
 
 void router_actor_t::ack(mailbox_handle_t reply_to, const hdr_t &hdr, bool ok,
                          const std::string &error) {
   if (reply_to) {
-    reply_to->post_control(ack_t{hdr, ok, error});
+    reply_to.post_control(ack_t{hdr, ok, error});
   }
 }
 

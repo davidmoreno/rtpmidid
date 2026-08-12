@@ -107,10 +107,10 @@ void test_lane_assignment() {
   ASSERT_TRUE(d->kind == data_message_t::kind_t::midi_received);
   auto c1 = mb->pop_control();
   ASSERT_TRUE(c1.has_value());
-  ASSERT_TRUE(std::holds_alternative<stop_t>(c1->v));
+  ASSERT_TRUE(std::holds_alternative<stop_t>(*c1));
   auto c2 = mb->pop_control();
   ASSERT_TRUE(c2.has_value());
-  ASSERT_TRUE(std::holds_alternative<control_payload_t>(c2->v));
+  ASSERT_TRUE(std::holds_alternative<control_payload_t>(*c2));
   ASSERT_TRUE(mb->idle());
 }
 
@@ -132,16 +132,16 @@ void test_late_response_discarded_via_pending_table() {
 }
 
 void test_hdr_envelope_roundtrip() {
-  control_message_t m = make_control_payload(0, "hello");
-  auto *p = std::get_if<control_payload_t>(&m.v);
-  ASSERT_TRUE(p != nullptr);
-  ASSERT_TRUE(p->text == "hello");
+  auto m = make_control_payload(0, "hello");
+  ASSERT_TRUE(m.text == "hello");
+  // The transport envelope carries the concrete message.
+  control_message_t transport{m};
   // Move-only control message (contains reap_actor with jthread): moves work.
-  control_message_t moved = std::move(m);
-  ASSERT_TRUE(std::holds_alternative<control_payload_t>(moved.v));
+  auto moved = std::move(m);
+  ASSERT_TRUE(moved.text == "hello");
   // reap_actor carries a jthread (design D9).
-  control_message_t reap(reap_actor_t{std::jthread(), "wedged"});
-  ASSERT_TRUE(std::holds_alternative<reap_actor_t>(reap.v));
+  control_message_t reap{reap_actor_t{std::jthread(), "wedged"}};
+  ASSERT_TRUE(std::holds_alternative<reap_actor_t>(reap));
 }
 
 int main(int argc, char **argv) {

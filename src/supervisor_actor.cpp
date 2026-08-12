@@ -81,7 +81,7 @@ void supervisor_actor_t::advance_shutdown() {
         advance_shutdown();
       });
       router_->mailbox()->post_control(
-          stop_all_t{hdr_t{shutdown_corr_}, mailbox()});
+          stop_all_t{hdr_t{shutdown_corr_}, mailbox_handle()});
       stage_ = stage_t::stopping_router;
       return;
     }
@@ -114,7 +114,7 @@ void supervisor_actor_t::advance_shutdown() {
 
 void supervisor_actor_t::stop_actor(actor_t &actor) { actor.request_stop(); }
 
-void supervisor_actor_t::on_control(control_message_t &&msg) {
+void supervisor_actor_t::on_control(supervisor_control_t &&msg) {
   std::visit(
       [this](auto &&m) {
         using T = std::decay_t<decltype(m)>;
@@ -139,7 +139,7 @@ void supervisor_actor_t::on_control(control_message_t &&msg) {
           }
         }
       },
-      msg.v);
+      msg);
 }
 
 void supervisor_actor_t::handle_reap_actor(reap_actor_t &&m) {

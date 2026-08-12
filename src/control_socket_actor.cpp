@@ -97,9 +97,11 @@ static std::string port_to_string(const std::variant<std::string, int> &p) {
 // ---------------------------------------------------------------------------
 
 control_connection_actor_t::control_connection_actor_t(
-    actor_config_t config, int client_fd, mailbox_handle_t router_mailbox,
-    mailbox_handle_t mdns_mailbox, std::shared_ptr<worker_actor_t> worker,
-    std::string version, std::chrono::milliseconds request_deadline)
+    actor_config_t config, int client_fd,
+    std::shared_ptr<router_mailbox_t> router_mailbox,
+    std::shared_ptr<mdns_mailbox_t> mdns_mailbox,
+    std::shared_ptr<worker_actor_t> worker, std::string version,
+    std::chrono::milliseconds request_deadline)
     : actor_t(std::move(config)), client_fd_(client_fd),
       router_mailbox_(std::move(router_mailbox)),
       mdns_mailbox_(std::move(mdns_mailbox)), worker_(std::move(worker)),
@@ -248,22 +250,15 @@ void control_connection_actor_t::respond_error(const pending_command_t &cmd,
   respond(cmd, "error", msg);
 }
 
-void control_connection_actor_t::on_control(control_message_t &&msg) {
-  std::visit(
-      [this](auto &&m) {
-        using T = std::decay_t<decltype(m)>;
-        if constexpr (std::is_same_v<T, ack_t>) {
-          // An awaited ack resolved; the waiter continuation handles it.
-        } else if constexpr (std::is_same_v<T, peer_ids_result_t>) {
-        } else if constexpr (std::is_same_v<T, peer_command_resp_t>) {
-        } else if constexpr (std::is_same_v<T, mdns_status_resp_t>) {
-          if (gather_.corr != 0 && m.hdr.corr == gather_.corr) {
-            gather_.mdns = m;
-            gather_.mdns_done = true;
-          }
-        }
-      },
-      msg.v);
+void control_connection_actor_t::on_control(connection_control_t &&msg) {
+  // Replies are consumed by the selective waits; the only direct handling
+  // is the mdns status reply completing the gather.
+  if (auto *m = std::get_if<mdns_status_resp_t>(&msg)) {
+    if (gather_.corr != 0 && m->hdr.corr == gather_.corr) {
+      gather_.mdns = *m;
+      gather_.mdns_done = true;
+    }
+  }
 }
 
 // --- waits ------------------------------------------------------------------
@@ -272,14 +267,14 @@ void control_connection_actor_t::wait_ack(const pending_command_t &cmd,
                                           uint64_t corr,
                                           const char *success_payload) {
   wait_for(
-      [corr](const control_message_t &m) {
-        return std::holds_alternative<ack_t>(m.v) &&
-               std::get<ack_t>(m.v).hdr.corr == corr;
+      [corr](const connection_control_t &m) {
+        return std::holds_alternative<ack_t>(m) &&
+               std::get<ack_t>(m).hdr.corr == corr;
       },
       request_deadline_,
-      [this, cmd, corr, success_payload](std::optional<control_message_t> res) {
+      [this, cmd, corr, success_payload](std::optional<connection_control_t> res) {
         if (res) {
-          auto &a = std::get<ack_t>(res->v);
+          auto &a = std::get<ack_t>(*res);
           if (a.ok) {
             respond(cmd, "result", success_payload);
           } else {
@@ -296,17 +291,17 @@ void control_connection_actor_t::spawn_via_router(const pending_command_t &cmd,
                                                   uint64_t corr,
                                                   spawn_peer_t &&sp) {
   sp.hdr = hdr_t{corr};
-  sp.reply_to = mailbox();
+  sp.reply_to = mailbox_handle();
   router_mailbox_->post_control(std::move(sp));
   wait_for(
-      [corr](const control_message_t &m) {
-        return std::holds_alternative<peer_ids_result_t>(m.v) &&
-               std::get<peer_ids_result_t>(m.v).hdr.corr == corr;
+      [corr](const connection_control_t &m) {
+        return std::holds_alternative<peer_ids_result_t>(m) &&
+               std::get<peer_ids_result_t>(m).hdr.corr == corr;
       },
       request_deadline_,
-      [this, cmd](std::optional<control_message_t> res) {
+      [this, cmd](std::optional<connection_control_t> res) {
         if (res) {
-          auto &r = std::get<peer_ids_result_t>(res->v);
+          auto &r = std::get<peer_ids_result_t>(*res);
           std::string out;
           jsondm::serialize(std::vector<std::string>{"ok"}, out);
           respond(cmd, "result", out);
@@ -332,46 +327,46 @@ void control_connection_actor_t::cmd_status(const pending_command_t &cmd) {
 void control_connection_actor_t::gather_status(uint64_t corr) {
   // The request is posted exactly once per gather; the waiter re-parks
   // without re-requesting.
-  router_mailbox_->post_control(status_req_t{hdr_t{corr}, mailbox()});
+  router_mailbox_->post_control(status_req_t{hdr_t{corr}, mailbox_handle()});
   re_park_gather(corr);
 }
 
 void control_connection_actor_t::re_park_gather(uint64_t corr) {
   wait_for(
-      [this, corr](const control_message_t &m) {
-        if (auto *h = std::get_if<status_head_t>(&m.v)) {
+      [this, corr](const connection_control_t &m) {
+        if (auto *h = std::get_if<status_head_t>(&m)) {
           return h->hdr.corr == corr;
         }
-        if (auto *r = std::get_if<peer_status_resp_t>(&m.v)) {
+        if (auto *r = std::get_if<peer_status_resp_t>(&m)) {
           return r->hdr.corr == corr;
         }
-        if (auto *ev = std::get_if<peer_event_t>(&m.v)) {
+        if (auto *ev = std::get_if<peer_event_t>(&m)) {
           // Only relevant events (an expected peer went away) wake us.
           return gather_.expected.count(ev->peer_id) != 0;
         }
         return false;
       },
       request_deadline_,
-      [this, corr](std::optional<control_message_t> res) {
+      [this, corr](std::optional<connection_control_t> res) {
         on_gather_step(corr, std::move(res));
       });
 }
 
 void control_connection_actor_t::on_gather_step(
-    uint64_t corr, std::optional<control_message_t> res) {
+    uint64_t corr, std::optional<connection_control_t> res) {
   if (!res) {
     finish_gather(pending_cmd_, corr);
     return;
   }
-  if (auto *h = std::get_if<status_head_t>(&res->v)) {
+  if (auto *h = std::get_if<status_head_t>(&*res)) {
     gather_.metas = h->peers;
     for (auto &m : h->peers) {
       gather_.expected.insert(m.id);
     }
-  } else if (auto *r = std::get_if<peer_status_resp_t>(&res->v)) {
+  } else if (auto *r = std::get_if<peer_status_resp_t>(&*res)) {
     gather_.responses[r->peer_id] = r->status;
     gather_.expected.erase(r->peer_id);
-  } else if (auto *ev = std::get_if<peer_event_t>(&res->v)) {
+  } else if (auto *ev = std::get_if<peer_event_t>(&*res)) {
     // A peer event for an expected peer: unreachable, the set shrinks.
     gather_.expected.erase(ev->peer_id);
   }
@@ -427,14 +422,14 @@ void control_connection_actor_t::finish_gather(const pending_command_t &cmd,
   };
   if (mdns_mailbox_ && !gather_.mdns_done) {
     const auto mdns_corr = next_corr();
-    mdns_mailbox_->post_control(mdns_status_req_t{hdr_t{mdns_corr}, mailbox()});
+    mdns_mailbox_->post_control(mdns_status_req_t{hdr_t{mdns_corr}, mailbox_handle()});
     wait_for(
-        [mdns_corr](const control_message_t &m) {
-          return std::holds_alternative<mdns_status_resp_t>(m.v) &&
-                 std::get<mdns_status_resp_t>(m.v).hdr.corr == mdns_corr;
+        [mdns_corr](const connection_control_t &m) {
+          return std::holds_alternative<mdns_status_resp_t>(m) &&
+                 std::get<mdns_status_resp_t>(m).hdr.corr == mdns_corr;
         },
         request_deadline_, [finish = std::move(finish)](
-                                std::optional<control_message_t>) { finish(); });
+                                std::optional<connection_control_t>) { finish(); });
     return;
   }
   finish();
@@ -447,7 +442,7 @@ void control_connection_actor_t::cmd_router_connect(
   jsondm::deserialize(params, p);
   const auto corr = next_corr();
   router_mailbox_->post_control(
-      connect_t{hdr_t{corr}, mailbox(), p.from, p.to});
+      connect_t{hdr_t{corr}, mailbox_handle(), p.from, p.to});
   wait_ack(cmd, corr);
 }
 
@@ -457,7 +452,7 @@ void control_connection_actor_t::cmd_router_disconnect(
   jsondm::deserialize(params, p);
   const auto corr = next_corr();
   router_mailbox_->post_control(
-      disconnect_t{hdr_t{corr}, mailbox(), p.from, p.to});
+      disconnect_t{hdr_t{corr}, mailbox_handle(), p.from, p.to});
   wait_ack(cmd, corr);
 }
 
@@ -466,7 +461,7 @@ void control_connection_actor_t::cmd_router_remove(
   remove_params_t p;
   jsondm::deserialize(params, p);
   const auto corr = next_corr();
-  router_mailbox_->post_control(remove_peer_t{hdr_t{corr}, mailbox(), p.peer_id});
+  router_mailbox_->post_control(remove_peer_t{hdr_t{corr}, mailbox_handle(), p.peer_id});
   wait_ack(cmd, corr);
 }
 
@@ -527,18 +522,18 @@ void control_connection_actor_t::cmd_connect(const pending_command_t &cmd,
   }
   resolve_dns(*worker_, hostname, port, mailbox(), dns_corr);
   wait_for(
-      [dns_corr](const control_message_t &m) {
-        return std::holds_alternative<dns_resolved_t>(m.v) &&
-               std::get<dns_resolved_t>(m.v).hdr.corr == dns_corr;
+      [dns_corr](const connection_control_t &m) {
+        return std::holds_alternative<dns_resolved_t>(m) &&
+               std::get<dns_resolved_t>(m).hdr.corr == dns_corr;
       },
       request_deadline_,
       [this, cmd, corr, name, hostname, port,
-       worker = worker_](std::optional<control_message_t> res) {
+       worker = worker_](std::optional<connection_control_t> res) {
         if (!res) {
           respond_error(cmd, "deadline: DNS resolution");
           return;
         }
-        auto &dns = std::get<dns_resolved_t>(res->v);
+        auto &dns = std::get<dns_resolved_t>(*res);
         if (dns.addresses.empty()) {
           respond_error(cmd, "could not resolve " + hostname);
           return;
@@ -702,19 +697,19 @@ void control_connection_actor_t::cmd_peer_command(
   }
   const auto corr = next_corr();
   router_mailbox_->post_control(peer_command_t{
-      hdr_t{corr}, mailbox(), peer_id, peer_cmd, std::string(params)});
+      hdr_t{corr}, mailbox_handle(), peer_id, peer_cmd, std::string(params)});
   wait_for(
-      [corr](const control_message_t &m) {
-        return std::holds_alternative<peer_command_resp_t>(m.v) &&
-               std::get<peer_command_resp_t>(m.v).hdr.corr == corr;
+      [corr](const connection_control_t &m) {
+        return std::holds_alternative<peer_command_resp_t>(m) &&
+               std::get<peer_command_resp_t>(m).hdr.corr == corr;
       },
       request_deadline_,
-      [this, cmd](std::optional<control_message_t> res) {
+      [this, cmd](std::optional<connection_control_t> res) {
         if (!res) {
           respond_error(cmd, "deadline: no response from peer");
           return;
         }
-        auto &r = std::get<peer_command_resp_t>(res->v);
+        auto &r = std::get<peer_command_resp_t>(*res);
         if (r.is_error) {
           respond_error(cmd, r.result_json);
         } else {
@@ -731,7 +726,8 @@ void control_connection_actor_t::notify_gone() { gone_ = true; }
 
 control_listener_actor_t::control_listener_actor_t(
     actor_config_t config, std::string socket_path,
-    mailbox_handle_t router_mailbox, mailbox_handle_t mdns_mailbox,
+    std::shared_ptr<router_mailbox_t> router_mailbox,
+    std::shared_ptr<mdns_mailbox_t> mdns_mailbox,
     std::shared_ptr<worker_actor_t> worker, std::string version,
     std::chrono::milliseconds request_deadline)
     : actor_t(std::move(config)), socket_path_(std::move(socket_path)),
@@ -797,7 +793,7 @@ void control_listener_actor_t::accept_client() {
   connections_.push_back(std::move(conn));
 }
 
-void control_listener_actor_t::on_control(control_message_t &&msg) {
+void control_listener_actor_t::on_control(control_listener_control_t &&msg) {
   std::visit(
       [this](auto &&m) {
         using T = std::decay_t<decltype(m)>;
@@ -808,7 +804,7 @@ void control_listener_actor_t::on_control(control_message_t &&msg) {
           });
         }
       },
-      msg.v);
+      msg);
   (void)0;
 }
 

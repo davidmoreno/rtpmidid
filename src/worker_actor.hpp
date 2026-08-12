@@ -34,7 +34,9 @@
 
 namespace rtpmididns {
 
-class worker_actor_t : public actor_t {
+class worker_actor_t : public actor_t<std::monostate, worker_control_t> {
+public:
+  using control_messages = worker_control_t;
 public:
   explicit worker_actor_t(
       actor_config_t config = actor_config_t{.name = "worker",
@@ -47,7 +49,7 @@ public:
   }
 
 protected:
-  void on_control(control_message_t &&msg) override;
+  void on_control(worker_control_t &&msg) override;
 };
 
 /**
@@ -75,7 +77,7 @@ inline void resolve_dns(worker_actor_t &worker, const std::string &hostname,
       freeaddrinfo(res);
     }
     if (reply_to) {
-      reply_to->post_control(
+      reply_to.post_control(
           dns_resolved_t{hdr_t{corr}, hostname, port, std::move(addresses)});
     }
   });

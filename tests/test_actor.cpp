@@ -35,7 +35,7 @@ using namespace rtpmididns;
 // --- helper types -----------------------------------------------------------
 
 /// Records dispatched data/control messages; parks on a "req" payload.
-class recorder_actor_t : public actor_t {
+class recorder_actor_t : public actor_t<data_message_t, control_message_t> {
 public:
   std::vector<std::string> events;
   std::optional<std::string> wait_result;
@@ -48,37 +48,37 @@ public:
     events.push_back("D" + std::to_string(msg.from));
   }
   void on_control(control_message_t &&msg) override {
-    if (auto *p = std::get_if<control_payload_t>(&msg.v)) {
+    if (auto *p = std::get_if<control_payload_t>(&msg)) {
       events.push_back("C" + p->text);
       if (p->text == "req") {
         // Sequential request/response: park until the target arrives.
         wait_for(
             [](const control_message_t &m) {
-              auto *q = std::get_if<control_payload_t>(&m.v);
+              auto *q = std::get_if<control_payload_t>(&m);
               return q && q->text == "target";
             },
             std::chrono::milliseconds(wait_deadline_ms),
             [this](std::optional<control_message_t> res) {
               if (res) {
-                wait_result = std::get<control_payload_t>((*res).v).text;
+                wait_result = std::get<control_payload_t>(*res).text;
               } else {
                 wait_timed_out = true;
                 wait_result = "TIMEOUT";
               }
             });
       }
-    } else if (auto *ev = std::get_if<peer_event_t>(&msg.v)) {
+    } else if (auto *ev = std::get_if<peer_event_t>(&msg)) {
       events.push_back("E" + std::to_string(ev->peer_id));
     }
   }
 };
 
-class throwing_actor_t : public actor_t {
+class throwing_actor_t : public actor_t<data_message_t, control_message_t> {
 public:
   std::vector<std::string> events;
   using actor_t::actor_t;
   void on_control(control_message_t &&msg) override {
-    auto *p = std::get_if<control_payload_t>(&msg.v);
+    auto *p = std::get_if<control_payload_t>(&msg);
     if (!p) {
       return;
     }
@@ -149,7 +149,7 @@ void test_stop_handshake() {
   ASSERT_FALSE(actor.pump()); // loop exited
   auto s = supervisor->pop_control();
   ASSERT_TRUE(s.has_value());
-  ASSERT_TRUE(std::holds_alternative<stopped_t>(s->v));
+  ASSERT_TRUE(std::holds_alternative<stopped_t>(*s));
   ASSERT_TRUE(supervisor->idle());
 }
 
@@ -165,7 +165,7 @@ void test_stop_token_escalation() {
   // Escalation is still a graceful exit: stopped is posted.
   auto s = supervisor->pop_control();
   ASSERT_TRUE(s.has_value());
-  ASSERT_TRUE(std::holds_alternative<stopped_t>(s->v));
+  ASSERT_TRUE(std::holds_alternative<stopped_t>(*s));
 }
 
 void test_wait_for_immediate_match() {
@@ -227,7 +227,7 @@ void test_wait_for_timeout_resume() {
 
 void test_wait_for_catch_all_drain_in_order() {
   recorder_actor_t actor(actor_config_t{.name = "t9"});
-  actor.mailbox()->post_control(make_peer_event(peer_event_kind_t::registered, 1));
+  actor.mailbox()->post_control(peer_event_t{peer_event_kind_t::registered, 1});
   actor.mailbox()->post_control(make_peer_event(peer_event_kind_t::removed, 2));
   actor.mailbox()->post_control(make_peer_event(peer_event_kind_t::stopped, 3));
   // Park with a trivially-true predicate: consumes the first queued
@@ -238,7 +238,7 @@ void test_wait_for_catch_all_drain_in_order() {
       std::chrono::milliseconds(100),
       [&drained](std::optional<control_message_t> res) {
         if (res) {
-          drained.push_back(std::get<peer_event_t>((*res).v).peer_id);
+          drained.push_back(std::get<peer_event_t>(*res).peer_id);
         }
       });
   actor.pump();
@@ -291,7 +291,7 @@ void test_threaded_actor_smoke() {
   }
   auto s = supervisor->pop_control();
   ASSERT_TRUE(s.has_value());
-  ASSERT_TRUE(std::holds_alternative<stopped_t>(s->v));
+  ASSERT_TRUE(std::holds_alternative<stopped_t>(*s));
 }
 
 int main(int argc, char **argv) {

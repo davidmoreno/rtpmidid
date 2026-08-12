@@ -33,11 +33,13 @@
 
 namespace rtpmididns {
 
-class mdns_actor_t : public actor_t {
+class mdns_actor_t : public actor_t<std::monostate, mdns_control_t> {
+public:
+  using control_messages = mdns_control_t;
 public:
   explicit mdns_actor_t(actor_config_t config,
-                        mailbox_handle_t router_mailbox = {},
-                        mailbox_handle_t alsa_mailbox = {},
+                        std::shared_ptr<router_mailbox_t> router_mailbox = {},
+                        std::shared_ptr<alsa_mailbox_t> alsa_mailbox = {},
                         std::shared_ptr<worker_actor_t> worker = {});
 
   /// The mdns object (for tests that need the legacy global-free access).
@@ -51,7 +53,7 @@ public:
 protected:
   void on_start() override;
   void on_stop() override;
-  void on_control(control_message_t &&msg) override;
+  void on_control(mdns_control_t &&msg) override;
 
 private:
   bool accept_discovery(const std::string &name, const std::string &address,
@@ -59,8 +61,8 @@ private:
   void cleanup_entry(const std::string &name);
 
   std::unique_ptr<rtpmidid::mdns_rtpmidi_t> mdns_;
-  mailbox_handle_t router_mailbox_;
-  mailbox_handle_t alsa_mailbox_;
+  std::shared_ptr<router_mailbox_t> router_mailbox_;
+  std::shared_ptr<alsa_mailbox_t> alsa_mailbox_;
   std::shared_ptr<worker_actor_t> worker_;
   rtpmidid::signal_t<const std::string &, const std::string &,
                      const std::string &>::connection_t

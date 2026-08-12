@@ -36,11 +36,13 @@
 
 namespace rtpmididns {
 
-class alsa_actor_t : public actor_t {
+class alsa_actor_t : public actor_t<data_message_t, alsa_control_t> {
+public:
+  using control_messages = alsa_control_t;
 public:
   alsa_actor_t(actor_config_t config, std::string alsa_name,
                std::vector<std::string> announce_names,
-               mailbox_handle_t router_mailbox);
+               std::shared_ptr<router_mailbox_t> router_mailbox);
 
   /// Create a hosted port now (before start) or at runtime; returns the
   /// router-assigned peer id via the given reply mailbox (or 0 if not
@@ -54,7 +56,7 @@ protected:
   void on_start() override;
   void on_stop() override;
   void on_data(data_message_t &&msg) override;
-  void on_control(control_message_t &&msg) override;
+  void on_control(alsa_control_t &&msg) override;
   void on_loop() override;
 
 private:
@@ -64,7 +66,7 @@ private:
 
   std::string alsa_name_;
   std::vector<std::string> announce_names_;
-  mailbox_handle_t router_mailbox_;
+  std::shared_ptr<router_mailbox_t> router_mailbox_;
   mididata_to_alsaevents_t mididata_decoder_;
   mididata_to_alsaevents_t mididata_encoder_;
   std::unique_ptr<aseq_t> seq_;
@@ -73,8 +75,8 @@ private:
   /// seq port -> router peer id
   std::unordered_map<uint8_t, peer_id_t> port_to_id_;
   struct pending_register_t {
-    mailbox_handle_t register_reply; // where the router ack lands
-    mailbox_handle_t create_reply;   // who asked for this port (may be null)
+    std::shared_ptr<reply_mailbox_t> register_reply; // where the router ack lands
+    mailbox_handle_t create_reply; // who asked for this port (may be null)
   };
   std::unordered_map<uint8_t, pending_register_t> pending_ports_;
   struct port_connections_t {

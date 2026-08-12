@@ -37,20 +37,22 @@ namespace rtpmididns {
 
 class router_actor_t;
 
-class supervisor_actor_t : public actor_t {
+class supervisor_actor_t : public actor_t<std::monostate, supervisor_control_t> {
+public:
+  using control_messages = supervisor_control_t;
 public:
   explicit supervisor_actor_t(actor_config_t config);
   ~supervisor_actor_t() override;
 
   /// Register a top-level actor for shutdown management.
-  void add_managed(std::shared_ptr<actor_t> actor) {
+  void add_managed(std::shared_ptr<actor_base_t> actor) {
     managed_.push_back(std::move(actor));
   }
   void set_router(std::shared_ptr<router_actor_t> router) {
     router_ = std::move(router);
   }
   /// The actor that owns the control listening socket (stopped first).
-  void set_control_listener(std::shared_ptr<actor_t> control) {
+  void set_control_listener(std::shared_ptr<actor_base_t> control) {
     control_listener_ = std::move(control);
   }
 
@@ -64,7 +66,7 @@ public:
   bool shutdown_complete() const { return shutdown_complete_; }
 
   void on_start() override;
-  void on_control(control_message_t &&msg) override;
+  void on_control(supervisor_control_t &&msg) override;
 
   enum class stage_t {
     none,
@@ -87,8 +89,8 @@ private:
   int signal_fd_ = -1;
   rtpmidid::poller_t::listener_t signal_fd_listener_;
   std::shared_ptr<router_actor_t> router_;
-  std::shared_ptr<actor_t> control_listener_;
-  std::vector<std::shared_ptr<actor_t>> managed_;
+  std::shared_ptr<actor_base_t> control_listener_;
+  std::vector<std::shared_ptr<actor_base_t>> managed_;
 
   stage_t stage_ = stage_t::none;
   bool shutdown_complete_ = false;

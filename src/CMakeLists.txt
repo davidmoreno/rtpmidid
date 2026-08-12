@@ -21,7 +21,6 @@ add_library(
   rtpmidiremotehandler.cpp
   utils.cpp
   midi_normalizer.cpp
-  actor.cpp
   router_actor.cpp
   peer_actor.cpp
   local_rawmidi_peer_actor.cpp

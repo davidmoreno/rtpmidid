@@ -33,7 +33,7 @@ using namespace rtpmididns;
 
 // --- helper: a peer that answers router requests ----------------------------
 
-class test_peer_t : public actor_t {
+class test_peer_t : public actor_t<data_message_t, control_message_t> {
 public:
   std::mutex m;
   std::vector<std::string> events;
@@ -57,19 +57,19 @@ public:
             record("registered");
           } else if constexpr (std::is_same_v<T, peer_status_req_t>) {
             if (answer_status) {
-              m.reply_to->post_control(
+              m.reply_to.post_control(
                   peer_status_resp_t{m.hdr, m.target, status_payload});
             }
           } else if constexpr (std::is_same_v<T, peer_command_t>) {
             record("cmd:" + m.cmd);
-            m.reply_to->post_control(
+            m.reply_to.post_control(
                 peer_command_resp_t{m.hdr, m.peer_id, "\"ok\"", false});
           } else if constexpr (std::is_same_v<T, peer_event_t>) {
             record("ev:" + std::to_string(int(m.kind)) + ":" +
                    std::to_string(m.peer_id));
           }
         },
-        msg.v);
+        msg);
   }
   void on_data(data_message_t &&msg) override {
     if (msg.kind == data_message_t::kind_t::midi_to_wire) {
@@ -124,15 +124,15 @@ bool pump_until(Actor &actor, Pred &&pred, int timeout_ms = 5000) {
 }
 
 /// Pop and discard every control message in a mailbox (stale acks etc.).
-static void drain_mailbox(const mailbox_handle_t &mb) {
+static void drain_mailbox(const std::shared_ptr<actor_mailbox_t> &mb) {
   while (mb->pop_control()) {
   }
 }
 
-static std::optional<peer_id_t> first_ack_id(mailbox_handle_t req,
-                                             uint64_t corr) {
+static std::optional<peer_id_t> first_ack_id(
+    const std::shared_ptr<actor_mailbox_t> &req, uint64_t corr) {
   while (auto c = req->pop_control()) {
-    if (auto *r = std::get_if<peer_ids_result_t>(&c->v)) {
+    if (auto *r = std::get_if<peer_ids_result_t>(&*c)) {
       if (r->hdr.corr == corr && !r->ids.empty()) {
         return r->ids[0];
       }
@@ -222,7 +222,7 @@ void test_spawn_handshake_ordering() {
   bad.hdr = hdr_t{8};
   bad.reply_to = req;
   bad.factory = [](const mailbox_handle_t &, peer_id_t)
-      -> std::shared_ptr<actor_t> {
+      -> std::shared_ptr<actor_base_t> {
     throw std::runtime_error("prep failed");
   };
   router->mailbox()->post_control(std::move(bad));
@@ -234,7 +234,7 @@ void test_spawn_handshake_ordering() {
   router->mailbox()->post_control(remove_peer_t{hdr_t{9}, req, id.value()});
   pump_until(*router, [&] {
     while (auto c = req->pop_control()) {
-      if (std::holds_alternative<ack_t>(c->v)) {
+      if (std::holds_alternative<ack_t>(*c)) {
         return true;
       }
     }
@@ -280,7 +280,7 @@ void test_remove_choreography_and_partner_events() {
   router->mailbox()->post_control(remove_peer_t{hdr_t{4}, req, idS});
   bool acked = pump_until(*router, [&] {
     while (auto c = req->pop_control()) {
-      if (auto *a = std::get_if<ack_t>(&c->v)) {
+      if (auto *a = std::get_if<ack_t>(&*c)) {
         return a->ok;
       }
     }
@@ -324,7 +324,7 @@ void test_escalation_reaps_wedged_peer() {
   router->mailbox()->post_control(remove_peer_t{hdr_t{2}, req, id});
   bool acked = pump_until(*router, [&] {
     while (auto c = req->pop_control()) {
-      if (auto *a = std::get_if<ack_t>(&c->v)) {
+      if (auto *a = std::get_if<ack_t>(&*c)) {
         return !a->ok; // warning ack
       }
     }
@@ -335,8 +335,8 @@ void test_escalation_reaps_wedged_peer() {
   // The supervisor got the reap_actor with the live jthread.
   auto reap = supervisor->pop_control();
   ASSERT_TRUE(reap.has_value());
-  ASSERT_TRUE(std::holds_alternative<reap_actor_t>(reap->v));
-  ASSERT_TRUE(std::get<reap_actor_t>(reap->v).thread.joinable());
+  ASSERT_TRUE(std::holds_alternative<reap_actor_t>(*reap));
+  ASSERT_TRUE(std::get<reap_actor_t>(*reap).thread.joinable());
 }
 
 void test_requester_driven_status_gather() {
@@ -356,8 +356,8 @@ void test_requester_driven_status_gather() {
   router->pump(); // head + scatter
   auto head = req->pop_control();
   ASSERT_TRUE(head.has_value());
-  ASSERT_TRUE(std::holds_alternative<status_head_t>(head->v));
-  auto &h = std::get<status_head_t>(head->v);
+  ASSERT_TRUE(std::holds_alternative<status_head_t>(*head));
+  auto &h = std::get<status_head_t>(*head);
   ASSERT_EQUAL(h.hdr.corr, 50ULL);
   ASSERT_EQUAL(h.peers.size(), 2UL);
   // The router answers the head and scatters; peers answer the requester
@@ -366,7 +366,7 @@ void test_requester_driven_status_gather() {
   peerY->pump();
   int resps = 0;
   while (auto c = req->pop_control()) {
-    if (std::holds_alternative<peer_status_resp_t>(c->v)) {
+    if (std::holds_alternative<peer_status_resp_t>(*c)) {
       resps++;
     }
   }
@@ -392,10 +392,10 @@ void test_peer_death_mid_gather_shrinks_set() {
   router->pump();
   auto ev = req->pop_control();
   ASSERT_TRUE(ev.has_value());
-  ASSERT_TRUE(std::holds_alternative<peer_event_t>(ev->v));
-  ASSERT_TRUE(std::get<peer_event_t>(ev->v).kind ==
+  ASSERT_TRUE(std::holds_alternative<peer_event_t>(*ev));
+  ASSERT_TRUE(std::get<peer_event_t>(*ev).kind ==
               peer_event_kind_t::stopped);
-  ASSERT_EQUAL(std::get<peer_event_t>(ev->v).peer_id, idX);
+  ASSERT_EQUAL(std::get<peer_event_t>(*ev).peer_id, idX);
   ASSERT_TRUE(router->peers().empty());
 }
 
@@ -410,7 +410,7 @@ void test_subscription_stream_and_unsubscribe() {
   router->pump();
   auto ev = sub->pop_control();
   ASSERT_TRUE(ev.has_value());
-  ASSERT_TRUE(std::get<peer_event_t>(ev->v).kind ==
+  ASSERT_TRUE(std::get<peer_event_t>(*ev).kind ==
               peer_event_kind_t::registered);
   // Unsubscribe ends the stream.
   router->mailbox()->post_control(unsubscribe_events_t{hdr_t{3}, sub});
@@ -437,8 +437,8 @@ void test_command_relay() {
   ASSERT_TRUE(peer->has_event("cmd:foo"));
   auto resp = req->pop_control();
   ASSERT_TRUE(resp.has_value());
-  ASSERT_TRUE(std::holds_alternative<peer_command_resp_t>(resp->v));
-  auto &r = std::get<peer_command_resp_t>(resp->v);
+  ASSERT_TRUE(std::holds_alternative<peer_command_resp_t>(*resp));
+  auto &r = std::get<peer_command_resp_t>(*resp);
   ASSERT_EQUAL(r.hdr.corr, 10ULL);
   ASSERT_EQUAL(r.peer_id, id);
   ASSERT_FALSE(r.is_error);
@@ -472,7 +472,7 @@ void test_stop_all_bounded() {
   router->mailbox()->post_control(stop_all_t{hdr_t{200}, req});
   bool acked = pump_until(*router, [&] {
     while (auto c = req->pop_control()) {
-      if (auto *a = std::get_if<ack_t>(&c->v)) {
+      if (auto *a = std::get_if<ack_t>(&*c)) {
         return a->ok;
       }
     }

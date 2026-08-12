@@ -36,7 +36,9 @@
 
 namespace rtpmididns {
 
-class peer_actor_t : public actor_t {
+class peer_actor_t : public actor_t<data_message_t, peer_control_t> {
+public:
+  using control_messages = peer_control_t;
 public:
   explicit peer_actor_t(actor_config_t config);
 
@@ -71,7 +73,7 @@ public:
   /// Post received MIDI to the router as `midi_received{from, payload}`.
   void send_to_router(peer_id_t from, midi_payload_t &&payload) {
     if (config_.supervisor_mailbox) {
-      config_.supervisor_mailbox->post_data(
+      config_.supervisor_mailbox.post_data(
           data_message_t::midi_received(from, std::move(payload)));
     }
   }
@@ -79,7 +81,7 @@ public:
 protected:
   void on_start() override;
   void on_data(data_message_t &&msg) override;
-  void on_control(control_message_t &&msg) override;
+  void on_control(peer_control_t &&msg) override;
 
   bool registered_ = false;
   std::vector<peer_id_t> registered_ids_;

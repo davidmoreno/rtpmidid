@@ -4,6 +4,28 @@ This file records the results of the cutover tasks 8.2 (no cross-thread
 direct calls) and 8.5 (latency/isolation smoke measurements) for the
 `add-actor-architecture` change.
 
+## Per-actor message typing
+
+Each actor declares exactly the control messages it accepts as a
+`std::variant` (`using control_messages = ...`), and its mailbox control
+lane element type IS that variant (`actor_t<DataT, ControlT>` / the
+`mailbox_t` template). Consequences:
+
+- An actor's `on_control` only ever sees — and only ever contains — the
+  messages it accepts: the mdns actor's variant has no MIDI messages, the
+  worker's has only jobs, the router's only routing/lifecycle commands.
+  The old single global `control_message_t` remains only as the transport
+  envelope for cross-actor handles.
+- The type system enforces acceptance: posting a message an actor does
+  not accept is a compile error on the typed path
+  (`post_control<M>` `static_assert`s membership in the target's
+  variant); the type-erased `mailbox_handle_t` (used for `reply_to` and
+  other heterogeneous handles) validates at runtime and drops with a
+  warning if a wiring bug ever routes a message to the wrong actor.
+- The queue template takes the accepted types directly
+  (`mpsc_queue_t<DataT>` / `mpsc_queue_t<ControlT>`), so an actor's queue
+  literally cannot hold a message class it does not accept.
+
 ## 8.2 — Cross-thread call audit
 
 Every concurrent unit in the daemon is an actor: one thread, one private
