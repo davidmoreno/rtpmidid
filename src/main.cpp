@@ -166,11 +166,8 @@ int main(int argc, char **argv) {
                      .supervisor_mailbox = sup_mb});
   auto worker = std::make_shared<worker_actor_t>(
       actor_config_t{.name = "worker", .supervisor_mailbox = sup_mb});
-  auto mdns = std::make_shared<mdns_actor_t>(
-      actor_config_t{.name = "mdns", .supervisor_mailbox = sup_mb});
-
   // ALSA actor: one actor, many ports (announced ports registered as
-  // hosted peer ids).
+  // hosted peer ids). Created before mdns so discovery can request ports.
   std::vector<std::string> alsa_ports;
   for (auto &ann : settings.alsa_announce) {
     alsa_ports.push_back(ann.name);
@@ -179,13 +176,17 @@ int main(int argc, char **argv) {
       actor_config_t{.name = "alsa", .supervisor_mailbox = sup_mb},
       settings.alsa_name, std::move(alsa_ports), router->mailbox());
 
+  auto mdns = std::make_shared<mdns_actor_t>(
+      actor_config_t{.name = "mdns", .supervisor_mailbox = sup_mb},
+      router->mailbox(), alsa->mailbox(), worker);
+
   // Network rtpmidi listeners (accept sockets in their own pollers).
   std::vector<std::shared_ptr<actor_t>> listeners;
   for (auto &ann : settings.rtpmidi_announce) {
     const auto port = ann.port.empty() ? uint16_t(0) : uint16_t(std::stoul(ann.port));
     listeners.push_back(std::make_shared<network_rtpmidi_listener_actor_t>(
         actor_config_t{.name = ann.name, .supervisor_mailbox = sup_mb},
-        ann.name, port, router->mailbox()));
+        ann.name, port, router->mailbox(), alsa->mailbox()));
   }
 
   // Control socket: listener + one connection actor per client.

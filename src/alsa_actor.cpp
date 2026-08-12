@@ -67,7 +67,7 @@ void alsa_actor_t::register_port(uint8_t seq_port, const std::string &name) {
   auto reply = std::make_shared<actor_mailbox_t>();
   router_mailbox_->post_control(register_peer_t{
       hdr_t{uint64_t(seq_port) + 1}, reply, mailbox(), "alsa", name});
-  pending_ports_[seq_port] = reply;
+  pending_ports_[seq_port].register_reply = reply;
 
   // Incoming seq events on this port -> midi_received{from=assigned id}.
   port_connections_[seq_port].midi =
@@ -103,9 +103,42 @@ void alsa_actor_t::unregister_port(uint8_t seq_port) {
   seq_->remove_port(seq_port);
 }
 
-void alsa_actor_t::on_control(control_message_t &&) {
-  // Everything the ALSA actor needs arrives on the data lane or is
-  // collected by on_loop (register acks on per-port reply mailboxes).
+void alsa_actor_t::on_control(control_message_t &&msg) {
+  std::visit(
+      [this](auto &&m) {
+        using T = std::decay_t<decltype(m)>;
+        if constexpr (std::is_same_v<T, alsa_create_port_t>) {
+          if (m.name.empty()) {
+            if (m.reply_to) {
+              m.reply_to->post_control(
+                  peer_ids_result_t{m.hdr, {}, nullptr});
+            }
+            return;
+          }
+          const uint8_t seq_port = create_port(m.name);
+          if (seq_port == 0) {
+            if (m.reply_to) {
+              m.reply_to->post_control(peer_ids_result_t{m.hdr, {}, nullptr});
+            }
+            return;
+          }
+          // The create request completes when the register ack arrives.
+          if (m.reply_to) {
+            auto &p = pending_ports_[seq_port];
+            p.create_reply = std::move(m.reply_to);
+          }
+          (void)0;
+        } else if constexpr (std::is_same_v<T, alsa_remove_port_t>) {
+          auto it = id_to_port_.find(m.peer_id);
+          if (it != id_to_port_.end()) {
+            unregister_port(it->second);
+          }
+          if (m.reply_to) {
+            m.reply_to->post_control(ack_t{m.hdr, true, {}});
+          }
+        }
+      },
+      msg.v);
 }
 
 void alsa_actor_t::on_data(data_message_t &&msg) {
@@ -157,11 +190,16 @@ void alsa_actor_t::on_loop() {
   // Collect register_peer acks from the per-port reply mailboxes.
   for (auto it = pending_ports_.begin(); it != pending_ports_.end();) {
     bool done = false;
-    while (auto c = it->second->pop_control()) {
+    while (auto c = it->second.register_reply->pop_control()) {
       if (auto *r = std::get_if<peer_ids_result_t>(&c->v)) {
         if (!r->ids.empty()) {
           id_to_port_[r->ids[0]] = it->first;
           port_to_id_[it->first] = r->ids[0];
+        }
+        // Complete any pending create request with the assigned id.
+        if (it->second.create_reply) {
+          it->second.create_reply->post_control(peer_ids_result_t{
+              hdr_t{}, r->ids, mailbox()});
         }
         done = true;
         break;

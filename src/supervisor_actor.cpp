@@ -123,10 +123,13 @@ void supervisor_actor_t::on_control(control_message_t &&msg) {
         } else if constexpr (std::is_same_v<T, reap_actor_t>) {
           handle_reap_actor(std::move(m));
         } else if constexpr (std::is_same_v<T, ack_t>) {
-          // Router stop-all completed (bounded per-peer waits inside).
+          // Router stop-all completed (bounded per-peer waits inside):
+          // move on to stopping the router and the managed actors (the
+          // `stopping_router` phase posts the stops and arms the finalize
+          // deadline).
           if (stage_ == stage_t::stopping_router && m.hdr.corr == shutdown_corr_) {
             shutdown_timer_.disable();
-            stage_ = stage_t::stopping_rest;
+            stage_ = stage_t::stopping_router;
             advance_shutdown();
           }
         } else if constexpr (std::is_same_v<T, stopped_t>) {

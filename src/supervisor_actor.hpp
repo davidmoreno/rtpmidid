@@ -66,7 +66,6 @@ public:
   void on_start() override;
   void on_control(control_message_t &&msg) override;
 
-private:
   enum class stage_t {
     none,
     stopping_control,
@@ -76,6 +75,7 @@ private:
     done,
   };
 
+private:
   void setup_signalfd();
   void begin_shutdown();
   void advance_shutdown();

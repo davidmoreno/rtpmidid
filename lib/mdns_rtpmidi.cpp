@@ -46,6 +46,10 @@ struct AvahiWatch {
   void *userdata = nullptr;
   AvahiWatchCallback callback = nullptr;
   AvahiWatchEvent event = AVAHI_WATCH_IN;
+  // The watch owns its fd listener: watch_free removes exactly this one,
+  // so no stale callback survives avahi_client_free (the old single-field
+  // watch_in_poller design left dangling callbacks in the poller).
+  rtpmidid::poller_t::listener_t listener;
 };
 
 ENUM_FORMATTER_BEGIN(AvahiEntryGroupState)
@@ -136,15 +140,13 @@ AvahiWatch *poller_adapter_watch_new(const AvahiPoll *api, int fd,
 
   wd->event = event;
   if (event == AVAHI_WATCH_IN) {
-    mdns_rtpmidid->watch_in_poller =
-        mdns_rtpmidid->poller_ptr->add_fd_in(fd, [wd](int _) {
-          wd->callback(wd, wd->fd, AVAHI_WATCH_IN, wd->userdata);
-        });
+    wd->listener = mdns_rtpmidid->poller_ptr->add_fd_in(fd, [wd](int _) {
+      wd->callback(wd, wd->fd, AVAHI_WATCH_IN, wd->userdata);
+    });
   } else if (event == AVAHI_WATCH_OUT) {
-    mdns_rtpmidid->watch_out_poller =
-        mdns_rtpmidid->poller_ptr->add_fd_in(fd, [wd](int _) {
-          wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
-        });
+    wd->listener = mdns_rtpmidid->poller_ptr->add_fd_in(fd, [wd](int _) {
+      wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
+    });
   } else {
     DEBUG("Other event: {}", event);
   }
@@ -165,15 +167,13 @@ void poller_adapter_watch_update(AvahiWatch *wd, AvahiWatchEvent event) {
 
   wd->event = event;
   if (event == AVAHI_WATCH_IN) {
-    mdns_rtpmidid->watch_in_poller =
-        mdns_rtpmidid->poller_ptr->add_fd_in(wd->fd, [wd](int _) {
-          wd->callback(wd, wd->fd, AVAHI_WATCH_IN, wd->userdata);
-        });
+    wd->listener = mdns_rtpmidid->poller_ptr->add_fd_in(wd->fd, [wd](int _) {
+      wd->callback(wd, wd->fd, AVAHI_WATCH_IN, wd->userdata);
+    });
   } else if (event == AVAHI_WATCH_OUT) {
-    mdns_rtpmidid->watch_out_poller =
-        mdns_rtpmidid->poller_ptr->add_fd_in(wd->fd, [wd](int _) {
-          wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
-        });
+    wd->listener = mdns_rtpmidid->poller_ptr->add_fd_in(wd->fd, [wd](int _) {
+      wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
+    });
   } else {
     DEBUG("Other event: {}", event);
   }
@@ -186,12 +186,8 @@ AvahiWatchEvent poller_adapter_watch_get_events(AvahiWatch *w) {
 
 /// Free a watch. More...
 void poller_adapter_watch_free(AvahiWatch *w) {
-  // rtpmidid::poller.remove_fd(w->fd);
-  // WARNING("TODO! If its only at program end, no problem.");
-  if (current) {
-    current->watch_in_poller.stop();
-    current->watch_out_poller.stop();
-  }
+  // Remove exactly this watch's fd listener (per-watch ownership).
+  w->listener.stop();
   // NOLINTNEXTLINE
   delete w;
 }

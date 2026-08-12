@@ -26,24 +26,59 @@
 #include "actor.hpp"
 #include "messages.hpp"
 #include "rtpmidid/mdns_rtpmidi.hpp"
+#include "worker_actor.hpp"
 #include <memory>
+#include <string>
+#include <unordered_map>
 
 namespace rtpmididns {
 
 class mdns_actor_t : public actor_t {
 public:
-  explicit mdns_actor_t(
-      actor_config_t config = actor_config_t{.name = "mdns"});
+  explicit mdns_actor_t(actor_config_t config,
+                        mailbox_handle_t router_mailbox = {},
+                        mailbox_handle_t alsa_mailbox = {},
+                        std::shared_ptr<worker_actor_t> worker = {});
 
   /// The mdns object (for tests that need the legacy global-free access).
   rtpmidid::mdns_rtpmidi_t *mdns() const { return mdns_.get(); }
+  /// Handle a discovery event (called by the avahi callback; also directly
+  /// by tests).
+  void on_discovered(const std::string &name, const std::string &address,
+                     const std::string &port);
+  void on_removed(const std::string &name);
 
 protected:
   void on_start() override;
+  void on_stop() override;
   void on_control(control_message_t &&msg) override;
 
 private:
+  bool accept_discovery(const std::string &name, const std::string &address,
+                        const std::string &port) const;
+  void cleanup_entry(const std::string &name);
+
   std::unique_ptr<rtpmidid::mdns_rtpmidi_t> mdns_;
+  mailbox_handle_t router_mailbox_;
+  mailbox_handle_t alsa_mailbox_;
+  std::shared_ptr<worker_actor_t> worker_;
+  rtpmidid::signal_t<const std::string &, const std::string &,
+                     const std::string &>::connection_t
+      discover_conn_;
+  rtpmidid::signal_t<const std::string &, const std::string &,
+                     const std::string &>::connection_t
+      remove_conn_;
+
+  struct discovery_entry_t {
+    std::string name;
+    std::string address;
+    std::string port;
+    uint64_t corr = 0;
+    peer_id_t alsa_id = 0;
+    peer_id_t net_id = 0;
+  };
+  std::unordered_map<std::string, discovery_entry_t> discovered_;
+  uint64_t corr_counter_ = 0;
 };
 
 } // namespace rtpmididns

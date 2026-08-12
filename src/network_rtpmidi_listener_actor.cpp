@@ -31,9 +31,10 @@ namespace rtpmididns {
 
 network_rtpmidi_listener_actor_t::network_rtpmidi_listener_actor_t(
     actor_config_t config, std::string name, uint16_t control_port,
-    mailbox_handle_t router_mailbox)
+    mailbox_handle_t router_mailbox, mailbox_handle_t alsa_mailbox)
     : actor_t(std::move(config)), name_(std::move(name)),
-      control_port_(control_port), router_mailbox_(std::move(router_mailbox)) {}
+      control_port_(control_port), router_mailbox_(std::move(router_mailbox)),
+      alsa_mailbox_(std::move(alsa_mailbox)) {}
 
 void network_rtpmidi_listener_actor_t::on_start() {
   auto open_socket = [&](uint16_t port) -> int {
@@ -186,8 +187,24 @@ void network_rtpmidi_listener_actor_t::spawn_peer(
     return;
   }
 
+  // The remote's name from the IN packet (used for its ALSA port).
+  std::string remote_name;
+  try {
+    rtpmidid::io_bytes_reader r(initial_in.data(),
+                                uint32_t(initial_in.size()));
+    r.seek(16); // signature + cmd + protocol + initiator_id + ssrc
+    remote_name = r.read_str0();
+  } catch (const std::exception &) {
+    remote_name = FMT::format("remote-{}", initiator_id);
+  }
+
+  auto &link = links_[initiator_id];
+  link.remote_name = remote_name;
+  link.spawn_corr = ++corr_counter_;
+  link.alsa_corr = ++corr_counter_;
+
   spawn_peer_t sp;
-  sp.hdr = hdr_t{uint64_t(this->config_.id) << 32 | initiator_id};
+  sp.hdr = hdr_t{link.spawn_corr};
   sp.reply_to = mailbox();
   sp.type = "network_rtpmidi_peer_t";
   sp.meta = name_;
@@ -218,14 +235,51 @@ void network_rtpmidi_listener_actor_t::spawn_peer(
 }
 
 void network_rtpmidi_listener_actor_t::handle_peer_ids_result(
-    peer_ids_result_t &&) {
-  // The spawn ack: nothing to do — routing was registered eagerly. The
-  // router now owns the peer; the listener forgets it (5.3).
+    peer_ids_result_t &&m) {
+  for (auto &[initiator_id, link] : links_) {
+    if (link.spawn_corr == m.hdr.corr) {
+      // Spawn ack: the router owns the peer; link the net id and create
+      // the ALSA port for the remote.
+      if (m.ids.empty()) {
+        links_.erase(initiator_id);
+        return;
+      }
+      link.net_id = m.ids[0];
+      if (alsa_mailbox_) {
+        alsa_mailbox_->post_control(alsa_create_port_t{
+            hdr_t{link.alsa_corr}, mailbox(), link.remote_name,
+            FMT::format("{}:{}", name_, link.remote_name)});
+      }
+      return;
+    }
+    if (link.alsa_corr == m.hdr.corr) {
+      // ALSA-create ack: wire the hosted port to the connection peer.
+      if (m.ids.empty()) {
+        links_.erase(initiator_id);
+        return;
+      }
+      link.alsa_id = m.ids[0];
+      if (router_mailbox_ && link.net_id != 0) {
+        router_mailbox_->post_control(
+            connect_t{hdr_t{0}, mailbox(), link.alsa_id, link.net_id});
+        router_mailbox_->post_control(
+            connect_t{hdr_t{0}, mailbox(), link.net_id, link.alsa_id});
+      }
+      return;
+    }
+  }
 }
 
 void network_rtpmidi_listener_actor_t::handle_peer_gone(udp_peer_gone_t &&m) {
   by_initiator_.erase(m.initiator_id);
   by_ssrc_.erase(m.ssrc);
+  // The connection ended: also drop its ALSA port.
+  auto it = links_.find(m.initiator_id);
+  if (it != links_.end() && it->second.alsa_id != 0 && alsa_mailbox_) {
+    alsa_mailbox_->post_control(
+        alsa_remove_port_t{hdr_t{0}, mailbox(), it->second.alsa_id});
+  }
+  links_.erase(m.initiator_id);
   if (connection_count_ > 0) {
     connection_count_--;
   }

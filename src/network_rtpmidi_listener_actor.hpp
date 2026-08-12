@@ -37,10 +37,12 @@ namespace rtpmididns {
 
 class network_rtpmidi_listener_actor_t : public actor_t {
 public:
-  /// `control_port` 0 = ephemeral (midi = control + 1).
+  /// `control_port` 0 = ephemeral (midi = control + 1). Each accepted
+  /// connection also gets an ALSA port (created through `alsa_mailbox`).
   network_rtpmidi_listener_actor_t(actor_config_t config, std::string name,
                                    uint16_t control_port,
-                                   mailbox_handle_t router_mailbox);
+                                   mailbox_handle_t router_mailbox,
+                                   mailbox_handle_t alsa_mailbox = {});
 
   uint16_t control_port() const { return control_port_; }
   uint16_t midi_port() const { return control_port_ + 1; }
@@ -73,12 +75,23 @@ private:
   std::string name_;
   uint16_t control_port_ = 0;
   mailbox_handle_t router_mailbox_;
+  mailbox_handle_t alsa_mailbox_;
   udp_socket_t control_;
   udp_socket_t midi_;
   /// Routing: client initiator id / ssrc -> connection peer mailbox.
   std::unordered_map<uint32_t, mailbox_handle_t> by_initiator_;
   std::unordered_map<uint32_t, mailbox_handle_t> by_ssrc_;
+  /// Per accepted connection: net peer id <-> hosted alsa port id.
+  struct peer_link_t {
+    uint64_t alsa_corr = 0;
+    uint64_t spawn_corr = 0;
+    peer_id_t net_id = 0;
+    peer_id_t alsa_id = 0;
+    std::string remote_name;
+  };
+  std::unordered_map<uint32_t, peer_link_t> links_; // by initiator id
   size_t connection_count_ = 0;
+  uint64_t corr_counter_ = 0;
 };
 
 } // namespace rtpmididns

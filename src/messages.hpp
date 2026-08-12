@@ -509,6 +509,23 @@ struct mdns_remove_t {
   int32_t port = 0;
 };
 
+// --- ALSA hosted-port creation (mdns discovery / network connections) -------
+
+/// Ask the ALSA actor to create a seq port and register it as a hosted
+/// peer; the reply carries the router-assigned id (peer_ids_result_t).
+struct alsa_create_port_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+  std::string name;
+  std::string meta;
+};
+/// Ask the ALSA actor to remove a hosted port by router id.
+struct alsa_remove_port_t {
+  hdr_t hdr;
+  mailbox_handle_t reply_to;
+  peer_id_t peer_id = 0;
+};
+
 // --- worker and DNS (design D10/D13) --------------------------------------
 
 /// A blocking job for the worker actor (C++23 `std::move_only_function`;
@@ -536,7 +553,8 @@ struct control_message_t {
                unsubscribe_events_t, stop_all_t, ack_t, peer_ids_result_t,
                worker_job_t, dns_resolved_t, udp_datagram_t, udp_peer_gone_t,
                mdns_status_req_t, mdns_status_resp_t, mdns_announce_t,
-               mdns_unannounce_t, mdns_remove_t>
+               mdns_unannounce_t, mdns_remove_t, alsa_create_port_t,
+               alsa_remove_port_t>
       v;
 
   control_message_t() = default;

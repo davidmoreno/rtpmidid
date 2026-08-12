@@ -22,6 +22,7 @@
 /// and message->send, worker FIFO jobs and DNS resolution.
 
 #include "local_rawmidi_peer_actor.hpp"
+#include "mdns_actor.hpp"
 #include "peer_actor.hpp"
 #include "test_case.hpp"
 #include "worker_actor.hpp"
@@ -208,6 +209,70 @@ void test_worker_dns_resolution() {
   ASSERT_FALSE(dns.addresses.empty()); // 127.0.0.1 and/or ::1
 }
 
+
+// --- mdns discovery -> ALSA port + network client (fake router/alsa) --------
+
+void test_mdns_discovery_creates_alsa_port_and_client() {
+  auto router_mb = std::make_shared<actor_mailbox_t>();
+  auto alsa_mb = std::make_shared<actor_mailbox_t>();
+  auto worker = std::make_shared<worker_actor_t>(actor_config_t{.name = "w"});
+  auto mdns = std::make_shared<mdns_actor_t>(
+      actor_config_t{.name = "mdns"}, router_mb, alsa_mb, worker);
+  mdns->pump(); // on_start (no avahi: mdns_ null, but wiring works)
+
+  // Discovery event: the mdns actor asks the ALSA actor for a port.
+  mdns->on_discovered("Fancy Synth", "192.168.1.50", "5004");
+  mdns->pump();
+  auto req = alsa_mb->pop_control();
+  ASSERT_TRUE(req.has_value());
+  ASSERT_TRUE(std::holds_alternative<alsa_create_port_t>(req->v));
+  auto &cp = std::get<alsa_create_port_t>(req->v);
+  ASSERT_TRUE(cp.name == "Fancy Synth");
+
+  // The ALSA actor replies with the assigned router id.
+  mdns->mailbox()->post_control(
+      peer_ids_result_t{cp.hdr, {10}, nullptr});
+  mdns->pump();
+  // Now the mdns actor spawns the network client via the router.
+  auto spawn = router_mb->pop_control();
+  ASSERT_TRUE(spawn.has_value());
+  ASSERT_TRUE(std::holds_alternative<spawn_peer_t>(spawn->v));
+  auto &sp = std::get<spawn_peer_t>(spawn->v);
+  ASSERT_TRUE(sp.meta == "Fancy Synth");
+
+  // The router acks the spawn.
+  mdns->mailbox()->post_control(peer_ids_result_t{sp.hdr, {20}, nullptr});
+  mdns->pump();
+  // Bidirectional connect: alsa id 10 <-> net id 20.
+  int connects = 0;
+  while (auto c = router_mb->pop_control()) {
+    if (auto *ct = std::get_if<connect_t>(&c->v)) {
+      connects++;
+      ASSERT_TRUE((ct->from == 10 && ct->to == 20) ||
+                  (ct->from == 20 && ct->to == 10));
+    }
+  }
+  ASSERT_EQUAL(connects, 2);
+
+  // Removal: the server goes away; the ALSA port and client are removed.
+  mdns->on_removed("Fancy Synth");
+  mdns->pump();
+  bool saw_remove = false;
+  bool saw_alsa_remove = false;
+  while (auto c = router_mb->pop_control()) {
+    if (auto *rm = std::get_if<remove_peer_t>(&c->v)) {
+      saw_remove = (rm->peer_id == 20);
+    }
+  }
+  while (auto c = alsa_mb->pop_control()) {
+    if (auto *rm = std::get_if<alsa_remove_port_t>(&c->v)) {
+      saw_alsa_remove = (rm->peer_id == 10);
+    }
+  }
+  ASSERT_TRUE(saw_remove);
+  ASSERT_TRUE(saw_alsa_remove);
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_registered_gate_drops_pre_registration_traffic),
@@ -216,6 +281,7 @@ int main(int argc, char **argv) {
       TEST(test_rawmidi_actor_recv_to_message_and_message_to_send),
       TEST(test_worker_jobs_fifo_and_exception_isolation),
       TEST(test_worker_dns_resolution),
+      TEST(test_mdns_discovery_creates_alsa_port_and_client),
   };
   testcase.run(argc, argv);
   return testcase.exit_code();

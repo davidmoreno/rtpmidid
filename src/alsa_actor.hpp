@@ -72,7 +72,11 @@ private:
   std::unordered_map<peer_id_t, uint8_t> id_to_port_;
   /// seq port -> router peer id
   std::unordered_map<uint8_t, peer_id_t> port_to_id_;
-  std::unordered_map<uint8_t, mailbox_handle_t> pending_ports_;
+  struct pending_register_t {
+    mailbox_handle_t register_reply; // where the router ack lands
+    mailbox_handle_t create_reply;   // who asked for this port (may be null)
+  };
+  std::unordered_map<uint8_t, pending_register_t> pending_ports_;
   struct port_connections_t {
     rtpmidid::signal_t<snd_seq_event_t *>::connection_t midi;
   };
