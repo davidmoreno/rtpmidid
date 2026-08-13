@@ -20,6 +20,7 @@
 #pragma once
 #include "formatterhelper.hpp"
 #include <array>
+#include <atomic>
 #include <iostream>
 #include <string>
 
@@ -36,35 +37,91 @@ ENUM_FORMATTER_END();
 
 namespace rtpmidid {
 
-class logger_t {
-  using buffer_t = std::array<char, 1024>;
-  // we use a preallocated array to avoid any allocation on debug
-  buffer_t buffer;
-  logger_level_t current_log_level = logger_level_t::INFO;
+/// A formatted log message, as handed to the logger actor: the level, the
+/// origin ("file.cpp:lineno") and the already-formatted message body. The
+/// producing thread substitutes the arguments into the body; the sink
+/// never reformats, it only renders the final line.
+struct log_message_t {
+  logger_level_t level = logger_level_t::INFO;
+  std::string origin;
+  std::string text;
+};
 
+/// Render a complete log line ("[INFO ] file.cpp:12 | message") with the
+/// ANSI color decoration, exactly as the daemon printed before the logger
+/// actor existed. Used by the direct-print fallback and by the daemon's
+/// logger actor, so both paths produce byte-identical output.
+std::string logger_format_line(const log_message_t &msg);
+
+/// Routing hook installed by the daemon's logger actor (`install()`): once
+/// set, every INFO/WARNING/DEBUG/ERROR hands its formatted message to the
+/// actor, and the actor's single thread owns the stdout output. When unset
+/// — lib-only programs, tests, early startup before the actor exists —
+/// `log` prints directly, exactly as it always did.
+extern void (*logger_log_sink)(log_message_t msg);
+
+/// "file.cpp:lineno" origin for a log call site.
+inline std::string log_origin(const char *filename, int lineno) {
+  const char *base = filename;
+  for (const char *p = filename; *p != '\0'; ++p) {
+    if (*p == '/') {
+      base = p + 1;
+    }
+  }
+  return std::string(base) + ":" + std::to_string(lineno);
+}
+
+// One-line rendering for mailbox drop diagnostics.
+inline std::string to_string(const log_message_t &m) {
+  return "log{level=" + std::to_string(static_cast<int>(m.level)) +
+         ", origin=\"" + m.origin + "\", text=\"" + m.text + "\"}";
+}
+
+class logger_t {
 public:
-  buffer_t::iterator log_preamble(logger_level_t level, const char *filename,
-                                  int lineno);
-  void log_postamble(buffer_t::iterator it);
-  void set_log_level(logger_level_t level) { current_log_level = level; }
+  void set_log_level(logger_level_t level) {
+    current_log_level.store(level, std::memory_order_relaxed);
+  }
+  logger_level_t log_level() const {
+    return current_log_level.load(std::memory_order_relaxed);
+  }
 
   template <typename... Args>
-  constexpr void log(logger_level_t level, const char *filename, int lineno,
-                     FMT::format_string<Args...> message, Args... args) {
-    // Runtime filtering: only log if level is at or above current_log_level
-    if (level < current_log_level) {
+  void log(logger_level_t level, const char *filename, int lineno,
+           FMT::format_string<Args...> message, Args... args) {
+    // Runtime filtering: only log if level is at or above current_log_level.
+    if (level < log_level()) {
       return;
     }
 
-    auto it = log_preamble(level, filename, lineno);
+    // Format the message body on the producing thread (the "already
+    // formatted char list" the logger actor receives). The per-thread
+    // buffer keeps logging race-free: the old shared buffer interleaved
+    // when two threads logged concurrently.
+    auto &buffer = thread_buffer();
+    const auto res = FMT::format_to_n(buffer.begin(), buffer.size() - 16,
+                                      message, std::forward<Args>(args)...);
 
-    auto max_size = buffer.size() - (it - buffer.begin()) - 16;
-    auto res =
-        FMT::format_to_n(it, max_size, message, std::forward<Args>(args)...);
-    it = res.out;
-
-    log_postamble(it);
+    log_message_t msg{level, log_origin(filename, lineno),
+                      std::string(buffer.begin(), res.out)};
+    if (logger_log_sink != nullptr) {
+      logger_log_sink(std::move(msg));
+    } else {
+      // No logger actor installed (lib-only program, test, early startup):
+      // keep the original direct print so output is unchanged.
+      std::cout << logger_format_line(msg) << std::endl;
+    }
   }
+
+private:
+  /// One preallocated buffer per thread, shared by all `log` instantiations
+  /// (we never allocate on the debug path).
+  static std::array<char, 1024> &thread_buffer() {
+    static thread_local std::array<char, 1024> buffer;
+    return buffer;
+  }
+
+  std::atomic<logger_level_t> current_log_level{logger_level_t::INFO};
 };
 } // namespace rtpmidid
 

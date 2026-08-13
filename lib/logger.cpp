@@ -24,6 +24,8 @@
 
 namespace rtpmidid {
 rtpmidid::logger_t logger2;
+void (*logger_log_sink)(log_message_t) = nullptr;
+
 static constexpr const char *ansi_color(logger_level_t level) {
   switch (level) {
   case DEBUG:
@@ -38,6 +40,8 @@ static constexpr const char *ansi_color(logger_level_t level) {
     return "";
   }
 }
+static constexpr const char *ansi_color_reset() { return "\033[0m"; }
+
 static constexpr size_t ansi_color_length(logger_level_t level) {
   switch (level) {
   case DEBUG:
@@ -53,37 +57,23 @@ static constexpr size_t ansi_color_length(logger_level_t level) {
   }
 }
 
-static constexpr const char *ansi_color_reset() { return "\033[0m"; }
-
-static constexpr const char *basename(const char *filename) {
-  const char *p = filename;
-  while (*filename) {
-    if (*filename == '/') {
-      p = filename + 1;
-    }
-    filename++;
+std::string logger_format_line(const log_message_t &msg) {
+  // The old preamble was "{color}[{level}] {basename}:{lineno}" with the
+  // non-color prefix padded to 40 columns, then " | ", the body and the
+  // color reset. Produces byte-identical output.
+  const std::string prefix =
+      "[" + FMT::format("{}", msg.level) + "] " + msg.origin;
+  std::string out;
+  out.reserve(ansi_color_length(msg.level) + 40 + 3 + msg.text.size() + 8);
+  out += ansi_color(msg.level);
+  out += prefix;
+  if (prefix.size() < 40) {
+    out.append(40 - prefix.size(), ' ');
   }
-  return p;
-}
-
-logger_t::buffer_t::iterator
-logger_t::log_preamble(logger_level_t level, const char *filename, int lineno) {
-  auto it = buffer.begin();
-
-  it = FMT::format_to(it, "{}[{}] {}:{}", ansi_color(level), level,
-                      basename(filename), lineno);
-  for (int i = it - buffer.begin() - ansi_color_length(level); i < 40; i++) {
-    *it = ' ';
-    it++;
-  }
-  it = FMT::format_to(it, " | ");
-  return it;
-}
-
-void logger_t::log_postamble(buffer_t::iterator it) {
-  it = FMT::format_to(it, "{}", ansi_color_reset());
-  *it = '\0';
-  std::cout << buffer.data() << std::endl;
+  out += " | ";
+  out += msg.text;
+  out += ansi_color_reset();
+  return out;
 }
 
 logger_level_t str_to_log_level(const std::string &value) {

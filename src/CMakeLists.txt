@@ -22,6 +22,7 @@ add_library(
   network_rtpmidi_peer_actor.cpp
   network_rtpmidi_listener_actor.cpp
   mdns_actor.cpp
+  logger_actor.cpp
   supervisor_actor.cpp
   alsa_actor.cpp
   control_socket_actor.cpp

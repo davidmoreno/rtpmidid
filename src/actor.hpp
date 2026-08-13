@@ -410,6 +410,15 @@ bool actor_t<DataT, ControlT>::run_once(
   on_loop();
 
   if (stopping_ || stop_source_.stop_requested()) {
+    // Graceful stop: never exit while lanes still hold messages. The
+    // data-first drain emptied the lanes before the stop was popped, but
+    // a producer can push in the drain→stop window (or right after the
+    // stop): one more pass drains those instead of dropping them, so a
+    // stop always flushes what was enqueued before it. Escalation (stop
+    // token) still exits immediately, bounding a wedged producer.
+    if (!stop_source_.stop_requested() && !mailbox_->idle()) {
+      return true;
+    }
     return false;
   }
 

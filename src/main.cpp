@@ -27,6 +27,7 @@
 #include "argv.hpp"
 #include "control_socket_actor.hpp"
 #include "local_rawmidi_peer_actor.hpp"
+#include "logger_actor.hpp"
 #include "mdns_actor.hpp"
 #include "network_rtpmidi_listener_actor.hpp"
 #include "network_rtpmidi_peer_actor.hpp"
@@ -157,6 +158,14 @@ int main(int argc, char **argv) {
   supervisor->set_signal_fd(signal_fd);
   const auto sup_mb = supervisor->mailbox();
 
+  // Logger actor: owns the daemon's stdout logging (INFO/WARNING/DEBUG/
+  // ERROR route here through the global sink). Created right after the
+  // supervisor so it can report to it; every log from here on (actor
+  // construction, scheduling, wiring) goes through this actor.
+  auto logger = std::make_shared<logger_actor_t>(
+      actor_config_t{.name = "logger", .supervisor_mailbox = sup_mb});
+  logger->install();
+
   auto router = std::make_shared<router_actor_t>(
       actor_config_t{.name = "router",
                      .scheduling = scheduling_class_t::elevated,
@@ -211,6 +220,7 @@ int main(int argc, char **argv) {
 
   // Start everything.
   try {
+    logger->start();
     supervisor->start();
     router->start();
     worker->start();
@@ -236,6 +246,15 @@ int main(int argc, char **argv) {
     std::this_thread::sleep_for(50ms);
   }
 
+  // The logger is the last actor to stop: the stop control message is
+  // processed only after the queued log lines are drained (data-first
+  // policy), so the final INFO above and every shutdown log are flushed
+  // before the process exits. Join the thread here — leaving it to the
+  // destructor would race the graceful stop with the stop-token
+  // escalation and could drop the last lines.
   INFO("Shutdown complete. Exiting.");
+  logger->request_stop();
+  auto logger_thread = logger->take_thread();
+  logger_thread.join();
   return 0;
 }

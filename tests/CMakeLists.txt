@@ -13,6 +13,11 @@ target_link_libraries(test_actor -pthread rtpmidid-shared rtpmidid2-static)
 target_link_libraries(test_actor ${FMT_LIBRARIES})
 add_test(NAME test_actor COMMAND test_actor)
 
+add_executable(test_logger test_logger.cpp)
+target_link_libraries(test_logger -pthread rtpmidid-shared rtpmidid2-static)
+target_link_libraries(test_logger ${FMT_LIBRARIES})
+add_test(NAME test_logger COMMAND test_logger)
+
 add_executable(test_messages test_messages.cpp)
 target_link_libraries(test_messages -pthread rtpmidid-shared rtpmidid2-static)
 target_link_libraries(test_messages ${FMT_LIBRARIES})
