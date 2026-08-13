@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2025 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2026 David Moreno Montero <dmoreno@coralbits.com>
  *
  * Unit tests for the json-dm runtime (include/rtpmidid/jsondm.hpp).
  * The serializer/deserializer specializations in this file are hand-written

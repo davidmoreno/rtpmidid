@@ -11,7 +11,7 @@
  * Happy path is allocation-free; allocation is permitted only on error paths
  * and when target containers must grow ("avoid, not forbid").
  *
- * Copyright (C) 2025 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2026 David Moreno Montero <dmoreno@coralbits.com>
  * GPLv3, same as rtpmidid.
  */
 #pragma once

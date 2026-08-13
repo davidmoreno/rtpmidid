@@ -1,6 +1,6 @@
 /**
  * Real Time Protocol Music Instrument Digital Interface Daemon
- * Copyright (C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
+ * Copyright (C) 2019-2026 David Moreno Montero <dmoreno@coralbits.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -43,12 +43,12 @@ const char *VERSION = RTPMIDID_VERSION;
 // NOLINTNEXTLINE (cppcoreguidelines-pro-bounds-pointer-arithmetic)
 constexpr const char *const CMDLINE_HELP = &R"(
 Real Time Protocol Music Instrument Digital Interface Daemon v{}
-(C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
+(C) 2019-2026 David Moreno Montero <dmoreno@coralbits.com>
 Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.
 
-rtpmidi allows to use rtpmidi protocol to communicate with MIDI 
-equipement using network equipiment. Recomended use is via ethernet 
-cabling as with WiFi there is a lot more latency and a lot of jitter. 
+rtpmidi allows to use rtpmidi protocol to communicate with MIDI
+equipement using network equipiment. Recomended use is via ethernet
+cabling as with WiFi there is a lot more latency and a lot of jitter.
 Internet use has not been tested, but may also deliver high latency
 and jitter.
 

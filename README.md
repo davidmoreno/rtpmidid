@@ -63,7 +63,7 @@ Recomended use is via debian packages, at https://github.com/davidmoreno/rtpmidi
 
 ```
 Real Time Protocol Music Instrument Digital Interface Daemon v23.10b1~12~g3495e
-(C) 2019-2023 David Moreno Montero <dmoreno@coralbits.com>
+(C) 2019-2026 David Moreno Montero <dmoreno@coralbits.com>
 Share ALSA sequencer MIDI ports using rtpmidi, and viceversa.
 
 rtpmidi allows to use rtpmidi protocol to communicate with MIDI equipement
