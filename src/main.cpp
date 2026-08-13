@@ -106,6 +106,11 @@ static void setup_static_peers(const std::shared_ptr<router_actor_t> &router,
 
 // NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char **argv) {
+  // Main-thread identity: log tag only. The comm is deliberately left as
+  // the process name (rtpmidid) — the main thread's comm IS the process
+  // comm, and killall/pgrep -x/systemd match on it.
+  rtpmidid::set_log_thread_tag("main");
+
   std::vector<std::string> args;
   for (int i = 1; i < argc; i++) {
     args.push_back(argv[i]);

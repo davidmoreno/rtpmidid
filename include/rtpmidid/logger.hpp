@@ -45,7 +45,22 @@ struct log_message_t {
   logger_level_t level = logger_level_t::INFO;
   std::string origin;
   std::string text;
+  /// The producing thread's tag (e.g. the actor name), captured at
+  /// production time as an owned copy: the producer and the renderer are
+  /// different threads (the logger actor prints what others logged), and
+  /// the producer may exit before the message is rendered, so a pointer
+  /// into the producer's storage would dangle. Empty when the thread has
+  /// no tag.
+  std::string thread_name;
 };
+
+/// Per-thread log tag registry (one `thread_local` per thread, mirroring
+/// the `thread_buffer()` pattern): any thread may set its tag (the actor
+/// runtime does so at thread start), and `log()` captures it into every
+/// emitted message. Threads that never set a tag produce untagged
+/// messages, rendered exactly as before.
+void set_log_thread_tag(std::string name);
+const std::string &current_log_thread_tag();
 
 /// Render a complete log line ("[INFO ] file.cpp:12 | message") with the
 /// ANSI color decoration, exactly as the daemon printed before the logger
@@ -104,6 +119,8 @@ public:
 
     log_message_t msg{level, log_origin(filename, lineno),
                       std::string(buffer.begin(), res.out)};
+    // Capture the producing thread's tag (owned copy, see log_message_t).
+    msg.thread_name = current_log_thread_tag();
     if (logger_log_sink != nullptr) {
       logger_log_sink(std::move(msg));
     } else {

@@ -31,8 +31,13 @@ supervisor_actor_t::supervisor_actor_t(actor_config_t config)
 
 void supervisor_actor_t::on_start() {
   // The reaper joins delegated jthreads off-loop (D9): shutdown never
-  // hangs on a wedged thread.
-  reaper_ = std::thread([this] { reaper_loop(); });
+  // hangs on a wedged thread. It also gets the per-thread identity
+  // (log tag + comm) like any actor thread.
+  reaper_ = std::thread([this] {
+    rtpmidid::set_log_thread_tag("reaper");
+    pthread_setname_np(pthread_self(), "rtpmidid:reaper");
+    reaper_loop();
+  });
   // The process-wide SIGTERM/SIGINT handler writes to an eventfd (the
   // avahi/ALSA libraries reset the signal mask, so signalfd's mask-based
   // wakeup is unreliable); this actor's poller services the eventfd.

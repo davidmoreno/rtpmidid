@@ -33,6 +33,7 @@
 #pragma once
 
 #include "mailbox.hpp"
+#include "rtpmidid/logger.hpp"
 #include "rtpmidid/poller.hpp"
 #include <algorithm>
 #include <cerrno>
@@ -339,6 +340,18 @@ void actor_t<DataT, ControlT>::request_stop_token() {
 
 template <typename DataT, typename ControlT>
 void actor_t<DataT, ControlT>::thread_main() {
+  // Per-thread identity, set before anything else so even the scheduling
+  // logs are tagged: the log tag names every line this thread produces,
+  // and the OS comm shows "rtpmidid:<name>" in htop/top -H / ps -eLf /
+  // gdb / perf. glibc's pthread_setname_np rejects names longer than 15
+  // chars with ERANGE (it does not truncate), so the comm is truncated
+  // here; the log tag always keeps the full name. An empty name tags
+  // nothing and leaves the comm untouched (no bare "rtpmidid:").
+  rtpmidid::set_log_thread_tag(config_.name);
+  if (!config_.name.empty()) {
+    const std::string comm = "rtpmidid:" + config_.name;
+    pthread_setname_np(pthread_self(), comm.substr(0, 15).c_str());
+  }
   apply_scheduling();
   try {
     on_start();

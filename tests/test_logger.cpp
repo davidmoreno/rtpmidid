@@ -18,8 +18,9 @@
 
 /// Logger actor tests (threadless pump mode): exact line rendering, macro
 /// routing through the installed sink, producer-side level filtering, the
-/// stop-drains-the-queue guarantee, and the direct-print fallback when no
-/// actor is installed.
+/// stop-drains-the-queue guarantee, the direct-print fallback when no
+/// actor is installed, and the per-thread log tag (rendering, capture,
+/// survival across producer exit).
 
 #include "logger_actor.hpp"
 #include "test_case.hpp"
@@ -145,6 +146,72 @@ static void test_no_sink_prints_directly() {
   ASSERT_TRUE(capture.str().find("direct 7") != std::string::npos);
 }
 
+/// Tagged messages render the tag inside the padded prefix, with the `|`
+/// aligned at the same column as untagged lines.
+static void test_thread_tag_rendering() {
+  logger_actor_t logger(actor_config_t{.name = "logger"});
+  cout_capture_t capture;
+
+  logger.mailbox()->post_data(rtpmidid::log_message_t{
+      rtpmidid::logger_level_t::INFO, "router_actor.cpp:12", "peer up",
+      "router"});
+  logger.pump();
+
+  // "[INFO ] [router] router_actor.cpp:12" (36 chars) padded to 40, then
+  // " | peer up", color reset, newline. INFO carries no color.
+  const std::string expected =
+      std::string("[INFO ] [router] router_actor.cpp:12") +
+      std::string(4, ' ') + " | peer up\033[0m\n";
+  ASSERT_EQUAL(capture.str(), expected);
+}
+
+/// The thread tag is captured at production time: a thread that set a tag
+/// produces tagged lines through the sink, and an untagged thread produces
+/// the legacy byte-identical format.
+static void test_thread_tag_capture_and_legacy() {
+  logger_actor_t logger(actor_config_t{.name = "logger"});
+  sink_guard_t guard(logger);
+  {
+    rtpmidid::set_log_thread_tag("worker");
+    cout_capture_t capture;
+    INFO("tagged from worker");
+    logger.pump();
+    ASSERT_TRUE(capture.str().find("[INFO ] [worker] test_logger.cpp:") !=
+                std::string::npos);
+    ASSERT_TRUE(capture.str().find("tagged from worker") !=
+                std::string::npos);
+  }
+  {
+    rtpmidid::set_log_thread_tag(""); // untagged: legacy format, no tag
+    cout_capture_t capture;
+    INFO("untagged message");
+    logger.pump();
+    ASSERT_TRUE(capture.str().find("[INFO ] test_logger.cpp:") !=
+                std::string::npos);
+    ASSERT_TRUE(capture.str().find("untagged message") !=
+                std::string::npos);
+  }
+}
+
+/// The tag is an owned copy, so it survives the producing thread exiting
+/// before the logger renders the message — no dangling reference.
+static void test_tag_survives_producer_exit() {
+  logger_actor_t logger(actor_config_t{.name = "logger"});
+  sink_guard_t guard(logger);
+  cout_capture_t capture;
+
+  std::thread producer([] {
+    rtpmidid::set_log_thread_tag("ephemeral");
+    INFO("from a dying thread");
+  });
+  producer.join();
+  logger.pump();
+
+  ASSERT_TRUE(capture.str().find("[ephemeral]") != std::string::npos);
+  ASSERT_TRUE(capture.str().find("from a dying thread") !=
+              std::string::npos);
+}
+
 /// Real-thread hammering of the drain-on-stop guarantee: a producer
 /// thread posts continuously while the main thread stops the actor, so
 /// the stop races the in-progress drain. After the thread exits the
@@ -184,6 +251,9 @@ static void test_threaded_stop_drains_racing_producer() {
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_actor_formats_and_prints),
+      TEST(test_thread_tag_rendering),
+      TEST(test_thread_tag_capture_and_legacy),
+      TEST(test_tag_survives_producer_exit),
       TEST(test_macros_route_through_sink),
       TEST(test_producer_level_filter),
       TEST(test_stop_drains_queue),

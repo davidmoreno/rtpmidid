@@ -26,6 +26,15 @@ namespace rtpmidid {
 rtpmidid::logger_t logger2;
 void (*logger_log_sink)(log_message_t) = nullptr;
 
+/// The per-thread log tag: set once per thread (e.g. by the actor runtime
+/// at thread start); `log()` copies it into every emitted message so the
+/// tag travels with the message to the rendering thread.
+static thread_local std::string thread_log_tag;
+
+void set_log_thread_tag(std::string name) { thread_log_tag = std::move(name); }
+
+const std::string &current_log_thread_tag() { return thread_log_tag; }
+
 static constexpr const char *ansi_color(logger_level_t level) {
   switch (level) {
   case DEBUG:
@@ -58,13 +67,17 @@ static constexpr size_t ansi_color_length(logger_level_t level) {
 }
 
 std::string logger_format_line(const log_message_t &msg) {
-  // The old preamble was "{color}[{level}] {basename}:{lineno}" with the
-  // non-color prefix padded to 40 columns, then " | ", the body and the
-  // color reset. Produces byte-identical output.
-  const std::string prefix =
-      "[" + FMT::format("{}", msg.level) + "] " + msg.origin;
+  // "[{level}] [tag] {basename}:{lineno}" with the non-color prefix
+  // padded to 40 columns, then " | ", the body and the color reset. An
+  // empty tag renders byte-identical to the pre-tag output.
+  std::string prefix = "[" + FMT::format("{}", msg.level) + "] ";
+  if (!msg.thread_name.empty()) {
+    prefix += "[" + msg.thread_name + "] ";
+  }
+  prefix += msg.origin;
   std::string out;
-  out.reserve(ansi_color_length(msg.level) + 40 + 3 + msg.text.size() + 8);
+  out.reserve(ansi_color_length(msg.level) + 40 + 3 + msg.text.size() + 8 +
+              msg.thread_name.size() + 3);
   out += ansi_color(msg.level);
   out += prefix;
   if (prefix.size() < 40) {
