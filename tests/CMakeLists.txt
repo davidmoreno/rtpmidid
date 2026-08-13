@@ -38,6 +38,11 @@ target_link_libraries(test_supervisor -pthread rtpmidid-shared rtpmidid2-static)
 target_link_libraries(test_supervisor ${FMT_LIBRARIES})
 add_test(NAME test_supervisor COMMAND test_supervisor)
 
+add_executable(test_ticker test_ticker.cpp)
+target_link_libraries(test_ticker -pthread rtpmidid-shared rtpmidid2-static)
+target_link_libraries(test_ticker ${FMT_LIBRARIES})
+add_test(NAME test_ticker COMMAND test_ticker)
+
 add_executable(test_alsa_bridge test_alsa_bridge.cpp)
 target_link_libraries(test_alsa_bridge -pthread rtpmidid-shared rtpmidid2-static)
 target_link_libraries(test_alsa_bridge ${FMT_LIBRARIES})

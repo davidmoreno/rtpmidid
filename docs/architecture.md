@@ -1,5 +1,10 @@
 # Actor architecture — cross-thread audit and hot-path measurements
 
+> For the full actor documentation (the model, the mailbox/queue layer, the
+> message protocol, the lifecycle, how to create new actors, and testing),
+> see [docs/actors/](actors/README.md).
+
+
 This file records the results of the cutover tasks 8.2 (no cross-thread
 direct calls) and 8.5 (latency/isolation smoke measurements) for the
 `add-actor-architecture` change.

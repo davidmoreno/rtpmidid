@@ -209,6 +209,11 @@ design in `openspec/changes/add-actor-architecture/design.md`).
   SIGINT handling, `actor_died` collection, a background reaper thread
   for wedged threads, and ordered shutdown.
 
+Full developer documentation — the model, mailboxes and queues, the
+message protocol, the lifecycle, a step-by-step guide to creating new
+actors, and how actors are tested — lives in
+[docs/actors/](docs/actors/README.md).
+
 ### Real-time scheduling
 
 Data-plane actors (peers, router) are eligible for SCHED_FIFO promotion
