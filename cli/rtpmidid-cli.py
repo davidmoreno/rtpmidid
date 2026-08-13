@@ -824,7 +824,7 @@ class Top:
         colwidths = []
         for col in columns:
             if col["width"] == 0:
-                colwidths.append(extra_width // auto_width_count)
+                colwidths.append(max(0, extra_width // auto_width_count))
             else:
                 colwidths.append(col["width"])
         return colwidths
@@ -858,8 +858,19 @@ class Top:
         if not sortf:
             sortf = columns[self.selected_col_index]["get"]
 
-        sorted_data = sorted(sorted(data, key=lambda x: str(x)), key=lambda x: sortf(x))
-        self.current_row = sorted_data[self.selected_row_index]
+        def make_sort_key(value):
+            """Return a comparable key for mixed-type values (int, str, None)."""
+            if isinstance(value, bool):
+                return (0, str(value))
+            if isinstance(value, (int, float)):
+                return (1, value)
+            return (2, str(value))
+
+        sorted_data = sorted(
+            sorted(data, key=lambda x: str(x)),
+            key=lambda x: make_sort_key(sortf(x)),
+        )
+        self.current_row = sorted_data[self.selected_row_index] if sorted_data else None
 
         self.print(self.ANSI_RESET)
         for idx, row in enumerate(sorted_data[: height - 1]):
