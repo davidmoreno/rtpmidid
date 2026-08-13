@@ -8,17 +8,11 @@ add_library(
   ini.cpp
   settings_jsondm.cpp
   settings.cpp
-  control_socket.cpp
   control_commands_jsondm.cpp
   control_status_jsondm.cpp
   peer_status_jsondm.cpp
   stringpp.cpp
-  hwautoannounce.cpp
 
-  factory.cpp
-  midirouter.cpp
-  midipeer.cpp
-  rtpmidiremotehandler.cpp
   utils.cpp
   midi_normalizer.cpp
   router_actor.cpp
@@ -32,14 +26,6 @@ add_library(
   alsa_actor.cpp
   control_socket_actor.cpp
 
-  local_alsa_listener.cpp
-  local_alsa_multi_listener.cpp
-  local_alsa_peer.cpp
-  local_rawmidi_peer.cpp
-  network_rtpmidi_client.cpp
-  network_rtpmidi_listener.cpp
-  network_rtpmidi_multi_listener.cpp
-  network_rtpmidi_peer.cpp
 )
 add_definitions(-D_REENTRANT)
 

@@ -18,6 +18,4 @@
  */
 
 #pragma once
-#include "midipeer.hpp"
-#include "midirouter.hpp"
 #include "settings.hpp"

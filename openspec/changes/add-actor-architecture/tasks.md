@@ -73,11 +73,10 @@
 ## 8. Cutover and packaging
 
 - [x] 8.1 Remove the global poller singleton and the old main loop; main becomes the supervisor actor only
-  (residual: the `rtpmidid::poller` symbol is still defined for librtpmidid's public
-  rtpclient/rtpserver/udppeer classes and the legacy tests; the daemon itself no
-  longer touches it. Full removal = parameterize those lib classes with a poller
-  and delete the legacy daemon sources (midirouter_t, midipeer_t, control_socket_t,
-  the legacy peer families) + their tests.)
+  (residual: the `rtpmidid::poller` symbol remains for librtpmidid's public
+  rtpclient/rtpserver/udppeer classes and their tests — the daemon itself no
+  longer touches it. The legacy daemon sources (midirouter_t, midipeer_t,
+  control_socket_t, the legacy peer families) and their tests were removed.)
 - [x] 8.2 Verify no cross-thread direct calls remain (audit: only mailbox posts between actors)
 - [x] 8.3 Update `debian/rtpmidid.service`: drop process-wide `CPUSchedulingPolicy=fifo`, keep `Group=audio`, add `LimitRTPRIO=` (or `AmbientCapabilities=CAP_SYS_NICE`) so in-daemon RT promotion can succeed, and document the requirement
 - [x] 8.4 Add configuration options: RT mode enable/priority values; document fallback behavior and the central lane-capacity constants (tuned in 8.5)
