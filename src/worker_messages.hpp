@@ -42,6 +42,12 @@ struct dns_resolved_t {
   std::vector<std::string> addresses; // empty = resolution failed
 };
 
+// One-line rendering for mailbox drop diagnostics (see message_core.hpp).
+inline std::string to_string(const dns_resolved_t &m) {
+  return "dns_resolved{hostname=\"" + m.hostname + "\", port=\"" + m.port +
+         "\", addresses=" + std::to_string(m.addresses.size()) + "}";
+}
+
 /// The worker's accepted control messages: jobs only.
 using worker_control_t = std::variant<stop_t, worker_job_t>;
 /// The worker's mailbox.

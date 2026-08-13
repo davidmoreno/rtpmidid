@@ -47,4 +47,20 @@ struct udp_peer_gone_t {
   uint32_t ssrc = 0;
 };
 
+// One-line rendering for mailbox drop diagnostics (see message_core.hpp).
+inline std::string to_string(udp_port_e port) {
+  switch (port) {
+  case udp_port_e::control:
+    return "control";
+  case udp_port_e::midi:
+    return "midi";
+  }
+  return "?";
+}
+inline std::string to_string(const udp_datagram_t &m) {
+  return "udp_datagram{port=" + to_string(m.port) +
+         ", len=" + std::to_string(m.data.size()) + ", remote=" +
+         m.remote_ip + ":" + std::to_string(m.remote_port) + "}";
+}
+
 } // namespace rtpmididns

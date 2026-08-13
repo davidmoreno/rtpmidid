@@ -254,6 +254,9 @@ template <typename DataT, typename ControlT>
 actor_t<DataT, ControlT>::actor_t(actor_config_t config)
     : config_(std::move(config)),
       mailbox_(std::make_shared<mailbox_type>()) {
+  // Diagnostic label for the mailbox: wiring-bug drop warnings name the
+  // receiving actor instead of an anonymous "Mailbox".
+  mailbox_->set_name(config_.name);
   if (config_.supervisor_mailbox == nullptr) {
     WARNING("Actor {} created without a supervisor mailbox: stopped/actor_died "
             "will not be posted.",

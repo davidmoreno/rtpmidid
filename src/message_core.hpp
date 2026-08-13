@@ -233,4 +233,46 @@ inline control_payload_t make_control_payload(uint32_t tag,
   return control_payload_t{tag, std::move(text)};
 }
 
+// --- one-line renderings for drop diagnostics --------------------------------
+// `mailbox_base_t::post_transport` drops (with a warning) control messages
+// an actor does not accept; the carrying `control_message_box_t` captures a
+// `to_string`-based description when the concrete type provides one (ADL at
+// instantiation). These keep the wiring-bug warning actionable — which
+// peer, which lifecycle kind — instead of just the type name.
+inline std::string to_string(peer_event_kind_t kind) {
+  switch (kind) {
+  case peer_event_kind_t::registered:
+    return "registered";
+  case peer_event_kind_t::removed:
+    return "removed";
+  case peer_event_kind_t::stopped:
+    return "stopped";
+  case peer_event_kind_t::died:
+    return "died";
+  case peer_event_kind_t::connected:
+    return "connected";
+  case peer_event_kind_t::disconnected:
+    return "disconnected";
+  }
+  return "unknown";
+}
+inline std::string to_string(const peer_event_t &ev) {
+  return "peer_event{" + to_string(ev.kind) + ", peer=" +
+         std::to_string(ev.peer_id) + "}";
+}
+inline std::string to_string(const ack_t &m) {
+  return "ack{ok=" + std::string(m.ok ? "true" : "false") +
+         (m.error.empty() ? "" : ", error=\"" + m.error + "\"") + "}";
+}
+inline std::string to_string(const stopped_t &m) {
+  return "stopped{peer_id=" + std::to_string(m.peer_id) + "}";
+}
+inline std::string to_string(const actor_died_t &m) {
+  return "actor_died{id=" + std::to_string(m.id) +
+         (m.reason.empty() ? "" : ", reason=\"" + m.reason + "\"") + "}";
+}
+inline std::string to_string(const reap_actor_t &m) {
+  return "reap_actor{reason=\"" + m.reason + "\"}";
+}
+
 } // namespace rtpmididns

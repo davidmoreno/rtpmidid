@@ -78,14 +78,36 @@ public:
   control_message_box_t(M &&m)
       : type_(typeid(std::decay_t<M>)),
         data_(new std::decay_t<M>(std::forward<M>(m)),
-              [](void *p) { delete static_cast<std::decay_t<M> *>(p); }) {}
+              [](void *p) { delete static_cast<std::decay_t<M> *>(p); }),
+        describe_(make_describe<std::decay_t<M>>()) {}
 
   std::type_index type() const { return type_; }
   void *data() { return data_.get(); }
+  /// Best-effort one-line rendering of the carried message ("" when the
+  /// concrete type has no `to_string` overload): makes a wiring-bug drop
+  /// warning say WHICH message (e.g. `peer_event{disconnected, peer=7}`)
+  /// instead of just the type name. Computed lazily, only on drop.
+  std::string describe() const {
+    return describe_ ? describe_(data_.get()) : std::string{};
+  }
 
 private:
+  /// A stringifier for `M` when `to_string(M)` is reachable — ADL at the
+  /// instantiation point, so overloads declared in later headers (e.g.
+  /// network_messages.hpp) are found too; nullptr otherwise.
+  template <typename M> static std::string (*make_describe())(const void *) {
+    if constexpr (requires(const M &m) { to_string(m); }) {
+      return [](const void *p) {
+        return to_string(*static_cast<const M *>(p));
+      };
+    } else {
+      return nullptr;
+    }
+  }
+
   std::type_index type_;
   std::unique_ptr<void, void (*)(void *)> data_;
+  std::string (*describe_)(const void *) = nullptr;
 };
 
 /**
@@ -97,12 +119,19 @@ private:
 class mailbox_base_t {
 public:
   virtual ~mailbox_base_t() = default;
+  /// Human-readable owner label for diagnostics (set by the owning actor
+  /// at construction; empty for standalone/test mailboxes).
+  void set_name(std::string name) { name_ = std::move(name); }
+  const std::string &name() const { return name_; }
   /// Post a data message (midi_received/midi_to_wire); false if this
   /// mailbox has no data lane for it.
   virtual bool post_data(data_message_t &&msg) = 0;
   /// Post a type-erased control message; false if this mailbox's control
   /// lane does not accept that message type.
   virtual bool post_transport(control_message_box_t &&box) = 0;
+
+private:
+  std::string name_;
 };
 
 // Definitions of the type-erased handle members (the message box and the
@@ -242,10 +271,15 @@ public:
       if (!ok) {
         // Not a flood: a wiring bug — a message was routed to an actor
         // whose declared control variant does not accept it. Be loud
-        // about it every time, naming the offending message type.
-        WARNING("Mailbox: dropping a '{}' control message this actor does "
-                "not accept (wiring bug).",
-                demangle_type(box.type().name()));
+        // about it every time, naming the target mailbox, the offending
+        // message type and its content (when the type has a rendering).
+        std::string desc = box.describe();
+        const std::string &mbname = name();
+        WARNING("Mailbox '{}': dropping a '{}' control message{} this actor "
+                "does not accept (wiring bug).",
+                (mbname.empty() ? "<unnamed>" : mbname),
+                demangle_type(box.type().name()),
+                (desc.empty() ? std::string{} : " (" + desc + ")"));
       }
       return ok;
     } else {

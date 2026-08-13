@@ -154,6 +154,7 @@ void test_erased_post_to_non_accepting_mailbox_is_rejected() {
   // through the type-erased handle must fail loudly (and return false),
   // not be silently swallowed.
   auto router_mb = std::make_shared<router_mailbox_t>();
+  router_mb->set_name("test-router");
   mailbox_handle_t h{router_mb};
   // mdns_status_req_t is not in the router's accepted control variant.
   ASSERT_FALSE(h.post_control(mdns_status_req_t{hdr_t{1}, {}}));
@@ -161,6 +162,25 @@ void test_erased_post_to_non_accepting_mailbox_is_rejected() {
   // An accepted message posts fine through the erased handle.
   ASSERT_TRUE(h.post_control(stop_t{hdr_t{2}}));
   ASSERT_FALSE(router_mb->idle());
+}
+
+void test_control_message_box_describe() {
+  // The drop warning says WHICH message: the carried box renders the
+  // concrete message through to_string when the type provides one.
+  control_message_box_t ev{peer_event_t{peer_event_kind_t::disconnected, 7}};
+  ASSERT_TRUE(ev.describe() == "peer_event{disconnected, peer=7}");
+  control_message_box_t st{make_stopped({}, 3)};
+  ASSERT_TRUE(st.describe() == "stopped{peer_id=3}");
+  control_message_box_t ack{ack_t{{}, false, "boom"}};
+  ASSERT_TRUE(ack.describe() == "ack{ok=false, error=\"boom\"}");
+  control_message_box_t dns{dns_resolved_t{{}, "host.example", "5004", {}}};
+  ASSERT_TRUE(dns.describe() ==
+              "dns_resolved{hostname=\"host.example\", port=\"5004\", "
+              "addresses=0}");
+  // Types without a to_string rendering describe as empty (no crash, the
+  // warning falls back to the type name only).
+  control_message_box_t plain{stop_t{{}}}; // no to_string overload
+  ASSERT_TRUE(plain.describe().empty());
 }
 
 void test_hdr_envelope_roundtrip() {
@@ -184,6 +204,7 @@ int main(int argc, char **argv) {
       TEST(test_hdr_envelope_roundtrip),
       TEST(test_mailbox_data_lane_drops_are_counted),
       TEST(test_erased_post_to_non_accepting_mailbox_is_rejected),
+      TEST(test_control_message_box_describe),
   };
   testcase.run(argc, argv);
   return testcase.exit_code();
