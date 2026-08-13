@@ -3,10 +3,14 @@ PORT:=10000
 # Number of jobs for make
 JOBS:=$(shell nproc)
 
+# Use ccache compiler cache if available: ON | OFF | auto (default auto)
+USE_CCACHE ?= auto
+
 # To easy change to clang, set CXX.
 # ENABLE_PCH sound like a good idea, but for massive parallelist (my comp has 32 CPU threads), it
 # stalls the parallelist waiting to compile the Pre Compiled Headers.
-CMAKE_EXTRA_ARGS := -DCMAKE_CXX_COMPILER=${CXX} -DENABLE_PCH=OFF
+# USE_CCACHE=ON|OFF|auto controls the ccache compiler cache (auto uses it if installed).
+CMAKE_EXTRA_ARGS := -DCMAKE_CXX_COMPILER=${CXX} -DENABLE_PCH=OFF -DUSE_CCACHE=${USE_CCACHE}
 
 # the final directory after proper install of normal files
 ifeq ($(PREFIX),)

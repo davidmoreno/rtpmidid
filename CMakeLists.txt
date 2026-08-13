@@ -18,6 +18,9 @@ set(USE_FMT "auto" CACHE STRING "Use fmt library (ON | OFF | auto)")
 # option to set log level: 1=debug, 2=info, 3=warning, 4=error
 # Set from CLI with: cmake -DLOG_LEVEL=2 ..
 set(LOG_LEVEL "1" CACHE STRING "Set log level (1=debug, 2=info, 3=warning, 4=error)")
+# option to use ccache to cache compilations and avoid recompiling unchanged files.
+# Note: ccache caching requires ENABLE_PCH=OFF (ccache cannot cache PCH compilations).
+set(USE_CCACHE "auto" CACHE STRING "Use ccache compiler cache (ON | OFF | auto)")
 
 if (NOT CPP_VERSION STREQUAL "23")
   message(FATAL_ERROR "C++23 is required (CPP_VERSION=${CPP_VERSION}); configure with -DCPP_VERSION=23")
@@ -85,6 +88,22 @@ elseif (LLD STREQUAL "lld")
   endif()
 endif()
 
+# if ccache is installed, use it to cache compilations and avoid recompiling
+if (NOT USE_CCACHE STREQUAL "OFF")
+  find_program(CCACHE_PROGRAM ccache)
+  if (CCACHE_PROGRAM)
+    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
+    if (ENABLE_PCH)
+      message(WARNING "ccache cannot cache PCH compilations; set -DENABLE_PCH=OFF to get cache hits")
+    endif()
+  elseif (USE_CCACHE STREQUAL "ON")
+    message(FATAL_ERROR "ccache requested (USE_CCACHE=ON) but ccache executable not found")
+  else()
+    message(STATUS "ccache not found, compilation caching disabled (install ccache or set -DUSE_CCACHE=ON)")
+  endif()
+endif()
 
 if (ENABLE_PCH)
   # show a log message
