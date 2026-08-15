@@ -161,23 +161,28 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
                            settings->log_level =
                                rtpmidid::str_to_log_level(value);
                          });
+  arguments.emplace_back(
+      "--log-no-color",
+      "Disable colored log output (overrides FORCE_COLOR). Default: color "
+      "when stdout is a terminal.",
+      [settings](const std::string &) { settings->log_no_color = true; }, false);
   arguments.emplace_back( //
       "--rtpmidi-discover",
       "Enable or disable rtpmidi discover. true | false | [posregex] | "
       "![negregex]",
       [settings](const std::string &value) {
         if (value == "true") {
-          DEBUG("rtpmidi_discover.enabled = true");
+          DEBUG("rtpmidi_discover.enabled={}", quoted_t{value});
           settings->rtpmidi_discover.enabled = true;
         } else if (value == "false") {
-          DEBUG("rtpmidi_discover.enabled = false");
+          DEBUG("rtpmidi_discover.enabled={}", quoted_t{value});
           settings->rtpmidi_discover.enabled = false;
         } else if (std::startswith(value, "!")) {
-          DEBUG("rtpmidi_discover.name_negative_regex = {}", value.substr(1));
+          DEBUG("rtpmidi_discover.name_negative_regex={}", quoted_t{value.substr(1)});
           settings->rtpmidi_discover.name_negative_regex =
               std::regex(value.substr(1, std::string::npos));
         } else {
-          DEBUG("rtpmidi_discover.name_positive_regex = {}", value);
+          DEBUG("rtpmidi_discover.name_positive_regex={}", quoted_t{value});
           settings->rtpmidi_discover.name_positive_regex = std::regex(value);
         }
       });
@@ -249,7 +254,7 @@ void parse_argv(const std::vector<std::string> &argv, settings_t *settings) {
     }
     // If none parsed, error
     if (!parsed) {
-      ERROR("Unknown argument: {}. Try help with --help.", key);
+      ERROR("Unknown argument={}. Try help with --help.", quoted_t{key});
       exit(1);
     }
   }

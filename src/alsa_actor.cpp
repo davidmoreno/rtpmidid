@@ -38,10 +38,10 @@ void alsa_actor_t::on_start() {
   try {
     // The seq fd is registered in THIS actor's poller.
     seq_ = std::make_unique<aseq_t>(alsa_name_, poller());
-    INFO("ALSA listener {}: sequencer client {} ready.", name(),
+    INFO("ALSA listener name={} sequencer client={} ready.", quoted_t{name()},
          seq_->client_id);
   } catch (const std::exception &e) {
-    ERROR("ALSA listener {}: sequencer open failed: {}", name(), e.what());
+    ERROR("ALSA listener name={} sequencer open failed error={}", quoted_t{name()}, quoted_t{e.what()});
     seq_ = nullptr;
     return;
   }
@@ -64,8 +64,8 @@ void alsa_actor_t::on_start() {
           [this](const aseq_t::port_t &p) { auto_export_remove(p); });
       auto_export_enumerate();
     } catch (const std::exception &e) {
-      WARNING("ALSA listener {}: auto-export announce subscription failed: {}",
-              name(), e.what());
+      WARNING("ALSA listener name={} auto-export announce subscription failed error={}",
+              quoted_t{name()}, quoted_t{e.what()});
     }
   }
 }
@@ -92,8 +92,8 @@ uint8_t alsa_actor_t::create_port(const std::string &port_name, bool waiting,
   if (!waiting) {
     begin_register(p);
   } else {
-    INFO("ALSA listener {}: waiting port '{}' (seq {}) for remote '{}'.",
-         name(), port_name, p.seq_port, remote);
+    INFO("ALSA listener name={} waiting port port={} (seq={}) for remote={}.",
+         quoted_t{name()}, quoted_t{port_name}, p.seq_port, quoted_t{remote});
   }
   return p.seq_port;
 }
@@ -157,8 +157,8 @@ void alsa_actor_t::on_subscribe(port_state_t &p, const aseq_t::port_t &other) {
     return;
   }
   p.subscribers++;
-  INFO("ALSA listener: port {} ('{}') subscribed ({} subscriber(s)).",
-       p.seq_port, p.name, p.subscribers);
+  INFO("ALSA listener: port={} name={} subscribed subscribers={}",
+       p.seq_port, quoted_t{p.name}, p.subscribers);
   if (p.kind != port_kind_t::waiting || p.subscribers != 1) {
     return;
   }
@@ -183,8 +183,8 @@ void alsa_actor_t::on_unsubscribe(port_state_t &p,
   if (p.subscribers > 0) {
     p.subscribers--;
   }
-  INFO("ALSA listener: port {} ('{}') unsubscribed ({} subscriber(s)).",
-       p.seq_port, p.name, p.subscribers);
+  INFO("ALSA listener: port={} name={} unsubscribed subscribers={}",
+       p.seq_port, quoted_t{p.name}, p.subscribers);
   if (p.kind != port_kind_t::waiting || p.subscribers != 0) {
     return;
   }
@@ -204,8 +204,8 @@ void alsa_actor_t::on_unsubscribe(port_state_t &p,
 void alsa_actor_t::post_session_request(port_state_t &p, bool subscribed) {
   if (!server_mailbox_) {
     WARNING("ALSA listener: no rtpmidi server wired; session request for "
-            "'{}' dropped.",
-            p.remote);
+            "remote={} dropped.",
+            quoted_t{p.remote});
     return;
   }
   server_mailbox_->post_control(session_request_t{
@@ -229,8 +229,8 @@ void alsa_actor_t::finish_register(port_state_t &p, peer_id_t id) {
   p.registered = true;
   p.router_id = id;
   id_to_port_[id] = p.seq_port;
-  INFO("ALSA listener: port {} ('{}') registered as peer id {}.", p.seq_port,
-       p.name, id);
+  INFO("ALSA listener: port={} (name={}) registered as peer id={}.", p.seq_port,
+       quoted_t{p.name}, id);
   for (auto &[mb, hdr] : p.create_replies) {
     if (mb) {
       mb.post_control(alsa_port_result_t{hdr, p.seq_port, id});
@@ -277,8 +277,8 @@ void alsa_actor_t::unregister_from_router(port_state_t &p) {
   if (router_mailbox_ && p.router_id != 0) {
     router_mailbox_->post_control(unregister_peer_t{
         hdr_t{uint64_t(p.seq_port) + 1}, mailbox(), p.router_id});
-    INFO("ALSA listener: port {} ('{}') unregistered (peer id {}).",
-         p.seq_port, p.name, p.router_id);
+    INFO("ALSA listener: port={} (name={}) unregistered (peer id={}).",
+         p.seq_port, quoted_t{p.name}, p.router_id);
   }
   id_to_port_.erase(p.router_id);
   p.router_id = 0;
@@ -291,7 +291,7 @@ void alsa_actor_t::remove_port(uint8_t seq_port) {
     return;
   }
   auto &p = it->second;
-  INFO("ALSA listener: removing port {} ('{}').", seq_port, p.name);
+  INFO("ALSA listener: removing port={} (name={}).", seq_port, quoted_t{p.name});
   unregister_from_router(p);
   if (seq_) {
     seq_->remove_port(seq_port);
@@ -315,8 +315,8 @@ void alsa_actor_t::on_control(alsa_control_t &&msg) {
                                         : port_kind_t::per_connection,
                               m.meta, m.remote);
           if (m.waiting) {
-            INFO("ALSA listener: waiting port '{}' (seq {}) for remote '{}'.",
-                 m.name, p.seq_port, m.remote);
+            INFO("ALSA listener: waiting port port={} (seq={}) for remote={}.",
+                 quoted_t{m.name}, p.seq_port, quoted_t{m.remote});
             if (m.reply_to) {
               m.reply_to.post_control(
                   alsa_port_result_t{m.hdr, p.seq_port, 0});
@@ -362,7 +362,7 @@ void alsa_actor_t::on_control(alsa_control_t &&msg) {
                 std::from_chars(m.target.data() + colon + 1,
                                 m.target.data() + m.target.size(), lport)
                         .ec != std::errc{}) {
-              ERROR("ALSA listener: bad subscribe target '{}'.", m.target);
+              ERROR("ALSA listener: bad subscribe target={}.", quoted_t{m.target});
               if (m.reply_to) {
                 m.reply_to.post_control(alsa_port_result_t{m.hdr, 0, 0});
               }
@@ -378,8 +378,8 @@ void alsa_actor_t::on_control(alsa_control_t &&msg) {
                 seq_->connect(aseq_t::port_t{seq_->client_id, p.seq_port},
                               aseq_t::port_t{client, lport}));
           } catch (const std::exception &e) {
-            ERROR("ALSA listener: cannot subscribe to {}: {}.", m.target,
-                  e.what());
+            ERROR("ALSA listener: cannot subscribe to target={} error={}.", quoted_t{m.target},
+                  quoted_t{e.what()});
             remove_port(p.seq_port);
             if (m.reply_to) {
               m.reply_to.post_control(alsa_port_result_t{m.hdr, 0, 0});
@@ -471,8 +471,8 @@ void alsa_actor_t::on_data(data_message_t &&msg) {
   }
   auto it = id_to_port_.find(msg.to);
   if (it == id_to_port_.end() || !seq_) {
-    WARNING_RATE_LIMIT(5, "ALSA listener {}: midi_to_wire to unknown id {}.",
-                       name(), msg.to);
+    WARNING_RATE_LIMIT(5, "ALSA listener name={} midi_to_wire to unknown id={}.",
+                       quoted_t{name()}, msg.to);
     return;
   }
   const uint8_t port = it->second;
@@ -487,7 +487,7 @@ void alsa_actor_t::on_data(data_message_t &&msg) {
       // EAGAIN: seq output buffer full; retry when POLLOUT is available.
       output_pending_ = true;
     } else if (r < 0) {
-      ERROR("ALSA listener {}: event output: {}", name(), snd_strerror(r));
+      ERROR("ALSA listener name={} event output error={}", quoted_t{name()}, quoted_t{snd_strerror(r)});
       snd_seq_drop_output(seq_->seq);
     }
   });
@@ -504,7 +504,7 @@ void alsa_actor_t::flush_output() {
   } else {
     output_pending_ = false;
     if (r < 0) {
-      ERROR("ALSA listener {}: drain output: {}", name(), snd_strerror(r));
+      ERROR("ALSA listener name={} drain output error={}", quoted_t{name()}, quoted_t{snd_strerror(r)});
       snd_seq_drop_output(seq_->seq);
     }
   }
@@ -655,8 +655,8 @@ void alsa_actor_t::auto_export_add(const std::string &client_name,
   const auto export_name =
       FMT::format("{} {}", client_name, get_port_name(port));
   auto_exports_[key] = export_name;
-  INFO("ALSA listener: auto-exporting seq port {}:{} as '{}'.", port.client,
-       port.port, export_name);
+  INFO("ALSA listener: auto-exporting seq port={}:{} as name={}.", port.client,
+       port.port, quoted_t{export_name});
   server_mailbox_->post_control(export_add_t{
       hdr_t{0}, {}, export_name, export_kind_e::seq,
       FMT::format("{}:{}", port.client, port.port), 0});
@@ -668,7 +668,7 @@ void alsa_actor_t::auto_export_remove(const aseq_t::port_t &port) {
   if (it == auto_exports_.end()) {
     return;
   }
-  INFO("ALSA listener: auto-export for seq port {}:{} removed.", port.client,
+  INFO("ALSA listener: auto-export for seq port={}:{} removed.", port.client,
        port.port);
   if (server_mailbox_) {
     server_mailbox_->post_control(

@@ -30,20 +30,21 @@ enum logger_level_t { DEBUG, INFO, WARNING, ERROR };
 
 ENUM_FORMATTER_BEGIN(rtpmidid::logger_level_t);
 ENUM_FORMATTER_ELEMENT(rtpmidid::logger_level_t::DEBUG, "DEBUG");
-ENUM_FORMATTER_ELEMENT(rtpmidid::logger_level_t::INFO, "INFO ");
-ENUM_FORMATTER_ELEMENT(rtpmidid::logger_level_t::WARNING, "WARN ");
+ENUM_FORMATTER_ELEMENT(rtpmidid::logger_level_t::INFO, "INFO");
+ENUM_FORMATTER_ELEMENT(rtpmidid::logger_level_t::WARNING, "WARN");
 ENUM_FORMATTER_ELEMENT(rtpmidid::logger_level_t::ERROR, "ERROR");
 ENUM_FORMATTER_END();
 
 namespace rtpmidid {
 
 /// A formatted log message, as handed to the logger actor: the level, the
-/// origin ("file.cpp:lineno") and the already-formatted message body. The
-/// producing thread substitutes the arguments into the body; the sink
-/// never reformats, it only renders the final line.
+/// source file (basename) and line number, and the already-formatted message
+/// body. The producing thread substitutes the arguments into the body; the
+/// sink never reformats, it only renders the final line.
 struct log_message_t {
   logger_level_t level = logger_level_t::INFO;
-  std::string origin;
+  std::string file;
+  int lineno = 0;
   std::string text;
   /// The producing thread's tag (e.g. the actor name), captured at
   /// production time as an owned copy: the producer and the renderer are
@@ -75,21 +76,67 @@ std::string logger_format_line(const log_message_t &msg);
 /// `log` prints directly, exactly as it always did.
 extern void (*logger_log_sink)(log_message_t msg);
 
-/// "file.cpp:lineno" origin for a log call site.
-inline std::string log_origin(const char *filename, int lineno) {
+/// Process-global color enable flag, computed once at startup. When off,
+/// `logger_format_line` skips tokenizing/coloring entirely.
+void set_log_color_enabled(bool enabled);
+bool log_color_enabled();
+
+/// Compute the color-enabled decision from its inputs, in precedence order:
+/// CLI --log-no-color > NO_COLOR > FORCE_COLOR > INI never/always > isatty.
+/// Pure and testable; the daemon wires it to argv/env/INI/TTY at startup.
+inline bool compute_log_color_enabled(bool cli_no_color, bool no_color_env,
+                                      bool force_color_env, bool ini_never,
+                                      bool ini_always, bool is_tty) {
+  if (cli_no_color) {
+    return false;
+  }
+  if (no_color_env) {
+    return false;
+  }
+  if (force_color_env) {
+    return true;
+  }
+  if (ini_never) {
+    return false;
+  }
+  if (ini_always) {
+    return true;
+  }
+  return is_tty;
+}
+
+/// Lowercase logfmt level name: debug/info/warning/error.
+inline const char *log_level_name(logger_level_t level) {
+  switch (level) {
+  case logger_level_t::DEBUG:
+    return "debug";
+  case logger_level_t::INFO:
+    return "info";
+  case logger_level_t::WARNING:
+    return "warning";
+  case logger_level_t::ERROR:
+    return "error";
+  default:
+    return "unknown";
+  }
+}
+
+/// Basename of a source file path for the file= log field.
+inline std::string log_basename(const char *filename) {
   const char *base = filename;
   for (const char *p = filename; *p != '\0'; ++p) {
     if (*p == '/') {
       base = p + 1;
     }
   }
-  return std::string(base) + ":" + std::to_string(lineno);
+  return std::string(base);
 }
 
 // One-line rendering for mailbox drop diagnostics.
 inline std::string to_string(const log_message_t &m) {
   return "log{level=" + std::to_string(static_cast<int>(m.level)) +
-         ", origin=\"" + m.origin + "\", text=\"" + m.text + "\"}";
+         ", file=\"" + m.file + "\", lineno=" + std::to_string(m.lineno) +
+         ", text=\"" + m.text + "\"}";
 }
 
 class logger_t {
@@ -117,7 +164,7 @@ public:
     const auto res = FMT::format_to_n(buffer.begin(), buffer.size() - 16,
                                       message, std::forward<Args>(args)...);
 
-    log_message_t msg{level, log_origin(filename, lineno),
+    log_message_t msg{level, log_basename(filename), lineno,
                       std::string(buffer.begin(), res.out)};
     // Capture the producing thread's tag (owned copy, see log_message_t).
     msg.thread_name = current_log_thread_tag();

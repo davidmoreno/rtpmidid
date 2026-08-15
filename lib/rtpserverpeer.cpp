@@ -31,7 +31,7 @@ rtpserverpeer_t::rtpserverpeer_t(io_bytes_reader &&buffer,
 
   peer = std::make_shared<rtppeer_t>(name);
 
-  DEBUG("Connected from {}", addr.to_string());
+  DEBUG("Connected from address={}", quoted_t{addr.to_string()});
   peer->remote_address = addr.dup();
   peer->local_address = srv->control.get_address().dup();
 
@@ -42,7 +42,7 @@ rtpserverpeer_t::rtpserverpeer_t(io_bytes_reader &&buffer,
   // Finally pass the data to the peer
   peer->data_ready(std::move(buffer), port);
 
-  DEBUG("rtpserverpeer_t::rtpserverpeer_t({});", id);
+  DEBUG("rtpserverpeer_t::rtpserverpeer_t(id={});", id);
 }
 
 void rtpserverpeer_t::setup_connections() {
@@ -71,7 +71,7 @@ void rtpserverpeer_t::setup_connections() {
 rtpserverpeer_t::rtpserverpeer_t(rtpserverpeer_t &&other) {
   id = -1;
   *this = std::move(other);
-  DEBUG("rtpserverpeer_t::rtpserverpeer_t({}) DUP;", id);
+  DEBUG("rtpserverpeer_t::rtpserverpeer_t(id={}) DUP;", id);
 }
 
 rtpserverpeer_t::~rtpserverpeer_t() {
@@ -80,7 +80,7 @@ rtpserverpeer_t::~rtpserverpeer_t() {
   ck_event_connection.disconnect();
   midi_event_connection.disconnect();
   timer_connection.disable();
-  DEBUG("rtpserverpeer_t::~rtpserverpeer_t({})", id);
+  DEBUG("rtpserverpeer_t::~rtpserverpeer_t(id={})", id);
   id = -2;
 }
 
@@ -93,7 +93,7 @@ void rtpserverpeer_t::rearm_ck_timeout() {
 }
 
 rtpserverpeer_t &rtpserverpeer_t::operator=(rtpserverpeer_t &&other) {
-  DEBUG("rtpserverpeer_t::operator=({} -> {})", id, other.id);
+  DEBUG("rtpserverpeer_t::operator=(from={} -> to={})", id, other.id);
   this->id = other.id;
   this->address = std::move(other.address);
   this->server = std::move(other.server);
@@ -117,13 +117,13 @@ void rtpserverpeer_t::sendto(const io_bytes_reader &buff,
 }
 
 void rtpserverpeer_t::status_change(rtppeer_t::status_e st) {
-  DEBUG("rptserverpeer_t status change to {}", st);
+  DEBUG("rptserverpeer_t status change to status={}", st);
 
   server->status_change_event(peer, st);
   if (st == rtppeer_t::CONNECTED) {
     rearm_ck_timeout();
   } else if (rtppeer_t::is_disconnected(st)) {
-    DEBUG("Remove from server the peer {}, status: {}", id, st);
+    DEBUG("Remove from server the peer id={} status={}", id, st);
     server->remove_peer(id);
   }
 }

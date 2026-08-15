@@ -177,7 +177,7 @@ void rtpclient_t::handle_event(event_e event){
     }
     switch(state){
         case state_e::Error:
-            DEBUG("Error, previous state: {}", oldstate);
+            DEBUG("Error, previous state={}", oldstate);
             state_error();
             break;
         case state_e::WaitToStart:

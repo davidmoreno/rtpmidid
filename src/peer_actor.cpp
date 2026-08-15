@@ -38,12 +38,12 @@ void peer_actor_t::on_start() {
         if (res) {
           registered_ = true;
           registered_ids_ = std::get<registered_t>(*res).ids;
-          INFO("Peer {}: registered with {} id(s).", name(),
+          INFO("Peer name={} registered with id_count={} id(s).", quoted_t{name()},
                registered_ids_.size());
         } else {
-          WARNING("Peer {}: did not receive `registered` within {} ms; "
+          WARNING("Peer name={} did not receive `registered` within timeout_ms={}; "
                   "self-terminating.",
-                  name(), registered_timeout_.count());
+                  quoted_t{name()}, registered_timeout_.count());
           request_stop_token();
         }
       });
@@ -51,13 +51,13 @@ void peer_actor_t::on_start() {
 
 void peer_actor_t::on_data(data_message_t &&msg) {
   if (msg.kind != data_message_t::kind_t::midi_to_wire) {
-    WARNING("Peer {}: unexpected data message kind; dropped.", name());
+    WARNING("Peer name={} unexpected data message kind; dropped.", quoted_t{name()});
     return;
   }
   if (!registered_) {
-    WARNING_RATE_LIMIT(5, "Peer {}: midi_to_wire before `registered`; "
+    WARNING_RATE_LIMIT(5, "Peer name={} midi_to_wire before `registered`; "
                           "dropped.",
-                       name());
+                       quoted_t{name()});
     return;
   }
   send_to_wire(msg.to, msg.from, std::move(msg.payload));
@@ -108,7 +108,7 @@ std::string peer_actor_t::command_impl(const std::string &cmd,
     jsondm::serialize(status(), out);
     return out;
   }
-  ERROR("Peer {}: unknown command: {}", name(), cmd);
+  ERROR("Peer name={} unknown command={}", quoted_t{name()}, quoted_t{cmd});
   throw std::runtime_error("Command not implemented");
 }
 

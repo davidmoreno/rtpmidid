@@ -80,7 +80,7 @@ void network_rtpmidi_peer_actor_t::setup_peer() {
         try {
           send_packet(port, data);
         } catch (const std::exception &e) {
-          ERROR("Peer {}: send failed: {}", name(), e.what());
+          ERROR("Peer name={} send failed error={}", quoted_t{name()}, quoted_t{e.what()});
           peer_->status_change_event(
               rtpmidid::rtppeer_t::status_e::DISCONNECTED_NETWORK_ERROR);
         }
@@ -269,7 +269,7 @@ void network_rtpmidi_peer_actor_t::initiator_flow() {
   }
   connect_started_ = true;
   if (!worker_) {
-    WARNING("Peer {}: no worker for DNS; aborting connect.", name());
+    WARNING("Peer name={} no worker for DNS; aborting connect.", quoted_t{name()});
     return;
   }
   resolve_dns(*worker_, hostname_, port_str_, mailbox(), 0x1000 + config_.id);
@@ -285,7 +285,7 @@ void network_rtpmidi_peer_actor_t::try_next_address() {
     } catch (const std::exception &) {
       continue;
     }
-    INFO("Peer {}: trying {}:{}", name(), ip, port_str_);
+    INFO("Peer name={} trying address={}:{}", quoted_t{name()}, quoted_t{ip}, quoted_t{port_str_});
     try {
       remote_base_addr_ = remote.dup();
       peer_->remote_address = remote.dup();
@@ -293,28 +293,28 @@ void network_rtpmidi_peer_actor_t::try_next_address() {
       rtpmidid::network_address_list_t local("::", local_base_port_str_);
       bind_control_socket(*local.begin(), false);
     } catch (const std::exception &e) {
-      WARNING("Peer {}: could not bind/connect to {}: {}", name(), ip,
-              e.what());
+      WARNING("Peer name={} could not bind/connect to address={} error={}", quoted_t{name()}, quoted_t{ip},
+              quoted_t{e.what()});
       continue;
     }
     const auto base = control_.addr.port();
     try {
       bind_midi_socket(base + 1, false);
     } catch (const std::exception &e) {
-      WARNING("Peer {}: could not bind midi port {}: {}", name(), base + 1,
-              e.what());
+      WARNING("Peer name={} could not bind midi port={} error={}", quoted_t{name()}, base + 1,
+              quoted_t{e.what()});
       continue;
     }
     // Connect timeout, then IN on both ports.
     timer_ = add_timer(10s, [this] {
-      WARNING("Peer {}: connect timeout.", name());
+      WARNING("Peer name={} connect timeout.", quoted_t{name()});
       disconnected();
     });
     peer_->connect_to(rtpmidid::rtppeer_t::CONTROL_PORT);
     peer_->connect_to(rtpmidid::rtppeer_t::MIDI_PORT);
     return;
   }
-  WARNING("Peer {}: all addresses failed.", name());
+  WARNING("Peer name={} all addresses failed.", quoted_t{name()});
   disconnected();
 }
 
@@ -330,7 +330,7 @@ void network_rtpmidi_peer_actor_t::acceptor_start() {
     bind_midi_socket(local_control_port_ + 1, true);
     peer_->local_address = control_.addr.dup();
   } catch (const std::exception &e) {
-    ERROR("Peer {}: cannot bind accepted connection: {}", name(), e.what());
+    ERROR("Peer name={} cannot bind accepted connection error={}", quoted_t{name()}, quoted_t{e.what()});
     disconnected();
     return;
   }
@@ -342,7 +342,7 @@ void network_rtpmidi_peer_actor_t::acceptor_start() {
   // If the client never completes the midi connection, give up.
   timer_ = add_timer(5s, [this] {
     if (peer_->status == rtpmidid::rtppeer_t::status_e::CONTROL_CONNECTED) {
-      WARNING("Peer {}: timeout waiting for midi connection.", name());
+      WARNING("Peer name={} timeout waiting for midi connection.", quoted_t{name()});
       peer_->disconnect();
     }
   });
@@ -353,7 +353,7 @@ void network_rtpmidi_peer_actor_t::acceptor_start() {
 void network_rtpmidi_peer_actor_t::on_status_change(
     rtpmidid::rtppeer_t::status_e st) {
   if (st == rtpmidid::rtppeer_t::status_e::CONNECTED) {
-    INFO("Peer {}: connected to {}.", name(), remote_base_addr_.to_string());
+    INFO("Peer name={} connected to address={}.", quoted_t{name()}, quoted_t{remote_base_addr_.to_string()});
     timer_.disable();
     ck_count_ = 0;
     if (mode_ == mode_t::initiator) {
@@ -361,7 +361,7 @@ void network_rtpmidi_peer_actor_t::on_status_change(
     } else {
       // Server: drop the connection if the client goes silent.
       timer_ = add_timer(60s, [this] {
-        WARNING("Peer {}: CK timeout; disconnecting.", name());
+        WARNING("Peer name={} CK timeout; disconnecting.", quoted_t{name()});
         peer_->disconnect();
       });
     }
@@ -374,7 +374,7 @@ void network_rtpmidi_peer_actor_t::send_ck() {
   ck_count_++;
   peer_->send_ck0();
   timer_ = add_timer(10s, [this] {
-    WARNING("Peer {}: CK timeout.", name());
+    WARNING("Peer name={} CK timeout.", quoted_t{name()});
     peer_->disconnect();
   });
 }
@@ -385,7 +385,7 @@ void network_rtpmidi_peer_actor_t::on_ck(float ms) {
   if (mode_ != mode_t::initiator) {
     // Acceptor: any CK activity keeps the connection alive.
     timer_ = add_timer(60s, [this] {
-      WARNING("Peer {}: CK timeout; disconnecting.", name());
+      WARNING("Peer name={} CK timeout; disconnecting.", quoted_t{name()});
       peer_->disconnect();
     });
     return;
@@ -406,12 +406,12 @@ void network_rtpmidi_peer_actor_t::disconnected() {
   if (mode_ == mode_t::acceptor) {
     // Self-terminate: post stopped and exit; the router treats it as an
     // implicit remove (the wrapper posts the notice).
-    WARNING("Peer {}: connection lost; self-terminating.", name());
+    WARNING("Peer name={} connection lost; self-terminating.", quoted_t{name()});
     request_stop_token();
     return;
   }
   // Initiator: retry after a reconnect backoff.
-  WARNING("Peer {}: disconnected; reconnecting in 30s.", name());
+  WARNING("Peer name={} disconnected; reconnecting in 30s.", quoted_t{name()});
   timer_ = add_timer(30s, [this] {
     dns_index_ = 0;
     connect_started_ = false;
@@ -458,7 +458,7 @@ void network_rtpmidi_peer_actor_t::on_stop() {
       peer_->send_goodbye(rtpmidid::rtppeer_t::CONTROL_PORT);
       peer_->send_goodbye(rtpmidid::rtppeer_t::MIDI_PORT);
     } catch (const std::exception &e) {
-      ERROR("Peer {}: goodbye failed: {}", name(), e.what());
+      ERROR("Peer name={} goodbye failed error={}", quoted_t{name()}, quoted_t{e.what()});
     }
   }
   if (control_.fd >= 0) {

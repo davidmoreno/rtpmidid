@@ -49,13 +49,13 @@ rtpserver_t::rtpserver_t(std::string _name, const std::string &port)
         data_ready(iobytes, from, rtppeer_t::MIDI_PORT);
       });
 
-  INFO("Listening RTP MIDI connections at {} / {}, with name: '{}'",
-       control.get_address().to_string(), midi.get_address().to_string(), name);
+  INFO("Listening RTP MIDI connections at control={} / midi={}, with name={}",
+       quoted_t{control.get_address().to_string()}, quoted_t{midi.get_address().to_string()}, quoted_t{name});
 }
 
 // NOLINTNEXTLINE(bugprone-exception-escape)
 rtpserver_t::~rtpserver_t() {
-  DEBUG("~rtpserver_t({})", name);
+  DEBUG("~rtpserver_t(name={})", quoted_t{name});
 
   // Must clear here, to be able to use the control and midi
   // sockets
@@ -65,7 +65,7 @@ rtpserver_t::~rtpserver_t() {
   // goodbyes, so better copy peers to be safe.
   std::vector<std::shared_ptr<rtppeer_t>> peers_copy(peers.size());
   for (auto &peerinfo : peers) {
-    DEBUG("Peer still in the server list: {}", peerinfo.id);
+    DEBUG("Peer still in the server list: id={}", peerinfo.id);
     peers_copy.push_back(peerinfo.peer);
   }
 
@@ -120,7 +120,7 @@ rtpserverpeer_t *rtpserver_t::find_peer_by_packet(io_bytes_reader &buffer,
 
       return find_peer_by_ssrc(ssrc);
     }
-    DEBUG("Unknown COMMAND id {:X} / {:X}", int(command), buffer.start[1]);
+    DEBUG("Unknown COMMAND id command={:X} / b={:X}", int(command), buffer.start[1]);
     return nullptr;
   }
 }
@@ -155,8 +155,8 @@ void rtpserver_t::data_ready(const io_bytes_reader &data,
         buffer.start[3] == 'N') {
       create_peer_from(std::move(buffer), addr, port);
     } else
-      DEBUG("Unknown peer {}, and not connect on control. Ignoring {} port.",
-            addr.to_string(), port);
+      DEBUG("Unknown peer address={}, and not connect on control. Ignoring port={}.",
+            quoted_t{addr.to_string()}, port);
 
     buffer.print_hex(true);
   }

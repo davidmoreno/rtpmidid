@@ -336,9 +336,9 @@ void test_slow_data_message_logged() {
   actor.mailbox()->post_data(
       data_message_t::midi_received(1, small_payload(1)));
   actor.pump();
-  ASSERT_TRUE(logs.contains("slow data message"));
+  ASSERT_TRUE(logs.contains("slow lane=data"));
   ASSERT_TRUE(logs.contains("midi_received{from=1"));
-  ASSERT_TRUE(logs.contains("took "));
+  ASSERT_TRUE(logs.contains("took_ms="));
 }
 
 void test_slow_control_message_logged() {
@@ -348,7 +348,7 @@ void test_slow_control_message_logged() {
   log_capture_guard_t logs;
   actor.mailbox()->post_control(make_control_payload(0, "x"));
   actor.pump();
-  ASSERT_TRUE(logs.contains("slow control message"));
+  ASSERT_TRUE(logs.contains("slow lane=control"));
   ASSERT_TRUE(logs.contains("control_payload_t"));
 }
 

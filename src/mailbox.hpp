@@ -294,11 +294,11 @@ public:
         // message type and its content (when the type has a rendering).
         std::string desc = box.describe();
         const std::string &mbname = name();
-        WARNING("Mailbox '{}': dropping a '{}' control message{} this actor "
+        WARNING("Mailbox mailbox={} dropping a type={} control message detail={} this actor "
                 "does not accept (wiring bug).",
-                (mbname.empty() ? "<unnamed>" : mbname),
-                demangle_type(box.type().name()),
-                (desc.empty() ? std::string{} : " (" + desc + ")"));
+                quoted_t{(mbname.empty() ? "<unnamed>" : mbname)},
+                quoted_t{demangle_type(box.type().name())},
+                quoted_t{(desc.empty() ? std::string{} : " (" + desc + ")")});
       }
       return ok;
     } else {
@@ -315,7 +315,7 @@ private:
       // (default drop_oldest keeps the freshest data) applies, but it is
       // observable — count + rate-limited log.
       WARNING_RATE_LIMIT(5, "Data lane full: a MIDI message was dropped "
-                            "({} dropped so far; a peer may be flooding).",
+                            "(dropped={}; a peer may be flooding).",
                          data_.drops());
     }
     return enqueued;

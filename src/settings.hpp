@@ -25,12 +25,20 @@
 
 namespace rtpmididns {
 
+/// Log color policy for the [general] `log_color` INI setting and the
+/// --log-no-color / FORCE_COLOR handling in main().
+enum class log_color_t { never, always, auto_ };
+
 /// [INI-DM]
 struct settings_t {
   std::string alsa_name = "rtpmidid";
   bool alsa_network = true;
   std::string control = "/var/run/rtpmidid/control.sock";
   rtpmidid::logger_level_t log_level = rtpmidid::logger_level_t::INFO;
+
+  log_color_t log_color = log_color_t::auto_;
+  /// Disable color (set by --log-no-color; CLI-only, beats FORCE_COLOR).
+  bool log_no_color = false;
   /// Real-time scheduling for data-plane actors (peers, router): promotes
   /// their threads to SCHED_FIFO at rt_priority (needs RLIMIT_RTPRIO or
   /// CAP_SYS_NICE); on failure falls back to nice-based elevation with a
@@ -115,6 +123,12 @@ ENUM_FORMATTER_ELEMENT(
     rtpmididns::settings_t::alsa_hw_auto_export_type_e::SYSTEM, "SYSTEM");
 ENUM_FORMATTER_END();
 
+ENUM_FORMATTER_BEGIN(rtpmididns::log_color_t);
+ENUM_FORMATTER_ELEMENT(rtpmididns::log_color_t::never, "never");
+ENUM_FORMATTER_ELEMENT(rtpmididns::log_color_t::always, "always");
+ENUM_FORMATTER_ELEMENT(rtpmididns::log_color_t::auto_, "auto");
+ENUM_FORMATTER_END();
+
 BASIC_FORMATTER(rtpmididns::settings_t::rawmidi_t, "rawmidi_t[{}, {}]",
                 v.device, v.name);
 BASIC_FORMATTER(rtpmididns::settings_t::connect_to_t,
@@ -135,10 +149,10 @@ VECTOR_FORMATTER(rtpmididns::settings_t::alsa_announce_t);
 VECTOR_FORMATTER(rtpmididns::settings_t::connect_to_t);
 
 BASIC_FORMATTER(rtpmididns::settings_t,
-                "settings_t[{}, {}, {}, {}, {}, {}, {}, {}, {}]", v.alsa_name,
-                v.alsa_network, v.control, v.log_level, v.rtpmidi_announce,
-                v.rtpmidi_discover, v.alsa_announce, v.connect_to,
-                v.alsa_hw_auto_export);
+                "settings_t[{}, {}, {}, {}, {}, {}, {}, {}, {}, {}]",
+                v.alsa_name, v.alsa_network, v.control, v.log_level,
+                v.log_color, v.rtpmidi_announce, v.rtpmidi_discover,
+                v.alsa_announce, v.connect_to, v.alsa_hw_auto_export);
 
 // ---------------------------------------------------------------------------
 // jsondm::ini converters for settings-specific types
@@ -206,6 +220,30 @@ inline std::string to_text<rtpmididns::settings_t::alsa_hw_auto_export_type_e>(
     return "system";
   default:
     return "all";
+  }
+}
+
+template <>
+inline rtpmididns::log_color_t
+to_value<rtpmididns::log_color_t>(std::string_view v) {
+  if (v == "never")
+    return rtpmididns::log_color_t::never;
+  if (v == "always")
+    return rtpmididns::log_color_t::always;
+  if (v == "auto")
+    return rtpmididns::log_color_t::auto_;
+  throw jsondm::exception("Invalid log_color value: {}", std::string(v));
+}
+template <>
+inline std::string to_text<rtpmididns::log_color_t>(
+    const rtpmididns::log_color_t &v) {
+  switch (v) {
+  case rtpmididns::log_color_t::never:
+    return "never";
+  case rtpmididns::log_color_t::always:
+    return "always";
+  default:
+    return "auto";
   }
 }
 

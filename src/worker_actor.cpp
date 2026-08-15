@@ -34,7 +34,7 @@ void worker_actor_t::on_control(worker_control_t &&msg) {
       try {
         job->job();
       } catch (const std::exception &e) {
-        ERROR("Worker: job threw: {}", e.what());
+        ERROR("Worker: job threw error={}", quoted_t{e.what()});
       } catch (...) {
         ERROR("Worker: job threw an unknown exception");
       }

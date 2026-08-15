@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <string_view>
 
 #ifdef USE_LIBFMT
 #define FMT fmt
@@ -82,3 +83,62 @@
 
 BASIC_FORMATTER(size_t, "{}", (uint32_t)v);
 BASIC_FORMATTER(ssize_t, "{}", (int32_t)v);
+
+namespace rtpmidid {
+
+/// logfmt value wrapper: when formatted, emits the value verbatim if it
+/// contains no space, `=`, or `"`; otherwise wraps it in double quotes,
+/// escaping `\`, `"`, and control chars (newline/tab/carriage-return) so the
+/// value stays on one line. Holds a `std::string_view` (no copy); only valid
+/// as an immediate format argument, never stored.
+struct quoted_t {
+  std::string_view value;
+  explicit quoted_t(std::string_view v) : value(v) {}
+};
+
+} // namespace rtpmidid
+
+// Make the logfmt value helper usable unqualified from any namespace (the
+// logging macros are global, but call sites live in rtpmididns/rtpmidid).
+using rtpmidid::quoted_t;
+
+template <> struct FMT::formatter<rtpmidid::quoted_t> {
+  constexpr auto parse(FMT::format_parse_context &ctx) { return ctx.begin(); }
+  auto format(const rtpmidid::quoted_t &q, FMT::format_context &ctx) const {
+    const auto &v = q.value;
+    bool needs_quote = false;
+    for (char c : v) {
+      if (c == ' ' || c == '=' || c == '"' || c < ' ') {
+        needs_quote = true;
+        break;
+      }
+    }
+    if (!needs_quote) {
+      return FMT::format_to(ctx.out(), "{}", v);
+    }
+    auto it = FMT::format_to(ctx.out(), "\"");
+    for (char c : v) {
+      switch (c) {
+      case '\\':
+        it = FMT::format_to(it, "\\\\");
+        break;
+      case '"':
+        it = FMT::format_to(it, "\\\"");
+        break;
+      case '\n':
+        it = FMT::format_to(it, "\\n");
+        break;
+      case '\t':
+        it = FMT::format_to(it, "\\t");
+        break;
+      case '\r':
+        it = FMT::format_to(it, "\\r");
+        break;
+      default:
+        it = FMT::format_to(it, "{}", c);
+        break;
+      }
+    }
+    return FMT::format_to(it, "\"");
+  }
+};

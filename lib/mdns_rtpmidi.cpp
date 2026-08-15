@@ -113,7 +113,7 @@ static void entry_group_callback(AvahiEntryGroup *g, AvahiEntryGroupState state,
     mr->group = g;
   }
   if (g != mr->group) {
-    DEBUG("Received a message from an unknown group {} != {}. new state: {}",
+    DEBUG("Received a message from an unknown group group={} != expected={}. new state={}",
           (void *)g, (void *)mr->group, state);
     return;
   }
@@ -148,7 +148,7 @@ AvahiWatch *poller_adapter_watch_new(const AvahiPoll *api, int fd,
       wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
     });
   } else {
-    DEBUG("Other event: {}", event);
+    DEBUG("Other event={}", event);
   }
 
   return wd;
@@ -175,7 +175,7 @@ void poller_adapter_watch_update(AvahiWatch *wd, AvahiWatchEvent event) {
       wd->callback(wd, wd->fd, AVAHI_WATCH_OUT, wd->userdata);
     });
   } else {
-    DEBUG("Other event: {}", event);
+    DEBUG("Other event={}", event);
   }
 }
 
@@ -210,7 +210,7 @@ AvahiTimeout *poller_adapter_timeout_new(const AvahiPoll *api,
     //   to->timer_id = 0;
     // } else {
     to->timer_id = current->poller_ptr->add_timer_event(chrono_tv, [to] {
-      DEBUG("Timeout for to {} {}", (void *)to, to->timer_id.id);
+      DEBUG("Timeout for to={} timer_id={}", (void *)to, to->timer_id.id);
       to->callback(to, to->userdata);
     });
     // }
@@ -330,8 +330,8 @@ void rtpmidid::mdns_rtpmidi_t::setup_service_browser() {
       client, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, RTPMIDI_MDNS_SERVICE_NAME,
       NULL, (AvahiLookupFlags)0, ::browse_callback, this);
   if (!service_browser) {
-    ERROR("Failed to create service browser: {}",
-          avahi_strerror(avahi_client_errno(client)));
+    ERROR("Failed to create service browser error={}",
+          quoted_t{avahi_strerror(avahi_client_errno(client))});
     return;
   }
 }
@@ -340,10 +340,10 @@ void rtpmidid::mdns_rtpmidi_t::setup_entry_group() {
   if (group)
     return;
   group = avahi_entry_group_new(client, ::entry_group_callback, this);
-  DEBUG("Avahi entry group created {}.", (void *)group);
+  DEBUG("Avahi entry group created group={}.", (void *)group);
   if (!group) {
-    ERROR("avahi_entry_group_new() failed: {}",
-          avahi_strerror(avahi_client_errno(client)));
+    ERROR("avahi_entry_group_new() failed error={}",
+          quoted_t{avahi_strerror(avahi_client_errno(client))});
     ERROR("Name collision?");
     return;
   }
@@ -358,7 +358,7 @@ void rtpmidid::mdns_rtpmidi_t::connect_to_avahi() {
   }
   int error = -1;
 
-  DEBUG("mdns {}", (void *)this);
+  DEBUG("mdns this={}", (void *)this);
   poller_adapter = std::make_unique<AvahiPoll>();
   poller_adapter->watch_new = poller_adapter_watch_new;
   poller_adapter->watch_update = poller_adapter_watch_update;
@@ -372,8 +372,8 @@ void rtpmidid::mdns_rtpmidi_t::connect_to_avahi() {
                             (AvahiClientFlags)AVAHI_CLIENT_NO_FAIL,
                             ::client_callback, this, &error);
   if (!client) {
-    ERROR("Error creating avahi client: {} {}. Try again in 30s", error,
-          avahi_strerror(error));
+    ERROR("Error creating avahi client error={} detail={}. Try again in 30s", error,
+          quoted_t{avahi_strerror(error)});
     // Try again in 30s
     reconnect_timer = rtpmidid::poller.add_timer_event(
         std::chrono::milliseconds(1000), [this]() { connect_to_avahi(); });
@@ -402,7 +402,7 @@ rtpmidid::mdns_rtpmidi_t::~mdns_rtpmidi_t() {
 
 void rtpmidid::mdns_rtpmidi_t::client_callback(avahi_client_state_e state_) {
   AvahiClientState state = (AvahiClientState)state_;
-  DEBUG("New avahi client state: {}", state);
+  DEBUG("New avahi client state={}", state);
 
   /* Called whenever the client or server state changes */
   switch (state) {
@@ -415,7 +415,7 @@ void rtpmidid::mdns_rtpmidi_t::client_callback(avahi_client_state_e state_) {
     break;
   case AVAHI_CLIENT_FAILURE: {
     auto avahi_errno = avahi_client_errno(client);
-    ERROR("Client failure: error=\"{}\" errno={}", avahi_strerror(avahi_errno),
+    ERROR("Client failure error={} errno={}", quoted_t{avahi_strerror(avahi_errno)},
           avahi_errno);
     if (avahi_errno == AVAHI_ERR_DISCONNECTED) {
       WARNING("Disconnected, reconnecting...It may get blocked. ");
@@ -442,7 +442,7 @@ void rtpmidid::mdns_rtpmidi_t::client_callback(avahi_client_state_e state_) {
     DEBUG("AVAHI_CLIENT_CONNECTING");
     break;
   default:
-    DEBUG("Unknown client state: {}", state);
+    DEBUG("Unknown client state={}", state);
   }
 }
 
@@ -453,11 +453,11 @@ void rtpmidid::mdns_rtpmidi_t::resolve_callback(
   case AVAHI_RESOLVER_FAILURE: {
     [[maybe_unused]] auto avahi_errno = avahi_client_errno(client);
     [[maybe_unused]]const char *errmsg = avahi_strerror(avahi_errno);
-    ERROR("AVAHI_RESOLVER_FAILURE Failed to resolve service=\"{}\" of type={}"
-          "in domain={} host_name={} port={} with error_n={} error=\"{}\" ",
-          data.name, data.type, data.domain,
-          data.host_name == nullptr ? "null" : data.host_name, data.port,
-          avahi_errno, errmsg);
+    ERROR("AVAHI_RESOLVER_FAILURE Failed to resolve service={} type={} "
+          "domain={} host_name={} port={} error_n={} error={}",
+          quoted_t{data.name}, quoted_t{data.type}, quoted_t{data.domain},
+          quoted_t{data.host_name == nullptr ? "null" : data.host_name}, data.port,
+          avahi_errno, quoted_t{errmsg});
 
     // We remove if it existed before. A resolver failure may be a timeout.
     remove_event(data.name, std::to_string(data.host_name || ""),
@@ -465,14 +465,14 @@ void rtpmidid::mdns_rtpmidi_t::resolve_callback(
   } break;
   case AVAHI_RESOLVER_FOUND: {
     if (!!(data.flags & AVAHI_LOOKUP_RESULT_OUR_OWN)) {
-      DEBUG("Received own announcement of service={}. Ignore.", data.name);
+      DEBUG("Received own announcement of service={}. Ignore.", quoted_t{data.name});
       return;
     }
     std::array<char, AVAHI_ADDRESS_STR_MAX> avahi_address_str{};
     avahi_address_snprint(avahi_address_str.data(), avahi_address_str.size(),
                           data.address);
-    DEBUG("Discovered service=\"{}\" in host={}:{} ip={} flags={:04X}",
-          data.name, data.host_name, data.port, avahi_address_str.data(),
+    DEBUG("Discovered service={} host={}:{} ip={} flags={:04X}",
+          quoted_t{data.name}, quoted_t{data.host_name}, data.port, quoted_t{avahi_address_str.data()},
           (int)data.flags);
 
     // FIXME: address is not correct for interface (!), so is not unique, how to
@@ -490,22 +490,21 @@ void rtpmidid::mdns_rtpmidi_t::resolve_callback(
 void rtpmidid::mdns_rtpmidi_t::browse_callback(const browse_callback_s &data) {
   switch (data.event) {
   case AVAHI_BROWSER_FAILURE:
-    ERROR("AVAHI_BROWSER_FAILURE {}",
-          avahi_strerror(avahi_client_errno(client)));
+    ERROR("AVAHI_BROWSER_FAILURE error={}",
+          quoted_t{avahi_strerror(avahi_client_errno(client))});
     return;
   case AVAHI_BROWSER_NEW:
     if (!(avahi_service_resolver_new(client, data.interface, data.protocol,
                                      data.name, data.type, data.domain,
                                      AVAHI_PROTO_UNSPEC, (AvahiLookupFlags)0,
                                      ::resolve_callback, (void *)this))) {
-      ERROR("AVAHI_BROWSER_NEW Failed to resolve service '{}': {}", data.name,
-            avahi_strerror(avahi_client_errno(client)));
+      ERROR("AVAHI_BROWSER_NEW Failed to resolve service={} error={}", quoted_t{data.name},
+            quoted_t{avahi_strerror(avahi_client_errno(client))});
     }
     break;
   case AVAHI_BROWSER_REMOVE:
-    INFO("{} REMOVE: service=\"{}\" of type=\"{}\" in domain={} "
-         "flags={:08X} ",
-         data.event, data.name, data.type, data.domain, (int)data.flags);
+    INFO("event={} REMOVE service={} type={} domain={} flags={:08X}",
+         data.event, quoted_t{data.name}, quoted_t{data.type}, quoted_t{data.domain}, (int)data.flags);
     if (data.flags & AVAHI_LOOKUP_RESULT_OUR_OWN) {
       DEBUG("Received own announcement removal. Ignore.");
       return;
@@ -514,10 +513,10 @@ void rtpmidid::mdns_rtpmidi_t::browse_callback(const browse_callback_s &data) {
     break;
   case AVAHI_BROWSER_ALL_FOR_NOW:
   case AVAHI_BROWSER_CACHE_EXHAUSTED:
-    INFO("{}", data.event);
+    INFO("event={}", data.event);
     break;
   default:
-    WARNING("AVAHI unknown event: {}", data.event);
+    WARNING("AVAHI unknown event={}", data.event);
   }
 }
 
@@ -525,7 +524,7 @@ void rtpmidid::mdns_rtpmidi_t::entry_group_callback(
     entry_group_state_e state_) {
   AvahiEntryGroupState state = (AvahiEntryGroupState)state_;
 
-  DEBUG("Entry group state: {}", state);
+  DEBUG("Entry group state={}", state);
 
   /* Called whenever the entry group state changes */
   switch (state) {
@@ -540,8 +539,8 @@ void rtpmidid::mdns_rtpmidi_t::entry_group_callback(
     break;
   }
   case AVAHI_ENTRY_GROUP_FAILURE:
-    ERROR("Entry group failure: {}",
-          avahi_strerror(avahi_client_errno(client)));
+    ERROR("Entry group failure error={}",
+          quoted_t{avahi_strerror(avahi_client_errno(client))});
     /* Some kind of failure happened while we were registering our services */
     // avahi_simple_poll_quit(simple_poll);
     break;
@@ -580,7 +579,7 @@ void rtpmidid::mdns_rtpmidi_t::announce_all() {
     break;
   default:
     WARNING("Group not established yet. Will be announced when established. "
-            "State={}",
+            "state={}",
             state);
     return;
   }
@@ -595,16 +594,16 @@ void rtpmidid::mdns_rtpmidi_t::announce_all() {
   int ret = -1;
   for (auto &entry : announcements) {
     auto name = entry.name + announce_suffix_str;
-    DEBUG("Announce: name=\"{}\" port={}", name, entry.port);
+    DEBUG("Announce name={} port={}", quoted_t{name}, entry.port);
     ret = avahi_entry_group_add_service(
         group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC,
         // (AvahiPublishFlags)AVAHI_PUBLISH_USE_MULTICAST,
         (AvahiPublishFlags)0, name.c_str(), RTPMIDI_MDNS_SERVICE_NAME, NULL,
         NULL, entry.port, NULL);
     if (ret < 0) {
-      ERROR("Failed to add service={} name=\"{}\" group state={} msg=\"{}\"",
-            RTPMIDI_MDNS_SERVICE_NAME, entry.name,
-            avahi_entry_group_get_state(group), avahi_strerror(ret));
+      ERROR("Failed to add service={} name={} group_state={} msg={}",
+            quoted_t{RTPMIDI_MDNS_SERVICE_NAME}, quoted_t{entry.name},
+            avahi_entry_group_get_state(group), quoted_t{avahi_strerror(ret)});
       announce_suffix++;
       return;
     }
@@ -615,15 +614,15 @@ void rtpmidid::mdns_rtpmidi_t::announce_all() {
   }
   ret = avahi_entry_group_commit(group);
   if (ret < 0) {
-    ERROR("Failed to commit entry group: {}", avahi_strerror(ret));
+    ERROR("Failed to commit entry group error={}", quoted_t{avahi_strerror(ret)});
     return;
   }
-  INFO("Announced {} services", announcements.size());
+  INFO("Announced count={} services", announcements.size());
 }
 
 void rtpmidid::mdns_rtpmidi_t::announce_rtpmidi(const std::string &name,
                                                 const int32_t port) {
-  DEBUG("Announce {}", name);
+  DEBUG("Announce name={}", quoted_t{name});
   announcements.push_back({name, port});
 
   announce_all();
@@ -631,7 +630,7 @@ void rtpmidid::mdns_rtpmidi_t::announce_rtpmidi(const std::string &name,
 
 void rtpmidid::mdns_rtpmidi_t::unannounce_rtpmidi(const std::string &name,
                                                   const int32_t port) {
-  DEBUG("Unannounce {}", name);
+  DEBUG("Unannounce name={}", quoted_t{name});
   announcements.erase(std::remove_if(announcements.begin(), announcements.end(),
                                      [port](const announcement_t &t) {
                                        return port == t.port;

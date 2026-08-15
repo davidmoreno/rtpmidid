@@ -36,9 +36,11 @@
 #include "worker_actor.hpp"
 #include <chrono>
 #include <csignal>
+#include <cstdlib>
 #include <memory>
 #include <sys/eventfd.h>
 #include <thread>
+#include <unistd.h>
 
 using namespace std::chrono_literals;
 
@@ -90,6 +92,32 @@ static void setup_static_peers(const std::shared_ptr<rtpmidi_server_actor_t> &se
 
 } // namespace rtpmididns
 
+namespace {
+
+/// True when the environment variable is present and non-empty (the
+/// NO_COLOR / FORCE_COLOR conventions treat any non-empty value as set).
+bool env_var_nonempty(const char *name) {
+  const char *v = ::getenv(name);
+  return v != nullptr && v[0] != '\0';
+}
+
+/// Compute the process-global color flag once from the full precedence
+/// chain and install it. Called before argument parsing (so early logs
+/// honor env/tty) and again after (so --log-no-color and INI log_color
+/// take effect).
+void apply_log_color_config() {
+  const auto &s = rtpmididns::settings;
+  const bool ini_never = s.log_color == rtpmididns::log_color_t::never;
+  const bool ini_always = s.log_color == rtpmididns::log_color_t::always;
+  const bool color = rtpmidid::compute_log_color_enabled(
+      s.log_no_color, env_var_nonempty("NO_COLOR"),
+      env_var_nonempty("FORCE_COLOR"), ini_never, ini_always,
+      ::isatty(STDOUT_FILENO));
+  rtpmidid::set_log_color_enabled(color);
+}
+
+} // namespace
+
 // NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char **argv) {
   // Main-thread identity: log tag only. The comm is deliberately left as
@@ -97,18 +125,25 @@ int main(int argc, char **argv) {
   // comm, and killall/pgrep -x/systemd match on it.
   rtpmidid::set_log_thread_tag("main");
 
+  // Compute color from env + tty before parsing args, so the parse's own
+  // DEBUG/INFO logs are colored correctly.
+  apply_log_color_config();
+
   std::vector<std::string> args;
   for (int i = 1; i < argc; i++) {
     args.push_back(argv[i]);
   }
   rtpmididns::parse_argv(std::move(args), &rtpmididns::settings);
 
+  // Recompute now that --log-no-color and INI log_color are known.
+  apply_log_color_config();
+
   // Initialize logger level from settings with validation.
   constexpr int compile_time_min_enum = LOG_LEVEL - 1;
   const int runtime_level = static_cast<int>(rtpmididns::settings.log_level);
   if (runtime_level < compile_time_min_enum) {
-    WARNING("Requested log level {} is lower than compile-time minimum {}. "
-            "Using minimum level {} instead.",
+    WARNING("Requested log level requested={} is lower than compile-time "
+            "minimum={}; using minimum={} instead.",
             rtpmididns::settings.log_level, LOG_LEVEL,
             static_cast<rtpmidid::logger_level_t>(compile_time_min_enum));
     rtpmidid::logger2.set_log_level(
@@ -130,10 +165,10 @@ int main(int argc, char **argv) {
   };
   sa.sa_flags = SA_RESTART;
   sigemptyset(&sa.sa_mask);
-  INFO("Installing SIGTERM/SIGINT handlers (eventfd {})", signal_fd_global);
+  INFO("Installing SIGTERM/SIGINT handlers eventfd={}", signal_fd_global);
   if (sigaction(SIGTERM, &sa, nullptr) != 0 ||
       sigaction(SIGINT, &sa, nullptr) != 0) {
-    ERROR("Failed to install signal handlers: {}", strerror(errno));
+    ERROR("Failed to install signal handlers error={}", quoted_t{strerror(errno)});
     return 1;
   }
   const int signal_fd = signal_fd_global;
@@ -219,7 +254,7 @@ int main(int argc, char **argv) {
     server->start();
     control->start();
   } catch (const std::exception &e) {
-    ERROR("Fatal setup error: {}", e.what());
+    ERROR("Fatal setup error error={}", quoted_t{e.what()});
     return 1;
   }
 
@@ -227,7 +262,7 @@ int main(int argc, char **argv) {
   // on the rtpmidi server; connections stay lazy until needed.
   setup_static_peers(server);
 
-  INFO("rtpmidid {} running (actor architecture).", VERSION);
+  INFO("rtpmidid version={} running (actor architecture).", quoted_t{VERSION});
 
   // The supervisor owns the lifecycle: SIGTERM/SIGINT arrive via its
   // signalfd and drive the ordered shutdown.

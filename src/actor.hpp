@@ -268,9 +268,9 @@ actor_t<DataT, ControlT>::actor_t(actor_config_t config)
   // receiving actor instead of an anonymous "Mailbox".
   mailbox_->set_name(config_.name);
   if (config_.supervisor_mailbox == nullptr) {
-    WARNING("Actor {} created without a supervisor mailbox: stopped/actor_died "
+    WARNING("Actor name={} created without a supervisor mailbox: stopped/actor_died "
             "will not be posted.",
-            config_.name);
+            quoted_t{config_.name});
   }
 }
 
@@ -296,12 +296,12 @@ void actor_t<DataT, ControlT>::apply_scheduling() {
       param.sched_priority = config_.rt_priority;
       int r = pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
       if (r == 0) {
-        INFO("Actor {}: promoted to SCHED_FIFO priority {}", config_.name,
+        INFO("Actor name={} promoted to SCHED_FIFO priority={}", quoted_t{config_.name},
              config_.rt_priority);
       } else {
-        WARNING("Actor {}: RT promotion to SCHED_FIFO failed ({}). Falling "
+        WARNING("Actor name={} RT promotion to SCHED_FIFO failed (error={}). Falling "
                 "back to nice-based elevation.",
-                config_.name, strerror(r));
+                quoted_t{config_.name}, quoted_t{strerror(r)});
         setpriority(PRIO_PROCESS, 0, -10);
       }
     } else {
@@ -314,11 +314,11 @@ void actor_t<DataT, ControlT>::apply_scheduling() {
     param.sched_priority = 0;
     int r = pthread_setschedparam(pthread_self(), SCHED_IDLE, &param);
     if (r == 0) {
-      INFO("Actor {}: running at SCHED_IDLE.", config_.name);
+      INFO("Actor name={} running at SCHED_IDLE.", quoted_t{config_.name});
     } else {
-      WARNING("Actor {}: SCHED_IDLE unavailable ({}). Falling back to "
+      WARNING("Actor name={} SCHED_IDLE unavailable (error={}). Falling back to "
               "nice(19).",
-              config_.name, strerror(r));
+              quoted_t{config_.name}, quoted_t{strerror(r)});
       setpriority(PRIO_PROCESS, 0, 19);
     }
     break;
@@ -329,7 +329,7 @@ void actor_t<DataT, ControlT>::apply_scheduling() {
 template <typename DataT, typename ControlT>
 void actor_t<DataT, ControlT>::start() {
   if (thread_.joinable()) {
-    WARNING("Actor {} already started.", config_.name);
+    WARNING("Actor name={} already started.", quoted_t{config_.name});
     return;
   }
   thread_ = std::jthread([this] { thread_main(); });
@@ -536,12 +536,12 @@ void actor_t<DataT, ControlT>::handle_data_safe(DataT &&msg) {
     on_data(std::move(msg));
   } catch (const std::exception &e) {
     message_exceptions_++;
-    ERROR("Actor {}: exception handling data message: {}", config_.name,
-          e.what());
+    ERROR("Actor name={} exception handling data message error={}", quoted_t{config_.name},
+          quoted_t{e.what()});
     return;
   } catch (...) {
     message_exceptions_++;
-    ERROR("Actor {}: unknown exception handling data message", config_.name);
+    ERROR("Actor name={} unknown exception handling data message", quoted_t{config_.name});
     return;
   }
   check_slow("data", [&] { return describe_message(msg); }, t0);
@@ -559,12 +559,12 @@ void actor_t<DataT, ControlT>::handle_control_safe(ControlT &&msg) {
     on_control(std::move(msg));
   } catch (const std::exception &e) {
     message_exceptions_++;
-    ERROR("Actor {}: exception handling control message: {}", config_.name,
-          e.what());
+    ERROR("Actor name={} exception handling control message error={}", quoted_t{config_.name},
+          quoted_t{e.what()});
     return;
   } catch (...) {
     message_exceptions_++;
-    ERROR("Actor {}: unknown exception handling control message", config_.name);
+    ERROR("Actor name={} unknown exception handling control message", quoted_t{config_.name});
     return;
   }
   check_slow("control", [&] { return describe_control(msg); }, t0);
@@ -582,8 +582,8 @@ void actor_t<DataT, ControlT>::check_slow(
   if (took > config_.slow_message_threshold) {
     const auto took_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(took);
-    ERROR("Actor {}: slow {} message {} took {} ms (> {} ms).", config_.name,
-          lane, describe(), took_ms.count(),
+    ERROR("Actor name={} slow lane={} message={} took_ms={} (> threshold_ms={} ms).", quoted_t{config_.name},
+          quoted_t{lane}, quoted_t{describe()}, took_ms.count(),
           config_.slow_message_threshold.count());
   }
 }
@@ -619,9 +619,9 @@ void actor_t<DataT, ControlT>::finish() {
   try {
     on_stop();
   } catch (const std::exception &e) {
-    ERROR("Actor {}: exception in on_stop: {}", config_.name, e.what());
+    ERROR("Actor name={} exception in on_stop error={}", quoted_t{config_.name}, quoted_t{e.what()});
   } catch (...) {
-    ERROR("Actor {}: unknown exception in on_stop", config_.name);
+    ERROR("Actor name={} unknown exception in on_stop", quoted_t{config_.name});
   }
   poller_.close();
   post_exit_notice();
@@ -636,7 +636,7 @@ void actor_t<DataT, ControlT>::post_exit_notice() {
     config_.supervisor_mailbox.post_control(
         make_stopped(stop_hdr_, config_.id));
   } else {
-    ERROR("Actor {} died: {}", config_.name, fatal_reason_);
+    ERROR("Actor name={} died reason={}", quoted_t{config_.name}, quoted_t{fatal_reason_});
     config_.supervisor_mailbox.post_control(
         make_actor_died(config_.id, fatal_reason_));
   }

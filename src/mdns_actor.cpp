@@ -41,9 +41,9 @@ void mdns_actor_t::on_start() {
   try {
     // The avahi fds/timers are registered in THIS actor's poller.
     mdns_ = std::make_unique<rtpmidid::mdns_rtpmidi_t>(poller());
-    INFO("mdns actor {}: avahi connected.", name());
+    INFO("mdns actor name={} avahi connected.", quoted_t{name()});
   } catch (const std::exception &e) {
-    ERROR("mdns actor {}: avahi setup failed: {}", name(), e.what());
+    ERROR("mdns actor name={} avahi setup failed error={}", quoted_t{name()}, quoted_t{e.what()});
     mdns_ = nullptr;
     return;
   }
@@ -81,19 +81,19 @@ void mdns_actor_t::on_discovered(const std::string &name,
     return;
   }
   if (!accept_discovery(name, address, port)) {
-    INFO("mdns: not adding discovered peer=\"{}\" (settings filter)", name);
+    INFO("mdns: not adding discovered peer={} (settings filter)", quoted_t{name});
     return;
   }
   if (discovered_.count(name) != 0) {
     return; // already known (dedupe by name)
   }
   if (!alsa_mailbox_ || !server_mailbox_) {
-    WARNING("mdns: discovery wiring incomplete; ignoring {}", name);
+    WARNING("mdns: discovery wiring incomplete; ignoring peer={}", quoted_t{name});
     return;
   }
-  INFO("mdns: discovered rtpmidi server \"{}\" at {}:{}; creating waiting "
+  INFO("mdns: discovered rtpmidi server peer={} at address={}:{}; creating waiting "
        "ALSA port (lazy).",
-       name, address, port);
+       quoted_t{name}, quoted_t{address}, port);
   discovery_entry_t entry;
   entry.name = name;
   entry.address = address;
@@ -115,8 +115,8 @@ void mdns_actor_t::on_removed(const std::string &name) {
   if (it == discovered_.end()) {
     return;
   }
-  INFO("mdns: remote rtpmidi server \"{}\" gone; removing waiting port.",
-       name);
+  INFO("mdns: remote rtpmidi server peer={} gone; removing waiting port.",
+       quoted_t{name});
   auto entry = std::move(it->second);
   discovered_.erase(it);
   if (alsa_mailbox_ && entry.seq_port != 0) {
@@ -166,13 +166,13 @@ void mdns_actor_t::on_control(mdns_control_t &&msg) {
               continue;
             }
             if (m.seq_port == 0) {
-              ERROR("mdns: waiting port for \"{}\" could not be created.",
-                    key);
+              ERROR("mdns: waiting port for peer={} could not be created.",
+                    quoted_t{key});
               discovered_.erase(key);
               return;
             }
             entry.seq_port = m.seq_port;
-            INFO("mdns: waiting port for \"{}\" created (seq {}).", key,
+            INFO("mdns: waiting port for peer={} created (seq={}).", quoted_t{key},
                  m.seq_port);
             // The server learns the seq port (inbound reuse of the waiting
             // port).

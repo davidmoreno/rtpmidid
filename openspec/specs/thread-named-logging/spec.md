@@ -27,17 +27,17 @@ The logging library SHALL maintain a per-thread tag (a `thread_local` string set
 
 ### Requirement: Log line rendering with tag
 
-The line renderer SHALL format a tagged message as `[LEVEL] [tag] origin` padded to 40 columns followed by ` | body`, and SHALL format an untagged message exactly as today (`[LEVEL] origin` padded to 40 columns followed by ` | body`). Both the direct-print fallback and the logger actor SHALL use the same renderer, producing identical output.
+The line renderer SHALL format a message as a logfmt line `level=<level> thread=<tag> filename=<basename>:<lineno> <body>`, where `<tag>` is the captured thread tag (empty when untagged) and `<body>` is the producer-formatted `key=value` message. Both the direct-print fallback and the logger actor SHALL use the same renderer, producing identical output.
 
 #### Scenario: Tagged line format
 
-- **WHEN** a message has level INFO, tag `router`, origin `router_actor.cpp:12`, body `peer up`
-- **THEN** the rendered line is `[INFO ] [router] router_actor.cpp:12    | peer up` with the `|` aligned at the same column as untagged lines
+- **WHEN** a message has level INFO, tag `router`, file `router_actor.cpp`, lineno 12, body `peer up`
+- **THEN** the rendered line is `level=info thread=router filename=router_actor.cpp:12 peer up`
 
-#### Scenario: Untagged output is byte-identical
+#### Scenario: Untagged line has empty thread field
 
 - **WHEN** a message has an empty tag
-- **THEN** the rendered line is byte-identical to the pre-change format (e.g. `[INFO ] myfile.cpp:42 | hello`)
+- **THEN** the rendered line carries an empty `thread=` field (e.g. `level=info thread= filename=myfile.cpp:42 hello`)
 
 ### Requirement: Actor thread naming
 

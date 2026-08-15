@@ -36,7 +36,7 @@ void router_actor_t::on_data(data_message_t &&msg) {
 void router_actor_t::forward_midi(data_message_t &&msg) {
   auto from_it = peers_.find(msg.from);
   if (from_it == peers_.end()) {
-    WARNING_RATE_LIMIT(5, "Router: midi_received from unknown sender {} "
+    WARNING_RATE_LIMIT(5, "Router: midi_received from unknown sender={} "
                           "dropped.",
                        msg.from);
     return;
@@ -50,7 +50,7 @@ void router_actor_t::forward_midi(data_message_t &&msg) {
     if (dest == peers_.end()) {
       // The graph is the router's own map; a missing destination is an
       // inconsistency (stale edge). Loud, rate-limited.
-      WARNING_RATE_LIMIT(5, "Router: forwarding from {} to missing peer {} "
+      WARNING_RATE_LIMIT(5, "Router: forwarding from={} to missing peer={} "
                             "(stale graph edge); message dropped.",
                          msg.from, to_id);
       continue;
@@ -70,7 +70,7 @@ void router_actor_t::forward_midi(data_message_t &&msg) {
     } catch (const std::exception &e) {
       // Oversized-payload escape pool exhausted on copy: drop this
       // destination (per-message isolation).
-      ERROR("Router: forwarding to {} failed: {}", to_id, e.what());
+      ERROR("Router: forwarding to={} failed error={}", to_id, quoted_t{e.what()});
     }
   }
 }
@@ -128,7 +128,7 @@ void router_actor_t::handle_register_peer(register_peer_t &&m) {
   rec.meta = std::move(m.meta);
   peers_[id] = std::move(rec);
   INFO("Router: registered hosted peer id={} type={}", id,
-       peers_[id].type.empty() ? "?" : peers_[id].type);
+       quoted_t{peers_[id].type.empty() ? "?" : peers_[id].type});
   notify_subscribers(peer_event_t{peer_event_kind_t::registered, id});
   m.reply_to.post_control(
       peer_ids_result_t{m.hdr, {id}, peers_[id].mailbox});
@@ -180,7 +180,7 @@ void router_actor_t::handle_spawn_peer(spawn_peer_t &&m) {
   rec.meta = std::move(m.meta);
   peers_[id] = std::move(rec);
   INFO("Router: spawned peer id={} type={}", id,
-       peers_[id].type.empty() ? "?" : peers_[id].type);
+       quoted_t{peers_[id].type.empty() ? "?" : peers_[id].type});
   // Gate: the peer waits for `registered` before handling wire traffic.
   peers_[id].mailbox.post_control(registered_t{{id}});
   m.reply_to.post_control(
@@ -317,7 +317,7 @@ void router_actor_t::handle_actor_died(actor_died_t &&m) {
   auto pit = pending_removes_.find(m.id);
   if (pit == pending_removes_.end()) {
     // Implicit remove (4.8): no stop phase, the thread has exited.
-    WARNING("Router: peer id={} died: {}", m.id, m.reason);
+    WARNING("Router: peer id={} died reason={}", m.id, quoted_t{m.reason});
     erase_peer(m.id, peer_event_kind_t::died);
     return;
   }

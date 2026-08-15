@@ -14,6 +14,7 @@ void jsondm::ini_deserializer<rtpmididns::settings_t>::read(
                 else if (key == "alsa_network") v.alsa_network = jsondm::ini::to_value<bool>(value);
                 else if (key == "control") v.control = jsondm::ini::to_value<std::string>(value);
                 else if (key == "log_level") v.log_level = jsondm::ini::to_value<rtpmidid::logger_level_t>(value);
+                else if (key == "log_color") v.log_color = jsondm::ini::to_value<rtpmididns::log_color_t>(value);
                 else if (key == "rt_priority") v.rt_priority = jsondm::ini::to_value<int>(value);
                 else throw jsondm::exception("{}:{}: Invalid key: {}", r.filename(), line, std::string(key));
             });
@@ -54,6 +55,7 @@ void jsondm::ini_serializer<rtpmididns::settings_t>::write(
     w.key("alsa_network", jsondm::ini::to_text<bool>(v.alsa_network));
     w.key("control", jsondm::ini::to_text<std::string>(v.control));
     w.key("log_level", jsondm::ini::to_text<rtpmidid::logger_level_t>(v.log_level));
+    w.key("log_color", jsondm::ini::to_text<rtpmididns::log_color_t>(v.log_color));
     w.key("rt_priority", jsondm::ini::to_text<int>(v.rt_priority));
     for (const auto &e : v.rtpmidi_announce) {
         w.section("rtpmidi_announce");

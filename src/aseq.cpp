@@ -45,7 +45,7 @@ void error_handler(const char *file, int line, const char *function, int err,
   va_end(arg);
   std::string filename = "alsa/";
   filename += file;
-  ERROR("{}", msg);
+  ERROR("error={}", quoted_t{msg});
 }
 
 snd_seq_addr_t *get_other_ev_client_port(snd_seq_event_t *ev,
@@ -84,13 +84,13 @@ aseq_t::aseq_t(std::string _name, rtpmidid::poller_t &poller)
   snd_seq_client_pool_alloca(&pool);
   int result;
   if ((result = snd_seq_get_client_pool(seq, pool)) < 0) {
-    ERROR("Failed to get pool: {}", snd_strerror(result));
+    ERROR("Failed to get pool error={}", quoted_t{snd_strerror(result)});
   } else {
     snd_seq_client_pool_set_input_pool(pool, 2000);
     snd_seq_client_pool_set_output_pool(pool, 2000);
 
     if ((result = snd_seq_set_client_pool(seq, pool)) < 0) {
-      ERROR("Failed to set pool: {}", snd_strerror(result));
+      ERROR("Failed to set pool error={}", quoted_t{snd_strerror(result)});
     }
   }
 
@@ -160,11 +160,11 @@ void aseq_t::read_ready() {
       snd_seq_addr_t *other = get_other_ev_client_port(ev, client_id);
       snd_seq_addr_t *me = get_my_ev_client_port(ev, client_id);
 
-      INFO("Event source if {}:{}", ev->source.client, ev->source.port);
+      INFO("Event source is client={}:{}", ev->source.client, ev->source.port);
 
       name = get_client_name(other);
 
-      INFO("New ALSA connection {} from port {}:{} -> {}:{}", name,
+      INFO("New ALSA connection name={} from={}:{} -> to={}:{}", quoted_t{name},
            other->client, other->port, me->client, me->port);
 
       if (other->client != client_id && me->client != client_id) {
@@ -177,7 +177,7 @@ void aseq_t::read_ready() {
         // This is an internal connection, should send subscribe from the other
         // side too
         name = get_client_name(me);
-        INFO("New ALSA connection from port {} ({}:{}) (internal)", name,
+        INFO("New ALSA connection from port name={} (client={}:{}) (internal)", quoted_t{name},
              me->client, me->port);
         subscribe_event[other->port](port_t(me->client, me->port), name);
       }
@@ -185,7 +185,7 @@ void aseq_t::read_ready() {
     case SND_SEQ_EVENT_PORT_UNSUBSCRIBED: {
       snd_seq_addr_t *other = get_other_ev_client_port(ev, client_id);
       snd_seq_addr_t *me = get_my_ev_client_port(ev, client_id);
-      DEBUG("Disconnected {}:{} -> {}:{}", other->client, other->port,
+      DEBUG("Disconnected from={}:{} -> to={}:{}", other->client, other->port,
             me->client, me->port);
 
       if (other->client != client_id && me->client != client_id) {
@@ -224,12 +224,12 @@ void aseq_t::read_ready() {
       auto name = get_client_name(&ev->data.addr);
       auto type = get_client_type(&ev->data.addr);
       auto port = port_t(ev->data.addr.client, ev->data.addr.port);
-      DEBUG("Client start {} {} {}", name, type, port);
+      DEBUG("Client start name={} type={} client={} port={}", quoted_t{name}, type, port.client, port.port);
       added_port_announcement(name, type, port);
     } break;
     case SND_SEQ_EVENT_PORT_EXIT: {
       auto port = port_t(ev->data.addr.client, ev->data.addr.port);
-      DEBUG("Client exit {}", port);
+      DEBUG("Client exit client={} port={}", port.client, port.port);
       removed_port_announcement(port);
     } break;
     default:
@@ -240,7 +240,7 @@ void aseq_t::read_ready() {
 
         // NOLINTNEXTLINE
         warning_raised[ev->type] = true;
-        WARNING("This event type {} is not managed yet", ev->type);
+        WARNING("This event type={} is not managed yet", ev->type);
       }
       break;
     }
@@ -374,13 +374,13 @@ static void disconnect_port_at_subs(snd_seq_t *seq,
         addr = snd_seq_query_subscribe_get_root(subs);
       }
 
-      DEBUG("Disconnect {}:{} -> {}:{}", root->client, root->port, addr->client,
+      DEBUG("Disconnect from={}:{} -> to={}:{}", root->client, root->port, addr->client,
             addr->port);
 
       snd_seq_port_subscribe_set_sender(port_sub, root);
       snd_seq_port_subscribe_set_dest(port_sub, addr);
       if (snd_seq_unsubscribe_port(seq, port_sub) < 0) {
-        ERROR("Could not disconenct ALSA seq ports: {}:{} -> {}:{}",
+        ERROR("Could not disconenct ALSA seq ports from={}:{} -> to={}:{}",
               root->client, root->port, addr->client, addr->port);
       }
 
@@ -391,7 +391,7 @@ static void disconnect_port_at_subs(snd_seq_t *seq,
 }
 
 void aseq_t::disconnect_port(uint8_t port) {
-  DEBUG("Disconnect alsa port {}", port);
+  DEBUG("Disconnect alsa port={}", port);
   snd_seq_query_subscribe_t *subs = nullptr;
   snd_seq_port_info_t *portinfo = nullptr;
 
@@ -407,13 +407,13 @@ void aseq_t::disconnect_port(uint8_t port) {
 }
 
 aseq_t::connection_t aseq_t::connect(const port_t &from, const port_t &to) {
-  DEBUG("Connect alsa ports {} -> {}", from.to_string(), to.to_string());
+  DEBUG("Connect alsa ports from={} -> to={}", quoted_t{from.to_string()}, quoted_t{to.to_string()});
 
   if (from.client == client_id) {
     int res = snd_seq_connect_to(seq, from.port, to.client, to.port);
     if (res == -16) {
-      WARNING("ALSA seq error 16: {} -> {}. Already connected?",
-              from.to_string(), to.to_string());
+      WARNING("ALSA seq error 16: from={} -> to={}. Already connected?",
+              quoted_t{from.to_string()}, quoted_t{to.to_string()});
       return aseq_t::connection_t(shared_from_this(), from, to);
     }
     if (res < 0) {
@@ -424,8 +424,8 @@ aseq_t::connection_t aseq_t::connect(const port_t &from, const port_t &to) {
   } else if (to.client == client_id) {
     int res = snd_seq_connect_from(seq, to.port, from.client, from.port);
     if (res == -16) {
-      WARNING("ALSA seq error 16: {} -> {}. Already connected?",
-              from.to_string(), to.to_string());
+      WARNING("ALSA seq error 16: from={} -> to={}. Already connected?",
+              quoted_t{from.to_string()}, quoted_t{to.to_string()});
       return aseq_t::connection_t(shared_from_this(), from, to);
     }
     if (res < 0) {
@@ -441,30 +441,30 @@ aseq_t::connection_t aseq_t::connect(const port_t &from, const port_t &to) {
 }
 
 void aseq_t::disconnect(const port_t &from, const port_t &to) {
-  DEBUG("Disconnect alsa ports {} <> {}", from.to_string(), to.to_string());
+  DEBUG("Disconnect alsa ports from={} <> to={}", quoted_t{from.to_string()}, quoted_t{to.to_string()});
   bool done = false;
   if (from.client == client_id) {
     int res = snd_seq_disconnect_to(seq, from.port, to.client, to.port);
     if (res < 0) {
-      ERROR("Failed disconnection: {} -> {}: {} ({})", from.to_string(),
-            to.to_string(), snd_strerror(res), res);
+      ERROR("Failed disconnection from={} -> to={} error={} (code={})", quoted_t{from.to_string()},
+            quoted_t{to.to_string()}, quoted_t{snd_strerror(res)}, res);
       // throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
       //                           from.to_string(), to.to_string(),
       //                           snd_strerror(res), res);
     }
-    DEBUG("Disconnected {} -> {}", from.to_string(), to.to_string());
+    DEBUG("Disconnected from={} -> to={}", quoted_t{from.to_string()}, quoted_t{to.to_string()});
     done = true;
   }
   if (to.client == client_id) {
     int res = snd_seq_disconnect_from(seq, to.port, from.client, from.port);
     if (res < 0) {
-      ERROR("Failed disconnection: {} -> {}: {} ({})", to.to_string(),
-            from.to_string(), snd_strerror(res), res);
+      ERROR("Failed disconnection from={} -> to={} error={} (code={})", quoted_t{to.to_string()},
+            quoted_t{from.to_string()}, quoted_t{snd_strerror(res)}, res);
       // throw rtpmidid::exception("Failed disconnection: {} -> {}: {} ({})",
       //                           from.to_string(), to.to_string(),
       //                           snd_strerror(res), res);
     }
-    DEBUG("Disconnected {} -> {}", to.to_string(), from.to_string());
+    DEBUG("Disconnected from={} -> to={}", quoted_t{to.to_string()}, quoted_t{from.to_string()});
     done = true;
   }
   if (!done) {
@@ -650,7 +650,7 @@ void mididata_to_alsaevents_t::mididata_to_evs_f(
     auto used = snd_midi_event_encode(buffer, data.position,
                                       data.end - data.position, &ev);
     if (used <= 0) {
-      ERROR("Fail encode event: {}, {}", used, data);
+      ERROR("Fail encode event used={} data={}", used, data);
       data.print_hex(false);
       return;
     }

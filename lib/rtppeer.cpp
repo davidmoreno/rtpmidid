@@ -48,7 +48,7 @@ rtppeer_t::~rtppeer_t() {
     send_goodbye(CONTROL_PORT);
     send_goodbye(MIDI_PORT);
   }
-  DEBUG("~rtppeer '{}' (local) <-> '{}' (remote)", local_name, remote_name);
+  DEBUG("~rtppeer local={} <-> remote={}", quoted_t{local_name}, quoted_t{remote_name});
 }
 
 void rtppeer_t::reset() {
@@ -147,19 +147,18 @@ void rtppeer_t::parse_command_ok(io_bytes_reader &buffer, port_e port) {
         "Response to connect from an unknown initiator. Not connecting.");
   }
 
-  INFO("Got confirmation from {}, initiator_id: {} ({}) ssrc: {}, "
-       "port: {}",
-       remote_name, initiator_id,
-       this->initiator_id == initiator_id ? "ok" : "nok", remote_ssrc, port);
+  INFO("Got confirmation from remote={} initiator_id={} match={} ssrc={} port={}",
+       quoted_t{remote_name}, initiator_id,
+       quoted_t{this->initiator_id == initiator_id ? "ok" : "nok"}, remote_ssrc, port);
 
   if (port == MIDI_PORT) {
     status = status_e(int(status) | int(MIDI_CONNECTED));
   } else if (port == CONTROL_PORT) {
     status = status_e(int(status) | int(CONTROL_CONNECTED));
   } else {
-    ERROR("Got data on unknown PORT! {}", port);
+    ERROR("Got data on unknown PORT port={}", port);
   }
-  DEBUG("New status is {}", status);
+  DEBUG("New status is status={}", status);
   status_change_event(status);
 }
 
@@ -188,9 +187,9 @@ void rtppeer_t::parse_command_in(io_bytes_reader &buffer, port_e port) {
         protocol);
   }
 
-  INFO("Got connection request from remote_name=\"{}\", initiator_id={:X}  "
-       "ssrc={:X}, local_name=\"{}\", at port={}",
-       remote_name, initiator_id, remote_ssrc, remote_name, port);
+  INFO("Got connection request from remote_name={} initiator_id={:X}  "
+       "ssrc={:X} local_name={} port={}",
+       quoted_t{remote_name}, initiator_id, remote_ssrc, quoted_t{remote_name}, port);
 
   io_bytes_writer_static<128> response;
   response.write_uint16(0xFFFF);
@@ -235,10 +234,10 @@ void rtppeer_t::parse_command_by(io_bytes_reader &buffer, port_e port) {
     mask = ~CONTROL_CONNECTED;
   auto nextstatus = status_e(int(status) & mask);
 
-  DEBUG("Parse BY. status: {}, port {}| {:08b} & {:08b} = {:08b}", status, port,
+  DEBUG("Parse BY. status={} port={}| {:08b} & {:08b} = {:08b}", status, port,
         (uint8_t)(status), (uint8_t)mask, int(status) & mask);
 
-  INFO("Disconnect from {}, {} port. Status {} -> {}", remote_name, port,
+  INFO("Disconnect from remote={} port={} status={} -> next_status={}", quoted_t{remote_name}, port,
        status, nextstatus);
   status = nextstatus;
 
@@ -262,9 +261,9 @@ void rtppeer_t::parse_command_no(io_bytes_reader &buffer, port_e port) {
   status = (status_e)(((int)status) &
                       ~((int)(port == MIDI_PORT ? MIDI_CONNECTED
                                                 : CONTROL_CONNECTED)));
-  WARNING("Invitation Rejected (NO) : remote ssrc {:X}", remote_ssrc);
-  INFO("Disconnect from {}, {} port. Status {:X}", remote_name,
-       port == MIDI_PORT ? "MIDI" : "Control", (int)status);
+  WARNING("Invitation Rejected (NO): remote_ssrc={:X}", remote_ssrc);
+  INFO("Disconnect from remote={} port={} status={:X}", quoted_t{remote_name},
+       quoted_t{port == MIDI_PORT ? "MIDI" : "Control"}, (int)status);
 
   status_change_event(DISCONNECTED_CONNECTION_REJECTED);
 }
@@ -294,7 +293,7 @@ void rtppeer_t::parse_command_ck(io_bytes_reader &buffer, port_e port) {
     count = 2;
     latency = ck3 - ck1;
     waiting_ck = false;
-    INFO("Latency {}: {:.2f} ms (client / 2)", std::string_view(remote_name),
+    INFO("Latency remote={} latency_ms={:.2f} (client / 2)", quoted_t{remote_name},
          latency / 10.0);
     ck_event(float(latency) / 10.0f);
     stats.add_stat(std::chrono::nanoseconds((int)latency * 100));
@@ -304,7 +303,7 @@ void rtppeer_t::parse_command_ck(io_bytes_reader &buffer, port_e port) {
     ck2 = buffer.read_uint64();
     // ck3 = buffer.read_uint64();
     latency = get_timestamp() - ck2;
-    INFO("Latency {}: {:.2f} ms (server / 3)", std::string_view(remote_name),
+    INFO("Latency remote={} latency_ms={:.2f} (server / 3)", quoted_t{remote_name},
          latency / 10.0);
     // No need to send message
     stats.add_stat(std::chrono::nanoseconds((int)latency * 100));
@@ -370,7 +369,7 @@ void rtppeer_t::parse_feedback(io_bytes_reader &buffer) {
   buffer.position = buffer.start + 8;
   seq_nr_ack = buffer.read_uint16();
 
-  DEBUG("Got feedback until package {} / {}. No journal, so ignoring.",
+  DEBUG("Got feedback until package seq_nr_ack={} / seq_nr={}. No journal, so ignoring.",
         seq_nr_ack, seq_nr);
 }
 
@@ -472,7 +471,7 @@ void rtppeer_t::parse_midi(io_bytes_reader &buffer) {
   buffer.read_uint8(); // Ignore RTP header flags (Byte 0)
   auto rtpmidi_id = buffer.read_uint8() & 0x7f;
   if (rtpmidi_id != 0x61) { // next Byte: Payload type
-    WARNING("Received packet (ID: 0x{:02x}) which is not RTP MIDI. Ignoring.",
+    WARNING("Received packet id=0x{:02x} which is not RTP MIDI. Ignoring.",
             rtpmidi_id);
     buffer.print_hex();
     return;
@@ -483,8 +482,8 @@ void rtppeer_t::parse_midi(io_bytes_reader &buffer) {
   buffer.read_uint32();                    // Ignore timestamp
   auto remote_ssrc = buffer.read_uint32(); // SSRC
   if (remote_ssrc != this->remote_ssrc) {
-    WARNING("Got message for unknown remote SSRC on this port. (from {:04X}, "
-            "I'm {:04X})",
+    WARNING("Got message for unknown remote SSRC on this port. (from={:04X} "
+            "mine={:04X})",
             remote_ssrc, this->remote_ssrc);
     return;
   }
@@ -609,7 +608,7 @@ void rtppeer_t::parse_sysex(io_bytes_reader &buffer, int16_t length) {
       // Continue, do nothing (data already copied before)
       break;
     default:
-      WARNING("Bad sysex end byte: {}", last_byte);
+      WARNING("Bad sysex end byte last_byte={}", last_byte);
       throw rtpmidid::bad_sysex_exception("Bad sysex end byte");
     }
   } else if (*buffer.position == 0xF0) {
@@ -648,8 +647,8 @@ uint64_t rtppeer_t::get_timestamp() {
 void rtppeer_t::send_midi(const io_bytes_reader &events) {
   if (!is_connected()) { // Not connected yet.
     WARNING_RATE_LIMIT(
-        10, "Can not send MIDI data to {} yet, not connected ({:X}).",
-        remote_name, (int)status);
+        10, "Can not send MIDI data to remote={} yet, not connected (status={:X}).",
+        quoted_t{remote_name}, (int)status);
     return;
   }
 
@@ -696,7 +695,7 @@ void rtppeer_t::send_midi(const io_bytes_reader &events) {
 }
 
 void rtppeer_t::send_goodbye(port_e to_port) {
-  DEBUG("Send goodbye to {}", to_port);
+  DEBUG("Send goodbye to port={}", to_port);
   io_bytes_writer_static<64> buffer;
 
   buffer.write_uint16(0x0FFFF);
@@ -720,7 +719,7 @@ void rtppeer_t::send_goodbye(port_e to_port) {
     status = NOT_CONNECTED;
 
   if (status == NOT_CONNECTED) {
-    DEBUG("Sent both goodbyes and is peer is disconected ({})", remote_name);
+    DEBUG("Sent both goodbyes and peer is disconected (remote={})", quoted_t{remote_name});
     status_change_event(DISCONNECTED_DISCONNECT);
   }
 }
@@ -728,7 +727,7 @@ void rtppeer_t::send_goodbye(port_e to_port) {
 void rtppeer_t::send_feedback(uint32_t seqnum) {
   // uint8_t packet[256];
 
-  DEBUG("Send feedback to the other end. Journal parsed. Seqnum {}", seqnum);
+  DEBUG("Send feedback to the other end. Journal parsed. seqnum={}", seqnum);
   remote_seq_nr = seqnum;
   io_bytes_writer_static<96> buffer;
 
@@ -774,11 +773,11 @@ void rtppeer_t::parse_journal(io_bytes_reader &journal_data) {
 
   uint16_t seqnum = journal_data.read_uint16();
 
-  DEBUG("I got data from seqnum {}. {} channels.", seqnum, totchan);
+  DEBUG("I got data from seqnum={} channels={}.", seqnum, totchan);
 
   if (A) {
     for (auto i = 0; i < totchan; i++) {
-      DEBUG("Parse channel pkg {}", i);
+      DEBUG("Parse channel pkg={}", i);
       parse_journal_chapter(journal_data);
     }
   }
@@ -795,7 +794,7 @@ void rtppeer_t::parse_journal_chapter(io_bytes_reader &journal_data) {
   auto channel = (head & 0x70) >> 4;
   auto chapters = journal_data.read_uint8();
 
-  DEBUG("Chapters: {:08b}", chapters);
+  DEBUG("Chapters={:08b}", chapters);
 
   // Although maybe I dont know how to parse them.. I need to at least skip
   // them
@@ -811,7 +810,7 @@ void rtppeer_t::parse_journal_chapter(io_bytes_reader &journal_data) {
 
 void rtppeer_t::parse_journal_chapter_N(uint8_t channel,
                                         io_bytes_reader &journal_data) {
-  DEBUG("Parse chapter N, channel {}", channel);
+  DEBUG("Parse chapter N, channel={}", channel);
 
   auto curr = journal_data.read_uint8();
   // bool S = head & 0x80;
@@ -820,7 +819,7 @@ void rtppeer_t::parse_journal_chapter_N(uint8_t channel,
   auto low = (curr >> 4) & 0x0f;
   auto high = curr & 0x0f;
 
-  DEBUG("{} note on count, {} noteoff count", nnoteon, high - low + 1);
+  DEBUG("note_on={} noteoff={} count", nnoteon, high - low + 1);
 
   // Prepare some struct, will overwrite mem data and write as midi event
   std::array<uint8_t, 3> tmp{0, 0, 0};

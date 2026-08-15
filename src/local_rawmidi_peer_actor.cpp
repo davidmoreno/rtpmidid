@@ -36,11 +36,11 @@ local_rawmidi_peer_actor_t::local_rawmidi_peer_actor_t(actor_config_t config,
 void local_rawmidi_peer_actor_t::on_start() {
   peer_actor_t::on_start(); // the `registered` gate
   if (fd_ < 0) {
-    WARNING("Rawmidi peer {}: no fd; read disabled.", name());
+    WARNING("Rawmidi peer name={} no fd; read disabled.", quoted_t{name()});
     return;
   }
   fd_listener_ = add_fd_in(fd_, [this](int) { read_midi(); });
-  INFO("Rawmidi actor {}: reading device {}", name(), device_);
+  INFO("Rawmidi actor name={} reading device={}", quoted_t{name()}, quoted_t{device_});
 }
 
 void local_rawmidi_peer_actor_t::on_stop() {
@@ -78,11 +78,11 @@ void local_rawmidi_peer_actor_t::send_to_wire(peer_id_t to, peer_id_t from,
   const ssize_t n = ::write(fd_, payload.data(), payload.size());
   if (n < 0) {
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
-      WARNING_RATE_LIMIT(5, "Rawmidi peer {}: device buffer full; message "
+      WARNING_RATE_LIMIT(5, "Rawmidi peer name={} device buffer full; message "
                             "dropped.",
-                         name_);
+                         quoted_t{name_});
     } else {
-      ERROR("Rawmidi peer {}: write error: {}", name_, strerror(errno));
+      ERROR("Rawmidi peer name={} write error={}", quoted_t{name_}, quoted_t{strerror(errno)});
     }
   }
 }

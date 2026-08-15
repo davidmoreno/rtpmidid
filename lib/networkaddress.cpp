@@ -171,7 +171,7 @@ network_address_list_t::network_address_list_t(const std::string &name,
   hints.ai_next = nullptr;
 
   if (getaddrinfo(name.c_str(), port.c_str(), &hints, &info) != 0) {
-    ERROR("Error getting address info for {}:{}", name, port);
+    ERROR("Error getting address info for name={} port={}", quoted_t{name}, quoted_t{port});
     if (info) {
       freeaddrinfo(info);
     }

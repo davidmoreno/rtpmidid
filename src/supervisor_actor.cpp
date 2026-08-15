@@ -124,7 +124,7 @@ void supervisor_actor_t::on_control(supervisor_control_t &&msg) {
       [this](auto &&m) {
         using T = std::decay_t<decltype(m)>;
         if constexpr (std::is_same_v<T, actor_died_t>) {
-          ERROR("Supervisor: actor id={} died: {}", m.id, m.reason);
+          ERROR("Supervisor: actor id={} died reason={}", m.id, quoted_t{m.reason});
         } else if constexpr (std::is_same_v<T, reap_actor_t>) {
           handle_reap_actor(std::move(m));
         } else if constexpr (std::is_same_v<T, ack_t>) {
@@ -154,7 +154,7 @@ void supervisor_actor_t::handle_reap_actor(reap_actor_t &&m) {
     reaped_count_++;
   }
   reap_cv_.notify_one();
-  WARNING("Supervisor: {} actor(s) delegated to the reaper.", reaped_count_);
+  WARNING("Supervisor: delegated count={} actor(s) to the reaper.", reaped_count_);
 }
 
 void supervisor_actor_t::reaper_loop() {

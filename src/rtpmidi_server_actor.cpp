@@ -47,7 +47,7 @@ void rtpmidi_server_actor_t::on_start() {
     router_mailbox_->post_control(
         subscribe_events_t{hdr_t{0}, mailbox_handle()});
   }
-  INFO("rtpmidi server {}: ready.", name());
+  INFO("rtpmidi server name={} ready.", quoted_t{name()});
 }
 
 void rtpmidi_server_actor_t::on_stop() {
@@ -73,7 +73,7 @@ void rtpmidi_server_actor_t::on_stop() {
 int rtpmidi_server_actor_t::open_listen_socket(uint16_t port) {
   const int fd = ::socket(AF_INET6, SOCK_DGRAM | SOCK_CLOEXEC, 0);
   if (fd < 0) {
-    ERROR("rtpmidi server {}: socket(): {}", name(), strerror(errno));
+    ERROR("rtpmidi server name={} socket() error={}", quoted_t{name()}, quoted_t{strerror(errno)});
     return -1;
   }
   int one = 1;
@@ -81,8 +81,8 @@ int rtpmidi_server_actor_t::open_listen_socket(uint16_t port) {
   rtpmidid::network_address_list_t addrs("::", std::to_string(port));
   auto addr = *addrs.begin();
   if (::bind(fd, addr.get_sockaddr(), addr.get_socklen()) != 0) {
-    ERROR("rtpmidi server {}: bind port {}: {}", name(), port,
-          strerror(errno));
+    ERROR("rtpmidi server name={} bind port={} error={}", quoted_t{name()}, port,
+          quoted_t{strerror(errno)});
     ::close(fd);
     return -1;
   }
@@ -91,7 +91,7 @@ int rtpmidi_server_actor_t::open_listen_socket(uint16_t port) {
 
 bool rtpmidi_server_actor_t::add_export(const export_add_t &m) {
   if (exports_.count(m.name) != 0) {
-    WARNING("rtpmidi server {}: export '{}' already exists.", name(), m.name);
+    WARNING("rtpmidi server name={} export={} already exists.", quoted_t{name()}, quoted_t{m.name});
     return false;
   }
   export_entry_t exp;
@@ -121,8 +121,8 @@ bool rtpmidi_server_actor_t::add_export(const export_add_t &m) {
   });
   const uint16_t port = exp.control_port;
   exports_[m.name] = std::move(exp);
-  INFO("rtpmidi server {}: export '{}' ({}) listening on control {} midi {}.",
-       name(), m.name, to_string(m.kind), port, port + 1);
+  INFO("rtpmidi server name={} export={} (kind={}) listening on control={} midi={}.",
+       quoted_t{name()}, quoted_t{m.name}, quoted_t{to_string(m.kind)}, port, port + 1);
   // Every listen endpoint is announced over mDNS (design D7).
   if (mdns_mailbox_) {
     mdns_mailbox_->post_control(mdns_announce_t{m.name, port});
@@ -135,7 +135,7 @@ void rtpmidi_server_actor_t::remove_export(const std::string &export_name) {
   if (it == exports_.end()) {
     return;
   }
-  INFO("rtpmidi server {}: removing export '{}'.", name(), export_name);
+  INFO("rtpmidi server name={} removing export={}.", quoted_t{name()}, quoted_t{export_name});
   // End every session served by this export.
   for (auto sit = sessions_.begin(); sit != sessions_.end();) {
     if (sit->second.export_name == export_name) {
@@ -297,8 +297,8 @@ void rtpmidi_server_actor_t::replace_existing_session(
     return;
   }
   // New connection replaces the old one (one session per remote pair).
-  WARNING("rtpmidi server {}: replacing existing session with '{}'.", name(),
-          remote);
+  WARNING("rtpmidi server name={} replacing existing session with remote={}.", quoted_t{name()},
+          quoted_t{remote});
   auto old = std::move(it->second);
   sessions_.erase(it);
   session_by_initiator_.erase(old.initiator_id);
@@ -365,9 +365,9 @@ void rtpmidi_server_actor_t::spawn_acceptor(
     // Deferred open (design D5): the device is opened now, on connection.
     const int fd = ::open(exp.target.c_str(), O_RDWR | O_NONBLOCK);
     if (fd < 0) {
-      ERROR("rtpmidi server {}: cannot open rawmidi device '{}' for '{}': "
-            "{}; rejecting the connection (export stays registered).",
-            name(), exp.target, remote_name, strerror(errno));
+      ERROR("rtpmidi server name={} cannot open rawmidi device={} for remote={}: "
+            "error={}; rejecting the connection (export stays registered).",
+            quoted_t{name()}, quoted_t{exp.target}, quoted_t{remote_name}, quoted_t{strerror(errno)});
       return;
     }
     link.device_fd = fd;
@@ -465,9 +465,8 @@ void rtpmidi_server_actor_t::wire_accept_link(accept_link_t &link) {
     alsa_mailbox_->post_control(
         alsa_port_session_t{link.seq_port, true});
   }
-  INFO("rtpmidi server {}: session with '{}' wired (net id {} <-> alsa id "
-       "{}, export '{}').",
-       name(), link.remote, link.net_id, link.alsa_id, link.export_name);
+  INFO("rtpmidi server name={} session with remote={} wired (net id={} <-> alsa id={}, export={}).",
+       quoted_t{name()}, quoted_t{link.remote}, link.net_id, link.alsa_id, quoted_t{link.export_name});
   links_.erase(link.initiator_id);
 }
 
@@ -528,9 +527,9 @@ void rtpmidi_server_actor_t::handle_session_request(session_request_t &&m) {
     if (sit != sessions_.end()) {
       // Reuse (design D3): an existing session (usually inbound) serves
       // this port; no duplicate client is spawned.
-      INFO("rtpmidi server {}: reusing existing {}bound session with '{}' "
-           "for port {}.",
-           name(), sit->second.inbound ? "in" : "out", m.remote, m.seq_port);
+      INFO("rtpmidi server name={} reusing existing direction={}bound session with remote={} "
+           "for port={}.",
+           quoted_t{name()}, quoted_t{sit->second.inbound ? "in" : "out"}, quoted_t{m.remote}, m.seq_port);
       if (m.port_id != 0 && router_mailbox_ && sit->second.peer_id != 0) {
         router_mailbox_->post_control(
             connect_t{hdr_t{0}, mailbox(), m.port_id, sit->second.peer_id});
@@ -546,8 +545,8 @@ void rtpmidi_server_actor_t::handle_session_request(session_request_t &&m) {
       return;
     }
     if (remotes_.count(m.remote) == 0) {
-      WARNING("rtpmidi server {}: session request for unknown remote '{}'.",
-              name(), m.remote);
+      WARNING("rtpmidi server name={} session request for unknown remote={}.",
+              quoted_t{name()}, quoted_t{m.remote});
       return;
     }
     start_outbound_session(m.remote, m.seq_port, m.port_id);
@@ -559,14 +558,14 @@ void rtpmidi_server_actor_t::handle_session_request(session_request_t &&m) {
     if (sit->second.inbound) {
       // Shared with an inbound connection: the session stays; only the
       // port registration is handled by the listener.
-      INFO("rtpmidi server {}: last unsubscribe on '{}'; session is inbound "
+      INFO("rtpmidi server name={} last unsubscribe on remote={}; session is inbound "
            "and stays.",
-           name(), m.remote);
+           quoted_t{name()}, quoted_t{m.remote});
       return;
     }
-    INFO("rtpmidi server {}: last unsubscribe on '{}'; closing the outbound "
+    INFO("rtpmidi server name={} last unsubscribe on remote={}; closing the outbound "
          "session.",
-         name(), m.remote);
+         quoted_t{name()}, quoted_t{m.remote});
     stop_outbound_session(m.remote);
   }
 }
@@ -578,8 +577,8 @@ void rtpmidi_server_actor_t::start_outbound_session(const std::string &remote,
   if (rit == remotes_.end() || !router_mailbox_ || !worker_) {
     return;
   }
-  INFO("rtpmidi server {}: starting outbound session to '{}' ({}:{}).",
-       name(), remote, rit->second.hostname, rit->second.port);
+  INFO("rtpmidi server name={} starting outbound session to remote={} (address={}:{}).",
+       quoted_t{name()}, quoted_t{remote}, quoted_t{rit->second.hostname}, quoted_t{rit->second.port});
   const auto corr = ++corr_counter_;
   pending_outbound_[corr] = outbound_pending_t{remote, seq_port, port_id};
   spawn_peer_t sp;
@@ -618,7 +617,7 @@ void rtpmidi_server_actor_t::stop_outbound_session(const std::string &remote) {
 
 void rtpmidi_server_actor_t::end_session(session_entry_t &&s,
                                          bool notify_listener) {
-  INFO("rtpmidi server {}: session with '{}' ended.", name(), s.remote);
+  INFO("rtpmidi server name={} session with remote={} ended.", quoted_t{name()}, quoted_t{s.remote});
   session_by_initiator_.erase(s.initiator_id);
   by_initiator_.erase(s.initiator_id);
   by_ssrc_.erase(s.ssrc);
@@ -655,8 +654,8 @@ void rtpmidi_server_actor_t::handle_rawmidi_client(server_rawmidi_client_t &&m) 
   // out at startup, holding the session for the daemon's lifetime.
   const int fd = ::open(m.device.c_str(), O_RDWR | O_NONBLOCK);
   if (fd < 0) {
-    ERROR("rtpmidi server {}: cannot open rawmidi device '{}': {}.", name(),
-          m.device, strerror(errno));
+    ERROR("rtpmidi server name={} cannot open rawmidi device={} error={}.", quoted_t{name()},
+          quoted_t{m.device}, quoted_t{strerror(errno)});
     if (m.reply_to) {
       m.reply_to.post_control(
           ack_t{m.hdr, false, "cannot open rawmidi device " + m.device});
@@ -719,8 +718,8 @@ void rtpmidi_server_actor_t::handle_peer_ids_result(peer_ids_result_t &&m) {
       auto po = std::move(it->second);
       pending_outbound_.erase(it);
       if (m.ids.empty()) {
-        ERROR("rtpmidi server {}: outbound spawn for '{}' failed.", name(),
-              po.remote);
+        ERROR("rtpmidi server name={} outbound spawn for remote={} failed.", quoted_t{name()},
+              quoted_t{po.remote});
         if (po.seq_port != 0 && alsa_mailbox_) {
           alsa_mailbox_->post_control(alsa_port_session_t{po.seq_port, false});
         }
@@ -741,8 +740,8 @@ void rtpmidi_server_actor_t::handle_peer_ids_result(peer_ids_result_t &&m) {
         router_mailbox_->post_control(
             connect_t{hdr_t{0}, mailbox(), m.ids[0], po.port_id});
       }
-      INFO("rtpmidi server {}: outbound session to '{}' started (peer id {}).",
-           name(), po.remote, m.ids[0]);
+      INFO("rtpmidi server name={} outbound session to remote={} started (peer id={}).",
+           quoted_t{name()}, quoted_t{po.remote}, m.ids[0]);
       return;
     }
   }
@@ -753,8 +752,8 @@ void rtpmidi_server_actor_t::handle_peer_ids_result(peer_ids_result_t &&m) {
       auto pr = std::move(it->second);
       pending_rawmidi_.erase(it);
       if (m.ids.empty()) {
-        ERROR("rtpmidi server {}: rawmidi peer spawn for '{}' failed.", name(),
-              pr.name);
+        ERROR("rtpmidi server name={} rawmidi peer spawn for peer={} failed.", quoted_t{name()},
+              quoted_t{pr.name});
         return;
       }
       pr.rawmidi_id = m.ids[0];
@@ -797,9 +796,9 @@ void rtpmidi_server_actor_t::handle_peer_ids_result(peer_ids_result_t &&m) {
       auto pr = std::move(it->second);
       pending_rawmidi_client_.erase(it);
       if (m.ids.empty()) {
-        ERROR("rtpmidi server {}: network client spawn for rawmidi '{}' "
+        ERROR("rtpmidi server name={} network client spawn for rawmidi={} "
               "failed.",
-              name(), pr.name);
+              quoted_t{name()}, quoted_t{pr.name});
         return;
       }
       if (router_mailbox_) {
@@ -814,9 +813,9 @@ void rtpmidi_server_actor_t::handle_peer_ids_result(peer_ids_result_t &&m) {
       s.device_peer_id = pr.rawmidi_id;
       s.inbound = false;
       sessions_[pr.name] = std::move(s);
-      INFO("rtpmidi server {}: rawmidi client '{}' wired (rawmidi id {} <-> "
-           "net id {}).",
-           name(), pr.name, pr.rawmidi_id, m.ids[0]);
+      INFO("rtpmidi server name={} rawmidi client={} wired (rawmidi id={} <-> "
+           "net id={}).",
+           quoted_t{name()}, quoted_t{pr.name}, pr.rawmidi_id, m.ids[0]);
       return;
     }
   }
@@ -825,8 +824,8 @@ void rtpmidi_server_actor_t::handle_peer_ids_result(peer_ids_result_t &&m) {
   for (auto &[initiator_id, link] : links_) {
     if (link.spawn_corr == m.hdr.corr) {
       if (m.ids.empty()) {
-        ERROR("rtpmidi server {}: acceptor spawn for '{}' failed.", name(),
-              link.remote);
+        ERROR("rtpmidi server name={} acceptor spawn for remote={} failed.", quoted_t{name()},
+              quoted_t{link.remote});
         by_initiator_.erase(link.initiator_id);
         by_ssrc_.erase(link.ssrc);
         if (link.device_fd >= 0) {
@@ -866,8 +865,8 @@ void rtpmidi_server_actor_t::handle_peer_ids_result(peer_ids_result_t &&m) {
     }
     if (link.kind == export_kind_e::rawmidi && link.rawmidi_corr == m.hdr.corr) {
       if (m.ids.empty()) {
-        ERROR("rtpmidi server {}: rawmidi peer spawn for '{}' failed.", name(),
-              link.remote);
+        ERROR("rtpmidi server name={} rawmidi peer spawn for remote={} failed.", quoted_t{name()},
+              quoted_t{link.remote});
         // The acceptor (if any) is dropped too.
         if (link.net_id != 0 && router_mailbox_) {
           router_mailbox_->post_control(
@@ -894,8 +893,8 @@ void rtpmidi_server_actor_t::handle_ack(ack_t &&m) {
   {
     auto it = pending_outbound_.find(m.hdr.corr);
     if (it != pending_outbound_.end()) {
-      ERROR("rtpmidi server {}: outbound spawn for '{}' failed: {}.", name(),
-            it->second.remote, m.error);
+      ERROR("rtpmidi server name={} outbound spawn for remote={} failed error={}.", quoted_t{name()},
+            quoted_t{it->second.remote}, quoted_t{m.error});
       const auto seq_port = it->second.seq_port;
       pending_outbound_.erase(it);
       if (seq_port != 0 && alsa_mailbox_) {
@@ -904,7 +903,7 @@ void rtpmidi_server_actor_t::handle_ack(ack_t &&m) {
       return;
     }
   }
-  WARNING("rtpmidi server {}: request failed: {}.", name(), m.error);
+  WARNING("rtpmidi server name={} request failed error={}.", quoted_t{name()}, quoted_t{m.error});
 }
 
 void rtpmidi_server_actor_t::handle_peer_gone(udp_peer_gone_t &&m) {
@@ -960,8 +959,8 @@ void rtpmidi_server_actor_t::on_control(server_control_t &&msg) {
               rit->second.seq_port = m.seq_port;
               rit->second.corr = 0;
               pending_ports_.erase(pit);
-              INFO("rtpmidi server {}: waiting port for '{}' ready (seq {}).",
-                   name(), rit->first, m.seq_port);
+              INFO("rtpmidi server name={} waiting port for remote={} ready (seq={}).",
+                   quoted_t{name()}, quoted_t{rit->first}, m.seq_port);
               break;
             }
           }
@@ -970,8 +969,8 @@ void rtpmidi_server_actor_t::on_control(server_control_t &&msg) {
               continue;
             }
             if (m.peer_id == 0 && m.seq_port == 0) {
-              ERROR("rtpmidi server {}: ALSA side for '{}' failed.", name(),
-                    link.remote);
+              ERROR("rtpmidi server name={} ALSA side for remote={} failed.", quoted_t{name()},
+                    quoted_t{link.remote});
               if (link.net_id != 0 && router_mailbox_) {
                 router_mailbox_->post_control(
                     remove_peer_t{hdr_t{0}, mailbox_handle(), link.net_id});

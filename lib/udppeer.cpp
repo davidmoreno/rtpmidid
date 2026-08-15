@@ -42,12 +42,12 @@ int udppeer_t::open(const network_address_t &address) {
   fd = socket(address.get_aifamily(), SOCK_DGRAM | SOCK_CLOEXEC, 0);
 
   if (fd < 0) {
-    ERROR("Error creating socket: {}", strerror(errno));
+    ERROR("Error creating socket error={}", quoted_t{strerror(errno)});
     return -1; // Bad socket, try next
   }
   auto ret = bind(fd, addr, addrlen);
   if (ret != 0) {
-    ERROR("Error binding socket: {} {}", address.to_string(), strerror(errno));
+    ERROR("Error binding socket address={} error={}", quoted_t{address.to_string()}, quoted_t{strerror(errno)});
     ::close(fd);
     fd = -1;
     return -1;
@@ -109,8 +109,8 @@ ssize_t udppeer_t::sendto(const packet_t &packet,
 
   if (res < 0) {
     std::string addr_str = addr.to_string();
-    ERROR("Error sending to {}. This is UDP... so just lost! ({})", addr_str,
-          strerror(errno));
+    ERROR("Error sending to address={}. This is UDP... so just lost! (error={})", quoted_t{addr_str},
+          quoted_t{strerror(errno)});
     // throw rtpmidid::exception("Can not send to address {}. {}", addr_str,
     //                           strerror(errno));
   }

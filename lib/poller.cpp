@@ -155,7 +155,7 @@ void poller_t::__remove_fd(int fd) {
       // EBADF: the fd was already closed (e.g. an actor closed it in
       // on_stop before its listener was destroyed); the kernel removed the
       // epoll entry when the fd closed, so this is not an error.
-      ERROR("Cant remove from poller! fd: {}, error: {}", fd, strerror(errno));
+      ERROR("Cant remove from poller! fd={} error={}", fd, quoted_t{strerror(errno)});
       throw exception("Can't remove fd {} from poller: {} ({})", fd,
                       strerror(errno), errno);
     }
@@ -245,7 +245,7 @@ void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
         epoll_wait(private_data->epollfd, events.data(), MAX_EVENTS, wait_ms);
 
     if (nfds == -1)
-      ERROR("epoll_wait failed: {}", strerror(errno));
+      ERROR("epoll_wait failed error={}", quoted_t{strerror(errno)});
   }
   assert(nfds <= MAX_EVENTS);
 
@@ -257,7 +257,7 @@ void poller_t::wait(std::optional<std::chrono::milliseconds> max_wait_ms) {
     try {
       private_data->fd_events[fd](fd);
     } catch (const std::exception &e) {
-      ERROR_ONCE("Caught exception at poller: {}", e.what());
+      ERROR_ONCE("Caught exception at poller error={}", quoted_t{e.what()});
     }
   }
 

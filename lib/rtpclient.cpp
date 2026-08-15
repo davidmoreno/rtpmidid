@@ -49,11 +49,11 @@ rtpclient_t::rtpclient_t(const std::string name) : peer(std::move(name)) {
     try {
       this->sendto(data, port);
     } catch (const network_exception &e) {
-      ERROR("Error sending data to {}. {}",
-            port == rtppeer_t::CONTROL_PORT
+      ERROR("Error sending data to address={} error={}",
+            quoted_t{port == rtppeer_t::CONTROL_PORT
                 ? control_peer.get_address().to_string()
-                : midi_peer.get_address().to_string(),
-            e.what());
+                : midi_peer.get_address().to_string()},
+            quoted_t{e.what()});
       peer.status_change_event(rtppeer_t::status_e::DISCONNECTED_NETWORK_ERROR);
     }
   });
@@ -84,8 +84,8 @@ void rtpclient_t::sendto(const io_bytes &pb, rtppeer_t::port_e port) {
   }
 
   if (res == -1) {
-    ERROR("Client: Could not send all data to {}. Sent {}. {} ({})", port, res,
-          strerror(errno), errno);
+    ERROR("Client: Could not send all data to port={}. Sent={} error={} (code={})", port, res,
+          quoted_t{strerror(errno)}, errno);
     throw network_exception(errno);
   }
 }
@@ -152,7 +152,7 @@ void rtpclient_t::state_resolve_next_ip_port() {
             .get_first()
             .dup();
 
-    DEBUG("Try to connect to address: {}", control_address.to_string());
+    DEBUG("Try to connect to address={}", quoted_t{control_address.to_string()});
 
     handle_event(Resolved);
   } else {
@@ -172,8 +172,8 @@ void rtpclient_t::state_connect_control() {
       });
 
   if (!control_peer.is_open()) {
-    ERROR("Could not connect {}:{} to control port",
-          resolve_next_dns_endpoint.hostname, resolve_next_dns_endpoint.port);
+    ERROR("Could not connect address={}:{} to control port",
+          quoted_t{resolve_next_dns_endpoint.hostname}, quoted_t{resolve_next_dns_endpoint.port});
     handle_event(ConnectFailed);
     return;
   }
@@ -188,8 +188,8 @@ void rtpclient_t::state_connect_control() {
         }
 
         auto address = control_peer.get_address();
-        INFO("Connected control port {} to {}:{}", address.port(),
-             address.hostname(), address.port());
+        INFO("Connected control port local_port={} to address={}:{}", address.port(),
+             quoted_t{address.hostname()}, address.port());
         handle_event(Connected);
       });
 
@@ -208,7 +208,7 @@ void rtpclient_t::state_connect_midi() {
       network_address_list_t("::", std::to_string(local_base_port + 1)));
 
   if (!midi_peer.is_open()) {
-    ERROR("Could not connect {}:{} to midi port", midi_address.ip(),
+    ERROR("Could not connect address={}:{} to midi port", quoted_t{midi_address.ip()},
           midi_address.port() + 1);
     handle_event(ConnectFailed);
     return;
@@ -271,7 +271,7 @@ void rtpclient_t::state_send_ck_short() {
       handle_event(LatencyMeasured);
     }
     ck_connection = peer.ck_event.connect([](float ms) {
-      WARNING("OUT OF ORDER CK0 received, latency: {} ms", ms);
+      WARNING("OUT OF ORDER CK0 received, latency_ms={}", ms);
     });
   });
   ck_count++;
@@ -292,7 +292,7 @@ void rtpclient_t::state_send_ck_long() {
     timer.disable();
     handle_event(WaitSendCK);
     ck_connection = peer.ck_event.connect([](float ms) {
-      WARNING("OUT OF ORDER CK0 received, latency: {} ms", ms);
+      WARNING("OUT OF ORDER CK0 received, latency_ms={}", ms);
     });
   });
 }
@@ -312,7 +312,7 @@ void rtpclient_t::state_disconnect_because_cktimeout() {
 void rtpclient_t::state_error() {
   peer.disconnect();
   ERROR("Error at rtpclient_t. Can't connect or disconnected. Will try to "
-        "connect again in {}ms",
+        "connect again in reconnect_ms={}",
         reconnect_timeout.count());
   timer = poller.add_timer_event(reconnect_timeout,
                                  [this] { handle_event(Connect); });

@@ -819,7 +819,7 @@ void control_listener_actor_t::on_start() {
   ::unlink(socketfile.c_str());
   listen_fd_ = ::socket(AF_UNIX, SOCK_STREAM, 0);
   if (listen_fd_ == -1) {
-    ERROR("Control listener: socket: {}", strerror(errno));
+    ERROR("Control listener: socket error={}", quoted_t{strerror(errno)});
     return;
   }
   struct sockaddr_un addr {};
@@ -827,13 +827,13 @@ void control_listener_actor_t::on_start() {
   strncpy(addr.sun_path, socketfile.c_str(), sizeof(addr.sun_path) - 1);
   if (::bind(listen_fd_, (const struct sockaddr *)(&addr),
              sizeof(struct sockaddr_un)) != 0) {
-    ERROR("Control listener: bind {}: {}", socketfile, strerror(errno));
+    ERROR("Control listener: bind path={} error={}", quoted_t{socketfile}, quoted_t{strerror(errno)});
     ::close(listen_fd_);
     listen_fd_ = -1;
     return;
   }
   if (::listen(listen_fd_, 20) != 0) {
-    ERROR("Control listener: listen: {}", strerror(errno));
+    ERROR("Control listener: listen error={}", quoted_t{strerror(errno)});
     ::close(listen_fd_);
     listen_fd_ = -1;
     return;
@@ -841,7 +841,7 @@ void control_listener_actor_t::on_start() {
   ::chmod(socketfile.c_str(), 0777);
   listener_ = add_fd_in(listen_fd_, [this](int) { accept_client(); });
 
-  INFO("Control listener ready at {}", socketfile);
+  INFO("Control listener ready at path={}", quoted_t{socketfile});
 }
 
 void control_listener_actor_t::on_stop() {
@@ -858,7 +858,7 @@ void control_listener_actor_t::on_stop() {
 void control_listener_actor_t::accept_client() {
   const int fd = ::accept(listen_fd_, nullptr, nullptr);
   if (fd == -1) {
-    ERROR("Control listener: accept: {}", strerror(errno));
+    ERROR("Control listener: accept error={}", quoted_t{strerror(errno)});
     return;
   }
 

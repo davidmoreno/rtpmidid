@@ -59,8 +59,7 @@ public:
       }
     }
     dropped_payloads.fetch_add(1);
-    WARNING_RATE_LIMIT(5, "MIDI escape pool exhausted ({} bytes used, "
-                          "{} bytes needed): oversized payload dropped.",
+    WARNING_RATE_LIMIT(5, "MIDI escape pool exhausted (used={} needed={} bytes): oversized payload dropped.",
                        used, n);
     return false;
   }

@@ -39,14 +39,13 @@ packet_type_e packet_t::get_packet_type() const {
 midi_event_list_t packet_midi_t::get_midi_events() {
   auto size = get_size();
   if (size < 13) {
-    DEBUG("MIDI packet to small to contain MIDI data ({} bytes)", size);
+    DEBUG("MIDI packet to small to contain MIDI data (bytes={})", size);
     return midi_event_list_t{nullptr, 0};
   }
   auto midi_size = uint32_t(data[12]);
-  DEBUG("MIDI SIZE {} bytes", midi_size);
+  DEBUG("MIDI SIZE bytes={}", midi_size);
   if (size < midi_size + 12) {
-    DEBUG("MIDI packet to small to contain ALL MIDI data ({} bytes)",
-          midi_size);
+    DEBUG("MIDI packet to small to contain ALL MIDI data (bytes={})", midi_size);
     return midi_event_list_t{nullptr, 0};
   }
 
