@@ -23,6 +23,19 @@ template <> struct jsondm::serializer<rtpmididns::mdns_status_t> {
 template <> struct jsondm::deserializer<rtpmididns::mdns_status_t> {
   static void read(jsondm::Reader &, rtpmididns::mdns_status_t &);
 };
+template <> struct jsondm::serializer<rtpmididns::export_entry_status_t> {
+  static void write(const rtpmididns::export_entry_status_t &,
+                    jsondm::Writer &);
+};
+template <> struct jsondm::deserializer<rtpmididns::export_entry_status_t> {
+  static void read(jsondm::Reader &, rtpmididns::export_entry_status_t &);
+};
+template <> struct jsondm::serializer<rtpmididns::exports_status_t> {
+  static void write(const rtpmididns::exports_status_t &, jsondm::Writer &);
+};
+template <> struct jsondm::deserializer<rtpmididns::exports_status_t> {
+  static void read(jsondm::Reader &, rtpmididns::exports_status_t &);
+};
 
 template <>
 struct FMT::formatter<rtpmididns::mdns_announcement_t>
@@ -33,3 +46,9 @@ struct FMT::formatter<rtpmididns::mdns_remote_announcement_t>
 template <>
 struct FMT::formatter<rtpmididns::mdns_status_t>
     : jsondm::formatter_base<rtpmididns::mdns_status_t> {};
+template <>
+struct FMT::formatter<rtpmididns::export_entry_status_t>
+    : jsondm::formatter_base<rtpmididns::export_entry_status_t> {};
+template <>
+struct FMT::formatter<rtpmididns::exports_status_t>
+    : jsondm::formatter_base<rtpmididns::exports_status_t> {};

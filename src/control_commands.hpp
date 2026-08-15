@@ -127,6 +127,7 @@ struct daemon_status_t {
   settings_projection_t settings;
   std::vector<peer_status_variant_t> router;
   mdns_status_t mdns;
+  exports_status_t exports;
 };
 
 // Per-command result types (heterogeneous results are variants).

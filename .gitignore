@@ -7,3 +7,4 @@ packaging/dist/
 packaging/publish/
 build-*
 __pycache__
+tmp

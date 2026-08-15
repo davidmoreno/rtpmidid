@@ -37,6 +37,9 @@ add_executable(test_network_actor test_network_actor.cpp)
 target_link_libraries(test_network_actor -pthread rtpmidid-shared rtpmidid2-static)
 target_link_libraries(test_network_actor ${FMT_LIBRARIES})
 add_test(NAME test_network_actor COMMAND test_network_actor)
+# Interim: threaded teardown can hang under load (see the change's
+# notes.md); bound the ctest run instead of hanging CI.
+set_tests_properties(test_network_actor PROPERTIES TIMEOUT 120)
 
 add_executable(test_supervisor test_supervisor.cpp)
 target_link_libraries(test_supervisor -pthread rtpmidid-shared rtpmidid2-static)
@@ -55,11 +58,13 @@ target_link_libraries(test_alsa_bridge ${ALSA_LIBRARIES})
 target_include_directories(test_alsa_bridge PUBLIC ${ALSA_INCLUDE_DIRS})
 target_compile_options(test_alsa_bridge PUBLIC ${ALSA_CFLAGS_OTHER})
 add_test(NAME test_alsa_bridge COMMAND test_alsa_bridge)
+set_tests_properties(test_alsa_bridge PROPERTIES TIMEOUT 120)
 
 add_executable(test_control_socket test_control_socket.cpp)
 target_link_libraries(test_control_socket -pthread rtpmidid-shared rtpmidid2-static)
 target_link_libraries(test_control_socket ${FMT_LIBRARIES})
 add_test(NAME test_control_socket COMMAND test_control_socket)
+set_tests_properties(test_control_socket PROPERTIES TIMEOUT 120)
 
 add_executable(test_rtpserver test_rtpserver.cpp test_utils.cpp)
 target_link_libraries(test_rtpserver rtpmidid-shared -pthread)

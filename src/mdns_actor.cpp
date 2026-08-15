@@ -17,18 +17,16 @@
  */
 
 #include "mdns_actor.hpp"
-#include "network_rtpmidi_peer_actor.hpp"
 #include "rtpmidid/logger.hpp"
 #include "settings.hpp"
 
 namespace rtpmididns {
 
 mdns_actor_t::mdns_actor_t(actor_config_t config,
-                           std::shared_ptr<router_mailbox_t> router_mailbox,
                            std::shared_ptr<alsa_mailbox_t> alsa_mailbox,
-                           std::shared_ptr<worker_actor_t> worker)
-    : actor_t(std::move(config)), router_mailbox_(std::move(router_mailbox)),
-      alsa_mailbox_(std::move(alsa_mailbox)), worker_(std::move(worker)) {}
+                           std::shared_ptr<server_mailbox_t> server_mailbox)
+    : actor_t(std::move(config)), alsa_mailbox_(std::move(alsa_mailbox)),
+      server_mailbox_(std::move(server_mailbox)) {}
 
 void mdns_actor_t::on_stop() {
   // Tear the avahi client down here, while this actor's thread is still
@@ -49,7 +47,8 @@ void mdns_actor_t::on_start() {
     mdns_ = nullptr;
     return;
   }
-  // Discovered rtpmidi servers become ALSA ports + network clients.
+  // Discovered rtpmidi servers become waiting ALSA ports (lazy: no client
+  // is spawned until an ALSA subscriber asks for the session).
   discover_conn_ = mdns_->discover_event.connect(
       [this](const std::string &n, const std::string &a, const std::string &p) {
         on_discovered(n, a, p);
@@ -88,12 +87,12 @@ void mdns_actor_t::on_discovered(const std::string &name,
   if (discovered_.count(name) != 0) {
     return; // already known (dedupe by name)
   }
-  if (!router_mailbox_ || !alsa_mailbox_ || !worker_) {
+  if (!alsa_mailbox_ || !server_mailbox_) {
     WARNING("mdns: discovery wiring incomplete; ignoring {}", name);
     return;
   }
-  INFO("mdns: discovered rtpmidi server \"{}\" at {}:{}; creating ALSA port + "
-       "network client.",
+  INFO("mdns: discovered rtpmidi server \"{}\" at {}:{}; creating waiting "
+       "ALSA port (lazy).",
        name, address, port);
   discovery_entry_t entry;
   entry.name = name;
@@ -101,10 +100,14 @@ void mdns_actor_t::on_discovered(const std::string &name,
   entry.port = port;
   entry.corr = ++corr_counter_;
   discovered_[name] = std::move(entry);
-  // 1. Ask the ALSA actor for a hosted port; the reply carries the router id.
-  alsa_mailbox_->post_control(alsa_create_port_t{
-      hdr_t{discovered_[name].corr}, mailbox_handle(), name,
-      FMT::format("{}:{}", address, port)});
+  // 1. The ALSA listener creates the waiting port (unregistered).
+  alsa_mailbox_->post_control(
+      alsa_create_port_t{hdr_t{discovered_[name].corr}, mailbox_handle(), name,
+                         FMT::format("{}:{}", address, port), true, name});
+  // 2. The rtpmidi server records the outbound target; the session starts
+  //    only when an ALSA client subscribes to the waiting port.
+  server_mailbox_->post_control(
+      server_remote_discovered_t{name, address, port});
 }
 
 void mdns_actor_t::on_removed(const std::string &name) {
@@ -112,24 +115,16 @@ void mdns_actor_t::on_removed(const std::string &name) {
   if (it == discovered_.end()) {
     return;
   }
-  INFO("mdns: remote rtpmidi server \"{}\" gone; removing ALSA port + client.",
+  INFO("mdns: remote rtpmidi server \"{}\" gone; removing waiting port.",
        name);
   auto entry = std::move(it->second);
   discovered_.erase(it);
-  if (entry.net_id != 0 && router_mailbox_) {
-    router_mailbox_->post_control(
-        remove_peer_t{hdr_t{0}, mailbox_handle(), entry.net_id});
-  }
-  if (entry.alsa_id != 0 && alsa_mailbox_) {
+  if (alsa_mailbox_ && entry.seq_port != 0) {
     alsa_mailbox_->post_control(
-        alsa_remove_port_t{hdr_t{0}, mailbox_handle(), entry.alsa_id});
+        alsa_remove_port_t{hdr_t{0}, mailbox_handle(), 0, entry.seq_port});
   }
-}
-
-void mdns_actor_t::cleanup_entry(const std::string &name) {
-  auto it = discovered_.find(name);
-  if (it != discovered_.end()) {
-    discovered_.erase(it);
+  if (server_mailbox_) {
+    server_mailbox_->post_control(server_remote_gone_t{name});
   }
 }
 
@@ -164,82 +159,28 @@ void mdns_actor_t::on_control(mdns_control_t &&msg) {
           if (mdns_) {
             mdns_->remove_announcement(m.name, m.hostname, m.port);
           }
-        } else if constexpr (std::is_same_v<T, peer_ids_result_t>) {
-          // A create-port or spawn ack for a discovery in flight.
+        } else if constexpr (std::is_same_v<T, alsa_port_result_t>) {
+          // Waiting-port creation ack for a discovery in flight.
           for (auto &[key, entry] : discovered_) {
             if (entry.corr != m.hdr.corr) {
               continue;
             }
-            if (m.ids.empty()) {
-              ERROR("mdns: discovery \"{}\" failed (no ids).", key);
-              cleanup_entry(key);
+            if (m.seq_port == 0) {
+              ERROR("mdns: waiting port for \"{}\" could not be created.",
+                    key);
+              discovered_.erase(key);
               return;
             }
-            if (entry.alsa_id == 0) {
-              // ALSA port created: spawn the network client.
-              entry.alsa_id = m.ids[0];
-              spawn_peer_t sp;
-              sp.hdr = hdr_t{entry.corr};
-              sp.reply_to = mailbox_handle();
-              sp.type = "network_rtpmidi_peer_t";
-              sp.meta = entry.name;
-              sp.factory =
-                  [worker = worker_, name = entry.name, address = entry.address,
-                   port = entry.port](const mailbox_handle_t &sup,
-                                      peer_id_t pid) {
-                    return std::make_shared<network_rtpmidi_peer_actor_t>(
-                        actor_config_t{.name = name,
-                                       .id = pid,
-                                       .supervisor_mailbox = sup},
-                        address, port, "0", worker);
-                  };
-              router_mailbox_->post_control(std::move(sp));
-            } else if (entry.net_id == 0) {
-              // Network client spawned: connect both ways.
-              entry.net_id = m.ids[0];
-              router_mailbox_->post_control(connect_t{
-                  hdr_t{0}, mailbox_handle(), entry.alsa_id, entry.net_id});
-              router_mailbox_->post_control(connect_t{
-                  hdr_t{0}, mailbox_handle(), entry.net_id, entry.alsa_id});
-              INFO("mdns: \"{}\" wired (alsa id {} <-> network id {}).", key,
-                   entry.alsa_id, entry.net_id);
+            entry.seq_port = m.seq_port;
+            INFO("mdns: waiting port for \"{}\" created (seq {}).", key,
+                 m.seq_port);
+            // The server learns the seq port (inbound reuse of the waiting
+            // port).
+            if (server_mailbox_) {
+              server_mailbox_->post_control(
+                  server_remote_port_t{key, m.seq_port});
             }
             return;
-          }
-        } else if constexpr (std::is_same_v<T, alsa_port_event_t>) {
-          // "Network Export" bridge: wire/unwire the announced port to every
-          // discovered remote's client.
-          for (auto &[key, entry] : discovered_) {
-            if (entry.net_id == 0) {
-              continue;
-            }
-            if (m.subscribed) {
-              router_mailbox_->post_control(connect_t{
-                  hdr_t{0}, mailbox_handle(), m.port_id, entry.net_id});
-              router_mailbox_->post_control(connect_t{
-                  hdr_t{0}, mailbox_handle(), entry.net_id, m.port_id});
-            } else {
-              router_mailbox_->post_control(disconnect_t{
-                  hdr_t{0}, mailbox_handle(), m.port_id, entry.net_id});
-              router_mailbox_->post_control(disconnect_t{
-                  hdr_t{0}, mailbox_handle(), entry.net_id, m.port_id});
-            }
-          }
-        } else if constexpr (std::is_same_v<T, ack_t>) {
-          // A failed spawn: drop the discovery entry (the alsa port stays;
-          // the network side could not be created).
-          for (auto &[key, entry] : discovered_) {
-            if (entry.corr == m.hdr.corr && entry.net_id == 0 &&
-                entry.alsa_id != 0) {
-              ERROR("mdns: spawn failed for \"{}\": {}; removing alsa port.",
-                    key, m.error);
-              if (alsa_mailbox_) {
-                alsa_mailbox_->post_control(alsa_remove_port_t{
-                    hdr_t{0}, mailbox_handle(), entry.alsa_id});
-              }
-              cleanup_entry(key);
-              return;
-            }
           }
         }
       },

@@ -26,12 +26,10 @@
 #include "alsa_actor.hpp"
 #include "argv.hpp"
 #include "control_socket_actor.hpp"
-#include "local_rawmidi_peer_actor.hpp"
 #include "logger_actor.hpp"
 #include "mdns_actor.hpp"
-#include "network_rtpmidi_listener_actor.hpp"
-#include "network_rtpmidi_peer_actor.hpp"
 #include "router_actor.hpp"
+#include "rtpmidi_server_actor.hpp"
 #include "rtpmidid/logger.hpp"
 #include "settings.hpp"
 #include "supervisor_actor.hpp"
@@ -48,57 +46,45 @@ namespace rtpmididns {
 // Defined in argv.cpp (RTPMIDID_VERSION).
 extern const char *VERSION;
 
-/// Spawn a standalone peer via the router (prepared bundle; the caller
-/// does all fallible work before posting).
-static void spawn_static_peer(const std::shared_ptr<router_actor_t> &router,
-                              spawn_peer_t &&sp) {
-  sp.reply_to = std::make_shared<reply_mailbox_t>();
-  router->mailbox()->post_control(std::move(sp));
-}
-
-static void setup_static_peers(const std::shared_ptr<router_actor_t> &router,
-                               const std::shared_ptr<worker_actor_t> &worker) {
-  // Static outbound connections (settings.connect_to): each spawns a
-  // network rtpmidi client peer; DNS runs on the worker.
+static void setup_static_peers(const std::shared_ptr<rtpmidi_server_actor_t> &server) {
+  // Lazy outbound connections (settings.connect_to): each becomes a
+  // waiting ALSA port on the listener plus an outbound target on the
+  // rtpmidi server; the session starts only when an ALSA client
+  // subscribes to the port (lazy-rtpmidi-connections, design D8).
   for (auto &ct : settings.connect_to) {
-    spawn_peer_t sp;
-    sp.type = "network_rtpmidi_peer_t";
-    sp.meta = ct.name;
-    sp.factory =
-        [worker, ct](const mailbox_handle_t &sup, peer_id_t pid) {
-          return std::make_shared<network_rtpmidi_peer_actor_t>(
-              actor_config_t{.name = ct.name.empty() ? ct.hostname : ct.name,
-                             .scheduling = scheduling_class_t::elevated,
-                             .rt_enabled = settings.rt_enable,
-                             .rt_priority = settings.rt_priority,
-                             .id = pid,
-                             .supervisor_mailbox = sup},
-              ct.hostname, ct.port, ct.local_udp_port, worker);
-        };
-    spawn_static_peer(router, std::move(sp));
+    server->mailbox()->post_control(server_connect_to_t{
+        ct.name.empty() ? ct.hostname : ct.name, ct.hostname, ct.port,
+        ct.local_udp_port});
   }
 
-  // Rawmidi devices (settings.rawmidi): each spawns a rawmidi peer actor.
-  // The fd is opened here (preparation); on failure nothing is spawned.
+  // Rawmidi devices (settings.rawmidi): server-mode devices are registered
+  // as exports without opening them (deferred open on connection);
+  // client-mode devices (`hostname=` set) keep the eager open + outbound
+  // connect (design D5).
   for (auto &rm : settings.rawmidi) {
-    spawn_peer_t sp;
-    sp.type = "local_rawmidi_peer_t";
-    sp.meta = rm.name;
-    sp.factory = [rm](const mailbox_handle_t &sup, peer_id_t pid) {
-      const int fd = ::open(rm.device.c_str(), O_RDWR | O_NONBLOCK);
-      if (fd < 0) {
-        throw std::runtime_error("cannot open rawmidi device " + rm.device);
-      }
-      return std::make_shared<local_rawmidi_peer_actor_t>(
-          actor_config_t{.name = rm.name.empty() ? rm.device : rm.name,
-                         .scheduling = scheduling_class_t::elevated,
-                         .rt_enabled = settings.rt_enable,
-                         .rt_priority = settings.rt_priority,
-                         .id = pid,
-                         .supervisor_mailbox = sup},
-          rm.device, rm.name, fd);
-    };
-    spawn_static_peer(router, std::move(sp));
+    const auto port = rm.local_udp_port.empty()
+                          ? uint16_t(0)
+                          : uint16_t(std::stoul(rm.local_udp_port));
+    if (rm.hostname.empty()) {
+      server->mailbox()->post_control(
+          export_add_t{hdr_t{0}, {},
+                       rm.name.empty() ? rm.device : rm.name,
+                       export_kind_e::rawmidi, rm.device, port});
+    } else {
+      server->mailbox()->post_control(server_rawmidi_client_t{
+          hdr_t{0}, {}, rm.name.empty() ? rm.device : rm.name, rm.device,
+          rm.hostname, rm.remote_udp_port, rm.local_udp_port});
+    }
+  }
+
+  // [rtpmidi_announce] sections: generic "Network" servers on the rtpmidi
+  // server (listen sockets + mDNS announcement; per-connection peer pairs
+  // on accept).
+  for (auto &ann : settings.rtpmidi_announce) {
+    const auto port =
+        ann.port.empty() ? uint16_t(0) : uint16_t(std::stoul(ann.port));
+    server->mailbox()->post_control(export_add_t{
+        hdr_t{0}, {}, ann.name, export_kind_e::network, "", port});
   }
 }
 
@@ -179,46 +165,45 @@ int main(int argc, char **argv) {
                      .supervisor_mailbox = sup_mb});
   auto worker = std::make_shared<worker_actor_t>(
       actor_config_t{.name = "worker", .supervisor_mailbox = sup_mb});
-  // ALSA actor: one actor, many ports (announced ports registered as
-  // hosted peer ids). The alsa and mdns actors use each other's mailboxes
-  // (discovery requests ports; ALSA subscriptions initiate sessions), so
-  // the mailboxes are created explicitly and bound before start.
+  // The two global server actors (design D1): the ALSA listener owns the
+  // seq client and all ports; the rtpmidi server owns every listen socket,
+  // the export registry and the session bookkeeping. Neither is a router
+  // peer. They use each other's mailboxes (subscription session requests,
+  // port management), so the mailboxes are created explicitly and bound
+  // before start.
   std::vector<std::string> alsa_ports;
   for (auto &ann : settings.alsa_announce) {
     alsa_ports.push_back(ann.name);
   }
   auto alsa_mb = std::make_shared<alsa_mailbox_t>();
   auto mdns_mb = std::make_shared<mdns_mailbox_t>();
+  auto server_mb = std::make_shared<server_mailbox_t>();
   auto alsa = std::make_shared<alsa_actor_t>(
       actor_config_t{.name = "alsa", .supervisor_mailbox = sup_mb},
-      settings.alsa_name, std::move(alsa_ports), router->mailbox(), mdns_mb);
+      settings.alsa_name, std::move(alsa_ports), router->mailbox(), server_mb);
   alsa->set_mailbox(alsa_mb);
 
   auto mdns = std::make_shared<mdns_actor_t>(
-      actor_config_t{.name = "mdns", .supervisor_mailbox = sup_mb},
-      router->mailbox(), alsa_mb, worker);
+      actor_config_t{.name = "mdns", .supervisor_mailbox = sup_mb}, alsa_mb,
+      server_mb);
   mdns->set_mailbox(mdns_mb);
 
-  // Network rtpmidi listeners (accept sockets in their own pollers).
-  std::vector<std::shared_ptr<actor_base_t>> listeners;
-  for (auto &ann : settings.rtpmidi_announce) {
-    const auto port = ann.port.empty() ? uint16_t(0) : uint16_t(std::stoul(ann.port));
-    listeners.push_back(std::make_shared<network_rtpmidi_listener_actor_t>(
-        actor_config_t{.name = ann.name, .supervisor_mailbox = sup_mb},
-        ann.name, port, router->mailbox(), alsa->mailbox()));
-  }
+  auto server = std::make_shared<rtpmidi_server_actor_t>(
+      actor_config_t{.name = "rtpmidi_server", .supervisor_mailbox = sup_mb},
+      router->mailbox(), alsa_mb, mdns_mb, worker);
+  server->set_mailbox(server_mb);
 
-  // Control socket: listener + one connection actor per client.
+  // Control socket: listener + one connection actor per client. Status
+  // gathers router + mdns + exports (ALSA listener, rtpmidi server).
   auto control = std::make_shared<control_listener_actor_t>(
       actor_config_t{.name = "control", .supervisor_mailbox = sup_mb},
-      settings.control, router->mailbox(), mdns->mailbox(), worker, VERSION);
+      settings.control, router->mailbox(), mdns->mailbox(), alsa_mb, server_mb,
+      worker, VERSION);
 
   // Supervisor wiring: ordered shutdown control -> router -> the rest.
   supervisor->set_router(router);
   supervisor->set_control_listener(control);
-  for (auto &l : listeners) {
-    supervisor->add_managed(l);
-  }
+  supervisor->add_managed(server);
   supervisor->add_managed(alsa);
   supervisor->add_managed(mdns);
   supervisor->add_managed(worker);
@@ -231,17 +216,16 @@ int main(int argc, char **argv) {
     worker->start();
     mdns->start();
     alsa->start();
-    for (auto &l : listeners) {
-      l->start();
-    }
+    server->start();
     control->start();
   } catch (const std::exception &e) {
     ERROR("Fatal setup error: {}", e.what());
     return 1;
   }
 
-  // Static peers (connect_to clients, rawmidi) spawn via the router.
-  setup_static_peers(router, worker);
+  // Static config (connect_to, rawmidi, announce sections) is registered
+  // on the rtpmidi server; connections stay lazy until needed.
+  setup_static_peers(server);
 
   INFO("rtpmidid {} running (actor architecture).", VERSION);
 

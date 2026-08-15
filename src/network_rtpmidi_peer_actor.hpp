@@ -26,13 +26,13 @@
 /// Two modes:
 /// - initiator (client): resolves DNS on the worker, binds, sends IN, CK
 ///   handshake, periodic CK0 keepalive, reconnect on failure.
-/// - acceptor (server): spawned by a listener with the initial IN
+/// - acceptor (server): spawned by the rtpmidi server with the initial IN
 ///   datagram; binds the shared ports with SO_REUSEPORT; datagrams the
-///   kernel hash misdelivers are re-forwarded to the listener.
+///   kernel hash misdelivers are re-forwarded to the server.
 
 #pragma once
 
-#include "control_messages.hpp" // listener_mailbox_t (foreign-datagram re-route)
+#include "rtpmidi_server_messages.hpp" // server_mailbox_t (foreign-datagram re-route)
 #include "peer_actor.hpp"
 #include "worker_actor.hpp"
 #include "rtpmidid/networkaddress.hpp"
@@ -49,12 +49,12 @@ public:
 public:
   /// Acceptor mode: an accepted connection. `initial_datagram` is the IN
   /// packet that opened the connection; `local_control_port` is the
-  /// listener's control port (midi = +1); the listener mailbox receives
+  /// server's control port (midi = +1); the server mailbox receives
   /// misdelivered foreign datagrams for re-routing.
   network_rtpmidi_peer_actor_t(
       actor_config_t config, rtpmidid::network_address_t client_address,
       rtpmidid::packet_t &&initial_datagram, uint16_t local_control_port,
-      std::shared_ptr<listener_mailbox_t> listener_mailbox);
+      std::shared_ptr<server_mailbox_t> server_mailbox);
 
   /// Initiator mode: connect to a remote server. DNS runs on the worker.
   network_rtpmidi_peer_actor_t(actor_config_t config, std::string hostname,
@@ -92,7 +92,7 @@ private:
   udp_socket_t midi_;    // port P+1
   rtpmidid::network_address_t remote_base_addr_; // the other side's control addr
   uint16_t local_control_port_ = 0;
-  std::shared_ptr<listener_mailbox_t> listener_mailbox_;
+  std::shared_ptr<server_mailbox_t> server_mailbox_;
   std::shared_ptr<worker_actor_t> worker_;
   std::string hostname_;
   std::string port_str_;

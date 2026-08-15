@@ -93,62 +93,6 @@ struct rawmidi_peer_status_t {
   peer_stats_t stats;
   std::string type;
 };
-/// [JSON-DM]
-struct listener_endpoint_t {
-  std::string hostname;
-  std::string port;
-};
-/// [JSON-DM]
-struct alsa_listener_status_t {
-  std::string name;
-  std::vector<listener_endpoint_t> endpoints;
-  int connection_count;
-  std::string status;
-  uint32_t id;
-  std::vector<uint32_t> send_to;
-  peer_stats_t stats;
-  std::string type;
-};
-/// [JSON-DM]
-struct rtp_listener_status_t {
-  std::string name;
-  int port;
-  std::vector<peer_rtp_detail_t> peers;
-  uint32_t id;
-  std::vector<uint32_t> send_to;
-  peer_stats_t stats;
-  std::string type;
-};
-/// [JSON-DM]
-struct rtp_listening_t {
-  std::string name;
-  int control_port;
-  int midi_port;
-};
-/// [JSON-DM]
-struct rtp_multi_listener_status_t {
-  std::vector<peer_rtp_detail_t> peers;
-  std::string name;
-  rtp_listening_t listening;
-  uint32_t id;
-  std::vector<uint32_t> send_to;
-  peer_stats_t stats;
-  std::string type;
-};
-/// [JSON-DM]
-struct alsa_connection_t {
-  std::string alsa;
-  uint32_t local;
-};
-/// [JSON-DM]
-struct alsa_multi_listener_status_t {
-  std::string name;
-  std::vector<alsa_connection_t> connections;
-  uint32_t id;
-  std::vector<uint32_t> send_to;
-  peer_stats_t stats;
-  std::string type;
-};
 // A peer whose status could not be produced: {"error": "<msg>"}.
 /// [JSON-DM]
 struct peer_error_t {
@@ -172,8 +116,6 @@ struct endpoint_params_t {
 
 using peer_status_variant_t =
     std::variant<rtp_peer_status_t, alsa_peer_status_t, rawmidi_peer_status_t,
-                 alsa_listener_status_t, rtp_listener_status_t,
-                 rtp_multi_listener_status_t, alsa_multi_listener_status_t,
                  peer_error_t>;
 
 } // namespace rtpmididns

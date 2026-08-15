@@ -52,56 +52,6 @@ template <> struct jsondm::serializer<rtpmididns::rawmidi_peer_status_t> {
 template <> struct jsondm::deserializer<rtpmididns::rawmidi_peer_status_t> {
   static void read(jsondm::Reader &, rtpmididns::rawmidi_peer_status_t &);
 };
-template <> struct jsondm::serializer<rtpmididns::listener_endpoint_t> {
-  static void write(const rtpmididns::listener_endpoint_t &, jsondm::Writer &);
-};
-template <> struct jsondm::deserializer<rtpmididns::listener_endpoint_t> {
-  static void read(jsondm::Reader &, rtpmididns::listener_endpoint_t &);
-};
-template <> struct jsondm::serializer<rtpmididns::alsa_listener_status_t> {
-  static void write(const rtpmididns::alsa_listener_status_t &,
-                    jsondm::Writer &);
-};
-template <> struct jsondm::deserializer<rtpmididns::alsa_listener_status_t> {
-  static void read(jsondm::Reader &, rtpmididns::alsa_listener_status_t &);
-};
-template <> struct jsondm::serializer<rtpmididns::rtp_listener_status_t> {
-  static void write(const rtpmididns::rtp_listener_status_t &,
-                    jsondm::Writer &);
-};
-template <> struct jsondm::deserializer<rtpmididns::rtp_listener_status_t> {
-  static void read(jsondm::Reader &, rtpmididns::rtp_listener_status_t &);
-};
-template <> struct jsondm::serializer<rtpmididns::rtp_listening_t> {
-  static void write(const rtpmididns::rtp_listening_t &, jsondm::Writer &);
-};
-template <> struct jsondm::deserializer<rtpmididns::rtp_listening_t> {
-  static void read(jsondm::Reader &, rtpmididns::rtp_listening_t &);
-};
-template <> struct jsondm::serializer<rtpmididns::rtp_multi_listener_status_t> {
-  static void write(const rtpmididns::rtp_multi_listener_status_t &,
-                    jsondm::Writer &);
-};
-template <>
-struct jsondm::deserializer<rtpmididns::rtp_multi_listener_status_t> {
-  static void read(jsondm::Reader &, rtpmididns::rtp_multi_listener_status_t &);
-};
-template <> struct jsondm::serializer<rtpmididns::alsa_connection_t> {
-  static void write(const rtpmididns::alsa_connection_t &, jsondm::Writer &);
-};
-template <> struct jsondm::deserializer<rtpmididns::alsa_connection_t> {
-  static void read(jsondm::Reader &, rtpmididns::alsa_connection_t &);
-};
-template <>
-struct jsondm::serializer<rtpmididns::alsa_multi_listener_status_t> {
-  static void write(const rtpmididns::alsa_multi_listener_status_t &,
-                    jsondm::Writer &);
-};
-template <>
-struct jsondm::deserializer<rtpmididns::alsa_multi_listener_status_t> {
-  static void read(jsondm::Reader &,
-                   rtpmididns::alsa_multi_listener_status_t &);
-};
 template <> struct jsondm::serializer<rtpmididns::peer_error_t> {
   static void write(const rtpmididns::peer_error_t &, jsondm::Writer &);
 };
@@ -145,27 +95,6 @@ struct FMT::formatter<rtpmididns::alsa_peer_status_t>
 template <>
 struct FMT::formatter<rtpmididns::rawmidi_peer_status_t>
     : jsondm::formatter_base<rtpmididns::rawmidi_peer_status_t> {};
-template <>
-struct FMT::formatter<rtpmididns::listener_endpoint_t>
-    : jsondm::formatter_base<rtpmididns::listener_endpoint_t> {};
-template <>
-struct FMT::formatter<rtpmididns::alsa_listener_status_t>
-    : jsondm::formatter_base<rtpmididns::alsa_listener_status_t> {};
-template <>
-struct FMT::formatter<rtpmididns::rtp_listener_status_t>
-    : jsondm::formatter_base<rtpmididns::rtp_listener_status_t> {};
-template <>
-struct FMT::formatter<rtpmididns::rtp_listening_t>
-    : jsondm::formatter_base<rtpmididns::rtp_listening_t> {};
-template <>
-struct FMT::formatter<rtpmididns::rtp_multi_listener_status_t>
-    : jsondm::formatter_base<rtpmididns::rtp_multi_listener_status_t> {};
-template <>
-struct FMT::formatter<rtpmididns::alsa_connection_t>
-    : jsondm::formatter_base<rtpmididns::alsa_connection_t> {};
-template <>
-struct FMT::formatter<rtpmididns::alsa_multi_listener_status_t>
-    : jsondm::formatter_base<rtpmididns::alsa_multi_listener_status_t> {};
 template <>
 struct FMT::formatter<rtpmididns::peer_error_t>
     : jsondm::formatter_base<rtpmididns::peer_error_t> {};

@@ -100,11 +100,16 @@ control_connection_actor_t::control_connection_actor_t(
     actor_config_t config, int client_fd,
     std::shared_ptr<router_mailbox_t> router_mailbox,
     std::shared_ptr<mdns_mailbox_t> mdns_mailbox,
+    std::shared_ptr<alsa_mailbox_t> alsa_mailbox,
+    std::shared_ptr<server_mailbox_t> server_mailbox,
     std::shared_ptr<worker_actor_t> worker, std::string version,
     std::chrono::milliseconds request_deadline)
     : actor_t(std::move(config)), client_fd_(client_fd),
       router_mailbox_(std::move(router_mailbox)),
-      mdns_mailbox_(std::move(mdns_mailbox)), worker_(std::move(worker)),
+      mdns_mailbox_(std::move(mdns_mailbox)),
+      alsa_mailbox_(std::move(alsa_mailbox)),
+      server_mailbox_(std::move(server_mailbox)),
+      worker_(std::move(worker)),
       version_(std::move(version)), request_deadline_(request_deadline) {}
 
 void control_connection_actor_t::on_start() {
@@ -319,6 +324,10 @@ void control_connection_actor_t::cmd_status(const pending_command_t &cmd) {
   gather_.responses.clear();
   gather_.expected.clear();
   gather_.mdns_done = false;
+  gather_.exports.clear();
+  gather_.exports_expected = 0;
+  gather_.exports_requested = false;
+  gather_.exports_done = false;
   gather_.finished = false;
   gather_status(gather_.corr);
   pending_cmd_ = cmd;
@@ -416,6 +425,23 @@ void control_connection_actor_t::finish_gather(const pending_command_t &cmd,
       m.status = "Not available";
     }
     st.mdns = m;
+    // Exports section (additive, lazy-rtpmidi-connections): merged replies
+    // from the ALSA listener (waiting ports) and the rtpmidi server
+    // (Network servers, rawmidi and seq exports), bucketed by kind.
+    for (auto &resp : gather_.exports) {
+      for (auto &e : resp.exports) {
+        export_entry_status_t ee{e.name, e.target, e.state, e.port};
+        if (e.kind == "waiting") {
+          st.exports.waiting.push_back(std::move(ee));
+        } else if (e.kind == "network") {
+          st.exports.network.push_back(std::move(ee));
+        } else if (e.kind == "rawmidi") {
+          st.exports.rawmidi.push_back(std::move(ee));
+        } else if (e.kind == "seq") {
+          st.exports.seq.push_back(std::move(ee));
+        }
+      }
+    }
     std::string out;
     jsondm::serialize(st, out);
     respond(cmd, "result", out);
@@ -428,12 +454,60 @@ void control_connection_actor_t::finish_gather(const pending_command_t &cmd,
           return std::holds_alternative<mdns_status_resp_t>(m) &&
                  std::get<mdns_status_resp_t>(m).hdr.corr == mdns_corr;
         },
-        request_deadline_, [finish = std::move(finish)](
-                                std::optional<connection_control_t>) { finish(); });
+        request_deadline_,
+        [this, corr, finish = std::move(finish)](
+            std::optional<connection_control_t>) mutable {
+          gather_exports(corr, std::move(finish));
+        });
     return;
   }
-  finish();
-  (void)corr;
+  gather_exports(corr, std::move(finish));
+}
+
+void control_connection_actor_t::gather_exports(uint64_t corr,
+                                                std::function<void()> finish) {
+  if (gather_.exports_done) {
+    finish();
+    return;
+  }
+  // Post the exports status requests exactly once (ALSA listener +
+  // rtpmidi server); each answers with an exports_status_resp_t.
+  if (!gather_.exports_requested) {
+    gather_.exports_requested = true;
+    if (alsa_mailbox_) {
+      alsa_mailbox_->post_control(
+          exports_status_req_t{hdr_t{corr}, mailbox_handle()});
+      gather_.exports_expected++;
+    }
+    if (server_mailbox_) {
+      server_mailbox_->post_control(
+          exports_status_req_t{hdr_t{corr}, mailbox_handle()});
+      gather_.exports_expected++;
+    }
+  }
+  if (gather_.exports_expected == 0) {
+    gather_.exports_done = true;
+    finish();
+    return;
+  }
+  wait_for(
+      [corr](const connection_control_t &m) {
+        auto *e = std::get_if<exports_status_resp_t>(&m);
+        return e != nullptr && e->hdr.corr == corr;
+      },
+      request_deadline_,
+      [this, corr, finish = std::move(finish)](
+          std::optional<connection_control_t> res) mutable {
+        if (res) {
+          gather_.exports.push_back(
+              std::move(std::get<exports_status_resp_t>(*res)));
+          gather_.exports_expected--;
+        } else {
+          // Deadline: answer with what is available.
+          gather_.exports_expected = 0;
+        }
+        gather_exports(corr, std::move(finish));
+      });
 }
 
 void control_connection_actor_t::cmd_router_connect(
@@ -728,11 +802,16 @@ control_listener_actor_t::control_listener_actor_t(
     actor_config_t config, std::string socket_path,
     std::shared_ptr<router_mailbox_t> router_mailbox,
     std::shared_ptr<mdns_mailbox_t> mdns_mailbox,
+    std::shared_ptr<alsa_mailbox_t> alsa_mailbox,
+    std::shared_ptr<server_mailbox_t> server_mailbox,
     std::shared_ptr<worker_actor_t> worker, std::string version,
     std::chrono::milliseconds request_deadline)
     : actor_t(std::move(config)), socket_path_(std::move(socket_path)),
       router_mailbox_(std::move(router_mailbox)),
-      mdns_mailbox_(std::move(mdns_mailbox)), worker_(std::move(worker)),
+      mdns_mailbox_(std::move(mdns_mailbox)),
+      alsa_mailbox_(std::move(alsa_mailbox)),
+      server_mailbox_(std::move(server_mailbox)),
+      worker_(std::move(worker)),
       version_(std::move(version)), request_deadline_(request_deadline) {}
 
 void control_listener_actor_t::on_start() {
@@ -787,8 +866,8 @@ void control_listener_actor_t::accept_client() {
       actor_config_t{.name = FMT::format("control-conn-{}", fd),
                      .id = uint32_t(fd),
                      .supervisor_mailbox = mailbox()},
-      fd, router_mailbox_, mdns_mailbox_, worker_, version_,
-      request_deadline_);
+      fd, router_mailbox_, mdns_mailbox_, alsa_mailbox_, server_mailbox_,
+      worker_, version_, request_deadline_);
   conn->start();
   connections_.push_back(std::move(conn));
 }

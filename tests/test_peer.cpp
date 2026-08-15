@@ -211,17 +211,18 @@ void test_worker_dns_resolution() {
 }
 
 
-// --- mdns discovery -> ALSA port + network client (fake router/alsa) --------
+// --- mdns discovery -> waiting ALSA port only (lazy model) --------------------
 
-void test_mdns_discovery_creates_alsa_port_and_client() {
-  auto router_mb = std::make_shared<router_mailbox_t>();
+void test_mdns_discovery_creates_waiting_port_only() {
   auto alsa_mb = std::make_shared<alsa_mailbox_t>();
-  auto worker = std::make_shared<worker_actor_t>(actor_config_t{.name = "w"});
+  auto server_mb = std::make_shared<server_mailbox_t>();
   auto mdns = std::make_shared<mdns_actor_t>(
-      actor_config_t{.name = "mdns"}, router_mb, alsa_mb, worker);
+      actor_config_t{.name = "mdns"}, alsa_mb, server_mb);
   mdns->pump(); // on_start (no avahi: mdns_ null, but wiring works)
 
-  // Discovery event: the mdns actor asks the ALSA actor for a port.
+  // Discovery event (lazy model, task 2.1): the mdns actor asks the ALSA
+  // listener for a waiting port and records the target on the rtpmidi
+  // server. No network client is spawned.
   mdns->on_discovered("Fancy Synth", "192.168.1.50", "5004");
   mdns->pump();
   auto req = alsa_mb->pop_control();
@@ -229,49 +230,37 @@ void test_mdns_discovery_creates_alsa_port_and_client() {
   ASSERT_TRUE(std::holds_alternative<alsa_create_port_t>(*req));
   auto &cp = std::get<alsa_create_port_t>(*req);
   ASSERT_TRUE(cp.name == "Fancy Synth");
+  ASSERT_TRUE(cp.waiting);
+  ASSERT_TRUE(cp.remote == "Fancy Synth");
+  // The server learns the outbound target.
+  auto srv = server_mb->pop_control();
+  ASSERT_TRUE(srv.has_value());
+  ASSERT_TRUE(std::holds_alternative<server_remote_discovered_t>(*srv));
+  auto &sd = std::get<server_remote_discovered_t>(*srv);
+  ASSERT_TRUE(sd.remote == "Fancy Synth" && sd.address == "192.168.1.50" &&
+              sd.port == "5004");
 
-  // The ALSA actor replies with the assigned router id.
-  mdns->mailbox()->post_control(
-      peer_ids_result_t{cp.hdr, {10}, {}});
+  // The ALSA listener replies with the seq port of the waiting port.
+  mdns->mailbox()->post_control(alsa_port_result_t{cp.hdr, 7, 0});
   mdns->pump();
-  // Now the mdns actor spawns the network client via the router.
-  auto spawn = router_mb->pop_control();
-  ASSERT_TRUE(spawn.has_value());
-  ASSERT_TRUE(std::holds_alternative<spawn_peer_t>(*spawn));
-  auto &sp = std::get<spawn_peer_t>(*spawn);
-  ASSERT_TRUE(sp.meta == "Fancy Synth");
 
-  // The router acks the spawn.
-  mdns->mailbox()->post_control(peer_ids_result_t{sp.hdr, {20}, {}});
-  mdns->pump();
-  // Bidirectional connect: alsa id 10 <-> net id 20.
-  int connects = 0;
-  while (auto c = router_mb->pop_control()) {
-    if (auto *ct = std::get_if<connect_t>(&*c)) {
-      connects++;
-      ASSERT_TRUE((ct->from == 10 && ct->to == 20) ||
-                  (ct->from == 20 && ct->to == 10));
-    }
-  }
-  ASSERT_EQUAL(connects, 2);
-
-  // Removal: the server goes away; the ALSA port and client are removed.
+  // Removal: the waiting port and the target are removed; no router traffic.
   mdns->on_removed("Fancy Synth");
   mdns->pump();
-  bool saw_remove = false;
   bool saw_alsa_remove = false;
-  while (auto c = router_mb->pop_control()) {
-    if (auto *rm = std::get_if<remove_peer_t>(&*c)) {
-      saw_remove = (rm->peer_id == 20);
-    }
-  }
   while (auto c = alsa_mb->pop_control()) {
     if (auto *rm = std::get_if<alsa_remove_port_t>(&*c)) {
-      saw_alsa_remove = (rm->peer_id == 10);
+      saw_alsa_remove = (rm->seq_port == 7);
     }
   }
-  ASSERT_TRUE(saw_remove);
   ASSERT_TRUE(saw_alsa_remove);
+  bool saw_gone = false;
+  while (auto c = server_mb->pop_control()) {
+    if (auto *g = std::get_if<server_remote_gone_t>(&*c)) {
+      saw_gone = (g->remote == "Fancy Synth");
+    }
+  }
+  ASSERT_TRUE(saw_gone);
 }
 
 int main(int argc, char **argv) {
@@ -282,7 +271,7 @@ int main(int argc, char **argv) {
       TEST(test_rawmidi_actor_recv_to_message_and_message_to_send),
       TEST(test_worker_jobs_fifo_and_exception_isolation),
       TEST(test_worker_dns_resolution),
-      TEST(test_mdns_discovery_creates_alsa_port_and_client),
+      TEST(test_mdns_discovery_creates_waiting_port_only),
   };
   testcase.run(argc, argv);
   return testcase.exit_code();

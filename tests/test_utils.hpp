@@ -21,6 +21,7 @@
 #include "mdns_messages.hpp"
 #include "peer_messages.hpp"
 #include "router_messages.hpp"
+#include "rtpmidi_server_messages.hpp"
 #include "worker_messages.hpp"
 #include <chrono>
 #include <functional>
@@ -37,7 +38,7 @@ using test_control_t =
                  control_payload_t, registered_t, peer_status_req_t,
                  peer_command_t, peer_status_resp_t, peer_command_resp_t,
                  ack_t, peer_ids_result_t, status_head_t, mdns_status_resp_t,
-                 dns_resolved_t>;
+                 dns_resolved_t, alsa_port_result_t>;
 /// Permissive test mailbox (accepts the test control set + the data lane).
 using test_mailbox_t = mailbox_t<data_message_t, test_control_t>;
 } // namespace rtpmididns

@@ -26,6 +26,7 @@
 #include "test_case.hpp"
 #include "test_utils.hpp"
 #include "worker_actor.hpp"
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <string>
@@ -109,6 +110,28 @@ static bool wait_until(const std::function<bool()> &f, int timeout_ms = 5000) {
   return f();
 }
 
+/// Stop actors and wait for their exit notices: the actor thread must be
+/// fully done before the object is destroyed (the base-class join runs
+/// after the derived members are gone).
+static void stop_and_wait(
+    const std::vector<std::shared_ptr<actor_base_t>> &actors,
+    const std::shared_ptr<test_mailbox_t> &supervisor) {
+  for (auto &a : actors) {
+    a->request_stop();
+  }
+  size_t remaining = actors.size();
+  wait_until([&] {
+    while (auto c = supervisor->pop_control()) {
+      if (std::get_if<stopped_t>(&*c)) {
+        if (remaining > 0) {
+          remaining--;
+        }
+      }
+    }
+    return remaining == 0;
+  }, 10000);
+}
+
 // --- tests ------------------------------------------------------------------
 
 void test_control_socket_wire_roundtrip() {
@@ -139,8 +162,8 @@ void test_control_socket_wire_roundtrip() {
 
   auto listener = std::make_shared<control_listener_actor_t>(
       actor_config_t{.name = "ctl", .supervisor_mailbox = supervisor},
-      socket_path, router->mailbox(), nullptr, worker, "test-version",
-      std::chrono::milliseconds(1000));
+      socket_path, router->mailbox(), nullptr, nullptr, nullptr, worker,
+      "test-version", std::chrono::milliseconds(1000));
   listener->start();
   ASSERT_TRUE(wait_until([&] { return listener->is_running(); }));
 
@@ -196,10 +219,96 @@ void test_control_socket_wire_roundtrip() {
   ASSERT_TRUE(r5.find("Unknown peer") != std::string::npos);
 
   ::close(fd);
-  listener->request_stop();
-  router->request_stop();
-  worker->request_stop();
-  peer->request_stop();
+  stop_and_wait({listener, router, worker, peer}, supervisor);
+  ::unlink(socket_path.c_str());
+}
+
+/// The status response carries an additive `exports` section gathered
+/// from the ALSA listener (waiting ports) and the rtpmidi server
+/// (Network servers, rawmidi and seq exports); the existing sections are
+/// unchanged (lazy-rtpmidi-connections, task 7.5).
+void test_status_exports_section() {
+  const std::string socket_path =
+      "/tmp/rtpmidid-test-control-" + std::to_string(::getpid()) + "-e.sock";
+  auto supervisor = std::make_shared<test_mailbox_t>();
+  auto router = std::make_shared<router_actor_t>(
+      actor_config_t{.name = "router", .supervisor_mailbox = supervisor});
+  auto worker = std::make_shared<worker_actor_t>(actor_config_t{.name = "w"});
+  router->start();
+  worker->start();
+
+  auto alsa_mb = std::make_shared<alsa_mailbox_t>();
+  auto server_mb = std::make_shared<server_mailbox_t>();
+  // Fake responders: the listener answers waiting ports, the server its
+  // export inventory.
+  std::atomic<bool> stop{false};
+  std::thread responder([&] {
+    while (!stop) {
+      while (auto c = alsa_mb->pop_control()) {
+        if (auto *r = std::get_if<exports_status_req_t>(&*c)) {
+          exports_status_resp_t resp;
+          resp.hdr = r->hdr;
+          resp.source = "alsa";
+          resp.exports.push_back(
+              {"RemoteSynth", "waiting", "192.168.1.50:5004", "waiting", 0});
+          r->reply_to.post_control(std::move(resp));
+        }
+      }
+      while (auto c = server_mb->pop_control()) {
+        if (auto *r = std::get_if<exports_status_req_t>(&*c)) {
+          exports_status_resp_t resp;
+          resp.hdr = r->hdr;
+          resp.source = "rtpmidi_server";
+          resp.exports.push_back({"Network", "network", "", "listening", 5004});
+          resp.exports.push_back(
+              {"MyRaw", "rawmidi", "/dev/snd/midiC1D0", "listening", 5006});
+          resp.exports.push_back(
+              {"Synth 0:0", "seq", "16:0", "connected", 5008});
+          r->reply_to.post_control(std::move(resp));
+        }
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+  });
+
+  auto listener = std::make_shared<control_listener_actor_t>(
+      actor_config_t{.name = "ctl", .supervisor_mailbox = supervisor},
+      socket_path, router->mailbox(), nullptr, alsa_mb, server_mb, worker,
+      "test-version", std::chrono::milliseconds(2000));
+  listener->start();
+  ASSERT_TRUE(wait_until([&] { return listener->is_running(); }));
+
+  int fd = -1;
+  for (int i = 0; i < 400 && fd < 0; i++) {
+    fd = connect_unix(socket_path);
+    if (fd < 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+  }
+  ASSERT_GTE(fd, 0);
+
+  std::string status_cmd = "{\"method\":\"status\",\"id\":\"7\"}\n";
+  ::write(fd, status_cmd.data(), status_cmd.size());
+  auto r = read_response(fd, 8000);
+  ASSERT_TRUE(r.find("\"id\":\"7\"") != std::string::npos);
+  // Existing sections unchanged.
+  ASSERT_TRUE(r.find("\"router\"") != std::string::npos);
+  ASSERT_TRUE(r.find("\"mdns\"") != std::string::npos);
+  // The additive exports section, bucketed by kind.
+  ASSERT_TRUE(r.find("\"exports\"") != std::string::npos);
+  ASSERT_TRUE(r.find("\"waiting\"") != std::string::npos);
+  ASSERT_TRUE(r.find("RemoteSynth") != std::string::npos);
+  ASSERT_TRUE(r.find("192.168.1.50:5004") != std::string::npos);
+  ASSERT_TRUE(r.find("\"network\"") != std::string::npos);
+  ASSERT_TRUE(r.find("\"rawmidi\"") != std::string::npos);
+  ASSERT_TRUE(r.find("/dev/snd/midiC1D0") != std::string::npos);
+  ASSERT_TRUE(r.find("\"seq\"") != std::string::npos);
+  ASSERT_TRUE(r.find("16:0") != std::string::npos);
+
+  ::close(fd);
+  stop = true;
+  responder.join();
+  stop_and_wait({listener, router, worker}, supervisor);
   ::unlink(socket_path.c_str());
 }
 
@@ -222,7 +331,7 @@ void test_stalled_client_does_not_block_others() {
 
   auto listener = std::make_shared<control_listener_actor_t>(
       actor_config_t{.name = "ctl", .supervisor_mailbox = supervisor},
-      socket_path, router->mailbox(), nullptr, worker, "v",
+      socket_path, router->mailbox(), nullptr, nullptr, nullptr, worker, "v",
       std::chrono::milliseconds(400));
   listener->start();
 
@@ -266,15 +375,14 @@ void test_stalled_client_does_not_block_others() {
 
   ::close(slow);
   ::close(fast);
-  listener->request_stop();
-  router->request_stop();
-  worker->request_stop();
+  stop_and_wait({listener, router, worker}, supervisor);
   ::unlink(socket_path.c_str());
 }
 
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_control_socket_wire_roundtrip),
+      TEST(test_status_exports_section),
       TEST(test_stalled_client_does_not_block_others),
   };
   testcase.run(argc, argv);

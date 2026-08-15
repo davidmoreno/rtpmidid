@@ -20,7 +20,7 @@ add_library(
   local_rawmidi_peer_actor.cpp
   worker_actor.cpp
   network_rtpmidi_peer_actor.cpp
-  network_rtpmidi_listener_actor.cpp
+  rtpmidi_server_actor.cpp
   mdns_actor.cpp
   logger_actor.cpp
   supervisor_actor.cpp

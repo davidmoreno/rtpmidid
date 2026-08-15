@@ -160,6 +160,7 @@ class Top:
     class Tabs:
         ROUTES = 1
         MDNS = 2
+        EXPORTS = 3
 
     tab: Tabs = Tabs.ROUTES
 
@@ -341,6 +342,8 @@ class Top:
     def command_switch_tab(self):
         if self.tab == self.Tabs.ROUTES:
             self.tab = self.Tabs.MDNS
+        elif self.tab == self.Tabs.MDNS:
+            self.tab = self.Tabs.EXPORTS
         else:
             self.tab = self.Tabs.ROUTES
 
@@ -604,6 +607,8 @@ class Top:
             self.print_routes_tab()
         elif self.tab == self.Tabs.MDNS:
             self.print_mdns_tab()
+        elif self.tab == self.Tabs.EXPORTS:
+            self.print_exports_tab()
         else:
             self.print_clean_tab()
         self.print_footer()
@@ -613,7 +618,7 @@ class Top:
         selected = self.ANSI_BG_CYAN + self.ANSI_TEXT_WHITE + self.ANSI_TEXT_BOLD
         not_selected = self.ANSI_BG_PURPLE + self.ANSI_TEXT_WHITE
 
-        tabs = ["Routes", "mDNS"]
+        tabs = ["Routes", "mDNS", "Exports"]
 
         self.terminal_goto(0, 3)
         self.print(self.ANSI_BG_BLACK + "  ")
@@ -903,6 +908,63 @@ class Top:
                 # self.print_padding(str(value or ""), colwidth)
                 self.print(" ")
             self.terminal_goto(x, y + 1)
+
+    def print_exports_tab(self):
+        """Exported/waiting endpoints (status `exports` section): waiting
+        remote ports, Network servers, rawmidi and seq exports. Live
+        sessions stay in the Routes tab."""
+        exports = self.status.get("exports") or {}
+        data = []
+        for kind in ("waiting", "network", "rawmidi", "seq"):
+            for row in exports.get(kind, []) or []:
+                entry = dict(row)
+                entry["kind"] = kind
+                data.append(entry)
+
+        def style(row):
+            if row is self.current_row:
+                return None
+            state = safe_get(row, "state")
+            if state == "connected":
+                return self.ANSI_TEXT_GREEN
+            if state == "subscribed":
+                return self.ANSI_TEXT_YELLOW
+            return None
+
+        columns = [
+            {
+                "name": "Kind",
+                "width": 10,
+                "get": lambda d: safe_get(d, "kind"),
+                "style": style,
+            },
+            {
+                "name": "Name",
+                "width": 0,
+                "get": lambda d: safe_get(d, "name"),
+                "style": style,
+            },
+            {
+                "name": "Target",
+                "width": 30,
+                "get": lambda d: safe_get(d, "target"),
+                "style": style,
+            },
+            {
+                "name": "Port",
+                "width": 8,
+                "align": "right",
+                "get": lambda d: safe_get(d, "port") or "",
+                "style": style,
+            },
+            {
+                "name": "State",
+                "width": 12,
+                "get": lambda d: safe_get(d, "state"),
+                "style": style,
+            },
+        ]
+        self.print_data_table(0, 4, self.width, self.height - 2, columns, data)
 
     def refresh_data(self):
         try:

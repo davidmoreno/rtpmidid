@@ -124,10 +124,29 @@ future.
 
 ### Automatic detection of announced rtpmidi ports
 
-Any port announced on the network will be available at the ALSA port always.
+Any port announced on the network becomes a *waiting* ALSA port.
 
-For mDNS discovered endpoints, the connection is delayed until the alsa seq
-connection.
+### Lazy connections
+
+Connections are created on demand (no always-on outbound sessions):
+
+- Every `[connect_to]` section and every mDNS-discovered server creates a
+  waiting ALSA port; **no** network session, DNS resolution or handshake
+  exists while the port is waiting.
+- The rtpmidi session starts when the first ALSA client subscribes to the
+  port (e.g. via `aconnect` or qmidiroute) and is closed on the last
+  unsubscribe.
+- One session per remote pair: an existing session (either direction) is
+  reused instead of opening a duplicate connection; a new incoming
+  connection replaces the old one.
+- The daemon status (`rtpmidid-cli status`) shows live sessions in
+  `router` and the waiting/exported endpoints in the additive `exports`
+  section (see `docs/CONTROL.md`).
+- Server-mode `[rawmidi]` devices are never opened while idle (exclusive
+  access is only held for the duration of a connection); client-mode
+  rawmidi (`hostname=` set) connects eagerly at startup.
+- `[alsa_hw_auto_export]` exports matching local sequencer ports, each
+  with its own announced rtpmidi endpoint, and tracks port hotplug.
 
 ### Direct connection
 

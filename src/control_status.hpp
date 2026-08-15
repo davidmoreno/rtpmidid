@@ -39,4 +39,25 @@ struct mdns_status_t {
   std::vector<mdns_remote_announcement_t> remote_announcements;
 };
 
+/// One exported/waiting endpoint in the status `exports` section
+/// (lazy-rtpmidi-connections, task 7.1; additive wire change).
+/// [JSON-DM]
+struct export_entry_status_t {
+  std::string name;
+  std::string target;
+  std::string state;
+  int port;
+};
+
+/// The status `exports` section: waiting remote ports (connect_to and
+/// discovered, with their target address), generic Network servers,
+/// rawmidi exports and auto-exported seq ports, each with its state.
+/// [JSON-DM]
+struct exports_status_t {
+  std::vector<export_entry_status_t> waiting;
+  std::vector<export_entry_status_t> network;
+  std::vector<export_entry_status_t> rawmidi;
+  std::vector<export_entry_status_t> seq;
+};
+
 } // namespace rtpmididns

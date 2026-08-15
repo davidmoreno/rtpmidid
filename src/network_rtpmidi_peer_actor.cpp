@@ -36,12 +36,12 @@ namespace rtpmididns {
 network_rtpmidi_peer_actor_t::network_rtpmidi_peer_actor_t(
     actor_config_t config, rtpmidid::network_address_t client_address,
     rtpmidid::packet_t &&initial_datagram, uint16_t local_control_port,
-    std::shared_ptr<listener_mailbox_t> listener_mailbox)
+    std::shared_ptr<server_mailbox_t> server_mailbox)
     : peer_actor_t(std::move(config)), mode_(mode_t::acceptor),
       peer_(std::make_shared<rtpmidid::rtppeer_t>(name())),
       remote_base_addr_(std::move(client_address)),
       local_control_port_(local_control_port),
-      listener_mailbox_(std::move(listener_mailbox)) {
+      server_mailbox_(std::move(server_mailbox)) {
   peer_->local_ssrc = ::rtpmidid::rand_u32();
   peer_->remote_address = remote_base_addr_.dup();
   setup_peer();
@@ -241,7 +241,7 @@ bool network_rtpmidi_peer_actor_t::datagram_is_mine(
 void network_rtpmidi_peer_actor_t::forward_foreign(
     const rtpmidid::packet_t &pkt, const rtpmidid::network_address_t &from,
     rtpmidid::rtppeer_t::port_e port) {
-  if (!listener_mailbox_) {
+  if (!server_mailbox_) {
     return;
   }
   udp_datagram_t dg;
@@ -250,7 +250,7 @@ void network_rtpmidi_peer_actor_t::forward_foreign(
   dg.data.assign(pkt.get_data(), pkt.get_data() + pkt.get_size());
   dg.remote_ip = from.ip();
   dg.remote_port = from.port();
-  listener_mailbox_->post_control(std::move(dg));
+  server_mailbox_->post_control(std::move(dg));
 }
 
 void network_rtpmidi_peer_actor_t::feed_routed_datagram(
@@ -448,8 +448,8 @@ void network_rtpmidi_peer_actor_t::on_control(peer_control_t &&msg) {
 }
 
 void network_rtpmidi_peer_actor_t::on_stop() {
-  if (listener_mailbox_) {
-    listener_mailbox_->post_control(
+  if (server_mailbox_) {
+    server_mailbox_->post_control(
         udp_peer_gone_t{peer_->initiator_id, peer_->remote_ssrc});
   }
   timer_.disable();

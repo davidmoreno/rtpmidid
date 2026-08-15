@@ -72,6 +72,37 @@ Shows some help about supported commands.
 
 Shows stats about the current connections.
 
+## status
+
+Returns the daemon status as JSON. Behavior note (lazy connections): the
+`router` list shows **live sessions only** — outbound connections
+(`[connect_to]` and discovered remotes) exist as waiting ALSA ports until
+an ALSA client subscribes, and are not peers of the router while waiting.
+The waiting/exported endpoints are listed in the additive `exports`
+section instead:
+
+```json
+{
+  "version": "...",
+  "settings": { "alsa_name": "rtpmidid", "control_filename": "..." },
+  "router": [ { "...": "per-peer typed status" } ],
+  "mdns": { "status": "Available", "announcements": [], "remote_announcements": [] },
+  "exports": {
+    "waiting": [ { "name": "DeepMind12D", "target": "192.168.1.33:5004", "state": "waiting", "port": 0 } ],
+    "network": [ { "name": "myhost", "target": "", "state": "listening", "port": 5004 } ],
+    "rawmidi": [ { "name": "MIDI C4D0", "target": "/dev/snd/midiC4D0", "state": "listening", "port": 5104 } ],
+    "seq":   [ { "name": "Synth MIDI 1", "target": "16:0", "state": "connected", "port": 5106 } ]
+  }
+}
+```
+
+`exports` buckets: `waiting` (connect_to / discovered remotes and their
+target address), `network` (generic `[rtpmidi_announce]` servers),
+`rawmidi` (server-mode rawmidi exports, name and device path) and `seq`
+(auto-exported sequencer ports, name and local port). Entry states:
+`waiting`, `subscribed`, `connected`, `listening`. The `router` and
+`mdns` sections are unchanged.
+
 ## quit | exit
 
 Stops rtpmidid

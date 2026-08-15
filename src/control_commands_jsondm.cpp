@@ -480,6 +480,10 @@ void jsondm::serializer<rtpmididns::daemon_status_t>::write(
     jsondm::Writer::member_guard g(w, "mdns");
     jsondm::write(w, v.mdns);
   }
+  {
+    jsondm::Writer::member_guard g(w, "exports");
+    jsondm::write(w, v.exports);
+  }
   w.obj_end();
 }
 void jsondm::deserializer<rtpmididns::daemon_status_t>::read(
@@ -499,6 +503,9 @@ void jsondm::deserializer<rtpmididns::daemon_status_t>::read(
     } else if (key == "mdns") {
       jsondm::Reader::member_guard g(r, "mdns");
       jsondm::read(r, v.mdns);
+    } else if (key == "exports") {
+      jsondm::Reader::member_guard g(r, "exports");
+      jsondm::read(r, v.exports);
     } else
       r.skip_value();
   }

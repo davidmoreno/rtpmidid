@@ -54,6 +54,8 @@ public:
   control_connection_actor_t(actor_config_t config, int client_fd,
                              std::shared_ptr<router_mailbox_t> router_mailbox,
                              std::shared_ptr<mdns_mailbox_t> mdns_mailbox,
+                             std::shared_ptr<alsa_mailbox_t> alsa_mailbox,
+                             std::shared_ptr<server_mailbox_t> server_mailbox,
                              std::shared_ptr<worker_actor_t> worker,
                              std::string version,
                              std::chrono::milliseconds request_deadline);
@@ -94,6 +96,7 @@ private:
   void re_park_gather(uint64_t corr);
   void on_gather_step(uint64_t corr, std::optional<connection_control_t> res);
   void finish_gather(const pending_command_t &cmd, uint64_t corr);
+  void gather_exports(uint64_t corr, std::function<void()> finish);
 
   void wait_ack(const pending_command_t &cmd, uint64_t corr,
                 const char *success_payload = "\"ok\"");
@@ -107,6 +110,8 @@ private:
   std::string read_buffer_;
   std::shared_ptr<router_mailbox_t> router_mailbox_;
   std::shared_ptr<mdns_mailbox_t> mdns_mailbox_;
+  std::shared_ptr<alsa_mailbox_t> alsa_mailbox_;
+  std::shared_ptr<server_mailbox_t> server_mailbox_;
   std::shared_ptr<worker_actor_t> worker_;
   std::string version_;
   std::chrono::milliseconds request_deadline_{5000};
@@ -122,6 +127,12 @@ private:
     std::unordered_set<peer_id_t> expected;
     bool mdns_done = false;
     mdns_status_resp_t mdns;
+    /// exports gather (additive status section): one reply per source
+    /// actor (ALSA listener, rtpmidi server).
+    int exports_expected = 0;
+    bool exports_requested = false;
+    std::vector<exports_status_resp_t> exports;
+    bool exports_done = false;
     bool finished = false;
   };
   gather_state_t gather_;
@@ -139,6 +150,8 @@ public:
   control_listener_actor_t(actor_config_t config, std::string socket_path,
                            std::shared_ptr<router_mailbox_t> router_mailbox,
                            std::shared_ptr<mdns_mailbox_t> mdns_mailbox,
+                           std::shared_ptr<alsa_mailbox_t> alsa_mailbox,
+                           std::shared_ptr<server_mailbox_t> server_mailbox,
                            std::shared_ptr<worker_actor_t> worker,
                            std::string version,
                            std::chrono::milliseconds request_deadline = std::chrono::seconds(5));
@@ -155,6 +168,8 @@ private:
   rtpmidid::poller_t::listener_t listener_;
   std::shared_ptr<router_mailbox_t> router_mailbox_;
   std::shared_ptr<mdns_mailbox_t> mdns_mailbox_;
+  std::shared_ptr<alsa_mailbox_t> alsa_mailbox_;
+  std::shared_ptr<server_mailbox_t> server_mailbox_;
   std::shared_ptr<worker_actor_t> worker_;
   std::string version_;
   std::chrono::milliseconds request_deadline_{5000};

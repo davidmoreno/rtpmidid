@@ -104,4 +104,90 @@ void jsondm::deserializer<rtpmididns::mdns_status_t>::read(
   }
   r.obj_end();
 }
+void jsondm::serializer<rtpmididns::export_entry_status_t>::write(
+    const rtpmididns::export_entry_status_t &v, jsondm::Writer &w) {
+  w.obj_begin();
+  {
+    jsondm::Writer::member_guard g(w, "name");
+    jsondm::write(w, v.name);
+  }
+  {
+    jsondm::Writer::member_guard g(w, "target");
+    jsondm::write(w, v.target);
+  }
+  {
+    jsondm::Writer::member_guard g(w, "state");
+    jsondm::write(w, v.state);
+  }
+  {
+    jsondm::Writer::member_guard g(w, "port");
+    jsondm::write(w, v.port);
+  }
+  w.obj_end();
+}
+void jsondm::deserializer<rtpmididns::export_entry_status_t>::read(
+    jsondm::Reader &r, rtpmididns::export_entry_status_t &v) {
+  r.obj_begin();
+  while (r.next_key()) {
+    auto key = r.key();
+    if (key == "name") {
+      jsondm::Reader::member_guard g(r, "name");
+      jsondm::read(r, v.name);
+    } else if (key == "target") {
+      jsondm::Reader::member_guard g(r, "target");
+      jsondm::read(r, v.target);
+    } else if (key == "state") {
+      jsondm::Reader::member_guard g(r, "state");
+      jsondm::read(r, v.state);
+    } else if (key == "port") {
+      jsondm::Reader::member_guard g(r, "port");
+      jsondm::read(r, v.port);
+    } else
+      r.skip_value();
+  }
+  r.obj_end();
+}
+void jsondm::serializer<rtpmididns::exports_status_t>::write(
+    const rtpmididns::exports_status_t &v, jsondm::Writer &w) {
+  w.obj_begin();
+  {
+    jsondm::Writer::member_guard g(w, "waiting");
+    jsondm::write(w, v.waiting);
+  }
+  {
+    jsondm::Writer::member_guard g(w, "network");
+    jsondm::write(w, v.network);
+  }
+  {
+    jsondm::Writer::member_guard g(w, "rawmidi");
+    jsondm::write(w, v.rawmidi);
+  }
+  {
+    jsondm::Writer::member_guard g(w, "seq");
+    jsondm::write(w, v.seq);
+  }
+  w.obj_end();
+}
+void jsondm::deserializer<rtpmididns::exports_status_t>::read(
+    jsondm::Reader &r, rtpmididns::exports_status_t &v) {
+  r.obj_begin();
+  while (r.next_key()) {
+    auto key = r.key();
+    if (key == "waiting") {
+      jsondm::Reader::member_guard g(r, "waiting");
+      jsondm::read(r, v.waiting);
+    } else if (key == "network") {
+      jsondm::Reader::member_guard g(r, "network");
+      jsondm::read(r, v.network);
+    } else if (key == "rawmidi") {
+      jsondm::Reader::member_guard g(r, "rawmidi");
+      jsondm::read(r, v.rawmidi);
+    } else if (key == "seq") {
+      jsondm::Reader::member_guard g(r, "seq");
+      jsondm::read(r, v.seq);
+    } else
+      r.skip_value();
+  }
+  r.obj_end();
+}
 } // namespace jsondm

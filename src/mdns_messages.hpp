@@ -65,12 +65,12 @@ struct mdns_remove_t {
   int32_t port = 0;
 };
 
-/// The mdns actor's accepted control messages. No MIDI, no routing,
-/// nothing else: status/announcement commands + the replies to its
-/// create-port/spawn requests.
+/// The mdns actor's accepted control messages. No MIDI, no routing: status
+/// and announcement commands plus the replies to its waiting-port creation
+/// requests (the session side is the rtpmidi server's job).
 using mdns_control_t =
     std::variant<stop_t, mdns_status_req_t, mdns_announce_t, mdns_unannounce_t,
-                 mdns_remove_t, peer_ids_result_t, ack_t, alsa_port_event_t>;
+                 mdns_remove_t, alsa_port_result_t>;
 /// The mdns actor's mailbox.
 using mdns_mailbox_t = mailbox_t<std::monostate, mdns_control_t>;
 
