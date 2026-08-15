@@ -205,4 +205,15 @@ struct data_message_t {
   }
 };
 
+/// One-line rendering for slow-message diagnostics: identifies the
+/// data-plane message kind and the peer ids without touching the
+/// (possibly moved-from) payload.
+inline std::string to_string(const data_message_t &m) {
+  const char *kind = m.kind == data_message_t::kind_t::midi_received
+                         ? "midi_received"
+                         : "midi_to_wire";
+  return std::string(kind) + "{from=" + std::to_string(m.from) +
+         ", to=" + std::to_string(m.to) + "}";
+}
+
 } // namespace rtpmididns

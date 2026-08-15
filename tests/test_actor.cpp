@@ -90,6 +90,39 @@ public:
   }
 };
 
+// --- slow-message log capture ----------------------------------------------
+
+/// Captures log messages through the global sink (installed for the scope),
+/// so slow-message ERRORs can be asserted without parsing colored stdout.
+static std::vector<rtpmidid::log_message_t> captured_logs;
+static void capture_log_sink(rtpmidid::log_message_t msg) {
+  captured_logs.push_back(std::move(msg));
+}
+
+class log_capture_guard_t {
+public:
+  log_capture_guard_t() {
+    captured_logs.clear();
+    old_sink_ = rtpmidid::logger_log_sink;
+    rtpmidid::logger_log_sink = capture_log_sink;
+  }
+  ~log_capture_guard_t() { rtpmidid::logger_log_sink = old_sink_; }
+  std::string joined() const {
+    std::string out;
+    for (const auto &m : captured_logs) {
+      out += m.text;
+      out += '\n';
+    }
+    return out;
+  }
+  bool contains(const std::string &needle) const {
+    return joined().find(needle) != std::string::npos;
+  }
+
+private:
+  void (*old_sink_)(rtpmidid::log_message_t);
+};
+
 // --- tests ------------------------------------------------------------------
 
 static midi_payload_t small_payload(int tag) {
@@ -295,6 +328,57 @@ void test_threaded_actor_smoke() {
   ASSERT_TRUE(std::holds_alternative<stopped_t>(*s));
 }
 
+void test_slow_data_message_logged() {
+  recorder_actor_t actor(actor_config_t{
+      .name = "slow-data",
+      .slow_message_threshold = std::chrono::milliseconds(0)});
+  log_capture_guard_t logs;
+  actor.mailbox()->post_data(
+      data_message_t::midi_received(1, small_payload(1)));
+  actor.pump();
+  ASSERT_TRUE(logs.contains("slow data message"));
+  ASSERT_TRUE(logs.contains("midi_received{from=1"));
+  ASSERT_TRUE(logs.contains("took "));
+}
+
+void test_slow_control_message_logged() {
+  recorder_actor_t actor(actor_config_t{
+      .name = "slow-control",
+      .slow_message_threshold = std::chrono::milliseconds(0)});
+  log_capture_guard_t logs;
+  actor.mailbox()->post_control(make_control_payload(0, "x"));
+  actor.pump();
+  ASSERT_TRUE(logs.contains("slow control message"));
+  ASSERT_TRUE(logs.contains("control_payload_t"));
+}
+
+void test_fast_message_not_logged() {
+  auto supervisor = std::make_shared<test_mailbox_t>();
+  recorder_actor_t actor(
+      actor_config_t{.name = "fast", .supervisor_mailbox = supervisor});
+  log_capture_guard_t logs;
+  actor.mailbox()->post_data(
+      data_message_t::midi_received(1, small_payload(1)));
+  actor.pump();
+  ASSERT_FALSE(logs.contains("slow"));
+  ASSERT_FALSE(logs.contains("took"));
+}
+
+void test_stop_not_flagged_slow() {
+  auto supervisor = std::make_shared<test_mailbox_t>();
+  recorder_actor_t actor(actor_config_t{
+      .name = "stop-fast",
+      .supervisor_mailbox = supervisor,
+      .slow_message_threshold = std::chrono::milliseconds(0)});
+  log_capture_guard_t logs;
+  actor.request_stop();
+  int guard = 0;
+  while (actor.pump() && guard++ < 100) {
+  }
+  ASSERT_FALSE(logs.contains("slow"));
+  ASSERT_FALSE(logs.contains("took"));
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_drain_interleaving_data_first),
@@ -308,6 +392,10 @@ int main(int argc, char **argv) {
       TEST(test_wait_for_catch_all_drain_in_order),
       TEST(test_midi_flows_during_parked_wait),
       TEST(test_threaded_actor_smoke),
+      TEST(test_slow_data_message_logged),
+      TEST(test_slow_control_message_logged),
+      TEST(test_fast_message_not_logged),
+      TEST(test_stop_not_flagged_slow),
   };
   testcase.run(argc, argv);
   return testcase.exit_code();

@@ -73,6 +73,10 @@ struct actor_config_t {
   /// Where `stopped` / `actor_died` are posted (the owning actor: router
   /// for peers, main supervisor for top-level actors).
   mailbox_handle_t supervisor_mailbox;
+  /// Diagnostic threshold: an ERROR is logged when a message handler
+  /// (`on_data` / `on_control`) takes longer than this. Per-actor so tests
+  /// can set 0ms to force the slow path deterministically.
+  std::chrono::milliseconds slow_message_threshold{1000};
 };
 
 /// The type-erased actor interface: lets heterogeneous actor lists
@@ -221,6 +225,11 @@ private:
   void handle_control_safe(ControlT &&msg);
   void fatal(const std::string &reason);
   void post_exit_notice();
+  /// Slow-message check: `describe` is invoked lazily (only when slow) so
+  /// string rendering / demangling never runs on the message hot path.
+  template <typename Describe>
+  void check_slow(const char *lane, Describe &&describe,
+                  std::chrono::steady_clock::time_point t0);
 
   rtpmidid::poller_t poller_;
   std::jthread thread_;
@@ -522,16 +531,20 @@ void actor_t<DataT, ControlT>::drain_with_policy() {
 
 template <typename DataT, typename ControlT>
 void actor_t<DataT, ControlT>::handle_data_safe(DataT &&msg) {
+  const auto t0 = std::chrono::steady_clock::now();
   try {
     on_data(std::move(msg));
   } catch (const std::exception &e) {
     message_exceptions_++;
     ERROR("Actor {}: exception handling data message: {}", config_.name,
           e.what());
+    return;
   } catch (...) {
     message_exceptions_++;
     ERROR("Actor {}: unknown exception handling data message", config_.name);
+    return;
   }
+  check_slow("data", [&] { return describe_message(msg); }, t0);
 }
 
 template <typename DataT, typename ControlT>
@@ -541,15 +554,37 @@ void actor_t<DataT, ControlT>::handle_control_safe(ControlT &&msg) {
     stopping_ = true;
     return;
   }
+  const auto t0 = std::chrono::steady_clock::now();
   try {
     on_control(std::move(msg));
   } catch (const std::exception &e) {
     message_exceptions_++;
     ERROR("Actor {}: exception handling control message: {}", config_.name,
           e.what());
+    return;
   } catch (...) {
     message_exceptions_++;
     ERROR("Actor {}: unknown exception handling control message", config_.name);
+    return;
+  }
+  check_slow("control", [&] { return describe_control(msg); }, t0);
+}
+
+template <typename DataT, typename ControlT>
+template <typename Describe>
+void actor_t<DataT, ControlT>::check_slow(
+    const char *lane, Describe &&describe,
+    std::chrono::steady_clock::time_point t0) {
+  // Compare at full clock resolution (not ms-truncated) so a sub-millisecond
+  // handler can still exceed a 0ms test threshold, and a 1000.4ms handler
+  // correctly exceeds a 1000ms threshold.
+  const auto took = std::chrono::steady_clock::now() - t0;
+  if (took > config_.slow_message_threshold) {
+    const auto took_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(took);
+    ERROR("Actor {}: slow {} message {} took {} ms (> {} ms).", config_.name,
+          lane, describe(), took_ms.count(),
+          config_.slow_message_threshold.count());
   }
 }
 

@@ -53,6 +53,25 @@ inline std::string demangle_type(const char *mangled) {
   return out;
 }
 
+/// One-line description of a message: `to_string(m)` when a `to_string`
+/// overload is reachable via ADL, else the demangled type name. Used by
+/// slow-message diagnostics to name the message that took too long; the
+/// fallback keeps it working for message types without a `to_string`.
+template <typename M> std::string describe_message(const M &m) {
+  if constexpr (requires(const M &m) { to_string(m); }) {
+    return to_string(m);
+  } else {
+    return demangle_type(typeid(M).name());
+  }
+}
+
+/// Describe the concrete alternative of a control variant (not the
+/// enclosing `std::variant<...>`).
+template <typename... Ts>
+std::string describe_control(const std::variant<Ts...> &v) {
+  return std::visit([](const auto &alt) { return describe_message(alt); }, v);
+}
+
 /**
  * Central lane-capacity constants (design D3): the single place to tune
  * lane capacities system-wide, validated by the cutover measurements
