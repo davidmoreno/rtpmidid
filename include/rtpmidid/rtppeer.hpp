@@ -19,6 +19,7 @@
 
 #pragma once
 #include "exceptions.hpp"
+#include "journal.hpp"
 #include "networkaddress.hpp"
 #include "signal.hpp"
 #include "stats.hpp"
@@ -91,6 +92,9 @@ public:
   // Need some buffer space for sysex. This may require memory alloc.
   std::vector<uint8_t> sysex;
   stats_t stats;
+  /// Recovery journal state: incoming journals repair lost note on/off
+  /// (received side), and from Phase 3 on it also journals our own stream.
+  recovery_journal_t recovery_journal;
 
   // This is to be filled at connection by whoever makes it
   // It is not used by the rtppeer_t, just nice info to have
@@ -144,17 +148,16 @@ public:
   void parse_midi(io_bytes_reader &);
   void parse_sysex(io_bytes_reader &, int16_t length);
 
+  /// Emit an incoming MIDI event: records it in the recovery journal receiver
+  /// state and forwards it to the midi_event subscribers.
+  void emit_midi(const io_bytes_reader &);
+
   void send_midi(const io_bytes_reader &buffer);
   void send_goodbye(port_e to_port);
   void send_feedback(uint32_t seqnum);
   void connect_to(port_e rtp_port);
   void send_ck0();
   uint64_t get_timestamp();
-
-  // Journal
-  void parse_journal(io_bytes_reader &);
-  void parse_journal_chapter(io_bytes_reader &);
-  void parse_journal_chapter_N(uint8_t channel, io_bytes_reader &);
 };
 } // namespace rtpmidid
 

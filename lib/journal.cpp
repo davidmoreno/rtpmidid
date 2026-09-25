@@ -322,7 +322,15 @@ void journal_codec_t::write_journal_n(
 
   for (const auto *channel : coded) {
     journal_channel_header_t channel_header;
+    // An element with S=0 (or a NoteOff bitfield with B=0, which is its S bit)
+    // means the channel journal codes a command from packet I-1, so the channel
+    // journal S bit MUST be 0 too (RFC 6295 Appendix A.1). Derive it, like the
+    // top level one, instead of trusting the caller.
     channel_header.s = channel->s;
+    if ((channel->chapter_n.has_note_off() && !channel->chapter_n.b) ||
+        !all_note_logs_have_s(channel->chapter_n)) {
+      channel_header.s = false;
+    }
     channel_header.channel = channel->channel;
     channel_header.length = uint16_t(channel_journal_size(channel->chapter_n));
     channel_header.toc = JOURNAL_CHAPTER_N;
@@ -437,4 +445,365 @@ journal_message_t journal_codec_t::read_journal(io_bytes_reader &reader) {
   }
 
   return message;
+}
+
+//
+// Receiver side: the RJRS (RFC 4696, "Receiving Streams: The Recovery Journal")
+//
+
+// SysEx Reset State commands that make earlier note commands not N-active
+// (RFC 6295 Appendix A.1): GM/GM2 System Enable/Disable and DLS On/Off.
+static bool is_reset_state_sysex(const uint8_t *data, size_t size) {
+  if (size && data[0] == 0xF0) {
+    data++;
+    size--;
+  }
+  if (size < 5 || data[0] != 0x7E) {
+    return false;
+  }
+  // F0 7E <device> <sub-id1> <sub-id2> F7
+  const uint8_t sub_id1 = data[2];
+  const uint8_t sub_id2 = data[3];
+  if (sub_id1 == 0x09) {
+    return sub_id2 == 0x00 || sub_id2 == 0x01 || sub_id2 == 0x03;
+  }
+  if (sub_id1 == 0x0A) {
+    return sub_id2 == 0x01 || sub_id2 == 0x02;
+  }
+  return false;
+}
+
+/// True if `extended_seq` is before `checkpoint`, modulo 2^16.
+static bool seq_before(uint32_t extended_seq, uint16_t checkpoint) {
+  return int16_t(uint16_t(extended_seq) - checkpoint) < 0;
+}
+
+void recovery_journal_t::reset() {
+  channels_ = {};
+  has_received_packet_ = false;
+  last_seq_ = 0;
+  extended_seq_ = 0;
+  packet_extended_seq_ = 0;
+  confirmed_extended_seq_ = 0;
+  has_feedback_ = false;
+}
+
+void recovery_journal_t::feedback_in(uint32_t extended_seq) {
+  confirmed_extended_seq_ = extended_seq;
+  has_feedback_ = true;
+  stats.feedback_received++;
+}
+
+journal_loss_e recovery_journal_t::observe(uint16_t seq_nr) {
+  if (!has_received_packet_) {
+    // First packet of the stream: there is no history to compare against, and
+    // the receiver note state is empty, so its journal is not a repair. RFC
+    // 6295 Section 4 asks receivers to treat it as ending a loss event, but
+    // with an empty RJRS that would only replay notes from the checkpoint
+    // window, which is the ghost note problem in reverse.
+    has_received_packet_ = true;
+    last_seq_ = seq_nr;
+    extended_seq_ = seq_nr;
+    packet_extended_seq_ = extended_seq_;
+    return journal_loss_e::none;
+  }
+
+  auto delta = int16_t(seq_nr - last_seq_);
+  if (delta <= 0) {
+    // Duplicate or reordered packet. Play it, but never repair from it: RFC
+    // 4696 Section 7 requires not taking actions that introduce artifacts.
+    stats.out_of_order++;
+    return journal_loss_e::none;
+  }
+
+  extended_seq_ += uint32_t(delta);
+  last_seq_ = seq_nr;
+  packet_extended_seq_ = extended_seq_;
+
+  if (delta == 1) {
+    return journal_loss_e::none;
+  }
+  stats.losses++;
+  return delta == 2 ? journal_loss_e::single : journal_loss_e::multi;
+}
+
+void recovery_journal_t::reset_channel(uint8_t channel) {
+  if (channel > 15) {
+    return;
+  }
+  channels_[channel] = channel_state_t{};
+}
+
+void recovery_journal_t::reset_all_channels() {
+  for (auto &channel : channels_) {
+    channel = channel_state_t{};
+  }
+}
+
+void recovery_journal_t::note_on(uint8_t channel, uint8_t note,
+                                 uint8_t velocity, uint32_t timestamp) {
+  auto &state = channels_[channel & 0x0F].notes[note & 0x7F];
+  state.velocity = velocity & 0x7F;
+  state.extended_seq = packet_extended_seq_;
+  state.time = timestamp;
+}
+
+void recovery_journal_t::note_off(uint8_t channel, uint8_t note,
+                                  uint32_t timestamp) {
+  auto &state = channels_[channel & 0x0F].notes[note & 0x7F];
+  state.velocity = 0;
+  state.extended_seq = packet_extended_seq_;
+  state.time = timestamp;
+}
+
+void recovery_journal_t::midi_played(const io_bytes_reader &events,
+                                     uint32_t timestamp) {
+  // SysEx reassembled from several packets is emitted without the leading F0
+  // but always ends in F7, so a buffer that starts with a data byte and ends
+  // with F7 is a complete SysEx message.
+  if (events.size() > 1 && events.start[0] < 0x80 &&
+      events.start[events.size() - 1] == 0xF7) {
+    if (is_reset_state_sysex(events.start, events.size())) {
+      reset_all_channels();
+    }
+    return;
+  }
+
+  io_bytes_reader reader(events);
+  while (reader.remaining()) {
+    auto status = reader.read_uint8();
+    if (status < 0x80) {
+      // The caller is expected to expand running status before emitting, so an
+      // abbreviated message here is unexpected data: skip it.
+      continue;
+    }
+    const uint8_t channel = status & 0x0F;
+    switch (status & 0xF0) {
+    case 0x80: { // NoteOff: note, release velocity
+      auto note = reader.remaining() ? (reader.read_uint8() & 0x7F) : 0;
+      if (reader.remaining()) {
+        reader.read_uint8();
+      }
+      note_off(channel, note, timestamp);
+      break;
+    }
+    case 0x90: { // NoteOn: note, velocity. Velocity 0 means NoteOff.
+      auto note = reader.remaining() ? (reader.read_uint8() & 0x7F) : 0;
+      auto velocity = reader.remaining() ? (reader.read_uint8() & 0x7F) : 0;
+      if (velocity == 0) {
+        note_off(channel, note, timestamp);
+      } else {
+        note_on(channel, note, velocity, timestamp);
+      }
+      break;
+    }
+    case 0xA0: { // Poly aftertouch: note, pressure
+      if (reader.remaining()) {
+        reader.read_uint8();
+      }
+      if (reader.remaining()) {
+        reader.read_uint8();
+      }
+      break;
+    }
+    case 0xB0: { // Control change: controller, value
+      auto controller = reader.remaining() ? (reader.read_uint8() & 0x7F) : 0;
+      if (reader.remaining()) {
+        reader.read_uint8();
+      }
+      if (controller >= 123 || controller == 120) {
+        // All Notes Off family and All Sound Off: earlier note commands are not
+        // N-active any more, and the notes are not sounding.
+        reset_channel(channel);
+      }
+      break;
+    }
+    case 0xC0: // Program change: program
+    case 0xD0: // Channel aftertouch: pressure
+      if (reader.remaining()) {
+        reader.read_uint8();
+      }
+      break;
+    case 0xE0: // Pitch wheel: two data bytes
+      if (reader.remaining()) {
+        reader.read_uint8();
+      }
+      if (reader.remaining()) {
+        reader.read_uint8();
+      }
+      break;
+    default: { // 0xF0: system messages, one complete message per emission
+      if (status == 0xFF) {
+        reset_all_channels(); // System reset is a Reset State command
+      } else if (status == 0xF0) {
+        auto start = reader.position;
+        auto size = reader.remaining();
+        while (reader.remaining()) {
+          auto byte = reader.read_uint8();
+          if (byte == 0xF7) {
+            break;
+          }
+        }
+        if (is_reset_state_sysex(start, size)) {
+          reset_all_channels();
+        }
+      }
+      return; // Nothing after a system message interests us
+    }
+    }
+  }
+}
+
+void recovery_journal_t::emit_note(
+    uint8_t status, uint8_t note, uint8_t velocity,
+    signal_t<const io_bytes_reader &> &midi_out) {
+  std::array<uint8_t, 3> event{status, uint8_t(note & 0x7F),
+                               uint8_t(velocity & 0x7F)};
+  io_bytes bytes(event.data(), event.size());
+  midi_out(bytes);
+}
+
+void recovery_journal_t::handle_chapter_n(
+    uint8_t channel, const journal_chapter_n_t &chapter, uint16_t checkpoint,
+    journal_loss_e loss, uint32_t timestamp,
+    signal_t<const io_bytes_reader &> &midi_out) {
+  auto &state = channels_[channel & 0x0F].notes;
+
+  // The NoteOff bitfield comes first (RFC 4696 Section 7.2). Its B bit is the
+  // S-style bit for this structure.
+  if (!(loss == journal_loss_e::single && chapter.b)) {
+    for (uint8_t note = 0; note < 128; note++) {
+      if (!chapter.note_off[note]) {
+        continue;
+      }
+      if (state[note].velocity == 0) {
+        // We already know this note is off: no artifact to repair.
+        continue;
+      }
+      // A NoteOff (or a NoteOff->NoteOn->NoteOff sequence) was lost: end the
+      // note now, which is exactly the stuck note this journal exists for.
+      emit_note(uint8_t(0x80 | (channel & 0x0F)), note, 0, midi_out);
+      note_off(channel, note, timestamp);
+      stats.notes_repaired_off++;
+    }
+  }
+
+  for (const auto &log : chapter.note_logs) {
+    if (loss == journal_loss_e::single && log.s) {
+      continue; // Not from the lost packet
+    }
+    const uint8_t note = log.note & 0x7F;
+    auto &note_state = state[note];
+
+    if (log.velocity == 0) {
+      // RFC 6295 says a note log velocity is never zero (a zero velocity NoteOn
+      // is a NoteOff, coded in the OFFBITS structure). Be liberal: treat it as
+      // the NoteOff it means.
+      WARNING_RATE_LIMIT(30,
+                         "Note log with velocity 0 for note {} on channel "
+                         "{}, treating it as a NoteOff",
+                         note, channel);
+      if (note_state.velocity != 0) {
+        emit_note(uint8_t(0x80 | (channel & 0x0F)), note, 0, midi_out);
+        note_off(channel, note, timestamp);
+        stats.notes_repaired_off++;
+      }
+      continue;
+    }
+
+    const bool sounding = note_state.velocity != 0;
+    bool lost_note_off_on = false;
+    if (sounding) {
+      // The three tests of RFC 4696 Section 7.2 for a lost
+      // NoteOff->NoteOn sequence.
+      if (note_state.velocity != log.velocity) {
+        lost_note_off_on = true;
+      } else if (seq_before(note_state.extended_seq, checkpoint)) {
+        lost_note_off_on = true;
+      } else if (log.y &&
+                 (timestamp - note_state.time) > note_on_recent_window) {
+        lost_note_off_on = true;
+      }
+    }
+
+    if (!sounding) {
+      // A NoteOn (or a NoteOn->NoteOff->NoteOn sequence) was lost.
+      if (log.y) {
+        emit_note(uint8_t(0x90 | (channel & 0x0F)), note, log.velocity,
+                  midi_out);
+        stats.notes_repaired_on++;
+      } else {
+        stats.notes_skipped++;
+      }
+    } else {
+      if (lost_note_off_on) {
+        emit_note(uint8_t(0x80 | (channel & 0x0F)), note, 0, midi_out);
+        stats.notes_repaired_off++;
+        if (log.y) {
+          emit_note(uint8_t(0x90 | (channel & 0x0F)), note, log.velocity,
+                    midi_out);
+          stats.notes_repaired_on++;
+        } else {
+          stats.notes_skipped++;
+        }
+      }
+    }
+
+    // The state is updated as if the logged NoteOn had executed, whether it was
+    // played or skipped.
+    note_state.velocity = log.velocity;
+    note_state.extended_seq = packet_extended_seq_;
+    note_state.time = timestamp;
+  }
+}
+
+void recovery_journal_t::parse_journal(
+    io_bytes_reader &journal, journal_loss_e loss, uint32_t timestamp,
+    signal_t<const io_bytes_reader &> &midi_out) {
+  if (loss == journal_loss_e::none) {
+    // Journals describe the past. If nothing was lost, there is nothing to
+    // repair: this is the common case, as peers like Apple's driver set J=1 on
+    // every packet.
+    return;
+  }
+
+  auto message = journal_codec_t::read_journal(journal);
+  stats.journals_received++;
+  if (message.malformed) {
+    stats.malformed++;
+  }
+  if (!message.header.a) {
+    return; // No channel journals: nothing to repair
+  }
+  if (loss == journal_loss_e::single && message.header.s) {
+    // The lost packet had an empty MIDI command list (RFC 4696 Section 7).
+    return;
+  }
+
+  for (const auto &channel : message.channels) {
+    if (loss == journal_loss_e::single && channel.s) {
+      // Nothing in this channel journal comes from the lost packet.
+      continue;
+    }
+    if (channel.has_chapter_n) {
+      handle_chapter_n(channel.channel, channel.chapter_n,
+                       message.header.checkpoint, loss, timestamp, midi_out);
+    }
+  }
+}
+
+bool recovery_journal_t::has_sounding_notes() const {
+  return sounding_notes() != 0;
+}
+
+size_t recovery_journal_t::sounding_notes() const {
+  size_t count = 0;
+  for (const auto &channel : channels_) {
+    for (const auto &note : channel.notes) {
+      if (note.velocity != 0) {
+        count++;
+      }
+    }
+  }
+  return count;
 }

@@ -10,7 +10,9 @@ here are some notes on what we should test, and some use cases.
 - [x] Connect to rtpmidi peers
 - [x] Disconnect from rtpmidi peers
 - [x] Clock
-- [ ] Journal N — see [docs/architecture/recovery-journal.md](../docs/architecture/recovery-journal.md)
+- [x] Journal N receive: repair lost note on/off — `tests/test_journal.cpp` (codec) and
+      `tests/test_recovery_journal.cpp` (receiver)
+- [ ] Journal N send — see [docs/architecture/recovery-journal.md](../docs/architecture/recovery-journal.md)
 - [ ] More journals
 
 ## Test cases

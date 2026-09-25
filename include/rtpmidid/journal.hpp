@@ -20,6 +20,7 @@
 #pragma once
 #include "exceptions.hpp"
 #include "iobytes.hpp"
+#include "signal.hpp"
 #include <array>
 #include <cstdint>
 #include <utility>
@@ -138,7 +139,8 @@ struct journal_chapter_n_t {
 struct journal_channel_t {
   uint8_t channel = 0;
   bool s = true;              // channel journal S bit
-  bool has_chapter_n = false; // the channel journal had a Chapter N
+  bool has_chapter_n = false; // set by the decoder; the writer codes a chapter
+                              // whenever chapter_n is not empty
   journal_chapter_n_t chapter_n;
 };
 
@@ -223,4 +225,134 @@ public:
   static journal_message_t read_journal(io_bytes_reader &);
 };
 
+/// How an incoming packet relates to the packets received before it.
+enum class journal_loss_e {
+  none,   // in order, or a first packet, or an out of order packet
+  single, // exactly one packet was lost before this one
+  multi,  // two or more packets were lost before this one
+};
+
+/**
+ * @short Receiver side of the recovery journal (RFC 4696 Appendix: the RJRS).
+ *
+ * Tracks the RTP sequence numbers of an incoming stream to detect losses, and
+ * the note state the receiver has actually rendered (RFC 4696 `jrec_chaptern`),
+ * so that a recovery journal can be diffed against it and only the commands
+ * that were really missed are executed.
+ *
+ * This is essential, not an optimization: peers such as Apple's driver set
+ * `J=1` on **every** packet, so a receiver that applies every journal it sees
+ * replays notes that were never lost.
+ *
+ * All methods are meant to be called from the thread that owns the peer, in
+ * this order for each received MIDI packet:
+ *
+ *   1. observe(seq_nr)                -> loss classification
+ *   2. parse_journal(...)             -> repairs (emitted on the midi signal)
+ *   3. midi_played(event, timestamp)  -> for each event of the packet itself
+ */
+class recovery_journal_t {
+public:
+  struct stats_t {
+    // Receiver side (Phase 2)
+    uint32_t journals_received = 0;
+    uint32_t notes_repaired_on = 0;
+    uint32_t notes_repaired_off = 0;
+    uint32_t notes_skipped = 0;
+    uint32_t losses = 0;
+    uint32_t out_of_order = 0;
+    uint32_t malformed = 0;
+    // Sender side (Phase 3/4)
+    uint32_t journals_sent = 0;
+    uint32_t guard_packets = 0;
+    uint32_t feedback_sent = 0;
+    uint32_t feedback_received = 0;
+  };
+
+  /**
+   * A NoteOn played longer ago than this (in 0.1 ms units, so 250 ms) is
+   * "clearly not recent" for the `Y` bit test of RFC 4696 section 7.2.
+   */
+  static constexpr uint32_t note_on_recent_window = 2500;
+
+  recovery_journal_t() = default;
+
+  /// Forget all stream and note state. Called on (re)connect.
+  void reset();
+
+  /// Classify an incoming packet against the ones seen so far, and remember its
+  /// sequence number for the events that will be played from it.
+  journal_loss_e observe(uint16_t seq_nr);
+
+  /**
+   * Record the extended sequence number a peer reports as the most recently
+   * received packet ('RS' journal feedback). It bounds the checkpoint history
+   * of the journals we send (Phase 3).
+   */
+  void feedback_in(uint32_t extended_seq);
+
+  /// Extended sequence number reported by the peer, if any feedback arrived.
+  uint32_t confirmed_extended_seq() const { return confirmed_extended_seq_; }
+  bool has_feedback() const { return has_feedback_; }
+
+  /// Record a MIDI event that was emitted (to ALSA): this is what the receiver
+  /// believes the renderer is doing.
+  void midi_played(const io_bytes_reader &events, uint32_t timestamp);
+
+  /**
+   * Repair the loss event ended by the packet carrying @a journal. Repairs are
+   * emitted on @a midi_out as ordinary MIDI NoteOn/NoteOff, before the events
+   * of the packet itself are played.
+   */
+  void parse_journal(io_bytes_reader &journal, journal_loss_e loss,
+                     uint32_t timestamp,
+                     signal_t<const io_bytes_reader &> &midi_out);
+
+  /// True while the receiver believes some note is still sounding.
+  bool has_sounding_notes() const;
+
+  /// How many notes are currently sounding, for stats and tests.
+  size_t sounding_notes() const;
+
+  stats_t stats;
+
+private:
+  struct note_state_t {
+    uint32_t extended_seq = 0; // extended seq of the most recent note command
+    uint32_t time = 0;         // local time of the most recent NoteOn
+    uint8_t velocity = 0;      // 0 means the note is not sounding
+  };
+  struct channel_state_t {
+    note_state_t notes[128];
+  };
+
+  void reset_channel(uint8_t channel);
+  void reset_all_channels();
+  void note_on(uint8_t channel, uint8_t note, uint8_t velocity,
+               uint32_t timestamp);
+  void note_off(uint8_t channel, uint8_t note, uint32_t timestamp);
+  void handle_chapter_n(uint8_t channel, const journal_chapter_n_t &,
+                        uint16_t checkpoint, journal_loss_e loss,
+                        uint32_t timestamp,
+                        signal_t<const io_bytes_reader &> &midi_out);
+  void emit_note(uint8_t status, uint8_t note, uint8_t velocity,
+                 signal_t<const io_bytes_reader &> &midi_out);
+
+  std::array<channel_state_t, 16> channels_{};
+  bool has_received_packet_ = false;
+  uint16_t last_seq_ = 0;
+  uint32_t extended_seq_ = 0;
+  // Extended sequence number of the packet currently being processed: recovery
+  // commands are attributed to the packet carrying the journal (RFC 4696 7.2).
+  uint32_t packet_extended_seq_ = 0;
+  uint32_t confirmed_extended_seq_ = 0;
+  bool has_feedback_ = false;
+};
+
 } // namespace rtpmidid
+
+ENUM_FORMATTER_BEGIN(rtpmidid::journal_loss_e);
+ENUM_FORMATTER_ELEMENT(rtpmidid::journal_loss_e::none, "none");
+ENUM_FORMATTER_ELEMENT(rtpmidid::journal_loss_e::single, "single");
+ENUM_FORMATTER_ELEMENT(rtpmidid::journal_loss_e::multi, "multi");
+ENUM_FORMATTER_END();

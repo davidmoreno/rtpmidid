@@ -253,77 +253,103 @@ For each channel:
    entries use 0 (skip) when the note-on is clearly stale relative to the RTP
    timestamp of `I`, else 1. v1: always 1 for `I-1`, 0 for older.
 
-## 4. Receiver design (`recovery_journal_receiver_t`)
+## 4. Receiver design (`recovery_journal_t`) — **implemented (Phase 2)**
 
-State (the RFC 4696 "RJRS"):
+State (the RFC 4696 "RJRS"): per MIDI channel, per note number:
 
 ```cpp
-struct rjrs_note_t { uint32_t ext_seq; uint32_t time; uint8_t vel; };
-struct channel_rjrs_t { rjrs_note_t notes[128]; };
+struct note_state_t {
+  uint32_t extended_seq; // extended sequence number of the most recent command
+  uint32_t time;         // local time of the most recent NoteOn
+  uint8_t velocity;      // 0 means "not sounding"
+};
 ```
+
+All of it is updated by `midi_played()`, which is told about every MIDI event the
+peer actually emits, plus by the repairs themselves. Nothing else touches it.
 
 ### 4.1 Loss detection
 
-- Track `ext_seq_received` (highest seen) and the previous in-order seq.
-- On each MIDI payload: `gap = seq - ext_seq_received`.
-  - `gap <= 0` → out-of-order/duplicate: play it, **do not** repair.
-  - `gap == 2` → single-packet loss.
-  - `gap > 2` → multi-packet loss.
+- Track the extended sequence number of the highest packet seen.
+- On each MIDI payload: `delta = int16_t(seq - last_seq)` (so wrap-around works).
+  - `delta <= 0` → out-of-order or duplicate: play it, **do not** repair.
+  - `delta == 1` → in order.
+  - `delta == 2` → single-packet loss.
+  - `delta > 2` → multi-packet loss.
 - **Repair only when a gap was detected.** This is the critical behavioural
   change: Apple always sends `J=1`, so a receiver that unconditionally applies
-  journals (today's code) replays already-played NoteOns and emits spurious
+  journals (the previous code) replays already-played NoteOns and emits spurious
   NoteOffs on every packet.
+- The first packet of a stream is classified `none`, deliberately deviating from
+  RFC 6295 §4 ("process the first received packet as if it were a packet that
+  ends a loss event"). With an empty RJRS there is nothing to compare against,
+  so applying the journal would only replay notes from the checkpoint window:
+  the ghost note problem in reverse. Revisit once our sender's `Y` policy is in
+  place.
 
 ### 4.2 Fast paths
 
 - `A == 0` → nothing to do.
 - Single-packet loss and top-level `S == 1` → the lost packet had an empty MIDI
   list: nothing to do.
-- Single-packet loss → skip channel/chapter elements whose `S` bit is 1.
+- Single-packet loss → skip channel journals with `S == 1`, note logs with
+  `S == 1`, and the OFFBITS structure when `B == 1`.
 - Multi-packet loss → parse everything.
 
 ### 4.3 Chapter N repair (RFC 4696 §7.2)
 
-Process **OFFBITS first**, then note logs. The channel journal's own `LENGTH`
-bounds the parse; ignore trailing bytes.
+Process **OFFBITS first**, then note logs, both bounded by the channel journal's
+`LENGTH`.
 
 For each set OFFBITS bit (note `n`):
 
-- if `vel[n] != 0` → a NoteOff (or NoteOff→NoteOn→NoteOff) was lost: emit
-  `NoteOff n` on that channel, set `vel[n] = 0`. **This is what unsticks a
-  stuck note.**
+- if `velocity != 0` → a NoteOff (or NoteOff→NoteOn→NoteOff) was lost: emit
+  `NoteOff n` on that channel, clear the state. **This is what unsticks a
+  stuck note.** A set bit for a note we do not believe is sounding is ignored,
+  so an anchor-policy peer repeating its journal cannot silence anything twice.
 
-For each note log (`n`, `vel`, `Y`):
+For each note log (`n`, `velocity`, `Y`):
 
-- `vel[n] == 0` → a NoteOn (or NoteOn→NoteOff→NoteOn) was lost. Play it if
-  `Y == 1`, skip if `Y == 0`; either way update `vel[n]=vel`, `time[n]`,
-  `ext_seq[n]` as if executed.
-- `vel[n] != 0` → test for a lost NoteOff→NoteOn:
-  - `vel[n] != log.velocity` → lost sequence
-  - `ext_seq[n] < checkpoint` → lost sequence
-  - `Y == 1` and `time[n]` is clearly not recent → lost sequence
-  → emit `NoteOff n`, then play/skip the logged NoteOn per `Y`, and update
-  state as if executed.
+- `velocity == 0` → invalid per RFC 6295 (it is a NoteOff). Treated as the
+  NoteOff it means, with a rate-limited warning.
+- state is not sounding → a NoteOn (or NoteOn→NoteOff→NoteOn) was lost. Play it
+  if `Y == 1`, skip it if `Y == 0`; either way update state as if executed.
+- state is sounding → test for a lost NoteOff→NoteOn sequence:
+  - `velocity != log.velocity` → lost sequence
+  - recorded sequence is before the journal checkpoint → lost sequence
+  - `Y == 1` and the recorded NoteOn is older than
+    `note_on_recent_window` (250 ms) → lost sequence
+  → emit `NoteOff n`, then play/skip the logged NoteOn per `Y`, and update state
+  as if executed.
 
-Emitted repairs go out on the **same `midi_event` signal** as normal MIDI, so
-the daemon routes them to ALSA with no extra plumbing.
+The 250 ms window is the only heuristic here; it is the tunable knob if real
+devices show either retriggered sustained notes or missing notes.
 
-### 4.4 Feedback and guard packets (poller side)
+Emitted repairs go out on the **same `midi_event` signal** as normal MIDI, so the
+daemon routes them to ALSA with no extra plumbing, and they are emitted before
+the events of the packet that carried the journal, which is the correct order.
+
+### 4.4 Feedback and guard packets (poller side) — Phase 4
 
 - Send `'RS'` feedback every ~1 s while connected (and immediately after the
-  first packet of a stream), with `ext_seq_received`. Apple needs this to shrink
-  its checkpoint; without it we also never stop its guard packets.
+  first packet of a stream), with the extended sequence number of the highest
+  packet seen. Apple needs this to shrink its checkpoint; without it we also
+  never stop its guard packets. `feedback_in()` already records the value the
+  peer reports, so the sender side (Phase 3) can use it.
 - Guard packets (ours): when MIDI activity stops and note state is non-empty,
   send journal-only packets at 100 ms, 200 ms, 400 ms, 800 ms, then 1 s
   (`guardtime`); stop when feedback confirms the receiver is caught up or MIDI
   activity resumes. Empty MIDI list, `J=1`, real journal.
 
-### 4.5 Leaving a session
+### 4.5 Leaving a session — Phase 4
 
 RFC 6295 §4: on exiting a session a receiver MUST ensure no indefinite
 artifacts remain. On disconnect (including `BY`, timeout, socket error), emit
-NoteOff for every note with `vel[n] != 0` (or CC 123 per affected channel).
-This fixes "stuck notes after the network dropped" independently of journals.
+NoteOff for every note with `velocity != 0` (or CC 123 per affected channel).
+`has_sounding_notes()` / `sounding_notes()` are already there for this, and the
+state already knows about CC 120/123-127 and the Reset State commands (System
+Reset and the GM/GM2/DLS SysEx messages), which clear it, because those commands
+make earlier note commands not N-active (RFC 6295 Appendix A.1).
 
 ## 5. Library API
 
@@ -342,50 +368,77 @@ The file is split in two layers so each phase is testable on its own:
    `journal_channel_header_t`, `journal_note_log_t`, `journal_chapter_n_t`,
    `journal_channel_t` and `journal_message_t`. It throws `bad_journal` for
    content that cannot be expressed or that is malformed.
-2. **`recovery_journal_t`** (Phases 2-3): the session state machine that decides
-   what to code and what to repair, on top of the codec. Checkpoint policy,
-   per-note sender state and the receiver RJRS live here.
+2. **`recovery_journal_t`** (receiver in Phase 2, sender in Phase 3): the session
+   state machine on top of the codec.
+
+The receiver API, as implemented:
 
 ```cpp
 namespace rtpmidid {
 
-/// Sender + receiver journal state for one RTP-MIDI session.
+enum class journal_loss_e { none, single, multi };
+
 class recovery_journal_t {
 public:
-  struct stats_t {                       // plain counters, single-writer
-    uint32_t journals_sent = 0, journals_received = 0, guard_packets = 0;
-    uint32_t notes_repaired_on = 0, notes_repaired_off = 0, notes_skipped = 0;
-    uint32_t feedback_sent = 0, feedback_received = 0;
-    uint32_t out_of_order = 0, losses = 0;
+  struct stats_t {
+    // Receiver (Phase 2)
+    uint32_t journals_received = 0, notes_repaired_on = 0,
+             notes_repaired_off = 0, notes_skipped = 0, losses = 0,
+             out_of_order = 0, malformed = 0;
+    // Sender (Phase 3/4)
+    uint32_t journals_sent = 0, guard_packets = 0, feedback_sent = 0,
+             feedback_received = 0;
   };
 
-  // Sender side
-  void midi_out(uint16_t seq_nr, const io_bytes_reader &events);
-  bool write_journal(io_bytes_writer &packet, uint16_t seq_nr);
-  void feedback_in(uint32_t ext_seq_received);      // from 'RS' packet
+  /// A NoteOn older than this (0.1 ms units) is "clearly not recent" for the
+  /// Y bit test of RFC 4696 section 7.2.
+  static constexpr uint32_t note_on_recent_window = 2500; // 250 ms
 
-  // Receiver side
-  enum class loss_t { none, single, multi };
-  loss_t midi_in(uint16_t seq_nr, const io_bytes_reader &events, uint16_t &checkpoint);
-  void parse_journal(io_bytes_reader &, loss_t, signal_t<const io_bytes_reader &> &out);
-  void session_end(signal_t<const io_bytes_reader &> &out);   // §4.5
+  void reset();
 
-  bool enabled = true;                                // programmatic kill switch
+  // Receiver
+  journal_loss_e observe(uint16_t seq_nr);
+  void midi_played(const io_bytes_reader &events, uint32_t timestamp);
+  void parse_journal(io_bytes_reader &, journal_loss_e loss, uint32_t timestamp,
+                     signal_t<const io_bytes_reader &> &midi_out);
+  bool has_sounding_notes() const;
+  size_t sounding_notes() const;
+
+  // Feedback (recorded in Phase 2, used by the sender in Phase 3)
+  void feedback_in(uint32_t extended_seq);
+  uint32_t confirmed_extended_seq() const;
+  bool has_feedback() const;
+
+  // Phase 3, sender
+  // void midi_out(uint16_t seq_nr, const io_bytes_reader &events);
+  // bool write_journal(io_bytes_writer &packet, uint16_t seq_nr);
+  // Phase 4
+  // void session_end(signal_t<const io_bytes_reader &> &out);
+
+  bool enabled = true; // programmatic kill switch (Phase 3)
   stats_t stats;
 };
 }
 ```
 
+Note the explicit `timestamp`: the receiver keeps the local execution time of each
+NoteOn for the `Y`/staleness test, and taking it as a parameter keeps the class
+free of a clock and the tests deterministic.
+
+`rtppeer_t` owns one as the public member `recovery_journal`, so the daemon can
+read `stats` without new plumbing.
+
 Integration in `rtppeer_t` (no daemon changes needed for the core):
 
-| Hook | Change |
-|---|---|
-| `send_midi()` | set `J`, call `midi_out()` before/while writing, `write_journal()` after |
-| `parse_midi()` | `midi_in()` for loss classification, pass `checkpoint`, `parse_journal()` emitting on `midi_event` |
-| `parse_feedback()` | read **uint32** at offset 8 (fixes today's `uint16` bug), call `feedback_in()`, count it |
-| `send_feedback()` | periodic, with `ext_seq_received`; used by guard logic |
-| `reset()`/`disconnect()` | `session_end()`, clear state |
-| `get_timestamp()` | reuse for `time[n]` |
+| Hook | Change | Phase |
+|---|---|---|
+| `parse_midi()` | `observe()` for loss classification, then `parse_journal()` emitting on `midi_event`, both before the packet's own events | **2, done** |
+| `emit_midi()` | new private helper: every emitted event goes through `midi_played()` before reaching `midi_event` | **2, done** |
+| `parse_feedback()` | read **uint32** at offset 8 (fixed), call `feedback_in()`, count it | **2, done** |
+| `reset()` | `recovery_journal.reset()` | **2, done** |
+| `send_midi()` | set `J`, call `midi_out()` while writing, `write_journal()` after | 3 |
+| `send_feedback()` | periodic, with the highest sequence number seen; used by guard logic | 4 |
+| `disconnect()` | `session_end()` before the status change | 4 |
 
 Daemon-side follow-ups (Phase 5): counters into `rtp_peer_status_t`
 (`src/dm_json_status.hpp`, `src/utils.cpp`), regenerate dm-json goldens
@@ -401,6 +454,8 @@ this being mostly benign. The journal adds more shared state, so:
 
 - Keep all journal mutation on the poller thread **and** the peer thread path
   as today (no new thread, no locks) — matching every other `rtppeer_t` field.
+  In practice the receiver state (`observe`, `midi_played`, `parse_journal`) is
+  only touched from `rtppeer_t::data_ready()`, i.e. the poller thread.
 - Counters are read by `status_rows` on another thread: use relaxed
   `std::atomic<uint32_t>` for the `stats_t` fields so reads cannot tear, and
   follow [mechanical-sympathy.md](mechanical-sympathy.md) (no allocation on the
@@ -415,18 +470,21 @@ this being mostly benign. The journal adds more shared state, so:
 
 ## 7. Status of the current code
 
-**Phase 1 done:** `include/rtpmidid/journal.hpp` + `lib/journal.cpp` implement
-`journal_codec_t`, a stateless wire codec for the journal section, the channel
-journal header and Chapter N, with 36 golden-vector/round-trip tests in
-`tests/test_journal.cpp`. It is not wired into `rtppeer_t` yet.
+**Phases 1 and 2 done.** `include/rtpmidid/journal.hpp` + `lib/journal.cpp`:
 
-`lib/rtppeer.cpp` still has the old receive-side `parse_journal`,
-`parse_journal_chapter`, `parse_journal_chapter_N` (lines ~773-857), invoked from
-`parse_midi()` when `header & 0x40`. Sending still does nothing (`send_midi()`
-never sets `J`). `tests/test_rtppeer.cpp` has one hand-made happy path
-(`test_journal`) which will be replaced in Phase 2.
+- `journal_codec_t`, the stateless wire codec (Phase 1), with 36
+  golden-vector/round-trip tests in `tests/test_journal.cpp`.
+- `recovery_journal_t`, the receiver state machine (Phase 2), with 21 tests in
+  `tests/test_recovery_journal.cpp` and 3 integration tests in
+  `tests/test_rtppeer.cpp`.
 
-Known defects to fix or replace (a Phase-2 acceptance list):
+The old receive-side `parse_journal`, `parse_journal_chapter` and
+`parse_journal_chapter_N` are **deleted**; incoming journals are handled by
+`recovery_journal_t`. Sending still does nothing (`send_midi()` never sets `J`),
+there is no periodic feedback and no guard packets yet.
+
+Defects 1-9 below are fixed by construction (the codec replaced that code);
+10 is Phase 4. Kept here as the record of what was wrong:
 
 | # | Defect |
 |---|---|
@@ -465,28 +523,51 @@ Unit (`tests/test_journal.cpp`, TDD — expectations first). **Done in Phase 1**
 - [x] Malformed chapter inside a multi-channel journal is skipped and flagged
       (`journal_message_t::malformed`) without losing the next channel.
 
+Receiver state machine (`tests/test_recovery_journal.cpp`, 21 tests). **Done in
+Phase 2**:
+
+- [x] Sequence classification: in order, single, multi, duplicate, reordered,
+      wrap-around at `0xFFFF`, and a fresh stream after `reset()`.
+- [x] Receiver idempotence: Apple-style `J=1` on every packet with **no loss**
+      emits **zero** extra events (regression guard for defect 6), and does not
+      even parse the journal.
+- [x] Receiver repair: single-packet loss of NoteOff → one NoteOff emitted, state
+      cleared; single-packet loss of NoteOn → NoteOn or skip per `Y`; multi-packet
+      loss parses everything; `NoteOff→NoteOn` detection via velocity, checkpoint
+      and stale `Y`/time, each tested on its own.
+- [x] Fast paths: `S=1` at the top level, per-channel `S`, per-log `S`, `B=1`.
+- [x] Out-of-order packet → no repair.
+- [x] N-active resets: CC 120 and 123-127, System Reset `0xFF`, the GM/GM2/DLS
+      Reset State SysEx (with and without leading `F0`), and non-reset CCs/SysEx
+      left alone.
+- [x] Invalid zero-velocity note log treated as a NoteOff.
+- [x] Channel isolation: a repair on one channel never touches another.
+- [x] A set OFFBITS bit for a note we do not believe is sounding is ignored.
+
 Still to come:
 
 - [ ] Oldest-first ordering with interleaved notes (Phase 3, sender state).
-- [ ] N-active resets: CC 120/123-127 and `0xFF` clear state; notes before them
-      are not journaled (Phase 2/3).
-- [ ] Receiver repair: single-packet loss of NoteOff → one NoteOff emitted, state
-      cleared; single-packet loss of NoteOn → NoteOn or skip per `Y`; multi-packet
-      loss; `NoteOff→NoteOn` detection via velocity, checkpoint and `Y`/time tests
-      (Phase 2).
-- [ ] Receiver idempotence: Apple-style `J=1` on every packet with **no loss**
-      emits **zero** extra events (regression guard for defect 6; Phase 2).
-- [ ] Out-of-order packet → no repair, event still played (Phase 2).
 - [ ] Checkpoint clamping: no feedback (anchor), stale feedback, feedback ahead of
       what we sent (Phase 3).
+- [ ] Sender: `J=1` on every payload, `S`/`B` derivation per element, MTU cap
+      (Phase 3); periodic `'RS'` feedback, guard packets, note silencing on
+      disconnect (Phase 4).
 
-`tests/test_rtppeer.cpp` integration:
+`tests/test_rtppeer.cpp` integration (Phase 2, done):
 
-- Two `rtppeer_t` instances, drop packet `k`, assert the receiver emits the
-  missing NoteOn/NoteOff and recovers state.
-- Feedback loop: receiver sends `'RS'`, sender's journal shrinks.
-- Guard packet timing with a fake clock.
-- Disconnect with notes held → NoteOff (or CC123) emitted.
+- [x] `test_journal_repairs_lost_note_off`: a NoteOn in sequence 0, sequence 1
+      lost, sequence 2 with a journal → the peer emits the NoteOn and then the
+      repaired NoteOff.
+- [x] `test_journal_in_order_no_spurious_events`: the same journal one sequence
+      number later emits nothing.
+- [x] `test_feedback_reads_32_bit_sequence`: the `'RS'` extended sequence number
+      is read (the old code read 16 bits and always got 0).
+
+Pending:
+
+- [ ] Feedback loop: receiver sends `'RS'`, sender's journal shrinks (Phase 3/4).
+- [ ] Guard packet timing with a fake clock (Phase 4).
+- [ ] Disconnect with notes held → NoteOff (or CC123) emitted (Phase 4).
 
 Manual interop matrix (document results in the PR):
 
@@ -507,11 +588,15 @@ Manual interop matrix (document results in the PR):
   arithmetic; 36 golden-vector/round-trip tests in `tests/test_journal.cpp`. Not
   wired into `rtppeer_t` yet. *Acceptance met: byte-exact vectors; round-trip;
   `LENGTH`/`TOTCHAN`/`S`/`B` semantics covered.*
-- **Phase 2 — receiver.** Next. Seq/loss tracking, RJRS state, RFC 4696 §7.2
-  repair on top of `journal_codec_t::read_journal()`, delete the buggy
-  `parse_journal*` from `rtppeer.cpp`, fix `parse_feedback` to `uint32`.
-  *Acceptance: loss integration tests; zero extra events with an always-`J=1`
-  peer.*
+- **Phase 2 — receiver (done).** Seq/loss tracking, RJRS state, RFC 4696 §7.2
+  repair on top of `journal_codec_t::read_journal()`, the old `parse_journal*`
+  deleted from `rtppeer.cpp`, `parse_feedback` reading `uint32`. *Acceptance met:
+  loss integration tests in `test_rtppeer.cpp`; zero extra events with an
+  always-`J=1` peer.*
+- **Phase 3 — sender.** Next. `J=1` always, journal section in `send_midi`,
+  closed-loop checkpoint from `'RS'`, `S`/`B` derivation, N-active resets, MTU
+  cap. *Acceptance: our journal repairs a loss on our own receiver; checkpoints
+  shrink after feedback.*
 - **Phase 3 — sender.** `J=1` always, journal section in `send_midi`, closed-loop
   checkpoint from `'RS'`, `S`/`B` computation, N-active resets, MTU cap.
   *Acceptance: our journal repairs a loss on our own receiver; checkpoints
