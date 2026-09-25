@@ -30,6 +30,16 @@ ends, and then can receive the data buffers, and will call the `send_event` when
 needs to send some events, normally due to a `send_midi` call (but can be
 `send_ck0`)
 
+## rtpmidid::journal_codec_t
+
+Wire codec for the RFC 6295 recovery journal, Chapter N (MIDI NoteOn `0x9` /
+NoteOff `0x8`), the chapter that repairs missing note on/off after packet loss.
+Encode with `write_journal_n()` / `write_chapter_n()`, decode with
+`read_journal()` / `read_chapter_n()`. The session state machine on top of it is
+not part of the library yet; see
+[docs/architecture/recovery-journal.md](docs/architecture/recovery-journal.md)
+and `test_journal.cpp`.
+
 ## rtpmidid::rtpclient and rtpmidid::rtpserver
 
 These are the network IO handlers. It receives the data as needed to create the

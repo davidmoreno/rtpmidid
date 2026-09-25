@@ -3,6 +3,9 @@
 The RFC has data all around the place, but here I have the headers and the bit
 meanings.
 
+Implementation spec for Chapter N (the journal that repairs missing NoteOn /
+NoteOff): [../architecture/recovery-journal.md](../architecture/recovery-journal.md).
+
 ## RTP Header
 
      0                   1                   2                   3
@@ -72,12 +75,18 @@ ifconfig and on normal LAN is always zero.
 
 | Bit                      | pos  | description                                                              |
 | ------------------------ | :--: | ------------------------------------------------------------------------ |
-| S                        |  0   | Single packet loss. To indicate only one packet is described in journal. |
+| S                        |  0   | Single packet loss hint. **1 by default**; 0 means some element in this journal codes a command stored in packet I-1 (then all containing elements and this bit are 0 too). |
 | Y                        |  1   | Has system journal                                                       |
 | A                        |  2   | Has channel journals. Needs totchan.                                     |
-| H                        |  3   | Enhanced Chapter C encoding.                                             |
+| H                        |  3   | Enhanced Chapter C encoding. 0 in our streams.                           |
 | TOTCHAN                  | 4-7  | Nr channels -1 (has totchan + 1 channels)                                |
-| Checkpoint packet seqnum | 8-23 | Seq nr for this journal Normally the one before the current packet.      |
+| Checkpoint packet seqnum | 8-23 | Seq nr of the checkpoint packet C. The journal covers packets C..I-1, where I is the packet carrying it. C == I means empty history. |
+
+Why the S bit exists: in the common case of a **single** lost packet, a receiver
+may skip every element whose S bit is 1, because S=1 guarantees the element
+codes nothing from the lost packet. If the lost packet's MIDI list was empty,
+the top-level S is 1 and no repair is needed at all. For multi-packet losses the
+S bits are ignored and everything is parsed.
 
 ## Channel Journal
 
@@ -91,10 +100,10 @@ One for each (TOTCHAN + 1)
 
 | Bit    |  pos   | description                                                              |
 | ------ | :----: | ------------------------------------------------------------------------ |
-| S      |   0    | Single packet loss. To indicate only one packet is described in journal. |
+| S      |   0    | S bit for this channel journal (see top-level S semantics).               |
 | CHAN   |  1-4   | Channel number                                                           |
 | H      |   5    | Whether controllers are Enhanced Chapter C.                              |
-| LENGHT |  6-15  | Lenght of the journal                                                    |
+| LENGHT |  6-15  | Length of the channel journal **including these 3 header octets** and all chapters. Receivers MUST use it to skip a journal they do not understand (RFC 6295 A.1). |
 | P      | 16 / 0 | Chapter P. Program Change.                                               |
 | C      | 17 / 1 | Chapter C. Control Change.                                               |
 | M      | 18 / 2 | Chapter M. Parameter System.                                             |
@@ -104,8 +113,9 @@ One for each (TOTCHAN + 1)
 | T      | 22 / 6 | Chapter T. After Touch.                                                  |
 | A      | 23 / 7 | Chapter A. Poly Aftertouch.                                              |
 
-I think S bit is to allow have a faster implementation fo the single case of
-only one packet lost.
+The S bit allows a faster implementation for the single-packet-loss case: skip
+every element with S=1, because those elements provably code nothing from the
+lost packet.
 
 ## Chapter P
 
@@ -155,11 +165,29 @@ only one packet lost.
     |    OFFBITS    |    OFFBITS    |     ....      |    OFFBITS    |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-| Bit |   pos   | description                          |
-| --- | :-----: | ------------------------------------ |
-| B   |    0    | S-Style functionality. By default 1. |
-| S   |   16n   | If B is 0, all S are 0.              |
-| Y   | 16n + 8 | Recomendation to play.               |
+| Bit  |    pos    | description                                                                 |
+| ---- | :-------: | --------------------------------------------------------------------------- |
+| B    |     0     | S-style bit for the OFFBITS field. **1 by default**; MUST be 0 if packet I-1's MIDI section contains a NoteOff for this channel (then all containing S bits MUST be 0 too). |
+| LEN  |    1-7    | Number of 2-octet note logs. 0 = empty list. `LEN=127` with `LOW=15, HIGH=0` codes **128** logs; any other `LEN=127` codes 127. |
+| LOW  |    8-11   | Index of the first OFFBITS octet.                                           |
+| HIGH |   12-15   | Index of the last OFFBITS octet. If `LOW <= HIGH` there are `HIGH-LOW+1` OFFBITS octets. `(LOW=15,HIGH=0)` and `(LOW=15,HIGH=1)` code an **empty** NoteOff bitfield. Other `LOW > HIGH` values MUST NOT be emitted. |
+| S    | 16n       | S bit of note log `n`.                                                      |
+| Y    | 16n + 8   | Recommendation to play (Y=1) or skip (Y=0) the recovered NoteOn.             |
+
+Chapter N rules that are easy to get wrong:
+
+- Note log list: 2 octets per entry, `NOTENUM` 7-bit, `VELOCITY` 7-bit and
+  **never zero** (a zero-velocity NoteOn is a NoteOff and belongs in OFFBITS).
+  Logs MUST be in **oldest-first** order.
+- OFFBITS: MSB of an octet is the **lowest** note of its group; MSB of the first
+  octet is note `8*LOW`, MSB of the last is note `8*HIGH`. Set bit = a NoteOff
+  for that note. NoteOff velocity is not coded.
+- A note number MUST NOT appear in both the note log list and OFFBITS.
+- The note log codes the **most recent N-active NoteOn** for that note number;
+  a set OFFBITS bit codes a note whose **most recent N-active command** was a
+  NoteOff.
+- "N-active" state is invalidated by CC 120, CC 123-127 and Reset State
+  commands (`0xFF`, GM/GM2/DLS SysEx resets).
 
 ## Chapter T
 

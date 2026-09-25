@@ -10,7 +10,7 @@ here are some notes on what we should test, and some use cases.
 - [x] Connect to rtpmidi peers
 - [x] Disconnect from rtpmidi peers
 - [x] Clock
-- [ ] Journal N
+- [ ] Journal N — see [docs/architecture/recovery-journal.md](../docs/architecture/recovery-journal.md)
 - [ ] More journals
 
 ## Test cases

@@ -3,6 +3,11 @@ target_link_libraries(test_rtppeer rtpmidid-shared)
 target_link_libraries(test_rtppeer ${FMT_LIBRARIES})
 add_test(NAME test_rtppeer COMMAND test_rtppeer)
 
+add_executable(test_journal test_journal.cpp test_utils.cpp)
+target_link_libraries(test_journal rtpmidid-shared)
+target_link_libraries(test_journal ${FMT_LIBRARIES})
+add_test(NAME test_journal COMMAND test_journal)
+
 add_executable(test_rtpserver test_rtpserver.cpp test_utils.cpp)
 target_link_libraries(test_rtpserver rtpmidid-shared -pthread)
 target_link_libraries(test_rtpserver ${FMT_LIBRARIES})
