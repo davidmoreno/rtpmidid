@@ -41,6 +41,7 @@ make all
 ### Debian/Ubuntu (DEB packages)
 
 - `debian-trixie` - Debian Trixie
+- `debian-bookworm` - Debian Bookworm (uses libfmt instead of C++20 `<format>`)
 - `ubuntu-24.04` - Ubuntu 24.04 LTS
 - `ubuntu-25.10` - Ubuntu 25.10
 
@@ -87,6 +88,7 @@ RUN apt-get update && apt-get install -y \
     debhelper-compat \
     libavahi-client-dev \
     libasound2-dev \
+    libfmt-dev \
     python3 \
     cmake \
     pandoc \

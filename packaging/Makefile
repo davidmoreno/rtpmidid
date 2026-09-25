@@ -7,7 +7,7 @@ ARCH ?= amd64
 RELEASES_DIR ?= $(PACKAGING_DIR)/dist
 
 # Available distributions (Debian/Ubuntu)
-DEB_DISTROS := debian-trixie ubuntu-24.04 ubuntu-25.10
+DEB_DISTROS := debian-trixie debian-bookworm ubuntu-24.04 ubuntu-25.10
 
 # Available distributions (Fedora/RPM)
 RPM_DISTROS := fedora-43
@@ -104,7 +104,9 @@ _deb-internal:
 	@echo "Building Debian package for $(DISTRO) on $(ARCH)..."
 	@mkdir -p $(RELEASES_DIR)/$(DISTRO)/$(ARCH)
 	@echo "Updating changelog with version from git tags..."
-	@if [ -d $(SOURCE_DIR)/.git ] && [ -f $(SOURCE_DIR)/debian/update-changelog.py ]; then \
+	@# NOTE: .git can be a directory or a file (git worktrees/submodules), so use
+	@# git rev-parse instead of testing for a directory.
+	@if git -C $(SOURCE_DIR) rev-parse --git-dir >/dev/null 2>&1 && [ -f $(SOURCE_DIR)/debian/update-changelog.py ]; then \
 		cd $(SOURCE_DIR) && \
 		chmod +x debian/update-changelog.py 2>/dev/null || true && \
 		if python3 debian/update-changelog.py 2>&1; then \
@@ -115,8 +117,8 @@ _deb-internal:
 			exit 1; \
 		fi; \
 	else \
-		if [ ! -d $(SOURCE_DIR)/.git ]; then \
-			echo "ERROR: .git directory not found - cannot determine version from git tags"; \
+		if ! git -C $(SOURCE_DIR) rev-parse --git-dir >/dev/null 2>&1; then \
+			echo "ERROR: no git repository found at $(SOURCE_DIR) - cannot determine version from git tags"; \
 			exit 1; \
 		fi; \
 		if [ ! -f $(SOURCE_DIR)/debian/update-changelog.py ]; then \
