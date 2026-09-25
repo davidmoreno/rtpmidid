@@ -77,6 +77,16 @@ make_channel(uint8_t channel, journal_chapter_n_t chapter, bool s = true) {
   return result;
 }
 
+
+/// Write a journal for the packet being sent and return its octets.
+static io_bytes_managed write_sender_journal(recovery_journal_t &journal) {
+  io_bytes_managed buffer(1024);
+  io_bytes_writer writer(buffer);
+  journal.write_journal(writer);
+  buffer.end = writer.position;
+  return buffer;
+}
+
 // ── Sequence tracking ───────────────────────────────────────────────────
 
 void test_observe_classification() {
@@ -514,14 +524,244 @@ void test_velocity_zero_note_log_is_note_off() {
 void test_feedback_records_extended_seq() {
   recovery_journal_t journal;
   ASSERT_FALSE(journal.has_feedback());
+
+  // The report is normalized to our own rollover count: no packet sent yet, so
+  // only the 16 bit sequence number survives.
   journal.feedback_in(0x00010002);
   ASSERT_TRUE(journal.has_feedback());
-  ASSERT_EQUAL(journal.confirmed_extended_seq(), 0x00010002u);
+  ASSERT_EQUAL(journal.confirmed_extended_seq(), 0x0002u);
   ASSERT_EQUAL(journal.stats.feedback_received, 1);
+
+  // A peer reports the highest sequence number it has seen, so the value only
+  // grows: stale or reordered reports are ignored.
+  journal.feedback_in(0x00010001);
+  ASSERT_EQUAL(journal.confirmed_extended_seq(), 0x0002u);
+  journal.feedback_in(0x00010005);
+  ASSERT_EQUAL(journal.confirmed_extended_seq(), 0x0005u);
 
   journal.reset();
   ASSERT_FALSE(journal.has_feedback());
   ASSERT_EQUAL(journal.confirmed_extended_seq(), 0u);
+}
+
+
+// ── Sender ──────────────────────────────────────────────────────────────
+
+void test_sender_first_packet_has_empty_journal() {
+  recovery_journal_t journal;
+  // Packet 0: the journal is written before the packet's own commands are
+  // recorded, so there is no history yet.
+  auto bytes = write_sender_journal(journal);
+  ASSERT_EQUAL(bytes.size(), 3);
+  ASSERT_EQUAL(bytes.start[0], 0x80); // S=1, A=0: empty journal
+  ASSERT_EQUAL(bytes.start[1], 0x00);
+  ASSERT_EQUAL(bytes.start[2], 0x00);
+
+  journal.midi_out(0, hex_to_bin("90 48 40"));
+  ASSERT_EQUAL(journal.stats.journals_sent, 1);
+}
+
+void test_sender_codes_sounding_notes_from_previous_packet() {
+  recovery_journal_t journal;
+  write_sender_journal(journal);               // Packet 0
+  journal.midi_out(0, hex_to_bin("90 48 40")); // NoteOn C4
+
+  // Packet 1: the note was turned on in packet I-1, so its S bit is 0 (and Y=1:
+  // playing it again is what a receiver that lost packet 0 should do).
+  auto bytes = write_sender_journal(journal);
+  // S=0 A=1 TOTCHAN=0, checkpoint 0
+  // channel 0: S=0 (its content comes from packet I-1), LENGTH=7, TOC=N
+  // Chapter N: B=1, LEN=1, empty OFFBITS, log S=0 note 0x48 Y=1 vel 0x40
+  auto expected = hex_to_bin("20 00 00 | 00 07 08 | 81 F0 48 C0");
+  ASSERT_EQUAL(bytes.size(), expected.size());
+  ASSERT_TRUE(bytes.compare(expected));
+
+  journal.midi_out(1, hex_to_bin("00")); // No MIDI data in packet 1
+}
+
+void test_sender_gear_after_note_off_is_note_off_bit() {
+  recovery_journal_t sender;
+  recovery_journal_t receiver;
+  midi_collector_t out;
+
+  // Packet 0: NoteOn. The receiver gets it.
+  write_sender_journal(sender);
+  sender.midi_out(0, hex_to_bin("90 48 40"));
+  ASSERT_EQUAL(receiver.observe(0), journal_loss_e::none);
+  receiver.midi_played(hex_to_bin("90 48 40"), 0);
+  ASSERT_EQUAL(receiver.sounding_notes(), 1);
+
+  // Packet 1: NoteOff, which the receiver never gets.
+  auto journal1 = write_sender_journal(sender);
+  sender.midi_out(1, hex_to_bin("80 48 00"));
+
+  // Packet 2: nothing of its own, and the receiver notices the gap.
+  auto journal2 = write_sender_journal(sender);
+  sender.midi_out(2, hex_to_bin("00"));
+
+  // The journal of packet 2 must code the NoteOff of packet 1: its B bit is 0
+  // (packet I-1 had a NoteOff on this channel) and the OFFBITS bit is set.
+  auto expected = hex_to_bin("20 00 00 | 00 06 08 | 00 99 80");
+  ASSERT_TRUE(journal2.compare(expected));
+
+  ASSERT_EQUAL(receiver.observe(2), journal_loss_e::single);
+  io_bytes_reader reader(journal2);
+  receiver.parse_journal(reader, journal_loss_e::single, 200, out.signal);
+  receiver.midi_played(hex_to_bin("00"), 200);
+
+  // The stuck note is repaired: this is the whole point of the sender side.
+  ASSERT_EQUAL(out.joined(), "80 48 00 | ");
+  ASSERT_EQUAL(receiver.sounding_notes(), 0);
+  ASSERT_EQUAL(receiver.stats.notes_repaired_off, 1);
+  ASSERT_NOT_EQUAL(journal1.size(), 0); // Kept the variable meaningful
+}
+
+void test_sender_note_logs_oldest_first() {
+  recovery_journal_t journal;
+  write_sender_journal(journal);
+  journal.midi_out(0, hex_to_bin("90 40 10")); // Note 0x40 first
+  write_sender_journal(journal);
+  journal.midi_out(1, hex_to_bin("90 30 10")); // Then note 0x30
+  write_sender_journal(journal);
+  journal.midi_out(2, hex_to_bin("90 50 10")); // Then note 0x50
+
+  // Anchor policy: the checkpoint is the first packet, so all three are coded,
+  // in session history order (oldest first), not in note number order. The
+  // packet after 2 carries no MIDI data of its own.
+  auto bytes = write_sender_journal(journal);
+  io_bytes_reader reader(bytes);
+  auto message = journal_codec_t::read_journal(reader);
+  ASSERT_EQUAL(message.channels.size(), 1);
+  const auto &logs = message.channels[0].chapter_n.note_logs;
+  ASSERT_EQUAL(logs.size(), 3);
+  ASSERT_EQUAL(logs[0].note, 0x40);
+  ASSERT_EQUAL(logs[1].note, 0x30);
+  ASSERT_EQUAL(logs[2].note, 0x50);
+  // Only the note from packet I-1 asks to be played, and only its S bit is 0.
+  ASSERT_EQUAL(logs[0].y, false);
+  ASSERT_EQUAL(logs[1].y, false);
+  ASSERT_EQUAL(logs[2].y, true);
+  ASSERT_EQUAL(logs[0].s, true);
+  ASSERT_EQUAL(logs[1].s, true);
+  ASSERT_EQUAL(logs[2].s, false);
+}
+
+/// Regression: the reused per-channel entries must not leak content from an
+/// earlier packet into a different channel.
+void test_sender_reused_channels_do_not_leak() {
+  recovery_journal_t journal;
+  write_sender_journal(journal);
+  journal.midi_out(0, hex_to_bin("90 40 40 91 45 40")); // ch0 and ch1 sounding
+
+  // Packet 1 codes two channel journals, so the second entry is in use.
+  auto two = write_sender_journal(journal);
+  io_bytes_reader two_reader(two);
+  ASSERT_EQUAL(journal_codec_t::read_journal(two_reader).channels.size(), 2);
+
+  // All Notes Off on channel 1 only: from now on packet 2 codes one channel, so
+  // the second entry is left over.
+  journal.midi_out(1, hex_to_bin("B1 7B 00"));
+  auto one = write_sender_journal(journal);
+  io_bytes_reader one_reader(one);
+  ASSERT_EQUAL(journal_codec_t::read_journal(one_reader).channels.size(), 1);
+
+  // A note on channel 2 brings the entry back into use. It must not carry the
+  // old channel 1 content.
+  journal.midi_out(2, hex_to_bin("92 46 40"));
+  auto three = write_sender_journal(journal);
+  io_bytes_reader three_reader(three);
+  auto message = journal_codec_t::read_journal(three_reader);
+  ASSERT_EQUAL(message.channels.size(), 2);
+  ASSERT_EQUAL(message.channels[0].channel, 0);
+  ASSERT_EQUAL(message.channels[0].chapter_n.note_logs.size(), 1);
+  ASSERT_EQUAL(message.channels[0].chapter_n.note_logs[0].note, 0x40);
+  ASSERT_EQUAL(message.channels[1].channel, 2);
+  ASSERT_EQUAL(message.channels[1].chapter_n.note_logs.size(), 1);
+  ASSERT_EQUAL(message.channels[1].chapter_n.note_logs[0].note, 0x46);
+  ASSERT_FALSE(message.channels[1].chapter_n.has_note_off());
+}
+
+void test_sender_feedback_shrinks_the_checkpoint() {
+  recovery_journal_t journal;
+  write_sender_journal(journal);
+  journal.midi_out(0, hex_to_bin("90 48 40"));
+  auto journal1 = write_sender_journal(journal);
+  journal.midi_out(1, hex_to_bin("00"));
+
+  // With no feedback the anchor policy keeps the whole stream in the journal.
+  auto expected_anchor = hex_to_bin("20 00 00 | 00 07 08 | 81 F0 48 C0");
+  ASSERT_TRUE(journal1.compare(expected_anchor));
+
+  // The peer says it saw packet 1: the checkpoint moves past the NoteOn, so
+  // there is nothing left to code.
+  journal.feedback_in(1);
+  auto journal2 = write_sender_journal(journal);
+  auto expected_empty = hex_to_bin("80 00 01");
+  ASSERT_TRUE(journal2.compare(expected_empty));
+  ASSERT_EQUAL(journal2.size(), 3);
+
+  // Feedback older than what we already sent does not move it back.
+  journal.feedback_in(0);
+  auto journal3 = write_sender_journal(journal);
+  ASSERT_TRUE(journal3.compare(expected_empty));
+}
+
+void test_sender_clears_state_on_all_notes_off() {
+  recovery_journal_t journal;
+  write_sender_journal(journal);
+  journal.midi_out(0, hex_to_bin("90 48 40 90 49 40"));
+  write_sender_journal(journal);
+  journal.midi_out(1, hex_to_bin("B0 7B 00")); // CC 123, All Notes Off
+
+  // The notes are not N-active any more, so the journal has nothing to code.
+  // The anchor checkpoint (first packet of the stream) is still coded.
+  auto bytes = write_sender_journal(journal);
+  ASSERT_TRUE(bytes.compare(hex_to_bin("80 00 00")));
+}
+
+void test_sender_mtu_cap_advances_checkpoint() {
+  recovery_journal_t journal;
+  io_bytes_managed ons(256 * 3);
+  {
+    io_bytes_writer writer(ons);
+    for (uint8_t channel = 0; channel < 2; channel++) {
+      for (uint8_t note = 0; note < 128; note++) {
+        writer.write_uint8(uint8_t(0x90 | channel));
+        writer.write_uint8(note);
+        writer.write_uint8(0x40);
+      }
+    }
+    ons.end = writer.position;
+  }
+
+  write_sender_journal(journal);
+  journal.midi_out(0, ons);
+  // One NoteOff, in the packet after the flood.
+  journal.midi_out(1, hex_to_bin("80 00 00"));
+  write_sender_journal(journal);
+  journal.midi_out(2, hex_to_bin("00"));
+
+  // 256 sounding notes need more than max_journal_size octets, so the
+  // checkpoint advances past the flood. What is left is the NoteOff bit of
+  // packet 1, which is the only command in the new history.
+  auto bytes = write_sender_journal(journal);
+  ASSERT_LTE(bytes.size(), recovery_journal_t::max_journal_size);
+  ASSERT_GT(bytes.size(), 3);
+  io_bytes_reader reader(bytes);
+  auto message = journal_codec_t::read_journal(reader);
+  ASSERT_EQUAL(message.channels.size(), 1);
+  ASSERT_EQUAL(message.channels[0].channel, 0);
+  ASSERT_TRUE(message.channels[0].chapter_n.code_note_off(0));
+  ASSERT_EQUAL(message.channels[0].chapter_n.note_logs.size(), 0);
+}
+
+void test_sender_disabled_writes_nothing() {
+  recovery_journal_t journal;
+  journal.enabled = false;
+  journal.midi_out(0, hex_to_bin("90 48 40"));
+  auto bytes = write_sender_journal(journal);
+  ASSERT_EQUAL(bytes.size(), 0);
+  ASSERT_EQUAL(journal.stats.journals_sent, 0);
 }
 
 int main(int argc, char **argv) {
@@ -547,6 +787,15 @@ int main(int argc, char **argv) {
       TEST(test_channel_isolation),
       TEST(test_velocity_zero_note_log_is_note_off),
       TEST(test_feedback_records_extended_seq),
+      TEST(test_sender_first_packet_has_empty_journal),
+      TEST(test_sender_codes_sounding_notes_from_previous_packet),
+      TEST(test_sender_gear_after_note_off_is_note_off_bit),
+      TEST(test_sender_note_logs_oldest_first),
+      TEST(test_sender_reused_channels_do_not_leak),
+      TEST(test_sender_feedback_shrinks_the_checkpoint),
+      TEST(test_sender_clears_state_on_all_notes_off),
+      TEST(test_sender_mtu_cap_advances_checkpoint),
+      TEST(test_sender_disabled_writes_nothing),
   };
 
   testcase.run(argc, argv);

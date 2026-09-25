@@ -123,8 +123,10 @@ void test_send_short_midi() {
 
           auto midi_buffer =
               rtpmidid::io_bytes_reader(data.start + 12, data.size() - 12);
-          ASSERT_TRUE(
-              midi_buffer.compare(hex_to_bin("07 90 64 7F 68 7F 71 7F")));
+          // 0x47: length 7 and J=1, then the MIDI list, then the empty journal
+          // of the first packet (no history yet).
+          ASSERT_TRUE(midi_buffer.compare(
+              hex_to_bin("47 90 64 7F 68 7F 71 7F 80 00 00")));
           sent_midi = true;
         }
       });
@@ -149,8 +151,11 @@ void test_send_long_midi() {
 
           auto midi_buffer =
               rtpmidid::io_bytes_reader(data.start + 12, data.size() - 12);
+          // Long header: B=1 and J=1 (0xC0) plus the length high nibble, then
+          // the MIDI list, then the empty journal of the first packet.
           ASSERT_TRUE(midi_buffer.compare(hex_to_bin(
-              "80 11 F0 7E 7F 06 02 00 01 0C 00 00 00 03 30 32 32 30 F7")));
+              "C0 11 F0 7E 7F 06 02 00 01 0C 00 00 00 03 30 32 32 30 F7 "
+              "80 00 00")));
           sent_midi = true;
         }
       });
@@ -348,6 +353,63 @@ void test_journal_in_order_no_spurious_events() {
 }
 
 /**
+ * End to end: what one peer sends must repair a loss on the other. The sender
+ * journals every packet (J=1) and the receiver repairs what the network ate.
+ */
+void test_journal_send_and_repair_between_peers() {
+  rtpmidid::rtppeer_t sender("sender");
+  rtpmidid::rtppeer_t receiver("receiver");
+  receiver.data_ready(CONNECT_MSG, rtpmidid::rtppeer_t::MIDI_PORT);
+  // The receiver drops packets from an unknown SSRC.
+  sender.local_ssrc = receiver.remote_ssrc;
+
+  std::vector<std::vector<uint8_t>> packets;
+  auto send_event_c = sender.send_event.connect(
+      [&packets](const rtpmidid::io_bytes_reader &data,
+                 rtpmidid::rtppeer_t::port_e) {
+        packets.emplace_back(data.start, data.end);
+      });
+
+  rtpmidid::io_bytes_writer_static<64> midi_io;
+  auto midi_event_c =
+      receiver.midi_event.connect([&midi_io](const rtpmidid::io_bytes &pb) {
+        midi_io.copy_from(pb.start, pb.size());
+      });
+
+  sender.status = rtpmidid::rtppeer_t::status_e::CONNECTED;
+  sender.send_midi(hex_to_bin("90 48 40")); // Packet 0: NoteOn C4
+  sender.send_midi(hex_to_bin("80 48 00")); // Packet 1: NoteOff C4 (gets lost)
+  sender.send_midi(hex_to_bin("90 49 40")); // Packet 2: NoteOn D4
+  ASSERT_EQUAL(packets.size(), 3);
+
+  // Packets 0 and 2 arrive, packet 1 does not.
+  for (size_t i : {size_t(0), size_t(2)}) {
+    rtpmidid::io_bytes_reader data(packets[i].data(), packets[i].size());
+    receiver.data_ready(std::move(data), rtpmidid::rtppeer_t::MIDI_PORT);
+  }
+
+  std::string got_hex;
+  for (size_t i = 0; i < midi_io.pos(); i++) {
+    got_hex += FMT::format("{:02X} ", midi_io.data[i]);
+  }
+  INFO("MIDI DATA. {} bytes: {}", midi_io.pos(), got_hex);
+
+  // NoteOn C4, the repaired NoteOff C4, then the NoteOn D4 of packet 2.
+  ASSERT_EQUAL(midi_io.pos(), 9);
+  ASSERT_EQUAL(midi_io.data[0], 0x90);
+  ASSERT_EQUAL(midi_io.data[1], 0x48);
+  ASSERT_EQUAL(midi_io.data[3], 0x80);
+  ASSERT_EQUAL(midi_io.data[4], 0x48);
+  ASSERT_EQUAL(midi_io.data[5], 0x00);
+  ASSERT_EQUAL(midi_io.data[6], 0x90);
+  ASSERT_EQUAL(midi_io.data[7], 0x49);
+
+  ASSERT_EQUAL(receiver.recovery_journal.stats.losses, 1);
+  ASSERT_EQUAL(receiver.recovery_journal.stats.notes_repaired_off, 1);
+  ASSERT_EQUAL(receiver.recovery_journal.sounding_notes(), 1); // C4 ended, D4 on
+}
+
+/**
  * Apple's journal feedback packet carries a 32 bit sequence number: reading
  * only 16 bits (as the old code did) yields 0 for any real stream.
  */
@@ -362,9 +424,11 @@ void test_feedback_reads_32_bit_sequence() {
                              ),
                   rtpmidid::rtppeer_t::CONTROL_PORT);
 
+  // Reading 16 bits at offset 8 (the old code) gives the high half, 0x0001.
   ASSERT_EQUAL(peer.seq_nr_ack, 0x0002);
   ASSERT_EQUAL(peer.recovery_journal.has_feedback(), true);
-  ASSERT_EQUAL(peer.recovery_journal.confirmed_extended_seq(), 0x00010002u);
+  // Normalized to our rollover count, which is 0: no packet sent yet.
+  ASSERT_EQUAL(peer.recovery_journal.confirmed_extended_seq(), 0x0002u);
   ASSERT_EQUAL(peer.recovery_journal.stats.feedback_received, 1);
 }
 
@@ -537,6 +601,7 @@ int main(int argc, char **argv) {
       TEST(test_journal_repairs_lost_note_off),
       TEST(test_journal_in_order_no_spurious_events),
       TEST(test_feedback_reads_32_bit_sequence),
+      TEST(test_journal_send_and_repair_between_peers),
       TEST(test_send_large_sysex),
       TEST(test_segmented_sysex),
   };

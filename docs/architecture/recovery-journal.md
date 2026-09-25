@@ -184,74 +184,89 @@ This is what lets a peer shrink its checkpoint window (closed-loop policy) and
 stop sending guard packets. We must send it periodically (see §4.4) — today we
 only send it as a side effect of parsing a journal, with a wrong value.
 
-## 3. Sender design (`recovery_journal_sender_t`)
+## 3. Sender design — **implemented (Phase 3)**
 
-State, all inside `rtppeer_t` and touched only from the peer's thread:
+`recovery_journal_t` keeps, per MIDI channel and note number, the most recent
+N-active command:
 
 ```cpp
-struct note_state_t {
-  uint8_t velocity;   // 0 == most recent N-active command was NoteOff
-  uint32_t seq;       // extended seq of that command
-  uint32_t order;     // monotonically increasing insertion order (oldest-first)
-};
-struct channel_state_t {
-  note_state_t notes[128];      // N-active state
-  uint16_t first_seq;           // extended seq of oldest entry in window
+struct sender_note_t {
+  uint32_t extended_seq; // extended sequence number of that command
+  uint32_t order;        // session history order, for oldest-first encoding
+  uint8_t velocity;      // 0 means the most recent command was a NoteOff
+  bool has_command;
 };
 ```
 
+The 32-bit extended sequence number is `(rollovers << 16) | seq_nr`, tracked in
+`midi_out()` so the 16-bit wrap of the RTP sequence number is handled.
+
 ### 3.1 Sending a payload
 
-`send_midi()` changes (lib/rtppeer.cpp):
+1. `send_midi()` writes the header with `J=1` (when `enabled`), the MIDI command
+   section as usual, and then appends the journal: the 3-octet top-level header,
+   plus one channel journal per channel with content, in ascending channel
+   order. An empty journal (header only, `A=0`) is still written: RFC 6295 §2.2
+   requires a journal section in every payload of a journaling stream.
+2. Then `midi_out(seq_nr, events)` records what was sent, assigning each command
+   the packet's extended sequence number and a session-history order.
+3. The journal is therefore written **before** the packet's own commands are
+   recorded. That ordering is what makes the S bits correct: a journal codes the
+   history `C..I-1`, which never contains packet `I` (RFC 6295 Appendix A.1).
 
-1. Reserve the header octet; always OR in `J` (`0x40`).
-2. Write the MIDI command section as today.
-3. Append the journal section:
-   - 3-octet top-level header with `C` = checkpoint for this packet (or `C = I`
-     for an empty journal).
-   - one channel journal per channel with content, ascending channel number.
-   - `A=1`, `TOTCHAN = n-1`; `A=0, TOTCHAN=0` if empty.
-4. Update sender state with the events just sent (`midi_out(seq_nr, events)`),
-   including N-active resets.
+### 3.2 Checkpoint selection
 
-Packet size: keep total ≤ MTU. Chapter N grows by 2 bytes per sounding note;
-if the journal would exceed a cap (start with 512 bytes of journal, tune with
-`tcpdump`), shrink the checkpoint window (raise `C`) and re-encode. A journal
-with 128 note logs + OFFBITS is ~320 bytes worst case, so the cap only matters
-for pathological multi-channel state.
-
-### 3.2 Checkpoint selection (closed-loop)
-
-- `ext_seq` is 32-bit (`seq_nr` + rollover counter); the wire carries the low
-  16 bits.
-- `ext_seq_confirmed` comes from `'RS'` feedback (§2.5).
-- Default checkpoint: `C = ext_seq_confirmed` (the last packet the receiver
-  says it saw), clamped to `[ext_seq_confirmed, I-1]` and never older than the
-  oldest record still in the sender's window.
-- If no feedback has ever arrived: checkpoint = first packet of the stream
-  (anchor behaviour) — conforming, larger journals, self-corrects after the
-  first feedback.
-- Checkpoint must always satisfy `C <= I-1`; `C == I` means "empty journal".
+- With no `'RS'` feedback yet, the policy is **anchor**: checkpoint = the first
+  packet of the stream, so the history always covers the whole session and
+  repair works without any feedback. Journals are larger, and shrink as soon as
+  feedback arrives.
+- `feedback_in()` normalizes the peer's reported extended sequence number to our
+  own rollover count (RFC 3550 half-range rule) and keeps the maximum, because a
+  peer reports the *highest* packet it has seen: stale or reordered reports must
+  not pull the checkpoint back.
+- The checkpoint is clamped to `[first packet, I-1]`.
+- On the very first packet the checkpoint is the packet itself (`C == I`), which
+  means "empty history".
 
 ### 3.3 Chapter N encoding rules
 
 For each channel:
 
-1. Collect notes whose most recent N-active command is inside `[C, I-1]`.
-   Nothing else is coded.
-2. Most recent command is a **NoteOn** (velocity ≠ 0) → note log; velocity of
-   that NoteOn; ordered **oldest-first** by insertion order.
+1. Code only notes whose most recent command is inside `[C, I-1]`.
+2. Most recent command is a **NoteOn** → note log, `VELOCITY` from that command,
+   ordered **oldest-first** by the recorded history order (commands in the same
+   packet share a sequence number, so a counter is needed to break ties).
 3. Most recent command is a **NoteOff** → set the OFFBITS bit for that note.
-4. If both sets are empty → no channel journal for that channel.
-5. `B` bit: 0 if packet `I-1` contained a NoteOff for this channel, else 1.
-6. `S` bits: 0 for any element whose most recent coded command came from packet
-   `I-1`, and then 0 for the channel journal and top-level header too. **This is
-   not optional**: with `S=1` a receiver is allowed to skip the element in the
-   single-packet-loss fast path (RFC 4696 §7), so a wrong `S=1` silently
-   disables repair of the most common loss.
-7. `Y` bit: 1 (play) for note logs of commands from packet `I-1`; for older
-   entries use 0 (skip) when the note-on is clearly stale relative to the RTP
-   timestamp of `I`, else 1. v1: always 1 for `I-1`, 0 for older.
+4. Nothing to code for a channel → no channel journal at all.
+5. `S` bit of a note log: 0 when the command came from packet `I-1`. `B` bit:
+   0 when packet `I-1` contained a NoteOff on that channel. The channel journal
+   S bit and the top-level S bit are **derived** from the elements by the codec,
+   so they can never disagree with them.
+6. `Y` bit: 1 for a note log that codes a command from packet `I-1` (the RFC's
+   "simultaneous with the packet"), 0 for older entries, which a receiver should
+   skip rather than retrigger. This is what keeps a sustained note from being
+   re-attacked every time the journal is repeated.
+7. N-active resets: CC 120, CC 123-127 and Reset State commands (System Reset
+   and the GM/GM2/DLS SysEx) clear the channel state, so commands before them are
+   never coded again.
+
+### 3.4 Packet size
+
+The journal is capped at `recovery_journal_t::max_journal_size` (512 octets) and
+at the space left in the packet buffer. If it does not fit, the checkpoint
+**advances** until it does, which drops the oldest commands: that trades repair
+coverage for packet size, which is exactly what a sending policy is about. With
+the default cap this only triggers with roughly a hundred notes sounding at once.
+If even the newest history does not fit, the journal is sent anyway with a
+rate-limited warning.
+
+### 3.5 Known limits of this phase
+
+- Chapter N only: a lost CC 7 (volume), program change or pitch bend is still
+  not repaired. This includes CC 123 (All Notes Off), which clears our state, so
+  a lost CC 123 cannot be recovered (Chapter C territory).
+- Skipped (`Y=0`) recovered NoteOns are transient artifacts, which RFC 6295 §4
+  explicitly allows; the mandate only covers indefinite artifacts.
 
 ## 4. Receiver design (`recovery_journal_t`) — **implemented (Phase 2)**
 
@@ -404,18 +419,20 @@ public:
   bool has_sounding_notes() const;
   size_t sounding_notes() const;
 
-  // Feedback (recorded in Phase 2, used by the sender in Phase 3)
+  // Sender (Phase 3)
+  void midi_out(uint16_t seq_nr, const io_bytes_reader &events);
+  size_t write_journal(io_bytes_writer &writer);
+
+  // Feedback: from the 'RS' packet, drives the sender checkpoint
   void feedback_in(uint32_t extended_seq);
   uint32_t confirmed_extended_seq() const;
   bool has_feedback() const;
 
-  // Phase 3, sender
-  // void midi_out(uint16_t seq_nr, const io_bytes_reader &events);
-  // bool write_journal(io_bytes_writer &packet, uint16_t seq_nr);
   // Phase 4
   // void session_end(signal_t<const io_bytes_reader &> &out);
 
-  bool enabled = true; // programmatic kill switch (Phase 3)
+  static constexpr size_t max_journal_size = 512;
+  bool enabled = true; // programmatic kill switch
   stats_t stats;
 };
 }
@@ -436,7 +453,7 @@ Integration in `rtppeer_t` (no daemon changes needed for the core):
 | `emit_midi()` | new private helper: every emitted event goes through `midi_played()` before reaching `midi_event` | **2, done** |
 | `parse_feedback()` | read **uint32** at offset 8 (fixed), call `feedback_in()`, count it | **2, done** |
 | `reset()` | `recovery_journal.reset()` | **2, done** |
-| `send_midi()` | set `J`, call `midi_out()` while writing, `write_journal()` after | 3 |
+| `send_midi()` | set `J`, append `write_journal()` after the MIDI section, then `midi_out()` | **3, done** |
 | `send_feedback()` | periodic, with the highest sequence number seen; used by guard logic | 4 |
 | `disconnect()` | `session_end()` before the status change | 4 |
 
@@ -460,8 +477,10 @@ this being mostly benign. The journal adds more shared state, so:
   `std::atomic<uint32_t>` for the `stats_t` fields so reads cannot tear, and
   follow [mechanical-sympathy.md](mechanical-sympathy.md) (no allocation on the
   hot path; `io_bytes_writer_static` for packet building).
-- The note/key state arrays are `16 * 128 * 12 B ≈ 24 KB` per peer; acceptable
-  but note it in [performance.md](performance.md).
+- The journal state is `16 * 128 * 12 B ≈ 24 KB` (receiver) plus
+  `16 * 128 * 16 B ≈ 32 KB` (sender) per peer, so about 56 KB, plus the reused
+  `coded_channels_` vector (allocated once, on the first packet that has a
+  journal to code). Note it in [performance.md](performance.md).
 - The codec allocates a `std::vector` for the note logs of each decoded Chapter
   N. That is an allocation on the receive path (a few per second at most, and
   only for packets that carry a journal). If it shows up in profiles, keep one
@@ -470,18 +489,21 @@ this being mostly benign. The journal adds more shared state, so:
 
 ## 7. Status of the current code
 
-**Phases 1 and 2 done.** `include/rtpmidid/journal.hpp` + `lib/journal.cpp`:
+**Phases 1, 2 and 3 done.** `include/rtpmidid/journal.hpp` + `lib/journal.cpp`:
 
 - `journal_codec_t`, the stateless wire codec (Phase 1), with 36
   golden-vector/round-trip tests in `tests/test_journal.cpp`.
-- `recovery_journal_t`, the receiver state machine (Phase 2), with 21 tests in
-  `tests/test_recovery_journal.cpp` and 3 integration tests in
-  `tests/test_rtppeer.cpp`.
+- `recovery_journal_t`: the receiver state machine (Phase 2) and the sender
+  (Phase 3), with 29 tests in `tests/test_recovery_journal.cpp` and 5
+  integration tests in `tests/test_rtppeer.cpp` (including a two-peer
+  send-and-repair test).
 
 The old receive-side `parse_journal`, `parse_journal_chapter` and
 `parse_journal_chapter_N` are **deleted**; incoming journals are handled by
-`recovery_journal_t`. Sending still does nothing (`send_midi()` never sets `J`),
-there is no periodic feedback and no guard packets yet.
+`recovery_journal_t`. `send_midi()` sets `J=1` and appends a journal to every
+packet. What is still missing is periodic `'RS'` feedback (so peers stay on the
+anchor policy with us and we never shrink our journals because of their
+feedback), guard packets, and silencing notes on disconnect: Phase 4.
 
 Defects 1-9 below are fixed by construction (the codec replaced that code);
 10 is Phase 4. Kept here as the record of what was wrong:
@@ -544,14 +566,24 @@ Phase 2**:
 - [x] Channel isolation: a repair on one channel never touches another.
 - [x] A set OFFBITS bit for a note we do not believe is sounding is ignored.
 
+Sender (`tests/test_recovery_journal.cpp`). **Done in Phase 3**:
+
+- [x] Empty journal for the first packet, and a journal code for a note that was
+      turned on in packet `I-1` (S=0, Y=1) with byte-exact expectations.
+- [x] Oldest-first note log ordering, independent of note number, with the S/Y
+      bits of each entry.
+- [x] Anchor checkpoint without feedback, and the checkpoint moving forward with
+      `'RS'` feedback, including ignoring stale reports.
+- [x] N-active resets (CC 123) clearing the sender state.
+- [x] Packet size cap advancing the checkpoint until the journal fits.
+- [x] `enabled = false` writing nothing.
+- [x] End to end: a two-peer test (`test_rtppeer.cpp`) where packet 1 is dropped
+      and the receiver emits the repaired NoteOff between the two NoteOns.
+
 Still to come:
 
-- [ ] Oldest-first ordering with interleaved notes (Phase 3, sender state).
-- [ ] Checkpoint clamping: no feedback (anchor), stale feedback, feedback ahead of
-      what we sent (Phase 3).
-- [ ] Sender: `J=1` on every payload, `S`/`B` derivation per element, MTU cap
-      (Phase 3); periodic `'RS'` feedback, guard packets, note silencing on
-      disconnect (Phase 4).
+- [ ] Periodic `'RS'` feedback, guard packets, note silencing on disconnect
+      (Phase 4).
 
 `tests/test_rtppeer.cpp` integration (Phase 2, done):
 
@@ -565,7 +597,8 @@ Still to come:
 
 Pending:
 
-- [ ] Feedback loop: receiver sends `'RS'`, sender's journal shrinks (Phase 3/4).
+- [ ] Receiver sending periodic `'RS'` feedback, and the sender's journal shrinking
+      because of it (Phase 4).
 - [ ] Guard packet timing with a fake clock (Phase 4).
 - [ ] Disconnect with notes held → NoteOff (or CC123) emitted (Phase 4).
 
@@ -593,10 +626,11 @@ Manual interop matrix (document results in the PR):
   deleted from `rtppeer.cpp`, `parse_feedback` reading `uint32`. *Acceptance met:
   loss integration tests in `test_rtppeer.cpp`; zero extra events with an
   always-`J=1` peer.*
-- **Phase 3 — sender.** Next. `J=1` always, journal section in `send_midi`,
-  closed-loop checkpoint from `'RS'`, `S`/`B` derivation, N-active resets, MTU
-  cap. *Acceptance: our journal repairs a loss on our own receiver; checkpoints
-  shrink after feedback.*
+- **Phase 3 — sender (done).** `J=1` always, journal section in `send_midi`,
+  anchor/closed-loop checkpoint from `'RS'`, `S`/`B` derivation, oldest-first
+  logs, N-active resets, packet size cap. *Acceptance met: a two-peer test drops
+  a packet and the receiver repairs it; `test_sender_feedback_shrinks_the_
+  checkpoint` covers the checkpoint moving with feedback.*
 - **Phase 3 — sender.** `J=1` always, journal section in `send_midi`, closed-loop
   checkpoint from `'RS'`, `S`/`B` computation, N-active resets, MTU cap.
   *Acceptance: our journal repairs a loss on our own receiver; checkpoints
@@ -619,10 +653,21 @@ Each phase is a separate PR, with its doc update in the same PR (see
    payload in a journaling stream MUST include a journal section"), but peers in
    the wild are only loosely conforming. If interop breaks with a specific peer,
    is a per-peer identity option (`rtpmidi_client:...,journal=off`) acceptable
-   later, given the "always on, no config" decision?
-2. **`Y` (play/skip) heuristic.** v1 proposes "play if it came from packet
-   `I-1`, else skip". Tuning this needs real-device listening tests.
+   later, given the "always on, no config" decision? `recovery_journal_t::enabled`
+   already exists as the programmatic switch.
+2. **`Y` (play/skip) heuristic.** Implemented as "play only what came from packet
+   `I-1`", which follows the RFC's definition of the bit and avoids retriggering
+   sustained notes, at the cost of skipping a note whose NoteOn was lost several
+   packets back (a transient artifact, allowed by RFC 6295 §4). Tuning this needs
+   real-device listening tests.
 3. **Guard packet budget.** iOS/macOS devices on Wi-Fi: is 1 s guardtime too
    chatty? `guardtime` is not negotiated in Apple's handshake, so we must pick.
 4. **Silence notes on disconnect (§4.5)** is technically outside Chapter N but
    is the same user-visible bug. Include in Phase 4 or a separate PR?
+5. **Chapter C next?** A lost CC 7 (volume) or CC 123 (All Notes Off) is an
+   indefinite artifact that Chapter N cannot repair, and CC is cheap to add
+   (fixed 2-octet logs). It is the natural follow-up once Chapter N has been
+   validated against real devices.
+6. **Interop validation is still pending.** Everything here is tested against
+   itself and against the RFC byte layouts; the manual matrix below needs to run
+   on real macOS/iOS/Windows peers.

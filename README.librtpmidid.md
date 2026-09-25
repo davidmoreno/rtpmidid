@@ -37,10 +37,12 @@ chapter that repairs missing note on/off after packet loss.
 
 - `journal_codec_t`: stateless wire codec. Encode with `write_journal_n()` /
   `write_chapter_n()`, decode with `read_journal()` / `read_chapter_n()`.
-- `recovery_journal_t`: session state. The receive side is usable today —
+- `recovery_journal_t`: session state, both directions. Receive:
   `observe()` classifies each incoming packet, `midi_played()` records what was
-  played, and `parse_journal()` repairs a detected loss. The sending side is not
-  implemented yet.
+  played, and `parse_journal()` repairs a detected loss. Send: `midi_out()`
+  records the commands of each outgoing packet and `write_journal()` produces the
+  journal section to append to it (set the `J` bit), with the checkpoint driven
+  by `'RS'` feedback via `feedback_in()`.
 
 `rtppeer_t` already owns one and uses it for incoming packets. See
 [docs/architecture/recovery-journal.md](docs/architecture/recovery-journal.md),

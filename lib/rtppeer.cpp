@@ -685,10 +685,13 @@ void rtppeer_t::send_midi(const io_bytes_reader &events) {
   buffer.write_uint32(local_ssrc);
 
   auto events_size = events.size();
+  // A stream that uses the recovery journal sets J in every payload, even when
+  // the journal section is only its 3 octet header (RFC 6295 Section 2.2).
+  const uint8_t journal_bit = recovery_journal.enabled ? 0x40 : 0x00;
   // Now midi
   if (events_size < 16) {
     // Short header, 1 octet
-    buffer.write_uint8(events_size);
+    buffer.write_uint8(events_size | journal_bit);
   } else {
     // Long header, 2 octets
     // DEBUG("Send long message: message_size={} bytes", events_size);
@@ -699,11 +702,18 @@ void rtppeer_t::send_midi(const io_bytes_reader &events) {
               events_size);
     }
 
-    buffer.write_uint8((events_size & 0x0f00) >> 8 | 0x80);
+    buffer.write_uint8(((events_size & 0x0f00) >> 8) | 0x80 | journal_bit);
     buffer.write_uint8(events_size & 0xff);
   }
 
   buffer.copy_from(events);
+
+  // The journal codes the history *before* this packet, so it is written before
+  // the commands of this packet are recorded.
+  if (recovery_journal.enabled) {
+    recovery_journal.write_journal(buffer);
+  }
+  recovery_journal.midi_out(seq_nr, events);
 
   // events.print_hex();
   // buffer.print_hex();

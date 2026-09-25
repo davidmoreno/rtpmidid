@@ -200,13 +200,19 @@ public:
   /**
    * Encode a complete journal section: top-level header followed by one channel
    * journal with a Chapter N per entry, in the given order (which MUST be
-   * ascending channel number). A and TOTCHAN are derived from @a channels.
+   * ascending channel number). A, TOTCHAN and the S bits are derived from the
+   * entries, so they can never disagree with them.
    *
    * Channels with an empty Chapter N are not coded; if all are empty the result
    * is the 3-octet "empty journal".
    */
   static void write_journal_n(io_bytes_writer &, uint16_t checkpoint, bool s,
-                              const std::vector<journal_channel_t> &channels);
+                              const journal_channel_t *channels, size_t count);
+  static void write_journal_n(io_bytes_writer &writer, uint16_t checkpoint,
+                              bool s,
+                              const std::vector<journal_channel_t> &channels) {
+    write_journal_n(writer, checkpoint, s, channels.data(), channels.size());
+  }
 
   // ── Decoding ────────────────────────────────────────────────────────
 
@@ -275,6 +281,20 @@ public:
    */
   static constexpr uint32_t note_on_recent_window = 2500;
 
+  /**
+   * Maximum size of the journal section appended to a packet. If the journal
+   * for the current checkpoint is bigger, the checkpoint advances (dropping the
+   * commands older than it) until it fits.
+   */
+  static constexpr size_t max_journal_size = 512;
+
+  /**
+   * Journaling on/off. Meant to be set before the session starts: changing it
+   * while connected leaves the two halves of the state out of sync, so it needs
+   * a reset().
+   */
+  bool enabled = true;
+
   recovery_journal_t() = default;
 
   /// Forget all stream and note state. Called on (re)connect.
@@ -294,6 +314,30 @@ public:
   /// Extended sequence number reported by the peer, if any feedback arrived.
   uint32_t confirmed_extended_seq() const { return confirmed_extended_seq_; }
   bool has_feedback() const { return has_feedback_; }
+
+  // ── Sender side (Phase 3) ───────────────────────────────────────────
+
+  /**
+   * Record the MIDI commands we are putting in an outgoing packet, so they can
+   * be coded in the journals of the packets that follow.
+   *
+   * MUST be called for every packet sent, and **after** write_journal() for the
+   * same packet: a journal codes the history back to its checkpoint, and that
+   * history never contains the packet carrying it (RFC 6295 Appendix A.1).
+   */
+  void midi_out(uint16_t seq_nr, const io_bytes_reader &events);
+
+  /**
+   * Write the journal section for the packet being sent, covering the
+   * checkpoint chosen by the sending policy: closed-loop from `'RS'` feedback
+   * when there is any, anchor (first packet of the stream) until then.
+   *
+   * Called after the MIDI command section of the packet has been written and
+   * before midi_out() for the same packet. Returns the octets written, which is
+   * never less than the 3 octet empty journal: a stream that uses the recovery
+   * journal sets `J=1` in every payload.
+   */
+  size_t write_journal(io_bytes_writer &writer);
 
   /// Record a MIDI event that was emitted (to ALSA): this is what the receiver
   /// believes the renderer is doing.
@@ -326,6 +370,18 @@ private:
     note_state_t notes[128];
   };
 
+  /// One note as the sender knows it. `extended_seq` of 0 is a valid sequence
+  /// number, hence the explicit `has_command`.
+  struct sender_note_t {
+    uint32_t extended_seq = 0;
+    uint32_t order = 0;   // session history order of that command
+    uint8_t velocity = 0; // 0 means the most recent command was a NoteOff
+    bool has_command = false;
+  };
+  struct sender_channel_state_t {
+    sender_note_t notes[128];
+  };
+
   void reset_channel(uint8_t channel);
   void reset_all_channels();
   void note_on(uint8_t channel, uint8_t note, uint8_t velocity,
@@ -338,6 +394,17 @@ private:
   void emit_note(uint8_t status, uint8_t note, uint8_t velocity,
                  signal_t<const io_bytes_reader &> &midi_out);
 
+  uint32_t next_sent_extended_seq(uint16_t seq_nr);
+  void send_note_on(uint8_t channel, uint8_t note, uint8_t velocity,
+                    uint32_t extended_seq);
+  void send_note_off(uint8_t channel, uint8_t note, uint32_t extended_seq);
+  void send_reset_channel(uint8_t channel);
+  void send_reset_all_channels();
+  uint32_t sender_checkpoint() const;
+  uint32_t normalize_reported_extended_seq(uint32_t reported) const;
+  void collect_sender_channels(uint32_t checkpoint);
+  size_t coded_channels_size() const;
+
   std::array<channel_state_t, 16> channels_{};
   bool has_received_packet_ = false;
   uint16_t last_seq_ = 0;
@@ -347,6 +414,20 @@ private:
   uint32_t packet_extended_seq_ = 0;
   uint32_t confirmed_extended_seq_ = 0;
   bool has_feedback_ = false;
+
+  std::array<sender_channel_state_t, 16> send_channels_{};
+  /// Channels coded in the journal being written. Reused between packets so the
+  /// hot path does not allocate: the note log vectors keep their capacity.
+  std::array<journal_channel_t, 16> coded_channels_{};
+  size_t coded_channel_count_ = 0;
+  std::array<bool, 16> last_packet_had_note_off_{};
+  bool has_sent_packet_ = false;
+  uint16_t last_sent_seq_nr_ = 0;
+  uint32_t send_rollovers_ = 0;
+  uint32_t current_extended_seq_ = 0;
+  uint32_t first_extended_seq_ = 0;
+  uint32_t last_packet_seq_ = 0; // extended seq of the previous packet
+  uint32_t order_counter_ = 0;
 };
 
 } // namespace rtpmidid

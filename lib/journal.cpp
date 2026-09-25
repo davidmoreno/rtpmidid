@@ -17,6 +17,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <algorithm>
 #include <rtpmidid/journal.hpp>
 #include <rtpmidid/logger.hpp>
 
@@ -281,21 +282,24 @@ journal_chapter_n_t journal_codec_t::read_chapter_n(io_bytes_reader &reader) {
   return chapter;
 }
 
-void journal_codec_t::write_journal_n(
-    io_bytes_writer &writer, uint16_t checkpoint, bool s,
-    const std::vector<journal_channel_t> &channels) {
+void journal_codec_t::write_journal_n(io_bytes_writer &writer,
+                                      uint16_t checkpoint, bool s,
+                                      const journal_channel_t *channels,
+                                      size_t count) {
   // A channel journal with no chapters at all is not coded.
-  std::vector<const journal_channel_t *> coded;
-  for (const auto &channel : channels) {
-    if (!channel.chapter_n.empty()) {
-      coded.push_back(&channel);
+  std::array<const journal_channel_t *, 16> coded{};
+  size_t coded_count = 0;
+  for (size_t i = 0; i < count; i++) {
+    if (channels[i].chapter_n.empty()) {
+      continue;
     }
+    if (coded_count >= coded.size()) {
+      throw bad_journal("Journal with more than {} channel journals",
+                        coded.size());
+    }
+    coded[coded_count++] = &channels[i];
   }
-  if (coded.size() > 16) {
-    throw bad_journal("Journal with {} channel journals, maximum is 16",
-                      coded.size());
-  }
-  for (size_t i = 1; i < coded.size(); i++) {
+  for (size_t i = 1; i < coded_count; i++) {
     if (coded[i]->channel <= coded[i - 1]->channel) {
       throw bad_journal("Channel journals MUST be in ascending channel order, "
                         "got {} after {}",
@@ -308,19 +312,21 @@ void journal_codec_t::write_journal_n(
   // header) to S=0 too (RFC 6295 Appendix A.1), so derive it instead of
   // trusting the caller.
   header.s = s;
-  for (const auto *channel : coded) {
+  for (size_t i = 0; i < coded_count; i++) {
+    const auto *channel = coded[i];
     if (!channel->s ||
         (channel->chapter_n.has_note_off() && !channel->chapter_n.b) ||
         !all_note_logs_have_s(channel->chapter_n)) {
       header.s = false;
     }
   }
-  header.a = !coded.empty();
-  header.totchan = coded.empty() ? 0 : uint8_t(coded.size() - 1);
+  header.a = coded_count > 0;
+  header.totchan = coded_count ? uint8_t(coded_count - 1) : 0;
   header.checkpoint = checkpoint;
   write_header(writer, header);
 
-  for (const auto *channel : coded) {
+  for (size_t i = 0; i < coded_count; i++) {
+    const auto *channel = coded[i];
     journal_channel_header_t channel_header;
     // An element with S=0 (or a NoteOff bitfield with B=0, which is its S bit)
     // means the channel journal codes a command from packet I-1, so the channel
@@ -448,12 +454,70 @@ journal_message_t journal_codec_t::read_journal(io_bytes_reader &reader) {
 }
 
 //
-// Receiver side: the RJRS (RFC 4696, "Receiving Streams: The Recovery Journal")
+// MIDI message walker, shared by the receiver and the sender
 //
+
+/**
+ * Walk a MIDI event stream, calling `handler(status, data, size)` once per
+ * message. `data`/`size` are the message payload, without the status byte.
+ *
+ * rtppeer_t emits one complete message per event, with running status already
+ * expanded, and SysEx either as F0..F7 or, when it had to be reassembled from
+ * several packets, without the leading F0 but always ending in F7.
+ */
+template <typename Handler>
+static void for_each_midi_message(const io_bytes_reader &events,
+                                  Handler handler) {
+  if (events.size() > 1 && events.start[0] < 0x80 &&
+      events.start[events.size() - 1] == 0xF7) {
+    // Reassembled SysEx.
+    handler(uint8_t(0xF0), events.start, events.size());
+    return;
+  }
+
+  io_bytes_reader reader(events);
+  while (reader.remaining()) {
+    auto status = reader.read_uint8();
+    if (status < 0x80) {
+      continue; // A data byte where a status byte belongs: skip it
+    }
+    if (status == 0xF0) { // SysEx: everything up to and including F7
+      auto *data = reader.position;
+      auto size = reader.remaining();
+      while (reader.remaining()) {
+        if (reader.read_uint8() == 0xF7) {
+          break;
+        }
+      }
+      handler(status, data, size);
+      continue;
+    }
+    if (status >= 0xF0) { // System common and realtime: no data for us
+      handler(status, nullptr, 0);
+      continue;
+    }
+    size_t wanted = 2;
+    switch (status & 0xF0) {
+    case 0xC0: // Program change
+    case 0xD0: // Channel aftertouch
+      wanted = 1;
+      break;
+    default:
+      break;
+    }
+    auto *data = reader.position;
+    auto size = std::min(wanted, reader.remaining());
+    reader.skip(int(size));
+    handler(status, data, size);
+  }
+}
 
 // SysEx Reset State commands that make earlier note commands not N-active
 // (RFC 6295 Appendix A.1): GM/GM2 System Enable/Disable and DLS On/Off.
 static bool is_reset_state_sysex(const uint8_t *data, size_t size) {
+  if (!data) {
+    return false;
+  }
   if (size && data[0] == 0xF0) {
     data++;
     size--;
@@ -478,6 +542,10 @@ static bool seq_before(uint32_t extended_seq, uint16_t checkpoint) {
   return int16_t(uint16_t(extended_seq) - checkpoint) < 0;
 }
 
+//
+// Receiver side: the RJRS (RFC 4696, "Receiving Streams: The Recovery Journal")
+//
+
 void recovery_journal_t::reset() {
   channels_ = {};
   has_received_packet_ = false;
@@ -486,12 +554,31 @@ void recovery_journal_t::reset() {
   packet_extended_seq_ = 0;
   confirmed_extended_seq_ = 0;
   has_feedback_ = false;
+
+  send_channels_ = {};
+  coded_channels_ = {};
+  coded_channel_count_ = 0;
+  last_packet_had_note_off_ = {};
+  has_sent_packet_ = false;
+  last_sent_seq_nr_ = 0;
+  send_rollovers_ = 0;
+  current_extended_seq_ = 0;
+  first_extended_seq_ = 0;
+  last_packet_seq_ = 0;
+  order_counter_ = 0;
 }
 
 void recovery_journal_t::feedback_in(uint32_t extended_seq) {
-  confirmed_extended_seq_ = extended_seq;
-  has_feedback_ = true;
   stats.feedback_received++;
+  // A peer reports the *highest* sequence number it has received, so the value
+  // only ever grows: keep the maximum and ignore stale or reordered reports,
+  // which would otherwise pull the checkpoint (and the journal) back.
+  auto normalized = normalize_reported_extended_seq(extended_seq);
+  if (has_feedback_ && int32_t(normalized - confirmed_extended_seq_) <= 0) {
+    return;
+  }
+  confirmed_extended_seq_ = normalized;
+  has_feedback_ = true;
 }
 
 journal_loss_e recovery_journal_t::observe(uint16_t seq_nr) {
@@ -558,38 +645,19 @@ void recovery_journal_t::note_off(uint8_t channel, uint8_t note,
 
 void recovery_journal_t::midi_played(const io_bytes_reader &events,
                                      uint32_t timestamp) {
-  // SysEx reassembled from several packets is emitted without the leading F0
-  // but always ends in F7, so a buffer that starts with a data byte and ends
-  // with F7 is a complete SysEx message.
-  if (events.size() > 1 && events.start[0] < 0x80 &&
-      events.start[events.size() - 1] == 0xF7) {
-    if (is_reset_state_sysex(events.start, events.size())) {
-      reset_all_channels();
-    }
+  if (!enabled) {
     return;
   }
-
-  io_bytes_reader reader(events);
-  while (reader.remaining()) {
-    auto status = reader.read_uint8();
-    if (status < 0x80) {
-      // The caller is expected to expand running status before emitting, so an
-      // abbreviated message here is unexpected data: skip it.
-      continue;
-    }
+  for_each_midi_message(events, [&](uint8_t status, const uint8_t *data,
+                                    size_t size) {
     const uint8_t channel = status & 0x0F;
     switch (status & 0xF0) {
-    case 0x80: { // NoteOff: note, release velocity
-      auto note = reader.remaining() ? (reader.read_uint8() & 0x7F) : 0;
-      if (reader.remaining()) {
-        reader.read_uint8();
-      }
-      note_off(channel, note, timestamp);
+    case 0x80: // NoteOff: note, release velocity
+      note_off(channel, size ? (data[0] & 0x7F) : 0, timestamp);
       break;
-    }
     case 0x90: { // NoteOn: note, velocity. Velocity 0 means NoteOff.
-      auto note = reader.remaining() ? (reader.read_uint8() & 0x7F) : 0;
-      auto velocity = reader.remaining() ? (reader.read_uint8() & 0x7F) : 0;
+      auto note = size ? (data[0] & 0x7F) : 0;
+      auto velocity = size > 1 ? (data[1] & 0x7F) : 0;
       if (velocity == 0) {
         note_off(channel, note, timestamp);
       } else {
@@ -597,61 +665,25 @@ void recovery_journal_t::midi_played(const io_bytes_reader &events,
       }
       break;
     }
-    case 0xA0: { // Poly aftertouch: note, pressure
-      if (reader.remaining()) {
-        reader.read_uint8();
-      }
-      if (reader.remaining()) {
-        reader.read_uint8();
-      }
-      break;
-    }
     case 0xB0: { // Control change: controller, value
-      auto controller = reader.remaining() ? (reader.read_uint8() & 0x7F) : 0;
-      if (reader.remaining()) {
-        reader.read_uint8();
-      }
+      auto controller = size ? (data[0] & 0x7F) : 0;
       if (controller >= 123 || controller == 120) {
-        // All Notes Off family and All Sound Off: earlier note commands are not
-        // N-active any more, and the notes are not sounding.
+        // All Notes Off family and All Sound Off: earlier note commands are
+        // not N-active any more, and the notes are not sounding.
         reset_channel(channel);
       }
       break;
     }
-    case 0xC0: // Program change: program
-    case 0xD0: // Channel aftertouch: pressure
-      if (reader.remaining()) {
-        reader.read_uint8();
+    case 0xF0: // System reset and Reset State SysEx are Reset State commands
+      if (status == 0xFF ||
+          (status == 0xF0 && is_reset_state_sysex(data, size))) {
+        reset_all_channels();
       }
       break;
-    case 0xE0: // Pitch wheel: two data bytes
-      if (reader.remaining()) {
-        reader.read_uint8();
-      }
-      if (reader.remaining()) {
-        reader.read_uint8();
-      }
-      break;
-    default: { // 0xF0: system messages, one complete message per emission
-      if (status == 0xFF) {
-        reset_all_channels(); // System reset is a Reset State command
-      } else if (status == 0xF0) {
-        auto start = reader.position;
-        auto size = reader.remaining();
-        while (reader.remaining()) {
-          auto byte = reader.read_uint8();
-          if (byte == 0xF7) {
-            break;
-          }
-        }
-        if (is_reset_state_sysex(start, size)) {
-          reset_all_channels();
-        }
-      }
-      return; // Nothing after a system message interests us
+    default:
+      break; // No note state in A0/C0/D0/E0 messages
     }
-    }
-  }
+  });
 }
 
 void recovery_journal_t::emit_note(
@@ -714,8 +746,8 @@ void recovery_journal_t::handle_chapter_n(
     const bool sounding = note_state.velocity != 0;
     bool lost_note_off_on = false;
     if (sounding) {
-      // The three tests of RFC 4696 Section 7.2 for a lost
-      // NoteOff->NoteOn sequence.
+      // The three tests of RFC 4696 Section 7.2 for a lost NoteOff->NoteOn
+      // sequence.
       if (note_state.velocity != log.velocity) {
         lost_note_off_on = true;
       } else if (seq_before(note_state.extended_seq, checkpoint)) {
@@ -735,17 +767,15 @@ void recovery_journal_t::handle_chapter_n(
       } else {
         stats.notes_skipped++;
       }
-    } else {
-      if (lost_note_off_on) {
-        emit_note(uint8_t(0x80 | (channel & 0x0F)), note, 0, midi_out);
-        stats.notes_repaired_off++;
-        if (log.y) {
-          emit_note(uint8_t(0x90 | (channel & 0x0F)), note, log.velocity,
-                    midi_out);
-          stats.notes_repaired_on++;
-        } else {
-          stats.notes_skipped++;
-        }
+    } else if (lost_note_off_on) {
+      emit_note(uint8_t(0x80 | (channel & 0x0F)), note, 0, midi_out);
+      stats.notes_repaired_off++;
+      if (log.y) {
+        emit_note(uint8_t(0x90 | (channel & 0x0F)), note, log.velocity,
+                  midi_out);
+        stats.notes_repaired_on++;
+      } else {
+        stats.notes_skipped++;
       }
     }
 
@@ -760,7 +790,7 @@ void recovery_journal_t::handle_chapter_n(
 void recovery_journal_t::parse_journal(
     io_bytes_reader &journal, journal_loss_e loss, uint32_t timestamp,
     signal_t<const io_bytes_reader &> &midi_out) {
-  if (loss == journal_loss_e::none) {
+  if (!enabled || loss == journal_loss_e::none) {
     // Journals describe the past. If nothing was lost, there is nothing to
     // repair: this is the common case, as peers like Apple's driver set J=1 on
     // every packet.
@@ -806,4 +836,236 @@ size_t recovery_journal_t::sounding_notes() const {
     }
   }
   return count;
+}
+
+//
+// Sender side
+//
+
+uint32_t recovery_journal_t::next_sent_extended_seq(uint16_t seq_nr) {
+  if (has_sent_packet_ && seq_nr < last_sent_seq_nr_ &&
+      uint16_t(last_sent_seq_nr_ - seq_nr) > 0x8000) {
+    send_rollovers_++; // The 16 bit sequence number wrapped
+  }
+  last_sent_seq_nr_ = seq_nr;
+  current_extended_seq_ = (send_rollovers_ << 16) | seq_nr;
+  if (!has_sent_packet_) {
+    first_extended_seq_ = current_extended_seq_;
+  }
+  has_sent_packet_ = true;
+  return current_extended_seq_;
+}
+
+void recovery_journal_t::send_note_on(uint8_t channel, uint8_t note,
+                                      uint8_t velocity, uint32_t extended_seq) {
+  auto &state = send_channels_[channel & 0x0F].notes[note & 0x7F];
+  state.has_command = true;
+  state.velocity = velocity & 0x7F;
+  state.extended_seq = extended_seq;
+  state.order = ++order_counter_;
+}
+
+void recovery_journal_t::send_note_off(uint8_t channel, uint8_t note,
+                                       uint32_t extended_seq) {
+  auto &state = send_channels_[channel & 0x0F].notes[note & 0x7F];
+  state.has_command = true;
+  state.velocity = 0;
+  state.extended_seq = extended_seq;
+  state.order = ++order_counter_;
+  last_packet_had_note_off_[channel & 0x0F] = true;
+}
+
+void recovery_journal_t::send_reset_channel(uint8_t channel) {
+  if (channel > 15) {
+    return;
+  }
+  send_channels_[channel] = sender_channel_state_t{};
+}
+
+void recovery_journal_t::send_reset_all_channels() {
+  for (auto &channel : send_channels_) {
+    channel = sender_channel_state_t{};
+  }
+}
+
+void recovery_journal_t::midi_out(uint16_t seq_nr,
+                                  const io_bytes_reader &events) {
+  auto extended_seq = next_sent_extended_seq(seq_nr);
+  last_packet_seq_ = extended_seq;
+  last_packet_had_note_off_.fill(false);
+
+  for_each_midi_message(
+      events, [&](uint8_t status, const uint8_t *data, size_t size) {
+        const uint8_t channel = status & 0x0F;
+        switch (status & 0xF0) {
+        case 0x80: // NoteOff: note, release velocity
+          send_note_off(channel, size ? (data[0] & 0x7F) : 0, extended_seq);
+          break;
+        case 0x90: { // NoteOn: note, velocity. Velocity 0 means NoteOff.
+          auto note = size ? (data[0] & 0x7F) : 0;
+          auto velocity = size > 1 ? (data[1] & 0x7F) : 0;
+          if (velocity == 0) {
+            send_note_off(channel, note, extended_seq);
+          } else {
+            send_note_on(channel, note, velocity, extended_seq);
+          }
+          break;
+        }
+        case 0xB0: { // Control change: controller, value
+          auto controller = size ? (data[0] & 0x7F) : 0;
+          if (controller >= 123 || controller == 120) {
+            send_reset_channel(channel); // Not N-active any more
+          }
+          break;
+        }
+        case 0xF0: // System reset and Reset State SysEx
+          if (status == 0xFF ||
+              (status == 0xF0 && is_reset_state_sysex(data, size))) {
+            send_reset_all_channels();
+          }
+          break;
+        default:
+          break;
+        }
+      });
+}
+
+uint32_t
+recovery_journal_t::normalize_reported_extended_seq(uint32_t reported) const {
+  // The peer reports the extended sequence number of *our* stream as it saw it.
+  // Keep our rollover count: RFC 3550 extended sequence numbers are compared
+  // with a half-range rule.
+  uint32_t candidate =
+      (current_extended_seq_ & 0xFFFF0000u) | (reported & 0xFFFFu);
+  if (candidate > current_extended_seq_ + 0x8000u) {
+    candidate -= 0x10000u;
+  }
+  return candidate;
+}
+
+uint32_t recovery_journal_t::sender_checkpoint() const {
+  if (!has_sent_packet_) {
+    // First packet: the checkpoint is the packet itself, so the history is
+    // empty (RFC 6295 Appendix A.1).
+    return current_extended_seq_;
+  }
+  uint32_t checkpoint =
+      has_feedback_ ? confirmed_extended_seq_ : first_extended_seq_;
+  if (checkpoint < first_extended_seq_) {
+    checkpoint = first_extended_seq_;
+  }
+  if (checkpoint > last_packet_seq_) {
+    // The history never contains the packet carrying the journal.
+    checkpoint = last_packet_seq_;
+  }
+  return checkpoint;
+}
+
+void recovery_journal_t::collect_sender_channels(uint32_t checkpoint) {
+  coded_channel_count_ = 0;
+
+  // Note logs are coded oldest first (RFC 6295 Appendix A.1), which `order`
+  // gives us: commands in the same packet share a sequence number.
+  std::array<std::pair<uint32_t, uint8_t>, 128> ordered{};
+
+  for (uint8_t channel = 0; channel < 16; channel++) {
+    const auto &state = send_channels_[channel];
+    // Entries are reused between packets, so each one is cleared as it is
+    // taken, not only the ones the previous packet happened to use. Clearing
+    // the note logs keeps their capacity, so after the first packet that codes
+    // something this path does not allocate.
+    auto &coded = coded_channels_[coded_channel_count_];
+    auto &chapter = coded.chapter_n;
+    chapter.note_logs.clear();
+    chapter.note_off.fill(false);
+    chapter.b = true;
+    size_t log_count = 0;
+    bool has_content = false;
+
+    for (uint8_t note = 0; note < 128; note++) {
+      const auto &note_state = state.notes[note];
+      if (!note_state.has_command || note_state.extended_seq < checkpoint) {
+        continue; // Not part of the checkpoint history
+      }
+      if (note_state.velocity != 0) {
+        ordered[log_count++] = {note_state.order, note};
+      } else {
+        chapter.set_note_off(note); // Its most recent command was a NoteOff
+        has_content = true;
+      }
+    }
+
+    if (log_count) {
+      std::sort(ordered.begin(), ordered.begin() + log_count);
+      for (size_t i = 0; i < log_count; i++) {
+        const auto note = ordered[i].second;
+        const auto &note_state = state.notes[note];
+        journal_note_log_t log;
+        log.note = note;
+        log.velocity = note_state.velocity;
+        // S bit: 0 when the command comes from packet I-1. That is also the one
+        // case where the NoteOn is "simultaneous" with the packet, so Y=1 says
+        // play it; older entries are skipped rather than retriggered
+        // (RFC 4696 section 7.2).
+        const bool from_previous_packet =
+            note_state.extended_seq == last_packet_seq_;
+        log.s = !from_previous_packet;
+        log.y = from_previous_packet;
+        chapter.note_logs.push_back(log);
+        has_content = true;
+      }
+    }
+
+    if (!has_content) {
+      // A channel journal with no chapters is not coded at all.
+      continue;
+    }
+    // B bit: 0 when packet I-1 had a NoteOff on this channel.
+    chapter.b = !last_packet_had_note_off_[channel];
+
+    coded.channel = channel;
+    coded.s = true;
+    coded.has_chapter_n = true;
+    coded_channel_count_++;
+  }
+}
+
+size_t recovery_journal_t::coded_channels_size() const {
+  size_t size = journal_codec_t::header_size;
+  for (size_t i = 0; i < coded_channel_count_; i++) {
+    size += journal_codec_t::channel_journal_size(coded_channels_[i].chapter_n);
+  }
+  return size;
+}
+
+size_t recovery_journal_t::write_journal(io_bytes_writer &writer) {
+  if (!enabled) {
+    return 0;
+  }
+
+  uint32_t checkpoint = sender_checkpoint();
+  collect_sender_channels(checkpoint);
+
+  // Keep the journal within the packet budget by advancing the checkpoint: the
+  // commands older than it are dropped. This trades repair coverage for packet
+  // size, which is exactly what the sending policy is about; with the default
+  // cap it only happens with around a hundred notes sounding at once.
+  const size_t budget = std::min(max_journal_size, writer.remaining());
+  while (coded_channels_size() > budget && checkpoint < last_packet_seq_) {
+    checkpoint++;
+    collect_sender_channels(checkpoint);
+  }
+  if (coded_channels_size() > budget) {
+    WARNING_RATE_LIMIT(10,
+                       "Recovery journal needs {} octets but only {} are "
+                       "available, sending it anyway",
+                       coded_channels_size(), budget);
+  }
+
+  const auto start = writer.pos();
+  journal_codec_t::write_journal_n(writer, uint16_t(checkpoint & 0xFFFF), true,
+                                   coded_channels_.data(),
+                                   coded_channel_count_);
+  stats.journals_sent++;
+  return writer.pos() - start;
 }
