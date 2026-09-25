@@ -4,7 +4,7 @@ The RFC has data all around the place, but here I have the headers and the bit
 meanings.
 
 Implementation spec for Chapter N (the journal that repairs missing NoteOn /
-NoteOff): [../architecture/recovery-journal.md](../architecture/recovery-journal.md).
+NoteOff): [architecture/recovery-journal.md](architecture/recovery-journal.md).
 
 ## RTP Header
 

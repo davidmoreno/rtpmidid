@@ -16,9 +16,9 @@ References:
   sender/receiver algorithms)
 - Apple MIDI Network Driver Protocol (journals always on, `'RS'` feedback,
   guard packets, which chapters Apple implements)
-- Wire-format cheat sheet: [reference/rfc6295-notes.md](../reference/rfc6295-notes.md)
-- Layer context: [rtp-midi-networking.md](rtp-midi-networking.md)
-- Data path: [midi-data-path.md](midi-data-path.md)
+- Wire-format cheat sheet: [RFC6295_notes.md](../RFC6295_notes.md)
+- Layer context: `rtp-midi-networking.md` (not in this branch's docs tree)
+- Data path: `midi-data-path.md` (not in this branch's docs tree)
 
 ## Decisions (locked)
 
@@ -494,12 +494,12 @@ this being mostly benign. The journal adds more shared state, so:
   only touched from `rtppeer_t::data_ready()`, i.e. the poller thread.
 - Counters are read by `status_rows` on another thread: use relaxed
   `std::atomic<uint32_t>` for the `stats_t` fields so reads cannot tear, and
-  follow [mechanical-sympathy.md](mechanical-sympathy.md) (no allocation on the
+  follow the mechanical-sympathy notes (no allocation on the
   hot path; `io_bytes_writer_static` for packet building).
 - The journal state is `16 * 128 * 12 B ≈ 24 KB` (receiver) plus
   `16 * 128 * 16 B ≈ 32 KB` (sender) per peer, so about 56 KB, plus the reused
   `coded_channels_` vector (allocated once, on the first packet that has a
-  journal to code). Note it in [performance.md](performance.md).
+  journal to code). Worth a performance note.
 - The codec allocates a `std::vector` for the note logs of each decoded Chapter
   N. That is an allocation on the receive path (a few per second at most, and
   only for packets that carry a journal). If it shows up in profiles, keep one
@@ -508,7 +508,7 @@ this being mostly benign. The journal adds more shared state, so:
 
 ## 7. Status of the current code
 
-**Phases 1 to 4 done.** The library is feature complete for Chapter N:
+**Phases 1 to 5 done.** The library is feature complete for Chapter N:
 
 - `journal_codec_t`, the stateless wire codec (Phase 1), with 36
   golden-vector/round-trip tests in `tests/test_journal.cpp`.
@@ -518,12 +518,17 @@ this being mostly benign. The journal adds more shared state, so:
   `tests/test_journal_timer.cpp` driving it through the real poller.
 - Integration tests in `tests/test_rtppeer.cpp`, including a two-peer
   send-and-repair test where a packet is dropped on the way.
+- Counters (Phase 5): `recovery_journal_t::stats` reports, per peer, journals
+  received/sent, notes repaired/skipped/silenced, losses, out-of-order packets,
+  malformed journals, guard packets and feedback, exercised by
+  `tests/test_recovery_journal.cpp` and `tests/test_rtppeer.cpp`. Exposing them through the daemon JSON-RPC
+  surface and the Web UI is a separate change and **is not part of this
+  library-side port**.
 
 The old receive-side `parse_journal`, `parse_journal_chapter` and
 `parse_journal_chapter_N` are **deleted**; incoming journals are handled by
 `recovery_journal_t`. `send_midi()` sets `J=1` and appends a journal to every
-packet. What is left is observability (Phase 5) and, on the wire protocol side,
-chapters other than N.
+packet. What is left is on the wire protocol side: chapters other than N.
 
 Defects 1-9 below are fixed by construction (the codec replaced that code);
 10 is Phase 4. Kept here as the record of what was wrong:
@@ -612,12 +617,20 @@ Feedback, guard packets and session exit (`tests/test_journal_timer.cpp` and
 - [x] `session_end()` emits a NoteOff for every sounding note, counts them, and is
       a no-op when nothing is sounding.
 
+Observability. **Counters are in the library (Phase 5)**; the daemon RPC and Web
+UI surface are not part of this library-side port:
+
+- [x] `recovery_journal_t::stats` counts repairs, losses, skipped and silenced
+      notes, guard packets and feedback after a real loss and repair.
+- [ ] Exposing them in `rtp_peer_status_t` and JSON-RPC (`router.status`,
+      `peer.status`, `router.peer_updated`) and the Web UI Peers table —
+      separate change, not included here.
+
 Still to come:
 
-- [ ] Observability: counters in `rtp_peer_status_t` and the JSON-RPC/Web UI
-      surface (Phase 5).
-- [ ] Chapter C (volume, All Notes Off), which Chapter N cannot protect, and
-      whatever real-device testing says about the `Y` heuristic.
+- [ ] Chapter C (volume, All Notes Off), which Chapter N cannot protect.
+- [ ] The guard-delay tuning above, once counters from real devices are in.
+- [ ] The manual interop matrix, still pending.
 
 `tests/test_rtppeer.cpp` integration (Phase 2, done):
 
@@ -646,8 +659,7 @@ Manual interop matrix (document results in the PR):
 ## 9. Phases
 
 - **Phase 0 — docs (done).** This spec; correct the wire-format errors in
-  [reference/rfc6295-notes.md](../reference/rfc6295-notes.md); link from the
-  docs index. No code.
+  [RFC6295_notes.md](../RFC6295_notes.md); link from the library README. No code.
 - **Phase 1 — codec (done).** `include/rtpmidid/journal.hpp` + `lib/journal.cpp`
   with Chapter N encode/decode, top-level and channel headers, and skip/size
   arithmetic; 36 golden-vector/round-trip tests in `tests/test_journal.cpp`. Not
@@ -673,14 +685,15 @@ Manual interop matrix (document results in the PR):
   `test_journal_timer.cpp` (feedback and guard packets on the real poller, guards
   stopping when the peer is caught up, timer stopping on disconnect) and by the
   `session_end` tests; the `tcpdump` part remains for manual validation.*
-- **Phase 5 — observability + docs.** Counters → `rtp_peer_status_t` → JSON-RPC
-  and Web UI; `docs/development/control-protocol.md`,
-  [development-notes.md](../development/development-notes.md) (drop the "no
-  journal support" limitation), [testing.md](../development/testing.md),
-  `tests/README.md` checkboxes.
+- **Phase 5 — observability + docs (library part done).** Counters live in
+  `recovery_journal_t::stats`; the daemon JSON-RPC surface
+  (`rtp_peer_status_t::journal` → `router.status`, `peer.status`,
+  `router.peer_updated`) and the Web UI Peers table (Journal column with a
+  tooltip breakdown) are a separate change and are **not** part of this
+  library-side port. *Counters are exercised by the `test_recovery_journal.cpp`
+  and `test_rtppeer.cpp` assertions on `recovery_journal.stats`.*
 
-Each phase is a separate PR, with its doc update in the same PR (see
-[AGENTS.md](../../AGENTS.md)).
+Each phase is a separate PR, with its doc update in the same PR.
 
 ## 10. Open questions
 
@@ -699,13 +712,34 @@ Each phase is a separate PR, with its doc update in the same PR (see
    chatty? `guardtime` is not negotiated in Apple's handshake, so we must pick.
 4. **Silence notes on disconnect (§4.5)** is technically outside Chapter N but
    is the same user-visible bug. Include in Phase 4 or a separate PR?
-5. **Timers are per peer.** `journal_timer_t` adds a 100 ms timer per peer; with
-   many peers that is many wake-ups. If it ever shows up in profiles, one shared
-   timer could drive all peers, or the tick could be raised for idle peers.
-6. **Chapter C next?** A lost CC 7 (volume) or CC 123 (All Notes Off) is an
+5. **First-guard delay: tune it with real data (deferred, decision made).** The
+   100 ms comes from RFC 4696 §4.2's informational reference algorithm, not from
+   a mandate: the only protocol parameter is `guardtime` (maximum separation,
+   typical 500-2000 ms, which we keep as `guard_max_period`), and Apple's
+   handshake has no SDP, so nothing is negotiated. The plan once Phase 5 counters
+   have produced data from real devices:
+   - drive the first delay from **jitter**, not mean latency: what the delay must
+     exceed is the *differential* delay between the original packet and the guard,
+     otherwise the guard wins the race, the receiver repairs, and the late
+     original then plays the NoteOn a second time (audible double trigger). Mean
+     latency is the wrong quantity; `peer.stats.average_and_stddev().stddev`
+     (CK samples) is the signal we already have.
+   - `guard_min_period = clamp(2 × stddev, 50 ms, 250 ms)`, falling back to
+     100 ms until enough CK samples exist. The floor stops guard spam on a LAN
+     with ~0 latency and ~0 loss; the cap keeps worst-case stuck-note repair
+     under ~350 ms.
+   - use a one-shot timer armed after the last MIDI packet instead of the 100 ms
+     tick, so a target below the tick period is actually honoured (today the
+     effective delay is 100-200 ms) and there are fewer wake-ups.
+   - the counters to watch first: `out_of_order` (guards racing delayed packets)
+     and `notes_repaired_on` versus `notes_skipped` (whether `Y` is tuned right).
+6. **Timers are per peer.** `journal_timer_t` adds a timer per peer; with many
+   peers that is many wake-ups. If it shows up in profiles, one shared timer could
+   drive all peers. The one-shot guard timer above removes most of them.
+7. **Chapter C next?** A lost CC 7 (volume) or CC 123 (All Notes Off) is an
    indefinite artifact that Chapter N cannot repair, and CC is cheap to add
    (fixed 2-octet logs). It is the natural follow-up once Chapter N has been
    validated against real devices.
-7. **Interop validation is still pending.** Everything here is tested against
+8. **Interop validation is still pending.** Everything here is tested against
    itself and against the RFC byte layouts; the manual matrix below needs to run
    on real macOS/iOS/Windows peers.
