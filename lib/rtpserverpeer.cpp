@@ -39,6 +39,9 @@ rtpserverpeer_t::rtpserverpeer_t(io_bytes_reader &&buffer,
 
   // Setup some callbacks
   setup_connections();
+  // Start the journal timers before any packet arrives, so a connection that
+  // completes during the first data_ready() is not missed.
+  journal_timer = std::make_unique<journal_timer_t>(*peer);
   // Finally pass the data to the peer
   peer->data_ready(std::move(buffer), port);
 
@@ -98,6 +101,7 @@ rtpserverpeer_t &rtpserverpeer_t::operator=(rtpserverpeer_t &&other) {
   this->address = std::move(other.address);
   this->server = std::move(other.server);
   this->peer = std::move(other.peer);
+  this->journal_timer = std::move(other.journal_timer);
 
   other.send_event_connection.disconnect();
   other.status_change_event_connection.disconnect();

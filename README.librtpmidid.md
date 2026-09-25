@@ -44,6 +44,10 @@ chapter that repairs missing note on/off after packet loss.
   journal section to append to it (set the `J` bit), with the checkpoint driven
   by `'RS'` feedback via `feedback_in()`.
 
+- `journal_timer_t`: per peer, drives periodic `'RS'` receiver feedback and guard
+  packets on the poller thread. `rtpclient_t` and `rtpserverpeer_t` create one
+  automatically; periods are public members for tuning or testing.
+
 `rtppeer_t` already owns one and uses it for incoming packets. See
 [docs/architecture/recovery-journal.md](docs/architecture/recovery-journal.md),
 `test_journal.cpp` and `test_recovery_journal.cpp`.

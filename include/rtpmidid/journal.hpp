@@ -268,7 +268,8 @@ public:
     uint32_t losses = 0;
     uint32_t out_of_order = 0;
     uint32_t malformed = 0;
-    // Sender side (Phase 3/4)
+    uint32_t notes_silenced = 0; // Notes ended when leaving a session
+    // Sender side
     uint32_t journals_sent = 0;
     uint32_t guard_packets = 0;
     uint32_t feedback_sent = 0;
@@ -339,6 +340,22 @@ public:
    */
   size_t write_journal(io_bytes_writer &writer);
 
+  /**
+   * True if we recorded note commands the peer may still be missing, which is
+   * when guard packets (journal only payloads) are worth sending.
+   */
+  bool sender_has_pending_state() const;
+
+  /**
+   * True when the peer's feedback covers everything we have sent, so there is
+   * nothing left to guard. Always false without feedback: the anchor policy
+   * keeps the whole stream in the journal until the peer tells us otherwise.
+   */
+  bool sender_is_caught_up() const {
+    return has_sent_packet_ && has_feedback_ &&
+           confirmed_extended_seq_ >= last_packet_seq_;
+  }
+
   /// Record a MIDI event that was emitted (to ALSA): this is what the receiver
   /// believes the renderer is doing.
   void midi_played(const io_bytes_reader &events, uint32_t timestamp);
@@ -357,6 +374,20 @@ public:
 
   /// How many notes are currently sounding, for stats and tests.
   size_t sounding_notes() const;
+
+  /**
+   * End every note the receiver believes is sounding, and forget it. Called
+   * when leaving a session: RFC 6295 Section 4 requires that a receiving
+   * session does not end with indefinite artifacts, and a note that never gets
+   * its NoteOff is exactly that. This is also what cleans up after a network
+   * death, where no journal will ever arrive.
+   */
+  size_t session_end(signal_t<const io_bytes_reader &> &midi_out);
+
+  /// Extended sequence number of the highest packet received, for 'RS'
+  /// feedback.
+  uint32_t highest_received_extended_seq() const { return extended_seq_; }
+  bool has_received_packet() const { return has_received_packet_; }
 
   stats_t stats;
 

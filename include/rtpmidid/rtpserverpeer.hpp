@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "journal_timer.hpp"
 #include "rtppeer.hpp"
 #include <rtpmidid/networkaddress.hpp>
 #include <rtpmidid/utils.hpp>
@@ -32,6 +33,8 @@ class rtpserverpeer_t {
 public:
   int id;
   std::shared_ptr<rtppeer_t> peer;
+  /// Receiver feedback and guard packets for this peer (see journal_timer.hpp)
+  std::unique_ptr<journal_timer_t> journal_timer;
   network_address_t address;
   rtpserver_t *server;
 

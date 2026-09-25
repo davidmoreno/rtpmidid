@@ -77,7 +77,6 @@ make_channel(uint8_t channel, journal_chapter_n_t chapter, bool s = true) {
   return result;
 }
 
-
 /// Write a journal for the packet being sent and return its octets.
 static io_bytes_managed write_sender_journal(recovery_journal_t &journal) {
   io_bytes_managed buffer(1024);
@@ -521,6 +520,50 @@ void test_velocity_zero_note_log_is_note_off() {
   ASSERT_EQUAL(journal.stats.notes_repaired_off, 1);
 }
 
+void test_session_end_silences_sounding_notes() {
+  recovery_journal_t journal;
+  midi_collector_t out;
+
+  journal.observe(0);
+  journal.midi_played(hex_to_bin("90 48 40 91 49 7F"), 100);
+  journal.midi_played(hex_to_bin("90 4A 30"), 100);
+  ASSERT_EQUAL(journal.sounding_notes(), 3);
+
+  auto silenced = journal.session_end(out.signal);
+
+  ASSERT_EQUAL(silenced, 3);
+  ASSERT_EQUAL(out.events.size(), 3);
+  // Channel by channel, note by note.
+  ASSERT_EQUAL(out.events[0], "80 48 00");
+  ASSERT_EQUAL(out.events[1], "80 4A 00");
+  ASSERT_EQUAL(out.events[2], "81 49 00");
+  ASSERT_EQUAL(journal.sounding_notes(), 0);
+  ASSERT_EQUAL(journal.stats.notes_silenced, 3);
+
+  // Nothing sounding: nothing to do.
+  out.clear();
+  ASSERT_EQUAL(journal.session_end(out.signal), 0);
+  ASSERT_EQUAL(out.events.size(), 0);
+}
+
+void test_sender_pending_state_and_caught_up() {
+  recovery_journal_t journal;
+  ASSERT_FALSE(journal.sender_has_pending_state()); // Nothing sent yet
+  ASSERT_FALSE(journal.sender_is_caught_up());
+
+  journal.midi_out(0, hex_to_bin("90 48 40"));
+  ASSERT_TRUE(journal.sender_has_pending_state());
+  ASSERT_FALSE(journal.sender_is_caught_up()); // No feedback yet
+
+  // Feedback that covers the last packet: the peer has everything.
+  journal.feedback_in(0);
+  ASSERT_TRUE(journal.sender_is_caught_up());
+  ASSERT_FALSE(journal.sender_has_pending_state());
+
+  journal.reset();
+  ASSERT_FALSE(journal.sender_has_pending_state());
+}
+
 void test_feedback_records_extended_seq() {
   recovery_journal_t journal;
   ASSERT_FALSE(journal.has_feedback());
@@ -543,7 +586,6 @@ void test_feedback_records_extended_seq() {
   ASSERT_FALSE(journal.has_feedback());
   ASSERT_EQUAL(journal.confirmed_extended_seq(), 0u);
 }
-
 
 // ── Sender ──────────────────────────────────────────────────────────────
 
@@ -786,6 +828,8 @@ int main(int argc, char **argv) {
       TEST(test_no_repair_for_unsounding_note_off_bit),
       TEST(test_channel_isolation),
       TEST(test_velocity_zero_note_log_is_note_off),
+      TEST(test_session_end_silences_sounding_notes),
+      TEST(test_sender_pending_state_and_caught_up),
       TEST(test_feedback_records_extended_seq),
       TEST(test_sender_first_packet_has_empty_journal),
       TEST(test_sender_codes_sounding_notes_from_previous_packet),

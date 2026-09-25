@@ -344,27 +344,37 @@ Emitted repairs go out on the **same `midi_event` signal** as normal MIDI, so th
 daemon routes them to ALSA with no extra plumbing, and they are emitted before
 the events of the packet that carried the journal, which is the correct order.
 
-### 4.4 Feedback and guard packets (poller side) — Phase 4
+### 4.4 Feedback and guard packets — **implemented (Phase 4)**
 
-- Send `'RS'` feedback every ~1 s while connected (and immediately after the
-  first packet of a stream), with the extended sequence number of the highest
-  packet seen. Apple needs this to shrink its checkpoint; without it we also
-  never stop its guard packets. `feedback_in()` already records the value the
-  peer reports, so the sender side (Phase 3) can use it.
-- Guard packets (ours): when MIDI activity stops and note state is non-empty,
-  send journal-only packets at 100 ms, 200 ms, 400 ms, 800 ms, then 1 s
-  (`guardtime`); stop when feedback confirms the receiver is caught up or MIDI
-  activity resumes. Empty MIDI list, `J=1`, real journal.
+`journal_timer_t` (one per peer, created by `rtpclient_t` and
+`rtpserverpeer_t`) runs on the poller thread and does two things, both only while
+the peer is `CONNECTED`:
 
-### 4.5 Leaving a session — Phase 4
+- **Receiver feedback**: on the first tick after connecting and then every
+  `feedback_period` (1 s), send an `'RS'` packet on the control port with the
+  extended sequence number of the highest packet received. That is what lets the
+  peer shrink its checkpoint history and stop its own guard packets.
+- **Guard packets**: while `sender_has_pending_state()` is true (we recorded note
+  commands the peer has not confirmed) and nothing has been sent for
+  `guard_min_period`, send a journal-only packet, backing off
+  `guard_min_period → guard_max_period` (100 ms → 1 s, the RFC's guardtime). No
+  packet is sent while real MIDI is flowing or once `sender_is_caught_up()`.
 
-RFC 6295 §4: on exiting a session a receiver MUST ensure no indefinite
-artifacts remain. On disconnect (including `BY`, timeout, socket error), emit
-NoteOff for every note with `velocity != 0` (or CC 123 per affected channel).
-`has_sounding_notes()` / `sounding_notes()` are already there for this, and the
-state already knows about CC 120/123-127 and the Reset State commands (System
-Reset and the GM/GM2/DLS SysEx messages), which clear it, because those commands
-make earlier note commands not N-active (RFC 6295 Appendix A.1).
+Guard packets do not fire `midi_sent_event`, so they never count as MIDI activity
+and cannot reset their own backoff.
+
+### 4.5 Leaving a session — **implemented (Phase 4)**
+
+RFC 6295 §4: on exiting a session a receiver MUST ensure no indefinite artifacts
+remain. `recovery_journal_t::session_end()` emits a NoteOff for every note it
+believes is sounding, and `rtppeer_t::reset()` calls it, which covers every
+teardown path: `BY`, connect failures, timeouts, socket errors and destruction.
+`stats.notes_silenced` counts them.
+
+That is also how a stuck note from a network death is cleaned up locally, without
+waiting for any journal, and it uses the same state that tracks CC 120/123-127 and
+the Reset State commands (System Reset, GM/GM2/DLS SysEx), which clear it because
+they make earlier note commands not N-active (RFC 6295 Appendix A.1).
 
 ## 5. Library API
 
@@ -413,23 +423,25 @@ public:
 
   // Receiver
   journal_loss_e observe(uint16_t seq_nr);
+  size_t session_end(signal_t<const io_bytes_reader &> &midi_out);
+  uint32_t highest_received_extended_seq() const;
+  bool has_received_packet() const;
   void midi_played(const io_bytes_reader &events, uint32_t timestamp);
   void parse_journal(io_bytes_reader &, journal_loss_e loss, uint32_t timestamp,
                      signal_t<const io_bytes_reader &> &midi_out);
   bool has_sounding_notes() const;
   size_t sounding_notes() const;
 
-  // Sender (Phase 3)
+  // Sender
   void midi_out(uint16_t seq_nr, const io_bytes_reader &events);
   size_t write_journal(io_bytes_writer &writer);
+  bool sender_has_pending_state() const;
+  bool sender_is_caught_up() const;
 
   // Feedback: from the 'RS' packet, drives the sender checkpoint
   void feedback_in(uint32_t extended_seq);
   uint32_t confirmed_extended_seq() const;
   bool has_feedback() const;
-
-  // Phase 4
-  // void session_end(signal_t<const io_bytes_reader &> &out);
 
   static constexpr size_t max_journal_size = 512;
   bool enabled = true; // programmatic kill switch
@@ -445,6 +457,13 @@ free of a clock and the tests deterministic.
 `rtppeer_t` owns one as the public member `recovery_journal`, so the daemon can
 read `stats` without new plumbing.
 
+The poller-side timers live in `journal_timer_t`
+([include/rtpmidid/journal_timer.hpp](../../include/rtpmidid/journal_timer.hpp)),
+one instance per peer, created by `rtpclient_t` and `rtpserverpeer_t` and started
+by the peer's `CONNECTED` status. Periods (`tick_period`, `feedback_period`,
+`guard_min_period`, `guard_max_period`) are public members, so tests can shrink
+them.
+
 Integration in `rtppeer_t` (no daemon changes needed for the core):
 
 | Hook | Change | Phase |
@@ -454,8 +473,8 @@ Integration in `rtppeer_t` (no daemon changes needed for the core):
 | `parse_feedback()` | read **uint32** at offset 8 (fixed), call `feedback_in()`, count it | **2, done** |
 | `reset()` | `recovery_journal.reset()` | **2, done** |
 | `send_midi()` | set `J`, append `write_journal()` after the MIDI section, then `midi_out()` | **3, done** |
-| `send_feedback()` | periodic, with the highest sequence number seen; used by guard logic | 4 |
-| `disconnect()` | `session_end()` before the status change | 4 |
+| `send_feedback()` | periodic, with the highest sequence number seen (`journal_timer_t`) | **4, done** |
+| `reset()` | `session_end()` before forgetting the note state | **4, done** |
 
 Daemon-side follow-ups (Phase 5): counters into `rtp_peer_status_t`
 (`src/dm_json_status.hpp`, `src/utils.cpp`), regenerate dm-json goldens
@@ -489,21 +508,22 @@ this being mostly benign. The journal adds more shared state, so:
 
 ## 7. Status of the current code
 
-**Phases 1, 2 and 3 done.** `include/rtpmidid/journal.hpp` + `lib/journal.cpp`:
+**Phases 1 to 4 done.** The library is feature complete for Chapter N:
 
 - `journal_codec_t`, the stateless wire codec (Phase 1), with 36
   golden-vector/round-trip tests in `tests/test_journal.cpp`.
-- `recovery_journal_t`: the receiver state machine (Phase 2) and the sender
-  (Phase 3), with 29 tests in `tests/test_recovery_journal.cpp` and 5
-  integration tests in `tests/test_rtppeer.cpp` (including a two-peer
-  send-and-repair test).
+- `recovery_journal_t`: receiver (Phase 2), sender (Phase 3) and session exit
+  (Phase 4), with tests in `tests/test_recovery_journal.cpp`.
+- `journal_timer_t`: periodic `'RS'` feedback and guard packets (Phase 4), with
+  `tests/test_journal_timer.cpp` driving it through the real poller.
+- Integration tests in `tests/test_rtppeer.cpp`, including a two-peer
+  send-and-repair test where a packet is dropped on the way.
 
 The old receive-side `parse_journal`, `parse_journal_chapter` and
 `parse_journal_chapter_N` are **deleted**; incoming journals are handled by
 `recovery_journal_t`. `send_midi()` sets `J=1` and appends a journal to every
-packet. What is still missing is periodic `'RS'` feedback (so peers stay on the
-anchor policy with us and we never shrink our journals because of their
-feedback), guard packets, and silencing notes on disconnect: Phase 4.
+packet. What is left is observability (Phase 5) and, on the wire protocol side,
+chapters other than N.
 
 Defects 1-9 below are fixed by construction (the codec replaced that code);
 10 is Phase 4. Kept here as the record of what was wrong:
@@ -580,10 +600,24 @@ Sender (`tests/test_recovery_journal.cpp`). **Done in Phase 3**:
 - [x] End to end: a two-peer test (`test_rtppeer.cpp`) where packet 1 is dropped
       and the receiver emits the repaired NoteOff between the two NoteOns.
 
+Feedback, guard packets and session exit (`tests/test_journal_timer.cpp` and
+`tests/test_recovery_journal.cpp`). **Done in Phase 4**:
+
+- [x] The timer sends receiver feedback with the highest sequence number
+      received, and guard packets (journal only, `J=1`, empty MIDI list) with
+      backoff while the peer has not confirmed our stream.
+- [x] Guards stop once the peer's feedback covers our last packet, while feedback
+      keeps flowing.
+- [x] The timer stops when the peer disconnects.
+- [x] `session_end()` emits a NoteOff for every sounding note, counts them, and is
+      a no-op when nothing is sounding.
+
 Still to come:
 
-- [ ] Periodic `'RS'` feedback, guard packets, note silencing on disconnect
-      (Phase 4).
+- [ ] Observability: counters in `rtp_peer_status_t` and the JSON-RPC/Web UI
+      surface (Phase 5).
+- [ ] Chapter C (volume, All Notes Off), which Chapter N cannot protect, and
+      whatever real-device testing says about the `Y` heuristic.
 
 `tests/test_rtppeer.cpp` integration (Phase 2, done):
 
@@ -595,12 +629,10 @@ Still to come:
 - [x] `test_feedback_reads_32_bit_sequence`: the `'RS'` extended sequence number
       is read (the old code read 16 bits and always got 0).
 
-Pending:
-
-- [ ] Receiver sending periodic `'RS'` feedback, and the sender's journal shrinking
-      because of it (Phase 4).
-- [ ] Guard packet timing with a fake clock (Phase 4).
-- [ ] Disconnect with notes held → NoteOff (or CC123) emitted (Phase 4).
+- [x] Receiver sending periodic `'RS'` feedback, and the sender's journal
+      shrinking because of it (Phase 4).
+- [x] Guard packet timing, on the real poller instead of a fake clock (Phase 4).
+- [x] Disconnect with notes held → NoteOff emitted (Phase 4).
 
 Manual interop matrix (document results in the PR):
 
@@ -635,9 +667,12 @@ Manual interop matrix (document results in the PR):
   checkpoint from `'RS'`, `S`/`B` computation, N-active resets, MTU cap.
   *Acceptance: our journal repairs a loss on our own receiver; checkpoints
   shrink after feedback.*
-- **Phase 4 — feedback + guard packets + session exit.** Periodic `'RS'`, guard
-  schedule, note silencing on disconnect. *Acceptance: no stuck notes after a
-  killed connection; guard packets observable in `tcpdump`.*
+- **Phase 4 — feedback + guard packets + session exit (done).** `journal_timer_t`
+  sends periodic `'RS'` feedback and backs off guard packets; `session_end()`
+  silences sounding notes on every teardown path. *Acceptance met by
+  `test_journal_timer.cpp` (feedback and guard packets on the real poller, guards
+  stopping when the peer is caught up, timer stopping on disconnect) and by the
+  `session_end` tests; the `tcpdump` part remains for manual validation.*
 - **Phase 5 — observability + docs.** Counters → `rtp_peer_status_t` → JSON-RPC
   and Web UI; `docs/development/control-protocol.md`,
   [development-notes.md](../development/development-notes.md) (drop the "no
@@ -664,10 +699,13 @@ Each phase is a separate PR, with its doc update in the same PR (see
    chatty? `guardtime` is not negotiated in Apple's handshake, so we must pick.
 4. **Silence notes on disconnect (§4.5)** is technically outside Chapter N but
    is the same user-visible bug. Include in Phase 4 or a separate PR?
-5. **Chapter C next?** A lost CC 7 (volume) or CC 123 (All Notes Off) is an
+5. **Timers are per peer.** `journal_timer_t` adds a 100 ms timer per peer; with
+   many peers that is many wake-ups. If it ever shows up in profiles, one shared
+   timer could drive all peers, or the tick could be raised for idle peers.
+6. **Chapter C next?** A lost CC 7 (volume) or CC 123 (All Notes Off) is an
    indefinite artifact that Chapter N cannot repair, and CC is cheap to add
    (fixed 2-octet logs). It is the natural follow-up once Chapter N has been
    validated against real devices.
-6. **Interop validation is still pending.** Everything here is tested against
+7. **Interop validation is still pending.** Everything here is tested against
    itself and against the RFC byte layouts; the manual matrix below needs to run
    on real macOS/iOS/Windows peers.

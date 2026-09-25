@@ -42,7 +42,8 @@ using namespace rtpmidid;
  * (TODO: add timer)
  *
  */
-rtpclient_t::rtpclient_t(const std::string name) : peer(std::move(name)) {
+rtpclient_t::rtpclient_t(const std::string name)
+    : peer(std::move(name)), journal_timer(peer) {
   peer.initiator_id = ::rtpmidid::rand_u32();
   send_connection = peer.send_event.connect([this](const io_bytes_reader &data,
                                                    rtppeer_t::port_e port) {

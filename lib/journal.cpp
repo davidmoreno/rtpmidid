@@ -546,6 +546,23 @@ static bool seq_before(uint32_t extended_seq, uint16_t checkpoint) {
 // Receiver side: the RJRS (RFC 4696, "Receiving Streams: The Recovery Journal")
 //
 
+size_t
+recovery_journal_t::session_end(signal_t<const io_bytes_reader &> &midi_out) {
+  size_t count = 0;
+  for (uint8_t channel = 0; channel < 16; channel++) {
+    for (uint8_t note = 0; note < 128; note++) {
+      if (channels_[channel].notes[note].velocity == 0) {
+        continue;
+      }
+      emit_note(uint8_t(0x80 | channel), note, 0, midi_out);
+      note_off(channel, note, 0);
+      count++;
+    }
+  }
+  stats.notes_silenced += uint32_t(count);
+  return count;
+}
+
 void recovery_journal_t::reset() {
   channels_ = {};
   has_received_packet_ = false;
@@ -854,6 +871,22 @@ uint32_t recovery_journal_t::next_sent_extended_seq(uint16_t seq_nr) {
   }
   has_sent_packet_ = true;
   return current_extended_seq_;
+}
+
+bool recovery_journal_t::sender_has_pending_state() const {
+  if (!has_sent_packet_ || sender_is_caught_up()) {
+    // Nothing sent yet, or the peer confirmed everything we sent: nothing to
+    // guard.
+    return false;
+  }
+  for (const auto &channel : send_channels_) {
+    for (const auto &note : channel.notes) {
+      if (note.has_command) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 void recovery_journal_t::send_note_on(uint8_t channel, uint8_t note,

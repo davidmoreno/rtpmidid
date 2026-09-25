@@ -123,6 +123,11 @@ public:
   typedef signal_t<float> ck_event_t;
   ck_event_t ck_event;
 
+  /// Fired when a MIDI packet with data is sent. Guard packets (journal only,
+  /// empty MIDI list) do not fire it: they must not count as MIDI activity.
+  typedef signal_t<> midi_sent_event_t;
+  midi_sent_event_t midi_sent_event;
+
   static bool is_command(io_bytes_reader &);
   static bool is_feedback(io_bytes_reader &);
 
@@ -152,9 +157,22 @@ public:
   /// state and forwards it to the midi_event subscribers.
   void emit_midi(const io_bytes_reader &);
 
+  /// Build and send an RTP MIDI packet with these events, plus the recovery
+  /// journal section (J=1) when journaling is enabled.
+  void send_midi_packet(const io_bytes_reader &events);
+
   void send_midi(const io_bytes_reader &buffer);
   void send_goodbye(port_e to_port);
-  void send_feedback(uint32_t seqnum);
+  /// Send an 'RS' receiver feedback packet on the control port, with the
+  /// extended sequence number of the highest packet received.
+  void send_feedback();
+  /**
+   * Send a guard packet: an RTP MIDI packet with an empty MIDI command list and
+   * only the recovery journal, so a peer that missed something can still repair
+   * it (RFC 4696 Section 4.2). Returns false when not connected or when
+   * journaling is disabled.
+   */
+  bool send_journal_packet();
   void connect_to(port_e rtp_port);
   void send_ck0();
   uint64_t get_timestamp();

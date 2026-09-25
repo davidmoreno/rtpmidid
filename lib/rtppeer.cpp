@@ -56,6 +56,10 @@ void rtppeer_t::reset() {
   remote_name = "";
   remote_ssrc = 0;
   initiator_id = 0;
+  // A session must not end with notes sounding: if we believe a note is on, its
+  // NoteOff either never arrived or never will. This covers disconnects,
+  // network deaths and the peer going away, as every teardown path ends here.
+  recovery_journal.session_end(midi_event);
   recovery_journal.reset();
 }
 
@@ -645,7 +649,7 @@ void rtppeer_t::parse_sysex(io_bytes_reader &buffer, int16_t length) {
  * 10 ts = 1ms, 10000 ts = 1s. 1ms = 0.1ts
  */
 uint64_t rtppeer_t::get_timestamp() {
-  struct timespec spec {};
+  struct timespec spec{};
 
   clock_gettime(CLOCK_MONOTONIC, &spec);
   // ns is 1e-9s. I need 1e-4s, so / 1e5
@@ -668,7 +672,23 @@ void rtppeer_t::send_midi(const io_bytes_reader &events) {
         remote_name, (int)status);
     return;
   }
+  send_midi_packet(events);
+  midi_sent_event();
+}
 
+bool rtppeer_t::send_journal_packet() {
+  if (!is_connected() || !recovery_journal.enabled) {
+    return false;
+  }
+  // A guard packet: empty MIDI command list, journal section. It does not fire
+  // midi_sent_event, so it is not mistaken for MIDI activity.
+  uint8_t empty_event = 0;
+  send_midi_packet(io_bytes_reader(&empty_event, 0));
+  recovery_journal.stats.guard_packets++;
+  return true;
+}
+
+void rtppeer_t::send_midi_packet(const io_bytes_reader &events) {
   io_bytes_writer_static<4096 + 12> buffer;
 
   uint32_t timestamp = get_timestamp();
@@ -751,18 +771,23 @@ void rtppeer_t::send_goodbye(port_e to_port) {
   }
 }
 
-void rtppeer_t::send_feedback(uint32_t seqnum) {
-  // uint8_t packet[256];
+void rtppeer_t::send_feedback() {
+  if (!is_connected() || !recovery_journal.has_received_packet()) {
+    return;
+  }
+  // The receiver feedback packet: 0xFFFF, 'RS', SSRC, and the extended sequence
+  // number of the most recently received packet, as a 32 bit value. It lets the
+  // peer shrink its checkpoint history and stop sending guard packets.
+  uint32_t seqnum = recovery_journal.highest_received_extended_seq();
+  DEBUG("Send feedback to the other end, up to sequence {}", seqnum);
 
-  DEBUG("Send feedback to the other end. Journal parsed. Seqnum {}", seqnum);
-  remote_seq_nr = seqnum;
   io_bytes_writer_static<96> buffer;
-
   buffer.write_uint16(0xFFFF);
   buffer.write_uint16(rtppeer_t::RS);
   buffer.write_uint32(local_ssrc);
   buffer.write_uint32(seqnum);
 
+  recovery_journal.stats.feedback_sent++;
   send_event(buffer, CONTROL_PORT);
 }
 
