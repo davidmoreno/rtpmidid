@@ -51,8 +51,8 @@ Protocol) stay as URLs; quote the passage in the note that needs it.
   (`sender_confirmed(guard_anchor)`), because the later ones are retransmissions
   of the same content. Requiring the newest packet to be confirmed never
   terminates with a peer whose report lags (1 s guardtime vs ~1 s `'RS'`), which
-  is exactly what was observed with a Roland JUPITER-Xm: a constant "not
-  confirmed ... resending it: 1 notes pending" line.
+  is what was observed with a Roland JUPITER-Xm: guard packets retransmitted at
+  guardtime for as long as a note stayed pending.
 - Guard packets *do* advance `last_packet_seq_`, so `sender_is_caught_up()` can
   legitimately stay false for a long time. Use `sender_confirmed(seq)` when the
   question is "did this particular journal reach the peer?".

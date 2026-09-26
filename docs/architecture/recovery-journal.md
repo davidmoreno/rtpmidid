@@ -377,11 +377,7 @@ note state is pending, so the episode is not reopened until new MIDI arrives or
 the peer catches up completely.
 
 Guard packets do not fire `midi_sent_event`, so they never count as MIDI activity
-and cannot reset their own backoff. The transition into a guard episode is logged
-once at DEBUG (`journal_timer.cpp`), with the pending note count and the sequence
-numbers on both sides: `sender_pending_notes()` is that count, and
-`last_sent_extended_seq()` the packet the peer is expected to confirm. Retries
-within the episode are not logged again.
+and cannot reset their own backoff.
 
 ### 4.5 Leaving a session — **implemented (Phase 4)**
 

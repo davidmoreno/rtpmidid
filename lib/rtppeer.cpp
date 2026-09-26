@@ -379,9 +379,6 @@ void rtppeer_t::parse_feedback(io_bytes_reader &buffer) {
   auto remote_seq_nr_ack = buffer.read_uint32();
   seq_nr_ack = uint16_t(remote_seq_nr_ack & 0xFFFF);
   recovery_journal.feedback_in(remote_seq_nr_ack);
-
-  DEBUG("Got feedback until package {} ({}) / {}", seq_nr_ack,
-        remote_seq_nr_ack, seq_nr);
 }
 
 int rtppeer_t::next_midi_packet_length(io_bytes_reader &buffer) {
@@ -779,7 +776,6 @@ void rtppeer_t::send_feedback() {
   // number of the most recently received packet, as a 32 bit value. It lets the
   // peer shrink its checkpoint history and stop sending guard packets.
   uint32_t seqnum = recovery_journal.highest_received_extended_seq();
-  DEBUG("Send feedback to the other end, up to sequence {}", seqnum);
 
   io_bytes_writer_static<96> buffer;
   buffer.write_uint16(0xFFFF);

@@ -18,7 +18,6 @@
  */
 
 #include <rtpmidid/journal_timer.hpp>
-#include <rtpmidid/logger.hpp>
 
 using namespace rtpmidid;
 
@@ -125,22 +124,10 @@ void journal_timer_t::tick() {
   if (peer.send_journal_packet()) {
     if (!has_guard_anchor) {
       // The first guard of the episode is the anchor: its journal is the one
-      // the peer's feedback has to cover. Logged once per episode, since the
-      // retransmissions that follow only repeat it.
+      // that carries the pending note state, so it is the packet the peer's
+      // feedback has to cover.
       has_guard_anchor = true;
       guard_anchor = journal.last_sent_extended_seq();
-      if (journal.has_feedback()) {
-        DEBUG("Peer {} has not confirmed the journal yet, resending it: {} "
-              "notes pending (it confirmed #{}, we sent up to #{})",
-              peer.remote_name, journal.sender_pending_notes(),
-              journal.confirmed_extended_seq(),
-              journal.last_sent_extended_seq());
-      } else {
-        DEBUG("Peer {} has sent no journal feedback, resending it: {} notes "
-              "pending (we sent up to #{})",
-              peer.remote_name, journal.sender_pending_notes(),
-              journal.last_sent_extended_seq());
-      }
     }
     last_guard = now;
     guard_period = std::min(guard_period * 2, guard_max_period);

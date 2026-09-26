@@ -369,8 +369,7 @@ public:
 
   /**
    * How many note commands the peer may still be missing: the notes a guard
-   * packet is resending. It is the count behind @c sender_has_pending_state(),
-   * for diagnostics.
+   * packet is resending. It is the count behind @c sender_has_pending_state().
    */
   size_t sender_pending_notes() const;
 

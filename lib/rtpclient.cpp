@@ -167,7 +167,6 @@ void rtpclient_t::state_connect_control() {
   control_peer.open(network_address_list_t("::", local_base_port_str));
   control_on_read_connection = control_peer.on_read.connect(
       [this](const packet_t &packet, const network_address_t &) {
-        DEBUG("Data ready for control!");
         io_bytes_reader data(packet.get_data(), packet.get_size());
         this->peer.data_ready(std::move(data), rtppeer_t::CONTROL_PORT);
       });

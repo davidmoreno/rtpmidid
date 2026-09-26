@@ -84,8 +84,7 @@ private:
   /// progress. Its journal is the one that carries the pending note state, so
   /// the episode is done as soon as the peer's feedback covers it; the later
   /// guards are retransmissions of the same content (RFC 4696 §4.2). Valid
-  /// while @c has_guard_anchor is true, which is also what keeps the DEBUG line
-  /// in tick() to one per episode.
+  /// while @c has_guard_anchor is true.
   uint32_t guard_anchor = 0;
   bool has_guard_anchor = false;
 };
