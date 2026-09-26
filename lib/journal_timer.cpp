@@ -58,6 +58,7 @@ void journal_timer_t::on_status(rtppeer_t::status_e status) {
     last_activity = std::chrono::steady_clock::now();
     guard_period = guard_min_period;
     ever_ticked = false;
+    guarding = false;
     schedule();
     return;
   }
@@ -71,6 +72,9 @@ void journal_timer_t::on_midi_sent() {
   // restarts from the minimum delay.
   last_activity = std::chrono::steady_clock::now();
   guard_period = guard_min_period;
+  // Real MIDI restarts the guard episode: when it goes quiet again, the DEBUG
+  // line below reports it afresh.
+  guarding = false;
 }
 
 void journal_timer_t::tick() {
@@ -95,6 +99,7 @@ void journal_timer_t::tick() {
   // Guard packets: only while there is state the peer has not confirmed.
   if (!journal.sender_has_pending_state() || journal.sender_is_caught_up()) {
     guard_period = guard_min_period;
+    guarding = false;
     return;
   }
   if (now - last_activity < guard_min_period) {
@@ -105,6 +110,23 @@ void journal_timer_t::tick() {
     return;
   }
   if (peer.send_journal_packet()) {
+    if (!guarding) {
+      // Logged once per guard episode: the packet is retransmitted with backoff
+      // until the peer confirms, so logging each one would only repeat itself.
+      guarding = true;
+      if (journal.has_feedback()) {
+        DEBUG("Peer {} has not confirmed the journal yet, resending it: {} "
+              "notes pending (it confirmed #{}, we sent up to #{})",
+              peer.remote_name, journal.sender_pending_notes(),
+              journal.confirmed_extended_seq(),
+              journal.last_sent_extended_seq());
+      } else {
+        DEBUG("Peer {} has sent no journal feedback, resending it: {} notes "
+              "pending (we sent up to #{})",
+              peer.remote_name, journal.sender_pending_notes(),
+              journal.last_sent_extended_seq());
+      }
+    }
     last_guard = now;
     guard_period = std::min(guard_period * 2, guard_max_period);
   }

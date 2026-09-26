@@ -356,6 +356,17 @@ public:
            confirmed_extended_seq_ >= last_packet_seq_;
   }
 
+  /// Extended sequence number of the last packet we sent: the number the peer
+  /// reports back in its receiver feedback.
+  uint32_t last_sent_extended_seq() const { return last_packet_seq_; }
+
+  /**
+   * How many note commands the peer may still be missing: the notes a guard
+   * packet is resending. It is the count behind @c sender_has_pending_state(),
+   * for diagnostics.
+   */
+  size_t sender_pending_notes() const;
+
   /// Record a MIDI event that was emitted (to ALSA): this is what the receiver
   /// believes the renderer is doing.
   void midi_played(const io_bytes_reader &events, uint32_t timestamp);

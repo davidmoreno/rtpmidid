@@ -550,18 +550,28 @@ void test_sender_pending_state_and_caught_up() {
   recovery_journal_t journal;
   ASSERT_FALSE(journal.sender_has_pending_state()); // Nothing sent yet
   ASSERT_FALSE(journal.sender_is_caught_up());
+  ASSERT_EQUAL(journal.sender_pending_notes(), 0u);
 
   journal.midi_out(0, hex_to_bin("90 48 40"));
   ASSERT_TRUE(journal.sender_has_pending_state());
   ASSERT_FALSE(journal.sender_is_caught_up()); // No feedback yet
+  ASSERT_EQUAL(journal.sender_pending_notes(), 1u);
+  ASSERT_EQUAL(journal.last_sent_extended_seq(), 0u);
+
+  // A second packet with a second note: both are unconfirmed, so both are what
+  // the guard packet resends.
+  journal.midi_out(1, hex_to_bin("90 49 40"));
+  ASSERT_EQUAL(journal.sender_pending_notes(), 2u);
 
   // Feedback that covers the last packet: the peer has everything.
-  journal.feedback_in(0);
+  journal.feedback_in(1);
   ASSERT_TRUE(journal.sender_is_caught_up());
   ASSERT_FALSE(journal.sender_has_pending_state());
+  ASSERT_EQUAL(journal.sender_pending_notes(), 0u);
 
   journal.reset();
   ASSERT_FALSE(journal.sender_has_pending_state());
+  ASSERT_EQUAL(journal.sender_pending_notes(), 0u);
 }
 
 void test_feedback_records_extended_seq() {

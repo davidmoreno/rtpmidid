@@ -874,19 +874,24 @@ uint32_t recovery_journal_t::next_sent_extended_seq(uint16_t seq_nr) {
 }
 
 bool recovery_journal_t::sender_has_pending_state() const {
+  return sender_pending_notes() > 0;
+}
+
+size_t recovery_journal_t::sender_pending_notes() const {
   if (!has_sent_packet_ || sender_is_caught_up()) {
     // Nothing sent yet, or the peer confirmed everything we sent: nothing to
     // guard.
-    return false;
+    return 0;
   }
+  size_t count = 0;
   for (const auto &channel : send_channels_) {
     for (const auto &note : channel.notes) {
       if (note.has_command) {
-        return true;
+        count++;
       }
     }
   }
-  return false;
+  return count;
 }
 
 void recovery_journal_t::send_note_on(uint8_t channel, uint8_t note,

@@ -80,6 +80,9 @@ private:
   std::chrono::milliseconds guard_period{100};
   bool scheduled = false;
   bool ever_ticked = false;
+  /// True while we are in a guard episode, so the DEBUG line in tick() is
+  /// logged once when it starts and not on every retransmission.
+  bool guarding = false;
 };
 
 } // namespace rtpmidid
