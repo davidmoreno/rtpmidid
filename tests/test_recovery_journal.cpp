@@ -574,6 +574,27 @@ void test_sender_pending_state_and_caught_up() {
   ASSERT_EQUAL(journal.sender_pending_notes(), 0u);
 }
 
+void test_sender_confirmed() {
+  recovery_journal_t journal;
+  ASSERT_FALSE(journal.sender_confirmed(0)); // No feedback yet
+
+  journal.midi_out(0, hex_to_bin("90 48 40"));
+  journal.midi_out(1, hex_to_bin("00"));
+  ASSERT_FALSE(journal.sender_confirmed(0));
+
+  // The peer reports the packet it received: that one and the older ones are
+  // confirmed, the newer ones are not. This is the query the guard timer uses
+  // to decide that the journal it sent has been delivered.
+  journal.feedback_in(0);
+  ASSERT_TRUE(journal.sender_confirmed(0));
+  ASSERT_FALSE(journal.sender_confirmed(1));
+  ASSERT_FALSE(journal.sender_is_caught_up()); // Packet 1 is not confirmed
+
+  journal.feedback_in(1);
+  ASSERT_TRUE(journal.sender_confirmed(1));
+  ASSERT_TRUE(journal.sender_is_caught_up());
+}
+
 void test_feedback_records_extended_seq() {
   recovery_journal_t journal;
   ASSERT_FALSE(journal.has_feedback());
@@ -840,6 +861,7 @@ int main(int argc, char **argv) {
       TEST(test_velocity_zero_note_log_is_note_off),
       TEST(test_session_end_silences_sounding_notes),
       TEST(test_sender_pending_state_and_caught_up),
+      TEST(test_sender_confirmed),
       TEST(test_feedback_records_extended_seq),
       TEST(test_sender_first_packet_has_empty_journal),
       TEST(test_sender_codes_sounding_notes_from_previous_packet),

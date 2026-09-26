@@ -347,13 +347,20 @@ public:
   bool sender_has_pending_state() const;
 
   /**
+   * True when the peer's feedback confirms a packet of our stream with
+   * extended sequence number @a extended_seq or a later one.
+   */
+  bool sender_confirmed(uint32_t extended_seq) const {
+    return has_feedback_ && confirmed_extended_seq_ >= extended_seq;
+  }
+
+  /**
    * True when the peer's feedback covers everything we have sent, so there is
    * nothing left to guard. Always false without feedback: the anchor policy
    * keeps the whole stream in the journal until the peer tells us otherwise.
    */
   bool sender_is_caught_up() const {
-    return has_sent_packet_ && has_feedback_ &&
-           confirmed_extended_seq_ >= last_packet_seq_;
+    return has_sent_packet_ && sender_confirmed(last_packet_seq_);
   }
 
   /// Extended sequence number of the last packet we sent: the number the peer

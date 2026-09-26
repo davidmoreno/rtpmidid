@@ -58,7 +58,7 @@ void journal_timer_t::on_status(rtppeer_t::status_e status) {
     last_activity = std::chrono::steady_clock::now();
     guard_period = guard_min_period;
     ever_ticked = false;
-    guarding = false;
+    has_guard_anchor = false;
     schedule();
     return;
   }
@@ -72,9 +72,9 @@ void journal_timer_t::on_midi_sent() {
   // restarts from the minimum delay.
   last_activity = std::chrono::steady_clock::now();
   guard_period = guard_min_period;
-  // Real MIDI restarts the guard episode: when it goes quiet again, the DEBUG
-  // line below reports it afresh.
-  guarding = false;
+  // Real MIDI restarts the guard episode: the journal of the first guard sent
+  // from now on carries the new state, so it is a new anchor to confirm.
+  has_guard_anchor = false;
 }
 
 void journal_timer_t::tick() {
@@ -97,9 +97,22 @@ void journal_timer_t::tick() {
   }
 
   // Guard packets: only while there is state the peer has not confirmed.
-  if (!journal.sender_has_pending_state() || journal.sender_is_caught_up()) {
+  if (!journal.sender_has_pending_state()) {
+    // Nothing sent yet, or the peer has confirmed everything: nothing to guard,
+    // and the next pending state starts a new episode.
     guard_period = guard_min_period;
-    guarding = false;
+    has_guard_anchor = false;
+    return;
+  }
+  if (has_guard_anchor && journal.sender_confirmed(guard_anchor)) {
+    // The first guard of this episode, and with it the journal carrying the
+    // pending note state, reached the peer: the repair is delivered. Waiting
+    // for the newest retransmission instead never terminates with a peer whose
+    // report lags behind us, because every guard is itself a new packet to
+    // confirm. The anchor is kept, so this episode is not reopened while the
+    // same note state stays pending; only new MIDI (or the note state going
+    // away) can start another one.
+    guard_period = guard_min_period;
     return;
   }
   if (now - last_activity < guard_min_period) {
@@ -110,10 +123,12 @@ void journal_timer_t::tick() {
     return;
   }
   if (peer.send_journal_packet()) {
-    if (!guarding) {
-      // Logged once per guard episode: the packet is retransmitted with backoff
-      // until the peer confirms, so logging each one would only repeat itself.
-      guarding = true;
+    if (!has_guard_anchor) {
+      // The first guard of the episode is the anchor: its journal is the one
+      // the peer's feedback has to cover. Logged once per episode, since the
+      // retransmissions that follow only repeat it.
+      has_guard_anchor = true;
+      guard_anchor = journal.last_sent_extended_seq();
       if (journal.has_feedback()) {
         DEBUG("Peer {} has not confirmed the journal yet, resending it: {} "
               "notes pending (it confirmed #{}, we sent up to #{})",

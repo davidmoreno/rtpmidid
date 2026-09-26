@@ -80,9 +80,14 @@ private:
   std::chrono::milliseconds guard_period{100};
   bool scheduled = false;
   bool ever_ticked = false;
-  /// True while we are in a guard episode, so the DEBUG line in tick() is
-  /// logged once when it starts and not on every retransmission.
-  bool guarding = false;
+  /// Extended sequence number of the first guard packet of the episode in
+  /// progress. Its journal is the one that carries the pending note state, so
+  /// the episode is done as soon as the peer's feedback covers it; the later
+  /// guards are retransmissions of the same content (RFC 4696 §4.2). Valid
+  /// while @c has_guard_anchor is true, which is also what keeps the DEBUG line
+  /// in tick() to one per episode.
+  uint32_t guard_anchor = 0;
+  bool has_guard_anchor = false;
 };
 
 } // namespace rtpmidid

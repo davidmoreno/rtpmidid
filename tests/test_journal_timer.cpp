@@ -18,6 +18,8 @@
 
 #include "../tests/test_utils.hpp"
 #include "./test_case.hpp"
+#include <cstdio>
+#include <functional>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/journal_timer.hpp>
 #include <rtpmidid/logger.hpp>
@@ -179,6 +181,82 @@ void test_timer_stops_guards_when_the_peer_is_caught_up() {
   ASSERT_GT(sent.control.size(), feedback_when_caught_up);
 }
 
+/// A peer whose 'RS' report always lags one packet behind: it confirms packet
+/// N once it has received N+1. Confirming the first guard is enough to deliver
+/// the journal, but `sender_is_caught_up()` never becomes true, so a timer that
+/// waits for the newest retransmission to be confirmed would keep sending guard
+/// packets at guardtime forever.
+void test_guards_stop_when_the_peer_report_lags_behind() {
+  rtpmidid::rtppeer_t peer("test");
+  // Deterministic sequence numbers, so the "one behind" report cannot wrap.
+  peer.seq_nr = 1000;
+  peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer_t::CONTROL_PORT);
+  peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer_t::MIDI_PORT);
+
+  // The lagging peer: remember the highest packet received, answer 'RS' one
+  // behind it.
+  uint16_t highest_received = 0;
+  uint16_t first_guard_seq = 0;
+  bool seen_guard = false;
+  auto receive_connection = peer.send_event.connect(
+      [&](const io_bytes_reader &data, rtpmidid::rtppeer_t::port_e port) {
+        if (port != rtpmidid::rtppeer_t::MIDI_PORT || data.size() < 16 ||
+            data.start[0] != 0x80 || data.start[1] != 0x61) {
+          return;
+        }
+        if (!seen_guard &&
+            is_guard_packet(std::vector<uint8_t>(data.start, data.end))) {
+          first_guard_seq = uint16_t((data.start[2] << 8) | data.start[3]);
+          seen_guard = true;
+        }
+        highest_received = uint16_t((data.start[2] << 8) | data.start[3]);
+      });
+
+  sent_packets_t sent;
+  sent.connect_to(peer);
+
+  journal_timer_t timer(peer);
+  timer.tick_period = 2ms;
+  timer.feedback_period = 1000ms; // Our own feedback is not what is tested
+  timer.guard_min_period = 5ms;
+  timer.guard_max_period = 10ms;
+
+  poller_t::timer_t rs_timer;
+  std::function<void()> rs_tick = [&]() {
+    if (seen_guard) {
+      const uint16_t report = uint16_t(highest_received - 1);
+      char packet[64];
+      snprintf(packet, sizeof packet, "FF FF 'RS' 0000 0000 00 00 %02X %02X",
+               report >> 8, report & 0xFF);
+      peer.data_ready(hex_to_bin(packet), rtpmidid::rtppeer_t::CONTROL_PORT);
+    }
+    rs_timer = poller.add_timer_event(2ms, rs_tick);
+  };
+  rs_timer = poller.add_timer_event(2ms, rs_tick);
+
+  // A note nobody will turn off: pending state worth guarding.
+  peer.send_midi(hex_to_bin("90 49 40"));
+  ASSERT_TRUE(peer.recovery_journal.sender_has_pending_state());
+
+  poller_wait_until([&]() { return seen_guard; }, 500ms);
+  ASSERT_GT(first_guard_seq, 0u);
+
+  // Once the peer confirms the anchor, the guards stop, even though the note is
+  // still pending and the peer never confirms our newest packet.
+  poller_wait_until(
+      [&]() { return peer.recovery_journal.sender_confirmed(first_guard_seq); },
+      500ms);
+  poller_wait_for(40ms); // Let a guard already scheduled go out
+
+  const auto guards = guard_packet_count(sent.midi);
+  ASSERT_GT(guards, 1u); // It took retransmissions before the anchor got back
+  ASSERT_FALSE(peer.recovery_journal.sender_is_caught_up());
+  ASSERT_TRUE(peer.recovery_journal.sender_has_pending_state());
+
+  poller_wait_for(80ms);
+  ASSERT_EQUAL(guard_packet_count(sent.midi), guards);
+}
+
 void test_timer_stops_when_disconnected() {
   rtpmidid::rtppeer_t peer("test");
   peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer_t::CONTROL_PORT);
@@ -215,6 +293,7 @@ int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_timer_sends_feedback_and_guard_packets),
       TEST(test_timer_stops_guards_when_the_peer_is_caught_up),
+      TEST(test_guards_stop_when_the_peer_report_lags_behind),
       TEST(test_timer_stops_when_disconnected),
   };
 

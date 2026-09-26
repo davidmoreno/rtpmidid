@@ -11,9 +11,11 @@ the stuck note caused by a lost NoteOff (the RFC's "indefinite artifact").
 References:
 
 - [RFC 6295](https://www.rfc-editor.org/rfc/rfc6295) §4, §5, Appendix A.1, A.6
-  (normative wire format)
+  (normative wire format; local copy: [rfcs/rfc6295.txt](rfcs/rfc6295.txt))
 - [RFC 4696](https://www.rfc-editor.org/rfc/rfc4696) §7, §7.2 (non-normative
-  sender/receiver algorithms)
+  sender/receiver algorithms; local copy: [rfcs/rfc4696.txt](rfcs/rfc4696.txt))
+- [RFC 3550](https://www.rfc-editor.org/rfc/rfc3550) §6.4 (RTCP report blocks and
+  the EHSNR field named below; local copy: [rfcs/rfc3550.txt](rfcs/rfc3550.txt))
 - Apple MIDI Network Driver Protocol (journals always on, `'RS'` feedback,
   guard packets, which chapters Apple implements)
 - Wire-format cheat sheet: [RFC6295_notes.md](../RFC6295_notes.md)
@@ -358,15 +360,28 @@ the peer is `CONNECTED`:
   commands the peer has not confirmed) and nothing has been sent for
   `guard_min_period`, send a journal-only packet, backing off
   `guard_min_period → guard_max_period` (100 ms → 1 s, the RFC's guardtime). No
-  packet is sent while real MIDI is flowing or once `sender_is_caught_up()`.
+  packet is sent while real MIDI is flowing.
+
+**When the episode ends.** The first guard of an episode is the *anchor*: its
+journal is the one that carries the pending note state, since the guards after it
+are retransmissions of the same content (RFC 4696 §4.2: guard packets contain no
+new MIDI information, only recovery journals). The episode is therefore over as
+soon as `sender_confirmed(guard_anchor)` — the peer's feedback covers that
+packet, even if it never acknowledges the newest retransmission. Waiting for
+`sender_is_caught_up()` instead does not terminate against a peer whose report
+lags behind us: every guard we send is itself a new packet to confirm, so the
+target moves away exactly as fast as we retransmit. That was the endless
+guard-packet loop seen with real hardware (a 1 s guardtime and an `'RS'` report
+that is structurally 1–2 packets behind). The anchor stays set while the same
+note state is pending, so the episode is not reopened until new MIDI arrives or
+the peer catches up completely.
 
 Guard packets do not fire `midi_sent_event`, so they never count as MIDI activity
 and cannot reset their own backoff. The transition into a guard episode is logged
 once at DEBUG (`journal_timer.cpp`), with the pending note count and the sequence
 numbers on both sides: `sender_pending_notes()` is that count, and
 `last_sent_extended_seq()` the packet the peer is expected to confirm. Retries
-within the episode are not logged again, since they repeat with backoff until
-the peer confirms.
+within the episode are not logged again.
 
 ### 4.5 Leaving a session — **implemented (Phase 4)**
 
@@ -616,8 +631,11 @@ Feedback, guard packets and session exit (`tests/test_journal_timer.cpp` and
 - [x] The timer sends receiver feedback with the highest sequence number
       received, and guard packets (journal only, `J=1`, empty MIDI list) with
       backoff while the peer has not confirmed our stream.
-- [x] Guards stop once the peer's feedback covers our last packet, while feedback
-      keeps flowing.
+- [x] Guards stop once the peer's feedback covers the first guard of the
+      episode (`sender_confirmed(guard_anchor)`), while feedback keeps flowing.
+      Regression: `test_guards_stop_when_the_peer_report_lags_behind` uses a peer
+      whose `'RS'` is always one packet behind, and which never confirms the
+      newest guard.
 - [x] The timer stops when the peer disconnects.
 - [x] `session_end()` emits a NoteOff for every sounding note, counts them, and is
       a no-op when nothing is sounding.
