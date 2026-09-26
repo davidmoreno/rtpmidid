@@ -45,8 +45,12 @@ HwAutoAnnounce::HwAutoAnnounce(std::shared_ptr<aseq_t> aseq,
           // {}:{}
           // ",
           //       device_name, port_name, device_id, port_id);
+          //  Use the same joined name as the runtime announcements, so a
+          //  device is not announced as "JUPITER-Xm" at startup and as
+          //  "JUPITER-Xm MIDI 1" after a replug.
+          auto name = aseq_join_names(device_name, port_name);
           try {
-            added_port_announcement(device_name, type,
+            added_port_announcement(name, type,
                                     aseq_t::port_t{device_id, port_id});
 
           } catch (const std::exception &e) {

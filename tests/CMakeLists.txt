@@ -114,6 +114,19 @@ endif (NOT LIBS_ONLY)
 
 
 if (NOT LIBS_ONLY)
+    add_executable(test_aseq_names
+        test_aseq_names.cpp test_utils.cpp
+    )
+    target_link_libraries(test_aseq_names -pthread rtpmidid-shared rtpmidid2-static)
+    add_test(NAME test_aseq_names COMMAND test_aseq_names)
+    target_link_libraries(test_aseq_names ${ALSA_LIBRARIES})
+    target_link_libraries(test_aseq_names ${FMT_LIBRARIES})
+    target_include_directories(test_aseq_names PUBLIC ${ALSA_INCLUDE_DIRS})
+    target_compile_options(test_aseq_names PUBLIC ${ALSA_CFLAGS_OTHER})
+endif (NOT LIBS_ONLY)
+
+
+if (NOT LIBS_ONLY)
     add_executable(test_midinormalizer
         test_midinormalizer.cpp test_utils.cpp
     )
