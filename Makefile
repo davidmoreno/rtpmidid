@@ -85,7 +85,7 @@ clean:
 	rm -rf packaging/dist
 
 VALGRINDFLAGS := --leak-check=full --error-exitcode=1 --num-callers=30 --track-origins=yes
-RTPMIDID_ARGS := --ini default.ini --port ${PORT} --name devel --control /tmp/rtpmidid.sock
+RTPMIDID_ARGS := --ini default.ini --port ${PORT} --name devel --control /tmp/rtpmidid.sock --log-level debug
 
 .PHONY: run run-valgrind run-gdb
 run: build-dev
