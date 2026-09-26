@@ -1,0 +1,490 @@
+/**
+ * Real Time Protocol Music Instrument Digital Interface Daemon
+ * Copyright (C) 2019-2026 David Moreno Montero <dmoreno@coralbits.com>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+ */
+
+#pragma once
+#include "exceptions.hpp"
+#include "iobytes.hpp"
+#include "signal.hpp"
+#include <array>
+#include <cstdint>
+#include <utility>
+#include <vector>
+
+// RFC 6295 recovery journal, Chapter N (MIDI NoteOff 0x8 / NoteOn 0x9).
+//
+// This header is the **wire codec** only: stateless encode/decode of the
+// recovery journal structures. The session state machine that decides *what*
+// to code and *what to repair* is `recovery_journal_t`, added in a later
+// phase (see docs/architecture/recovery-journal.md).
+//
+// All multi-octet values are big-endian, as everywhere in RTP-MIDI.
+
+namespace rtpmidid {
+
+class bad_journal : public ::rtpmidid::exception {
+public:
+  template <typename... Args>
+  bad_journal(FMT::format_string<Args...> what, Args... args)
+      : ::rtpmidid::exception("Bad recovery journal: {}",
+                              FMT::format(what, std::forward<Args>(args)...)) {}
+};
+
+/// Chapter TOC bits of the channel journal header (RFC 6295 Section 5).
+enum journal_chapter_e {
+  JOURNAL_CHAPTER_P = 0x80, // Program Change (0xC)
+  JOURNAL_CHAPTER_C = 0x40, // Control Change (0xB)
+  JOURNAL_CHAPTER_M = 0x20, // Parameter System (part of 0xB)
+  JOURNAL_CHAPTER_W = 0x10, // Pitch Wheel (0xE)
+  JOURNAL_CHAPTER_N = 0x08, // NoteOff (0x8), NoteOn (0x9)
+  JOURNAL_CHAPTER_E = 0x04, // Note Command Extras (0x8, 0x9)
+  JOURNAL_CHAPTER_T = 0x02, // Channel Aftertouch (0xD)
+  JOURNAL_CHAPTER_A = 0x01, // Poly Aftertouch (0xA)
+};
+
+/**
+ * Top-level recovery journal header, 3 octets (RFC 6295 Figure 8).
+ *
+ *   |S|Y|A|H|TOTCHAN|   Checkpoint Packet Seqnum    |
+ *
+ * The journal covers the MIDI command sections of packets C..I-1, where I is
+ * the packet carrying it and C is `checkpoint`. The S bit is 1 by default and
+ * MUST be 0 when any element of this journal codes a command stored in packet
+ * I-1 (in that case every containing element MUST be 0 too).
+ */
+struct journal_header_t {
+  bool s = true;
+  bool y = false;          // system journal present (never set by us)
+  bool a = false;          // channel journals present
+  bool h = false;          // enhanced Chapter C encoding (never set by us)
+  uint8_t totchan = 0;     // number of channel journals, minus one
+  uint16_t checkpoint = 0; // sequence number of packet C
+
+  /// Number of channel journals that follow (0 when A is 0).
+  uint8_t channel_count() const { return a ? uint8_t(totchan + 1) : 0; }
+};
+
+/**
+ * Channel journal header, 3 octets (RFC 6295 Figure 9).
+ *
+ *   |S| CHAN  |H|      LENGTH       |  TOC  |
+ *
+ * `length` is the total size of the channel journal, **including these three
+ * header octets** and every chapter (RFC 6295 Appendix A.1). Receivers MUST
+ * use it to advance past a channel journal they do not understand.
+ */
+struct journal_channel_header_t {
+  bool s = true;
+  uint8_t channel = 0; // 0-15, same encoding as the MIDI status nibble
+  bool h = false;
+  uint16_t length = 0;
+  uint8_t toc = 0; // journal_chapter_e bits
+};
+
+/// One Chapter N note log, 2 octets (RFC 6295 Figure A.6.3).
+struct journal_note_log_t {
+  uint8_t note = 0;     // 0-127
+  uint8_t velocity = 1; // 1-127. Zero-velocity NoteOn is a NoteOff, coded in
+                        // the OFFBITS structure instead
+  bool y = true; // hint: play (true) or skip (false) the recovered NoteOn
+  bool s = true; // S bit of this log
+};
+
+/**
+ * Chapter N content: the list of note logs (NoteOn side) and the NoteOff
+ * bitfield (OFFBITS, NoteOff side) for one channel.
+ */
+struct journal_chapter_n_t {
+  bool b = true; // B bit: S-style bit for the OFFBITS structure
+  // Note logs, oldest command first (RFC 6295 Appendix A.1 oldest-first rule).
+  std::vector<journal_note_log_t> note_logs;
+  // note_off[n] true means a set OFFBITS bit for note n: "there may be a
+  // NoteOff you never saw".
+  std::array<bool, 128> note_off{};
+
+  bool has_note_off() const {
+    for (auto v : note_off) {
+      if (v)
+        return true;
+    }
+    return false;
+  }
+  /// A chapter with no note logs and no OFFBITS bits is not worth coding.
+  bool empty() const { return note_logs.empty() && !has_note_off(); }
+
+  bool code_note_off(uint8_t note) const { return note_off[note & 0x7F]; }
+  void set_note_off(uint8_t note, bool on = true) {
+    note_off[note & 0x7F] = on;
+  }
+  void clear_note_off(uint8_t note) { note_off[note & 0x7F] = false; }
+};
+
+/// One channel journal we understood (Chapter N). Other chapters in the same
+/// channel journal are skipped, not represented.
+struct journal_channel_t {
+  uint8_t channel = 0;
+  bool s = true;              // channel journal S bit
+  bool has_chapter_n = false; // set by the decoder; the writer codes a chapter
+                              // whenever chapter_n is not empty
+  journal_chapter_n_t chapter_n;
+};
+
+/// A decoded journal section.
+struct journal_message_t {
+  journal_header_t header;
+  /// Channel journals that carried a Chapter N, ascending channel number.
+  std::vector<journal_channel_t> channels;
+  /// A system journal was present and skipped (Apple sends one for sequencer
+  /// state and MTC). We never code one.
+  bool has_system_journal = false;
+  /// Some channel journal carried chapters we do not implement (P/C/M/W/E/T/A).
+  /// They are skipped safely using LENGTH, but repairs they describe are lost.
+  bool has_other_chapters = false;
+  /// Some Chapter N was malformed and skipped.
+  bool malformed = false;
+};
+
+/**
+ * @short Stateless wire codec for the RFC 6295 recovery journal.
+ *
+ * Encoding validates its input and throws bad_journal on content that cannot
+ * be expressed (or must not be sent, such as a zero-velocity note log).
+ * Decoding throws bad_journal on malformed input, except for per-channel
+ * Chapter N content inside read_journal(), which is skipped and flagged in
+ * journal_message_t::malformed.
+ */
+class journal_codec_t {
+public:
+  static constexpr size_t header_size = 3;
+  static constexpr size_t channel_header_size = 3;
+  static constexpr size_t chapter_n_header_size = 2;
+
+  // ── Sizes, in octets ────────────────────────────────────────────────
+
+  /// Size of the encoded Chapter N (header + note logs + OFFBITS octets).
+  static size_t chapter_n_size(const journal_chapter_n_t &);
+  /// Size of a channel journal carrying only this Chapter N (3 + chapter).
+  static size_t channel_journal_size(const journal_chapter_n_t &);
+
+  /**
+   * OFFBITS octet range for a chapter, as coded in the LOW/HIGH header fields.
+   *
+   * `low > high` means "no OFFBITS octets": the canonical coding of an empty
+   * NoteOff bitfield is (LOW=15, HIGH=0). The (15,1) pair is also accepted
+   * when decoding.
+   */
+  static std::pair<uint8_t, uint8_t> offbits_range(const journal_chapter_n_t &);
+
+  // ── Encoding ────────────────────────────────────────────────────────
+
+  static void write_header(io_bytes_writer &, const journal_header_t &);
+  static void write_channel_header(io_bytes_writer &,
+                                   const journal_channel_header_t &);
+  static void write_chapter_n(io_bytes_writer &, const journal_chapter_n_t &);
+
+  /**
+   * Encode a complete journal section: top-level header followed by one channel
+   * journal with a Chapter N per entry, in the given order (which MUST be
+   * ascending channel number). A, TOTCHAN and the S bits are derived from the
+   * entries, so they can never disagree with them.
+   *
+   * Channels with an empty Chapter N are not coded; if all are empty the result
+   * is the 3-octet "empty journal".
+   */
+  static void write_journal_n(io_bytes_writer &, uint16_t checkpoint, bool s,
+                              const journal_channel_t *channels, size_t count);
+  static void write_journal_n(io_bytes_writer &writer, uint16_t checkpoint,
+                              bool s,
+                              const std::vector<journal_channel_t> &channels) {
+    write_journal_n(writer, checkpoint, s, channels.data(), channels.size());
+  }
+
+  // ── Decoding ────────────────────────────────────────────────────────
+
+  static journal_header_t read_header(io_bytes_reader &);
+  static journal_channel_header_t read_channel_header(io_bytes_reader &);
+  static journal_chapter_n_t read_chapter_n(io_bytes_reader &);
+
+  /**
+   * Decode a complete journal section, following the top-level header, the
+   * (TOTCHAN + 1) channel journals and the Chapter N of each.
+   *
+   * Chapters before N in a channel journal (P/C/M/W) are skipped using their
+   * own format, so a Chapter N that shares a channel journal with them is still
+   * found. Chapters after N are skipped using the channel journal LENGTH.
+   */
+  static journal_message_t read_journal(io_bytes_reader &);
+};
+
+/// How an incoming packet relates to the packets received before it.
+enum class journal_loss_e {
+  none,   // in order, or a first packet, or an out of order packet
+  single, // exactly one packet was lost before this one
+  multi,  // two or more packets were lost before this one
+};
+
+/**
+ * @short Receiver side of the recovery journal (RFC 4696 Appendix: the RJRS).
+ *
+ * Tracks the RTP sequence numbers of an incoming stream to detect losses, and
+ * the note state the receiver has actually rendered (RFC 4696 `jrec_chaptern`),
+ * so that a recovery journal can be diffed against it and only the commands
+ * that were really missed are executed.
+ *
+ * This is essential, not an optimization: peers such as Apple's driver set
+ * `J=1` on **every** packet, so a receiver that applies every journal it sees
+ * replays notes that were never lost.
+ *
+ * All methods are meant to be called from the thread that owns the peer, in
+ * this order for each received MIDI packet:
+ *
+ *   1. observe(seq_nr)                -> loss classification
+ *   2. parse_journal(...)             -> repairs (emitted on the midi signal)
+ *   3. midi_played(event, timestamp)  -> for each event of the packet itself
+ */
+class recovery_journal_t {
+public:
+  struct stats_t {
+    // Receiver side (Phase 2)
+    uint32_t journals_received = 0;
+    uint32_t notes_repaired_on = 0;
+    uint32_t notes_repaired_off = 0;
+    uint32_t notes_skipped = 0;
+    // Journal note commands for notes whose state we did not know: the peer has
+    // a NoteOn we never received, so it knows about a note we do not.
+    uint32_t notes_unknown = 0;
+    uint32_t losses = 0;
+    uint32_t out_of_order = 0;
+    uint32_t malformed = 0;
+    uint32_t notes_silenced = 0; // Notes ended when leaving a session
+    // Sender side
+    uint32_t journals_sent = 0;
+    uint32_t guard_packets = 0;
+    uint32_t feedback_sent = 0;
+    uint32_t feedback_received = 0;
+  };
+
+  /**
+   * A NoteOn played longer ago than this (in 0.1 ms units, so 250 ms) is
+   * "clearly not recent" for the `Y` bit test of RFC 4696 section 7.2.
+   */
+  static constexpr uint32_t note_on_recent_window = 2500;
+
+  /**
+   * Maximum size of the journal section appended to a packet. If the journal
+   * for the current checkpoint is bigger, the checkpoint advances (dropping the
+   * commands older than it) until it fits.
+   */
+  static constexpr size_t max_journal_size = 512;
+
+  /**
+   * Journaling on/off. Meant to be set before the session starts: changing it
+   * while connected leaves the two halves of the state out of sync, so it needs
+   * a reset().
+   */
+  bool enabled = true;
+
+  recovery_journal_t() = default;
+
+  /// Forget all stream and note state. Called on (re)connect.
+  void reset();
+
+  /// Classify an incoming packet against the ones seen so far, and remember its
+  /// sequence number for the events that will be played from it.
+  journal_loss_e observe(uint16_t seq_nr);
+
+  /**
+   * Record the extended sequence number a peer reports as the most recently
+   * received packet ('RS' journal feedback). It bounds the checkpoint history
+   * of the journals we send (Phase 3).
+   */
+  void feedback_in(uint32_t extended_seq);
+
+  /// Extended sequence number reported by the peer, if any feedback arrived.
+  uint32_t confirmed_extended_seq() const { return confirmed_extended_seq_; }
+  bool has_feedback() const { return has_feedback_; }
+
+  // ── Sender side (Phase 3) ───────────────────────────────────────────
+
+  /**
+   * Record the MIDI commands we are putting in an outgoing packet, so they can
+   * be coded in the journals of the packets that follow.
+   *
+   * MUST be called for every packet sent, and **after** write_journal() for the
+   * same packet: a journal codes the history back to its checkpoint, and that
+   * history never contains the packet carrying it (RFC 6295 Appendix A.1).
+   */
+  void midi_out(uint16_t seq_nr, const io_bytes_reader &events);
+
+  /**
+   * Write the journal section for the packet being sent, covering the
+   * checkpoint chosen by the sending policy: closed-loop from `'RS'` feedback
+   * when there is any, anchor (first packet of the stream) until then.
+   *
+   * Called after the MIDI command section of the packet has been written and
+   * before midi_out() for the same packet. Returns the octets written, which is
+   * never less than the 3 octet empty journal: a stream that uses the recovery
+   * journal sets `J=1` in every payload.
+   */
+  size_t write_journal(io_bytes_writer &writer);
+
+  /**
+   * True if we recorded note commands the peer may still be missing, which is
+   * when guard packets (journal only payloads) are worth sending.
+   */
+  bool sender_has_pending_state() const;
+
+  /**
+   * True when the peer's feedback confirms a packet of our stream with
+   * extended sequence number @a extended_seq or a later one.
+   */
+  bool sender_confirmed(uint32_t extended_seq) const {
+    return has_feedback_ && confirmed_extended_seq_ >= extended_seq;
+  }
+
+  /**
+   * True when the peer's feedback covers everything we have sent, so there is
+   * nothing left to guard. Always false without feedback: the anchor policy
+   * keeps the whole stream in the journal until the peer tells us otherwise.
+   */
+  bool sender_is_caught_up() const {
+    return has_sent_packet_ && sender_confirmed(last_packet_seq_);
+  }
+
+  /// Extended sequence number of the last packet we sent: the number the peer
+  /// reports back in its receiver feedback.
+  uint32_t last_sent_extended_seq() const { return last_packet_seq_; }
+
+  /**
+   * How many note commands the peer may still be missing: the notes a guard
+   * packet is resending. It is the count behind @c sender_has_pending_state().
+   */
+  size_t sender_pending_notes() const;
+
+  /// Record a MIDI event that was emitted (to ALSA): this is what the receiver
+  /// believes the renderer is doing.
+  void midi_played(const io_bytes_reader &events, uint32_t timestamp);
+
+  /**
+   * Repair the loss event ended by the packet carrying @a journal. Repairs are
+   * emitted on @a midi_out as ordinary MIDI NoteOn/NoteOff, before the events
+   * of the packet itself are played.
+   */
+  void parse_journal(io_bytes_reader &journal, journal_loss_e loss,
+                     uint32_t timestamp,
+                     signal_t<const io_bytes_reader &> &midi_out);
+
+  /// True while the receiver believes some note is still sounding.
+  bool has_sounding_notes() const;
+
+  /// How many notes are currently sounding, for stats and tests.
+  size_t sounding_notes() const;
+
+  /**
+   * End every note the receiver believes is sounding, and forget it. Called
+   * when leaving a session: RFC 6295 Section 4 requires that a receiving
+   * session does not end with indefinite artifacts, and a note that never gets
+   * its NoteOff is exactly that. This is also what cleans up after a network
+   * death, where no journal will ever arrive.
+   */
+  size_t session_end(signal_t<const io_bytes_reader &> &midi_out);
+
+  /// Extended sequence number of the highest packet received, for 'RS'
+  /// feedback.
+  uint32_t highest_received_extended_seq() const { return extended_seq_; }
+  bool has_received_packet() const { return has_received_packet_; }
+
+  stats_t stats;
+
+private:
+  struct note_state_t {
+    uint32_t extended_seq = 0; // extended seq of the most recent note command
+    uint32_t time = 0;         // local time of the most recent NoteOn
+    uint8_t velocity = 0;      // 0 means the note is not sounding
+  };
+  struct channel_state_t {
+    note_state_t notes[128];
+  };
+
+  /// One note as the sender knows it. `extended_seq` of 0 is a valid sequence
+  /// number, hence the explicit `has_command`.
+  struct sender_note_t {
+    uint32_t extended_seq = 0;
+    uint32_t order = 0;   // session history order of that command
+    uint8_t velocity = 0; // 0 means the most recent command was a NoteOff
+    bool has_command = false;
+  };
+  struct sender_channel_state_t {
+    sender_note_t notes[128];
+  };
+
+  void reset_channel(uint8_t channel);
+  void reset_all_channels();
+  void note_on(uint8_t channel, uint8_t note, uint8_t velocity,
+               uint32_t timestamp);
+  void note_off(uint8_t channel, uint8_t note, uint32_t timestamp);
+  void handle_chapter_n(uint8_t channel, const journal_chapter_n_t &,
+                        uint16_t checkpoint, journal_loss_e loss,
+                        uint32_t timestamp,
+                        signal_t<const io_bytes_reader &> &midi_out);
+  void emit_note(uint8_t status, uint8_t note, uint8_t velocity,
+                 signal_t<const io_bytes_reader &> &midi_out);
+
+  uint32_t next_sent_extended_seq(uint16_t seq_nr);
+  void send_note_on(uint8_t channel, uint8_t note, uint8_t velocity,
+                    uint32_t extended_seq);
+  void send_note_off(uint8_t channel, uint8_t note, uint32_t extended_seq);
+  void send_reset_channel(uint8_t channel);
+  void send_reset_all_channels();
+  uint32_t sender_checkpoint() const;
+  uint32_t normalize_reported_extended_seq(uint32_t reported) const;
+  void collect_sender_channels(uint32_t checkpoint);
+  size_t coded_channels_size() const;
+
+  std::array<channel_state_t, 16> channels_{};
+  bool has_received_packet_ = false;
+  uint16_t last_seq_ = 0;
+  uint32_t extended_seq_ = 0;
+  // Extended sequence number of the packet currently being processed: recovery
+  // commands are attributed to the packet carrying the journal (RFC 4696 7.2).
+  uint32_t packet_extended_seq_ = 0;
+  uint32_t confirmed_extended_seq_ = 0;
+  bool has_feedback_ = false;
+
+  std::array<sender_channel_state_t, 16> send_channels_{};
+  /// Channels coded in the journal being written. Reused between packets so the
+  /// hot path does not allocate: the note log vectors keep their capacity.
+  std::array<journal_channel_t, 16> coded_channels_{};
+  size_t coded_channel_count_ = 0;
+  std::array<bool, 16> last_packet_had_note_off_{};
+  bool has_sent_packet_ = false;
+  uint16_t last_sent_seq_nr_ = 0;
+  uint32_t send_rollovers_ = 0;
+  uint32_t current_extended_seq_ = 0;
+  uint32_t first_extended_seq_ = 0;
+  uint32_t last_packet_seq_ = 0; // extended seq of the previous packet
+  uint32_t order_counter_ = 0;
+};
+
+} // namespace rtpmidid
+
+ENUM_FORMATTER_BEGIN(rtpmidid::journal_loss_e);
+ENUM_FORMATTER_ELEMENT(rtpmidid::journal_loss_e::none, "none");
+ENUM_FORMATTER_ELEMENT(rtpmidid::journal_loss_e::single, "single");
+ENUM_FORMATTER_ELEMENT(rtpmidid::journal_loss_e::multi, "multi");
+ENUM_FORMATTER_END();

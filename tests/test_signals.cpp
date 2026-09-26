@@ -99,9 +99,33 @@ void test_signal_disconnect() {
   }
 }
 
+void test_signal_owner_destroyed_in_callback() {
+  // A callback may destroy the object that owns the signal. The callbacks of
+  // that same emission after it must not run: they belong to an owner that is
+  // gone, and the signal itself is freed. Before this was handled, operator()
+  // re-read this->slots_ after each callback (use-after-free), which under a
+  // real allocator corrupts the heap once the freed memory is reused.
+  struct owner_t {
+    signal_t<int> signal;
+    connection_t<int> first;
+    connection_t<int> second;
+  };
+
+  auto owner = std::make_unique<owner_t>();
+  int second_calls = 0;
+  owner->first = owner->signal.connect([&owner](int) { owner.reset(); });
+  owner->second =
+      owner->signal.connect([&second_calls](int) { second_calls++; });
+
+  owner->signal(1);
+
+  ASSERT_EQUAL(second_calls, 0);
+}
+
 int main(void) {
   test_case_t testcase{
       TEST(test_signal_disconnect),
+      TEST(test_signal_owner_destroyed_in_callback),
   };
 
   testcase.run();

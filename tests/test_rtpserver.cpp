@@ -122,11 +122,10 @@ void test_connect_disconnect_send() {
   test_client_t control_client(0, server.port());
   test_client_t midi_client(control_client.local_port + 1, server.port() + 1);
 
-  auto nmidievents = std::make_shared<int>(0);
-  auto midi_event_c1 = server.midi_event.connect(
-      [&nmidievents](const rtpmidid::io_bytes_reader &) {
-        *nmidievents += 1;
-        DEBUG("Got MIDI Event");
+  rtpmidid::io_bytes_writer_static<64> midi_io;
+  auto midi_event_c1 =
+      server.midi_event.connect([&midi_io](const rtpmidid::io_bytes &pb) {
+        midi_io.copy_from(pb.start, pb.size());
       });
 
   control_client.send(connect_msg);
@@ -141,16 +140,26 @@ void test_connect_disconnect_send() {
 
   // This I receive
   midi_client.send(midi_msg);
-  DEBUG("Got {} events", *nmidievents);
-  ASSERT_EQUAL(*nmidievents, 1);
+  DEBUG("Got {} bytes of events", midi_io.pos());
+  ASSERT_EQUAL(midi_io.pos(), 3);
+  ASSERT_EQUAL(midi_io.data[0], 0x90);
+  ASSERT_EQUAL(midi_io.data[1], 0x60);
+  ASSERT_EQUAL(midi_io.data[2], 0x7f);
 
   control_client.send(disconnect_msg);
   midi_client.send(disconnect_msg);
 
+  // Leaving the session silences the sounding note: the NoteOn, then its
+  // NoteOff, and nothing else.
+  ASSERT_EQUAL(midi_io.pos(), 6);
+  ASSERT_EQUAL(midi_io.data[3], 0x80);
+  ASSERT_EQUAL(midi_io.data[4], 0x60);
+  ASSERT_EQUAL(midi_io.data[5], 0x00);
+
   // This should not
   midi_client.send(midi_msg);
 
-  ASSERT_EQUAL(*nmidievents, 1);
+  ASSERT_EQUAL(midi_io.pos(), 6);
 }
 
 int main(int argc, char **argv) {

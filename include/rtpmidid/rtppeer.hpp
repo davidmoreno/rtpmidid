@@ -19,6 +19,7 @@
 
 #pragma once
 #include "exceptions.hpp"
+#include "journal.hpp"
 #include "networkaddress.hpp"
 #include "signal.hpp"
 #include "stats.hpp"
@@ -91,6 +92,9 @@ public:
   // Need some buffer space for sysex. This may require memory alloc.
   std::vector<uint8_t> sysex;
   stats_t stats;
+  /// Recovery journal state: incoming journals repair lost note on/off
+  /// (received side), and from Phase 3 on it also journals our own stream.
+  recovery_journal_t recovery_journal;
 
   // This is to be filled at connection by whoever makes it
   // It is not used by the rtppeer_t, just nice info to have
@@ -119,6 +123,11 @@ public:
   typedef signal_t<float> ck_event_t;
   ck_event_t ck_event;
 
+  /// Fired when a MIDI packet with data is sent. Guard packets (journal only,
+  /// empty MIDI list) do not fire it: they must not count as MIDI activity.
+  typedef signal_t<> midi_sent_event_t;
+  midi_sent_event_t midi_sent_event;
+
   static bool is_command(io_bytes_reader &);
   static bool is_feedback(io_bytes_reader &);
 
@@ -144,17 +153,29 @@ public:
   void parse_midi(io_bytes_reader &);
   void parse_sysex(io_bytes_reader &, int16_t length);
 
+  /// Emit an incoming MIDI event: records it in the recovery journal receiver
+  /// state and forwards it to the midi_event subscribers.
+  void emit_midi(const io_bytes_reader &);
+
+  /// Build and send an RTP MIDI packet with these events, plus the recovery
+  /// journal section (J=1) when journaling is enabled.
+  void send_midi_packet(const io_bytes_reader &events);
+
   void send_midi(const io_bytes_reader &buffer);
   void send_goodbye(port_e to_port);
-  void send_feedback(uint32_t seqnum);
+  /// Send an 'RS' receiver feedback packet on the control port, with the
+  /// extended sequence number of the highest packet received.
+  void send_feedback();
+  /**
+   * Send a guard packet: an RTP MIDI packet with an empty MIDI command list and
+   * only the recovery journal, so a peer that missed something can still repair
+   * it (RFC 4696 Section 4.2). Returns false when not connected or when
+   * journaling is disabled.
+   */
+  bool send_journal_packet();
   void connect_to(port_e rtp_port);
   void send_ck0();
   uint64_t get_timestamp();
-
-  // Journal
-  void parse_journal(io_bytes_reader &);
-  void parse_journal_chapter(io_bytes_reader &);
-  void parse_journal_chapter_N(uint8_t channel, io_bytes_reader &);
 };
 } // namespace rtpmidid
 

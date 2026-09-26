@@ -20,6 +20,7 @@
 #pragma once
 
 #include "./iobytes.hpp"
+#include "./journal_timer.hpp"
 #include "./poller.hpp"
 #include "./rtppeer.hpp"
 #include "./signal.hpp"
@@ -43,6 +44,8 @@ class rtpclient_t {
   NON_COPYABLE_NOR_MOVABLE(rtpclient_t)
 public:
   rtppeer_t peer;
+  /// Receiver feedback and guard packets for this peer (see journal_timer.hpp)
+  journal_timer_t journal_timer;
   struct endpoint_t {
     std::string hostname;
     std::string port;

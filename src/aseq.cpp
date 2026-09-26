@@ -16,8 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "./aseq.hpp"
+#include <algorithm>
 #include <alsa/seq.h>
 #include <alsa/seq_event.h>
+#include <cctype>
 #include <rtpmidid/logger.hpp>
 
 namespace rtpmididns {
@@ -264,6 +266,55 @@ void aseq_t::remove_port(uint8_t port) {
   midi_event.erase(port);
 }
 
+/// True if the character can separate two words in an ALSA name.
+static bool name_token_boundary(char c) {
+  return c == ' ' || c == '-' || c == '_' || c == ':' || c == '/' || c == '\t';
+}
+
+/// Case insensitive substring search that only matches whole words.
+///
+/// This avoids client names that are a substring of a longer word, as "Pea"
+/// matching the port "Peak MIDI 1".
+static bool contains_word(const std::string &haystack,
+                          const std::string &needle) {
+  if (needle.empty() || needle.size() > haystack.size())
+    return false;
+
+  auto equal_ci = [](char a, char b) {
+    return std::tolower(static_cast<unsigned char>(a)) ==
+           std::tolower(static_cast<unsigned char>(b));
+  };
+
+  for (size_t i = 0; i + needle.size() <= haystack.size(); i++) {
+    if (!std::equal(needle.begin(), needle.end(), haystack.begin() + i,
+                    equal_ci))
+      continue;
+    if (i > 0 && !name_token_boundary(haystack[i - 1]))
+      continue;
+    if (i + needle.size() < haystack.size() &&
+        !name_token_boundary(haystack[i + needle.size()]))
+      continue;
+    return true;
+  }
+  return false;
+}
+
+std::string aseq_join_names(const std::string &client_name,
+                            const std::string &port_name) {
+  if (client_name.empty())
+    return port_name;
+  if (port_name.empty())
+    return client_name;
+
+  // Many times the port name already includes the whole client name.
+  if (contains_word(port_name, client_name))
+    return port_name;
+  if (contains_word(client_name, port_name))
+    return client_name;
+
+  return FMT::format("{}-{}", client_name, port_name);
+}
+
 std::vector<std::string> get_ports(aseq_t *seq) {
   std::vector<std::string> ret;
 
@@ -311,10 +362,7 @@ std::string aseq_t::get_client_name(snd_seq_addr_t *addr) {
   snd_seq_client_info_free(client_info);
   snd_seq_port_info_free(port_info);
 
-  //  Many times the name is just a copy
-  if (client_name == port_name)
-    return client_name;
-  return FMT::format("{}-{}", client_name, port_name);
+  return aseq_join_names(client_name, port_name);
 }
 
 aseq_t::client_type_e get_type_by_seq_type(int type) {

@@ -134,6 +134,16 @@ public:
 
 std::vector<std::string> get_ports(aseq_t *);
 
+/// Joins an ALSA client name and port name into a device name.
+///
+/// Hardware clients usually repeat the client name inside the port name
+/// (client "JUPITER-Xm", port "JUPITER-Xm MIDI 1"). When one name already
+/// contains the other as a whole word (case insensitive) only the longer one is
+/// used, so the result is not "JUPITER-Xm-JUPITER-Xm MIDI 1". When they are
+/// unrelated they are joined with a dash, as in "VMPK-Out 1".
+std::string aseq_join_names(const std::string &client_name,
+                            const std::string &port_name);
+
 /**
  * @short This class allows to feed midi data and loops over the given function
  *

@@ -3,6 +3,21 @@ target_link_libraries(test_rtppeer rtpmidid-shared)
 target_link_libraries(test_rtppeer ${FMT_LIBRARIES})
 add_test(NAME test_rtppeer COMMAND test_rtppeer)
 
+add_executable(test_journal test_journal.cpp test_utils.cpp)
+target_link_libraries(test_journal rtpmidid-shared)
+target_link_libraries(test_journal ${FMT_LIBRARIES})
+add_test(NAME test_journal COMMAND test_journal)
+
+add_executable(test_recovery_journal test_recovery_journal.cpp test_utils.cpp)
+target_link_libraries(test_recovery_journal rtpmidid-shared)
+target_link_libraries(test_recovery_journal ${FMT_LIBRARIES})
+add_test(NAME test_recovery_journal COMMAND test_recovery_journal)
+
+add_executable(test_journal_timer test_journal_timer.cpp test_utils.cpp)
+target_link_libraries(test_journal_timer rtpmidid-shared -pthread)
+target_link_libraries(test_journal_timer ${FMT_LIBRARIES})
+add_test(NAME test_journal_timer COMMAND test_journal_timer)
+
 add_executable(test_rtpserver test_rtpserver.cpp test_utils.cpp)
 target_link_libraries(test_rtpserver rtpmidid-shared -pthread)
 target_link_libraries(test_rtpserver ${FMT_LIBRARIES})
@@ -95,6 +110,19 @@ if (NOT LIBS_ONLY)
     target_link_libraries(test_rtpclient ${FMT_LIBRARIES})
     target_include_directories(test_rtpclient PUBLIC ${ALSA_INCLUDE_DIRS})
     target_compile_options(test_rtpclient PUBLIC ${ALSA_CFLAGS_OTHER})
+endif (NOT LIBS_ONLY)
+
+
+if (NOT LIBS_ONLY)
+    add_executable(test_aseq_names
+        test_aseq_names.cpp test_utils.cpp
+    )
+    target_link_libraries(test_aseq_names -pthread rtpmidid-shared rtpmidid2-static)
+    add_test(NAME test_aseq_names COMMAND test_aseq_names)
+    target_link_libraries(test_aseq_names ${ALSA_LIBRARIES})
+    target_link_libraries(test_aseq_names ${FMT_LIBRARIES})
+    target_include_directories(test_aseq_names PUBLIC ${ALSA_INCLUDE_DIRS})
+    target_compile_options(test_aseq_names PUBLIC ${ALSA_CFLAGS_OTHER})
 endif (NOT LIBS_ONLY)
 
 

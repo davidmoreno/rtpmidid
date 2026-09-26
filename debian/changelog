@@ -1,3 +1,9 @@
+rtpmidid (26.01~17~gc41b2) stable; urgency=medium
+
+  * Development version. Check `git log`.
+
+ -- David Moreno <dmoreno@coralbits.com>  Sat, 26 Sep 2026 15:27:39 +0200
+
 rtpmidid (26.01) stable; urgency=medium
 
   * Docker support: Added Dockerfile, docker-compose, and comprehensive Docker documentation

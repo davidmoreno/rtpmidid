@@ -20,16 +20,31 @@ fi
 # Change to build directory
 cd $BUILD_DIR
 
-# Get version from git or use default
-VERSION=$(git describe --match "v[0-9]*" --tags --abbrev=5 HEAD 2>/dev/null | sed 's/^v//g' | sed 's/-/~/g' || echo "0.0.0")
+# Get the version. The host passes it in RTPMIDID_VERSION because git describe
+# inside the container is unreliable: the mounted source may be a git worktree
+# whose .git file points outside the mount, or be owned by another uid. Only
+# fall back to git here, and fail loudly instead of generating an empty
+# "Version:" tag (rpmbuild then dies with "Empty tag: Version:").
+VERSION="${RTPMIDID_VERSION:-}"
+if [ -z "$VERSION" ]; then
+    VERSION=$(git describe --match "v[0-9]*" --tags --abbrev=5 HEAD 2>/dev/null | sed 's/^v//g' | sed 's/-/~/g')
+fi
+if [ -z "$VERSION" ]; then
+    echo "ERROR: cannot determine version: RTPMIDID_VERSION is unset and git describe failed" >&2
+    exit 1
+fi
+echo "Building version $VERSION"
 
 # Create rpmbuild directory structure
 mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
 
 # Create source tarball
+# Exclude build trees: 'build' matches build/ anywhere, './build-*' additionally
+# catches build-asan/ and friends (anchored, so packaging/build*.sh is kept).
 tar czf ~/rpmbuild/SOURCES/rtpmidid-${VERSION}.tar.gz \
     --exclude='.git' \
     --exclude='build' \
+    --exclude='./build-*' \
     --exclude='packaging/dist' \
     --exclude='*.deb' \
     --exclude='*.rpm' \
@@ -44,6 +59,10 @@ cp packaging/rpm/rtpmidid.spec ~/rpmbuild/SPECS/
 cd ~/rpmbuild/SPECS
 # Replace version in spec file
 sed -i "s/^Version:.*/Version:        ${VERSION}/" rtpmidid.spec
+grep -q "^Version:        ${VERSION}$" rtpmidid.spec || {
+    echo "ERROR: failed to set Version: ${VERSION} in the spec file" >&2
+    exit 1
+}
 rpmbuild -ba rtpmidid.spec
 
 # Copy RPM files to /output for extraction

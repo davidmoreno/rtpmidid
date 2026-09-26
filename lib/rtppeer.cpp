@@ -56,6 +56,11 @@ void rtppeer_t::reset() {
   remote_name = "";
   remote_ssrc = 0;
   initiator_id = 0;
+  // A session must not end with notes sounding: if we believe a note is on, its
+  // NoteOff either never arrived or never will. This covers disconnects,
+  // network deaths and the peer going away, as every teardown path ends here.
+  recovery_journal.session_end(midi_event);
+  recovery_journal.reset();
 }
 
 void rtppeer_t::data_ready(io_bytes_reader &&buffer, port_e port) {
@@ -243,8 +248,18 @@ void rtppeer_t::parse_command_by(io_bytes_reader &buffer, port_e port) {
   status = nextstatus;
 
   // One BY is enough, not even waiting for the midi one.
-  if (status == NOT_CONNECTED)
+  if (status == NOT_CONNECTED) {
+    // The session is over: silence the notes before the disconnect event, so
+    // the midi_event subscribers (the router that writes to ALSA) are still
+    // there to deliver the NoteOffs. This cannot live in ~rtppeer_t(): the
+    // daemon disconnects its midi_event handler before the peer is destroyed.
+    reset();
     status_change_event(DISCONNECTED_PEER_DISCONNECTED);
+  } else if (port == MIDI_PORT) {
+    // The MIDI half is gone even if the control half is not: no more MIDI is
+    // coming, so silence without tearing the peer down.
+    recovery_journal.session_end(midi_event);
+  }
 }
 
 void rtppeer_t::parse_command_no(io_bytes_reader &buffer, port_e port) {
@@ -265,6 +280,14 @@ void rtppeer_t::parse_command_no(io_bytes_reader &buffer, port_e port) {
   WARNING("Invitation Rejected (NO) : remote ssrc {:X}", remote_ssrc);
   INFO("Disconnect from {}, {} port. Status {:X}", remote_name,
        port == MIDI_PORT ? "MIDI" : "Control", (int)status);
+
+  // Same as `BY`: a session that ends must not leave notes sounding (RFC 6295
+  // Section 4). The rejection may arrive on a peer that had notes pending.
+  if (status == NOT_CONNECTED) {
+    reset();
+  } else if (port == MIDI_PORT) {
+    recovery_journal.session_end(midi_event);
+  }
 
   status_change_event(DISCONNECTED_CONNECTION_REJECTED);
 }
@@ -367,11 +390,13 @@ void rtppeer_t::send_ck0() {
 }
 
 void rtppeer_t::parse_feedback(io_bytes_reader &buffer) {
+  // Apple's journal feedback packet: 0xFFFF, 'RS', SSRC (4 octets), and the
+  // extended sequence number of the most recently received packet as a 32 bit
+  // value. Reading only 16 bits here (as this used to) always yields 0.
   buffer.position = buffer.start + 8;
-  seq_nr_ack = buffer.read_uint16();
-
-  DEBUG("Got feedback until package {} / {}. No journal, so ignoring.",
-        seq_nr_ack, seq_nr);
+  auto remote_seq_nr_ack = buffer.read_uint32();
+  seq_nr_ack = uint16_t(remote_seq_nr_ack & 0xFFFF);
+  recovery_journal.feedback_in(remote_seq_nr_ack);
 }
 
 int rtppeer_t::next_midi_packet_length(io_bytes_reader &buffer) {
@@ -489,6 +514,10 @@ void rtppeer_t::parse_midi(io_bytes_reader &buffer) {
     return;
   }
 
+  // Sequence tracking for the recovery journal: classify this packet against
+  // the ones received before it, before anything from it is played.
+  auto loss = recovery_journal.observe(remote_seq_nr);
+
   // RFC 6295 RTP-MIDI _header
   // The Flags are:
   // B = has long header
@@ -506,13 +535,14 @@ void rtppeer_t::parse_midi(io_bytes_reader &buffer) {
   auto remaining = length;
 
   if ((header & 0x40) != 0) {
-    // I actually parse the journal BEFORE the current message as it is
-    // for events before the event.
-    WARNING("This RTP MIDI header has journal. WIP.");
+    // The journal describes the packets before this one, so it is applied
+    // before the events of this packet: a recovered NoteOff must land before a
+    // new NoteOn for the same note.
     io_bytes_reader journal_data = buffer;
     journal_data.position += length;
 
-    parse_journal(journal_data);
+    recovery_journal.parse_journal(journal_data, loss,
+                                   uint32_t(get_timestamp()), midi_event);
   }
   if ((header & 0x20) != 0) {
     WARNING("This RTP MIDI payload has delta time for the first command. "
@@ -549,11 +579,11 @@ void rtppeer_t::parse_midi(io_bytes_reader &buffer) {
       io_bytes_writer midi_writer(midi);
       midi_writer.write_uint8(running_status);
       midi_writer.copy_from(buffer.position, length);
-      midi_event(midi);
+      emit_midi(midi);
     } else {
       // Normal flow, simple midi data
       io_bytes midi(buffer.position, length);
-      midi_event(midi);
+      emit_midi(midi);
     }
     buffer.skip(length);
 
@@ -597,7 +627,7 @@ void rtppeer_t::parse_sysex(io_bytes_reader &buffer, int16_t length) {
       auto sysexreader = io_bytes_reader(&sysex[1], sysex.size() - 1);
       // DEBUG("Send sysex {}", sysex.size());
       // sysexreader.print_hex();
-      midi_event(sysexreader);
+      emit_midi(sysexreader);
       sysex.clear();
 
     } break;
@@ -618,7 +648,7 @@ void rtppeer_t::parse_sysex(io_bytes_reader &buffer, int16_t length) {
     if (last_byte == 0xF7) { // Normal packet
       // DEBUG("Read normal sysex packet");
       io_bytes midi(buffer.position, length);
-      midi_event(midi);
+      emit_midi(midi);
     } else {
       // DEBUG("First part");
       sysex.clear();
@@ -634,7 +664,7 @@ void rtppeer_t::parse_sysex(io_bytes_reader &buffer, int16_t length) {
  * 10 ts = 1ms, 10000 ts = 1s. 1ms = 0.1ts
  */
 uint64_t rtppeer_t::get_timestamp() {
-  struct timespec spec {};
+  struct timespec spec{};
 
   clock_gettime(CLOCK_MONOTONIC, &spec);
   // ns is 1e-9s. I need 1e-4s, so / 1e5
@@ -645,6 +675,11 @@ uint64_t rtppeer_t::get_timestamp() {
   return (now - timestamp_start);
 }
 
+void rtppeer_t::emit_midi(const io_bytes_reader &events) {
+  recovery_journal.midi_played(events, uint32_t(get_timestamp()));
+  midi_event(events);
+}
+
 void rtppeer_t::send_midi(const io_bytes_reader &events) {
   if (!is_connected()) { // Not connected yet.
     WARNING_RATE_LIMIT(
@@ -652,7 +687,23 @@ void rtppeer_t::send_midi(const io_bytes_reader &events) {
         remote_name, (int)status);
     return;
   }
+  send_midi_packet(events);
+  midi_sent_event();
+}
 
+bool rtppeer_t::send_journal_packet() {
+  if (!is_connected() || !recovery_journal.enabled) {
+    return false;
+  }
+  // A guard packet: empty MIDI command list, journal section. It does not fire
+  // midi_sent_event, so it is not mistaken for MIDI activity.
+  uint8_t empty_event = 0;
+  send_midi_packet(io_bytes_reader(&empty_event, 0));
+  recovery_journal.stats.guard_packets++;
+  return true;
+}
+
+void rtppeer_t::send_midi_packet(const io_bytes_reader &events) {
   io_bytes_writer_static<4096 + 12> buffer;
 
   uint32_t timestamp = get_timestamp();
@@ -669,10 +720,13 @@ void rtppeer_t::send_midi(const io_bytes_reader &events) {
   buffer.write_uint32(local_ssrc);
 
   auto events_size = events.size();
+  // A stream that uses the recovery journal sets J in every payload, even when
+  // the journal section is only its 3 octet header (RFC 6295 Section 2.2).
+  const uint8_t journal_bit = recovery_journal.enabled ? 0x40 : 0x00;
   // Now midi
   if (events_size < 16) {
     // Short header, 1 octet
-    buffer.write_uint8(events_size);
+    buffer.write_uint8(events_size | journal_bit);
   } else {
     // Long header, 2 octets
     // DEBUG("Send long message: message_size={} bytes", events_size);
@@ -683,11 +737,18 @@ void rtppeer_t::send_midi(const io_bytes_reader &events) {
               events_size);
     }
 
-    buffer.write_uint8((events_size & 0x0f00) >> 8 | 0x80);
+    buffer.write_uint8(((events_size & 0x0f00) >> 8) | 0x80 | journal_bit);
     buffer.write_uint8(events_size & 0xff);
   }
 
   buffer.copy_from(events);
+
+  // The journal codes the history *before* this packet, so it is written before
+  // the commands of this packet are recorded.
+  if (recovery_journal.enabled) {
+    recovery_journal.write_journal(buffer);
+  }
+  recovery_journal.midi_out(seq_nr, events);
 
   // events.print_hex();
   // buffer.print_hex();
@@ -725,18 +786,22 @@ void rtppeer_t::send_goodbye(port_e to_port) {
   }
 }
 
-void rtppeer_t::send_feedback(uint32_t seqnum) {
-  // uint8_t packet[256];
+void rtppeer_t::send_feedback() {
+  if (!is_connected() || !recovery_journal.has_received_packet()) {
+    return;
+  }
+  // The receiver feedback packet: 0xFFFF, 'RS', SSRC, and the extended sequence
+  // number of the most recently received packet, as a 32 bit value. It lets the
+  // peer shrink its checkpoint history and stop sending guard packets.
+  uint32_t seqnum = recovery_journal.highest_received_extended_seq();
 
-  DEBUG("Send feedback to the other end. Journal parsed. Seqnum {}", seqnum);
-  remote_seq_nr = seqnum;
   io_bytes_writer_static<96> buffer;
-
   buffer.write_uint16(0xFFFF);
   buffer.write_uint16(rtppeer_t::RS);
   buffer.write_uint32(local_ssrc);
   buffer.write_uint32(seqnum);
 
+  recovery_journal.stats.feedback_sent++;
   send_event(buffer, CONTROL_PORT);
 }
 
@@ -761,102 +826,6 @@ void rtppeer_t::connect_to(port_e rtp_port) {
   send_event(buffer, rtp_port);
 }
 
-void rtppeer_t::parse_journal(io_bytes_reader &journal_data) {
-  journal_data.print_hex();
-
-  uint8_t header = journal_data.read_uint8();
-
-  // bool S = header & 0x80; // Single packet loss
-  // bool Y = header & 0x40; // System journal
-  bool A = header & 0x20; // Channel journal
-  // bool H = header & 0x10; // Enhanced chapter C encoding
-  uint8_t totchan = header & 0x0F;
-
-  uint16_t seqnum = journal_data.read_uint16();
-
-  DEBUG("I got data from seqnum {}. {} channels.", seqnum, totchan);
-
-  if (A) {
-    for (auto i = 0; i < totchan; i++) {
-      DEBUG("Parse channel pkg {}", i);
-      parse_journal_chapter(journal_data);
-    }
-  }
-  // TODO Send ACK for journal data? Set seqnum?
-  send_feedback(seqnum);
-}
-
-void rtppeer_t::parse_journal_chapter(io_bytes_reader &journal_data) {
-  auto head = journal_data.read_uint8();
-  // bool S = head & 0x80;
-  // bool H = head & 0x08;
-
-  auto length = ((head & 0x07) << 8) | journal_data.read_uint8();
-  auto channel = (head & 0x70) >> 4;
-  auto chapters = journal_data.read_uint8();
-
-  DEBUG("Chapters: {:08b}", chapters);
-
-  // Although maybe I dont know how to parse them.. I need to at least skip
-  // them
-  if (chapters & 0xF0) {
-    WARNING("There are some PCMW chapters and I dont even know how to skip "
-            "them. Sorry journal invalid.");
-    journal_data.skip(length);
-  }
-  if (chapters & 0x08) {
-    parse_journal_chapter_N(channel, journal_data);
-  }
-}
-
-void rtppeer_t::parse_journal_chapter_N(uint8_t channel,
-                                        io_bytes_reader &journal_data) {
-  DEBUG("Parse chapter N, channel {}", channel);
-
-  auto curr = journal_data.read_uint8();
-  // bool S = head & 0x80;
-  auto nnoteon = curr & 0x7f;
-  curr = journal_data.read_uint8();
-  auto low = (curr >> 4) & 0x0f;
-  auto high = curr & 0x0f;
-
-  DEBUG("{} note on count, {} noteoff count", nnoteon, high - low + 1);
-
-  // Prepare some struct, will overwrite mem data and write as midi event
-  std::array<uint8_t, 3> tmp{0, 0, 0};
-
-  for (auto i = 0; i < nnoteon; i++) {
-    auto notenum = journal_data.read_uint8();
-    auto notevel = journal_data.read_uint8();
-
-    // bool B = (notenum&0x80); // S functionality Appendix A.1
-
-    bool Y =
-        (notevel &
-         0x80); // If true, must play on, if not better skip, might be stale
-    if (Y) {
-      tmp[0] = 0x90 | channel;
-      tmp[1] = notenum & 0x7f;
-      tmp[2] = notevel & 0x7f;
-      io_bytes event(tmp.data(), 3);
-      midi_event(event);
-    }
-  }
-
-  tmp[0] = 0x80 | channel;
-  for (auto i = low; i <= high; i++) {
-    auto bitmap = journal_data.read_uint8();
-    auto minnote = i * 8;
-    for (auto j = 0; j < 8; j++) {
-      if (bitmap & (0x80 >> j)) {
-        tmp[1] = minnote;
-        tmp[2] = 0;
-        io_bytes event(tmp.data(), 3);
-        midi_event(event);
-      }
-    }
-  }
-}
 void rtppeer_t::disconnect() {
   if (status & MIDI_CONNECTED) {
     send_goodbye(MIDI_PORT);

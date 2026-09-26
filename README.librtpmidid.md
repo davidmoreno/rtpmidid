@@ -30,6 +30,28 @@ ends, and then can receive the data buffers, and will call the `send_event` when
 needs to send some events, normally due to a `send_midi` call (but can be
 `send_ck0`)
 
+## rtpmidid::journal_codec_t and rtpmidid::recovery_journal_t
+
+RFC 6295 recovery journal, Chapter N (MIDI NoteOn `0x9` / NoteOff `0x8`), the
+chapter that repairs missing note on/off after packet loss.
+
+- `journal_codec_t`: stateless wire codec. Encode with `write_journal_n()` /
+  `write_chapter_n()`, decode with `read_journal()` / `read_chapter_n()`.
+- `recovery_journal_t`: session state, both directions. Receive:
+  `observe()` classifies each incoming packet, `midi_played()` records what was
+  played, and `parse_journal()` repairs a detected loss. Send: `midi_out()`
+  records the commands of each outgoing packet and `write_journal()` produces the
+  journal section to append to it (set the `J` bit), with the checkpoint driven
+  by `'RS'` feedback via `feedback_in()`.
+
+- `journal_timer_t`: per peer, drives periodic `'RS'` receiver feedback and guard
+  packets on the poller thread. `rtpclient_t` and `rtpserverpeer_t` create one
+  automatically; periods are public members for tuning or testing.
+
+`rtppeer_t` already owns one and uses it for incoming packets. See
+[docs/architecture/recovery-journal.md](docs/architecture/recovery-journal.md),
+`test_journal.cpp` and `test_recovery_journal.cpp`.
+
 ## rtpmidid::rtpclient and rtpmidid::rtpserver
 
 These are the network IO handlers. It receives the data as needed to create the
