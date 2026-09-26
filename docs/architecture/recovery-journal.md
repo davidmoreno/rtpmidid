@@ -324,13 +324,19 @@ For each set OFFBITS bit (note `n`):
   `NoteOff n` on that channel, clear the state. **This is what unsticks a
   stuck note.** A set bit for a note we do not believe is sounding is ignored,
   so an anchor-policy peer repeating its journal cannot silence anything twice.
+  It is not silent though: the bit says the note was N-active at the
+  checkpoint, so there is a NoteOn we never received, and a rate-limited
+  WARNING says so.
 
 For each note log (`n`, `velocity`, `Y`):
 
 - `velocity == 0` → invalid per RFC 6295 (it is a NoteOff). Treated as the
   NoteOff it means, with a rate-limited warning.
 - state is not sounding → a NoteOn (or NoteOn→NoteOff→NoteOn) was lost. Play it
-  if `Y == 1`, skip it if `Y == 0`; either way update state as if executed.
+  if `Y == 1`, skip it if `Y == 0`; either way update state as if executed. This
+  is the journal telling us about a note we did not know was sounding, so it
+  gets a rate-limited WARNING: it is the normal single-loss repair, but it is
+  also how a peer whose state has diverged from ours shows up.
 - state is sounding → test for a lost NoteOff→NoteOn sequence:
   - `velocity != log.velocity` → lost sequence
   - recorded sequence is before the journal checkpoint → lost sequence

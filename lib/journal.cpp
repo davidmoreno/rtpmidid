@@ -726,7 +726,15 @@ void recovery_journal_t::handle_chapter_n(
         continue;
       }
       if (state[note].velocity == 0) {
-        // We already know this note is off: no artifact to repair.
+        // We already know this note is off: no artifact to repair. The bit
+        // still says the note was N-active at the journal's checkpoint, so
+        // there is a NoteOn we never saw: its packet was lost, or the note was
+        // already sounding when this session started.
+        WARNING_RATE_LIMIT(30,
+                           "Journal has a NoteOff for note {} on channel {}, "
+                           "which was not sounding: its NoteOn was never "
+                           "received",
+                           note, channel);
         continue;
       }
       // A NoteOff (or a NoteOff->NoteOn->NoteOff sequence) was lost: end the
@@ -776,7 +784,15 @@ void recovery_journal_t::handle_chapter_n(
     }
 
     if (!sounding) {
-      // A NoteOn (or a NoteOn->NoteOff->NoteOn sequence) was lost.
+      // A NoteOn (or a NoteOn->NoteOff->NoteOn sequence) was lost: the journal
+      // is telling us about a note we did not know was sounding. This is the
+      // normal single-packet-loss repair, so it is worth knowing about but not
+      // worth a line per event.
+      WARNING_RATE_LIMIT(30,
+                         "Journal has a NoteOn for note {} on channel {} "
+                         "(velocity {}), which was not sounding: its NoteOn "
+                         "was never received",
+                         note, channel, log.velocity);
       if (log.y) {
         emit_note(uint8_t(0x90 | (channel & 0x0F)), note, log.velocity,
                   midi_out);

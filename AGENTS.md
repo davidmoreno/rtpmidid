@@ -60,6 +60,17 @@ Protocol) stay as URLs; quote the passage in the note that needs it.
   confirmed as caught up; the anchor rule cannot help there and retransmitting at
   guardtime is the safe behaviour.
 
+## Log levels
+
+`WARNING` is for things that are worth seeing by default, `DEBUG` for the rest.
+Per-event traffic belongs at neither: the per-packet feedback/guard `DEBUG`s were
+removed because with a few peers connected they bury everything else. When the
+event is interesting but frequent, use `WARNING_RATE_LIMIT(seconds, ...)` — for
+example the receiver repair paths: a journal referencing a note we never saw
+(OFFBITS for a non-sounding note, or a NoteOn log for one) warns at most once
+every 30 s, because it is the normal single-loss repair but also the visible sign
+of state divergence. `recovery_journal_t::stats` is the exact-count companion.
+
 ## Code and test conventions
 
 - `signal_t::connect()` returns a `connection_t` that disconnects on
