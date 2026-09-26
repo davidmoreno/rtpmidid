@@ -248,8 +248,18 @@ void rtppeer_t::parse_command_by(io_bytes_reader &buffer, port_e port) {
   status = nextstatus;
 
   // One BY is enough, not even waiting for the midi one.
-  if (status == NOT_CONNECTED)
+  if (status == NOT_CONNECTED) {
+    // The session is over: silence the notes before the disconnect event, so
+    // the midi_event subscribers (the router that writes to ALSA) are still
+    // there to deliver the NoteOffs. This cannot live in ~rtppeer_t(): the
+    // daemon disconnects its midi_event handler before the peer is destroyed.
+    reset();
     status_change_event(DISCONNECTED_PEER_DISCONNECTED);
+  } else if (port == MIDI_PORT) {
+    // The MIDI half is gone even if the control half is not: no more MIDI is
+    // coming, so silence without tearing the peer down.
+    recovery_journal.session_end(midi_event);
+  }
 }
 
 void rtppeer_t::parse_command_no(io_bytes_reader &buffer, port_e port) {
@@ -270,6 +280,14 @@ void rtppeer_t::parse_command_no(io_bytes_reader &buffer, port_e port) {
   WARNING("Invitation Rejected (NO) : remote ssrc {:X}", remote_ssrc);
   INFO("Disconnect from {}, {} port. Status {:X}", remote_name,
        port == MIDI_PORT ? "MIDI" : "Control", (int)status);
+
+  // Same as `BY`: a session that ends must not leave notes sounding (RFC 6295
+  // Section 4). The rejection may arrive on a peer that had notes pending.
+  if (status == NOT_CONNECTED) {
+    reset();
+  } else if (port == MIDI_PORT) {
+    recovery_journal.session_end(midi_event);
+  }
 
   status_change_event(DISCONNECTED_CONNECTION_REJECTED);
 }

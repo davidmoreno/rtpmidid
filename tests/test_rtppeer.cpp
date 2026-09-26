@@ -353,6 +353,50 @@ void test_journal_in_order_no_spurious_events() {
 }
 
 /**
+ * A peer that says goodbye while a note sounds must not leave it stuck: giving
+ * up a session silences every note the receiver believes is sounding (RFC 6295
+ * Section 4). Regression: the `BY` path emitted the disconnect event without
+ * reset(), so session_end() never ran and the NoteOff was never emitted.
+ */
+void test_goodbye_silences_sounding_notes() {
+  rtpmidid::rtppeer_t peer("test");
+  peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer_t::CONTROL_PORT);
+  peer.data_ready(CONNECT_MSG, rtpmidid::rtppeer_t::MIDI_PORT);
+
+  rtpmidid::io_bytes_writer_static<64> midi_io;
+  auto midi_event_c =
+      peer.midi_event.connect([&midi_io](const rtpmidid::io_bytes &pb) {
+        midi_io.copy_from(pb.start, pb.size());
+      });
+
+  // Sequence 0: NoteOn C4, no journal: nothing to repair, just a sounding note.
+  peer.data_ready(hex_to_bin("[1000 0001] [0110 0001] "
+                             "00 00"       // Sequence 0
+                             "00 00 00 00" // Timestamp
+                             "'BEEF'"      // SSRC
+                             "03 90 48 40" // NoteOn C4, velocity 64
+                             ),
+                  rtpmidid::rtppeer_t::MIDI_PORT);
+  ASSERT_EQUAL(peer.recovery_journal.sounding_notes(), 1);
+  ASSERT_EQUAL(midi_io.pos(), 3);
+
+  // The remote says goodbye on both ports.
+  peer.data_ready(DISCONNECT_MSG, rtpmidid::rtppeer_t::CONTROL_PORT);
+  peer.data_ready(DISCONNECT_MSG, rtpmidid::rtppeer_t::MIDI_PORT);
+
+  ASSERT_EQUAL(peer.status, rtpmidid::rtppeer_t::status_e::NOT_CONNECTED);
+  ASSERT_EQUAL(peer.recovery_journal.sounding_notes(), 0);
+  ASSERT_EQUAL(peer.recovery_journal.stats.notes_silenced, 1);
+
+  // The NoteOn, then the silencing NoteOff.
+  ASSERT_EQUAL(midi_io.pos(), 6);
+  ASSERT_EQUAL(midi_io.data[0], 0x90);
+  ASSERT_EQUAL(midi_io.data[3], 0x80);
+  ASSERT_EQUAL(midi_io.data[4], 0x48);
+  ASSERT_EQUAL(midi_io.data[5], 0x00);
+}
+
+/**
  * End to end: what one peer sends must repair a loss on the other. The sender
  * journals every packet (J=1) and the receiver repairs what the network ate.
  */
@@ -600,6 +644,7 @@ int main(int argc, char **argv) {
       TEST(test_recv_midi_with_running_status),
       TEST(test_journal_repairs_lost_note_off),
       TEST(test_journal_in_order_no_spurious_events),
+      TEST(test_goodbye_silences_sounding_notes),
       TEST(test_feedback_reads_32_bit_sequence),
       TEST(test_journal_send_and_repair_between_peers),
       TEST(test_send_large_sysex),

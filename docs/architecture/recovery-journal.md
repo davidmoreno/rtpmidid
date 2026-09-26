@@ -396,8 +396,16 @@ and cannot reset their own backoff.
 RFC 6295 §4: on exiting a session a receiver MUST ensure no indefinite artifacts
 remain. `recovery_journal_t::session_end()` emits a NoteOff for every note it
 believes is sounding, and `rtppeer_t::reset()` calls it, which covers every
-teardown path: `BY`, connect failures, timeouts, socket errors and destruction.
-`stats.notes_silenced` counts them.
+teardown path: `BY`, `NO`, connect failures, timeouts, socket errors and
+destruction. `stats.notes_silenced` counts them.
+
+On the `BY`/`NO` paths `reset()` runs **before** the `DISCONNECTED_*` status
+event, while the daemon's `midi_event` subscriber (the router, which forwards to
+ALSA) is still connected: the daemon removes the peer on that event, and the
+peer's `midi_event` connection dies with it. The silencing cannot be moved to
+`~rtppeer_t()` for the same reason — by then there is nobody left to deliver the
+NoteOffs. A `BY` that only takes down the MIDI port (control still up) silences
+too, without tearing the peer down, because no more MIDI is coming.
 
 That is also how a stuck note from a network death is cleaned up locally, without
 waiting for any journal, and it uses the same state that tracks CC 120/123-127 and
@@ -647,6 +655,10 @@ Feedback, guard packets and session exit (`tests/test_journal_timer.cpp` and
 - [x] The timer stops when the peer disconnects.
 - [x] `session_end()` emits a NoteOff for every sounding note, counts them, and is
       a no-op when nothing is sounding.
+- [x] The `BY` (`test_goodbye_silences_sounding_notes`) and `NO` teardown paths
+      call `session_end()` before the disconnect event, so a note sounding at
+      disconnect reaches the local device as a NoteOff. Regression: the `BY`
+      path used to skip `reset()`, leaving the note stuck.
 
 Observability. **Counters are in the library (Phase 5)**; the daemon RPC and Web
 UI surface are not part of this library-side port:
@@ -676,7 +688,10 @@ Still to come:
 - [x] Receiver sending periodic `'RS'` feedback, and the sender's journal
       shrinking because of it (Phase 4).
 - [x] Guard packet timing, on the real poller instead of a fake clock (Phase 4).
-- [x] Disconnect with notes held → NoteOff emitted (Phase 4).
+- [x] Disconnect with notes held → NoteOff emitted (Phase 4):
+      `test_goodbye_silences_sounding_notes` (`BY` on both ports) and
+      `test_connect_disconnect_send` (`tests/test_rtpserver.cpp`, the socket to
+      `midi_event` path) assert the NoteOff and that nothing else is emitted.
 
 Manual interop matrix (document results in the PR):
 
