@@ -1,4 +1,8 @@
-FROM fedora:43
+# Generic Fedora build image. The release is selected with FEDORA_VERSION,
+# which the packaging Makefile derives from the distro name (fedora-44 ->
+# --build-arg FEDORA_VERSION=44), so a new Fedora release needs no new file.
+ARG FEDORA_VERSION=43
+FROM fedora:${FEDORA_VERSION}
 
 # Install build dependencies
 RUN dnf install -y \

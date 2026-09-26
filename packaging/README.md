@@ -26,7 +26,11 @@ make deb DISTRO=ubuntu-24.04 ARCH=arm64
 # Build all Debian packages
 make deb-all
 
-# Build RPM packages for Fedora 43
+# Build RPM packages for the machine we are running on (Fedora 44/x86_64
+# builds fedora-44/x86_64). DISTRO/ARCH override the detection.
+make rpm
+
+# Build RPM packages for an explicit distribution and architecture
 make rpm DISTRO=fedora-43 ARCH=x86_64
 
 # Build all RPM packages
@@ -47,7 +51,12 @@ make all
 
 ### Fedora (RPM packages)
 
-- `fedora-43` - Fedora 43
+- `fedora-43` - Fedora 43 (the pinned release used by `make rpm-all`)
+
+Any other `fedora-<release>` works too: RPM builds use the generic
+`docker/Dockerfile.fedora` template with `--build-arg FEDORA_VERSION=<release>`,
+so a new Fedora release does not need a new Dockerfile. `make rpm` with no
+arguments picks the host release and architecture.
 
 ## Supported Architectures
 
@@ -103,31 +112,11 @@ WORKDIR /build
 
 ### Adding a Fedora/RPM Distribution
 
-1. Create a new Dockerfile in `docker/` directory: `Dockerfile.<distro-name>`
-2. Add the distro name to the `RPM_DISTROS` variable in `packaging/Makefile`
-3. The Dockerfile should install RPM build dependencies
-
-Example:
-
-```dockerfile
-FROM fedora:43
-RUN dnf install -y \
-    rpm-build \
-    cmake \
-    ninja-build \
-    gcc-c++ \
-    avahi-devel \
-    alsa-lib-devel \
-    python3 \
-    pandoc \
-    git \
-    systemd-rpm-macros \
-    && dnf clean all
-RUN useradd -m -s /bin/bash builder
-COPY ../build-rpm.sh /usr/local/bin/rtpmidid-build-rpm.sh
-RUN chmod +x /usr/local/bin/rtpmidid-build-rpm.sh
-WORKDIR /build
-```
+Nothing to do for a new Fedora release: `docker/Dockerfile.fedora` is generic and
+takes the release as `FEDORA_VERSION`. If a release needs different build
+dependencies, add a pinned `docker/Dockerfile.<distro-name>` (it takes
+precedence), and add the distro to `RPM_DISTROS` in `packaging/Makefile` if
+`make rpm-all` should build it.
 
 ## Requirements
 
