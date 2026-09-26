@@ -26,6 +26,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <set>
 
 // #define DEBUG0 DEBUG
 #define DEBUG0(...)
@@ -61,6 +62,7 @@ public:
     // later will be replaced.
     slots_ = std::make_shared<VT>(*slots_);
     slots_->insert(std::make_pair(cid, std::move(f)));
+    live_->insert(cid);
     DEBUG0("{}::signal_t::connect(f) -> {}", (void *)this, cid);
     connections[cid] = nullptr;
     return ::rtpmidid::connection_t(this, cid);
@@ -70,6 +72,7 @@ public:
     DEBUG0("{}::signal_t::disconnect({})", (void *)this, id);
     slots_ = std::make_shared<VT>(*slots_);
     slots_->erase(id);
+    live_->erase(id);
     connections.erase(id);
   }
 
@@ -96,10 +99,17 @@ public:
    * not call a not valid callback anymore.
    */
   void operator()(Args... args) {
+    // Take local handles before calling any callback: a callback is allowed to
+    // destroy the owner of this signal (and thus this signal_t), so after the
+    // first call `this` and its members must not be touched again. `live` is
+    // the one piece of state shared with the current generation, so a slot
+    // disconnected - or every slot, when the signal is destroyed - while we are
+    // looping is still seen here as removed, and is not called.
     auto slots_ = this->slots_;
+    auto live = live_;
     DEBUG0("{}::signal_t::() {} slots_", (void *)this, slots_->size());
     for (auto const &f : *slots_) {
-      if (this->slots_->find(f.first) == this->slots_->end())
+      if (live->find(f.first) == live->end())
         continue; // this element was removed while looping, do not call
       DEBUG0("{}::signal_t::() calling {}", (void *)this, f.first);
       f.second(args...);
@@ -125,6 +135,10 @@ public:
 private:
   int max_id = 1;
   std::shared_ptr<VT> slots_;
+  // Ids currently connected, shared with the emissions in flight. It is
+  // mutated in place (never replaced), so an emission that outlives the signal
+  // itself can still tell which of its callbacks were disconnected.
+  std::shared_ptr<std::set<int>> live_ = std::make_shared<std::set<int>>();
 
   std::map<int, connection_t *> connections{};
 };
