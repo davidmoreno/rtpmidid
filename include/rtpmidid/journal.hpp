@@ -265,6 +265,9 @@ public:
     uint32_t notes_repaired_on = 0;
     uint32_t notes_repaired_off = 0;
     uint32_t notes_skipped = 0;
+    // Journal note commands for notes whose state we did not know: the peer has
+    // a NoteOn we never received, so it knows about a note we do not.
+    uint32_t notes_unknown = 0;
     uint32_t losses = 0;
     uint32_t out_of_order = 0;
     uint32_t malformed = 0;

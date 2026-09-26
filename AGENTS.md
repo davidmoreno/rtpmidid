@@ -69,7 +69,8 @@ event is interesting but frequent, use `WARNING_RATE_LIMIT(seconds, ...)` — fo
 example the receiver repair paths: a journal referencing a note we never saw
 (OFFBITS for a non-sounding note, or a NoteOn log for one) warns at most once
 every 30 s, because it is the normal single-loss repair but also the visible sign
-of state divergence. `recovery_journal_t::stats` is the exact-count companion.
+of state divergence. That warning carries the counters, since a rate-limited line
+is a good place to see them move; `notes_unknown` counts how often it happens.
 
 ## Code and test conventions
 

@@ -717,6 +717,11 @@ void recovery_journal_t::handle_chapter_n(
     journal_loss_e loss, uint32_t timestamp,
     signal_t<const io_bytes_reader &> &midi_out) {
   auto &state = channels_[channel & 0x0F].notes;
+  // Journal commands for notes whose state we did not know: their NoteOn was
+  // never received. Counted here and reported once per journal at the end, with
+  // the running counters, instead of one line per note.
+  size_t unknown_on = 0;
+  size_t unknown_off = 0;
 
   // The NoteOff bitfield comes first (RFC 4696 Section 7.2). Its B bit is the
   // S-style bit for this structure.
@@ -730,11 +735,7 @@ void recovery_journal_t::handle_chapter_n(
         // still says the note was N-active at the journal's checkpoint, so
         // there is a NoteOn we never saw: its packet was lost, or the note was
         // already sounding when this session started.
-        WARNING_RATE_LIMIT(30,
-                           "Journal has a NoteOff for note {} on channel {}, "
-                           "which was not sounding: its NoteOn was never "
-                           "received",
-                           note, channel);
+        unknown_off++;
         continue;
       }
       // A NoteOff (or a NoteOff->NoteOn->NoteOff sequence) was lost: end the
@@ -785,14 +786,10 @@ void recovery_journal_t::handle_chapter_n(
 
     if (!sounding) {
       // A NoteOn (or a NoteOn->NoteOff->NoteOn sequence) was lost: the journal
-      // is telling us about a note we did not know was sounding. This is the
-      // normal single-packet-loss repair, so it is worth knowing about but not
-      // worth a line per event.
-      WARNING_RATE_LIMIT(30,
-                         "Journal has a NoteOn for note {} on channel {} "
-                         "(velocity {}), which was not sounding: its NoteOn "
-                         "was never received",
-                         note, channel, log.velocity);
+      // is telling us about a note we did not know was sounding. This is also
+      // the normal single-packet-loss repair, so it is reported as a rate
+      // limited warning with the counters, not one line per note.
+      unknown_on++;
       if (log.y) {
         emit_note(uint8_t(0x90 | (channel & 0x0F)), note, log.velocity,
                   midi_out);
@@ -817,6 +814,20 @@ void recovery_journal_t::handle_chapter_n(
     note_state.velocity = log.velocity;
     note_state.extended_seq = packet_extended_seq_;
     note_state.time = timestamp;
+  }
+
+  if (unknown_on || unknown_off) {
+    // One line per journal (rate limited), with the counters as they stand
+    // after this journal: seeing these numbers move is the point, so they
+    // include the commands just processed.
+    stats.notes_unknown += uint32_t(unknown_on + unknown_off);
+    WARNING_RATE_LIMIT(
+        30,
+        "Journal has {} NoteOn(s) and {} NoteOff(s) for notes we never saw "
+        "sounding; {} so far (journals received {}, losses {}, notes repaired "
+        "{} on / {} off)",
+        unknown_on, unknown_off, stats.notes_unknown, stats.journals_received,
+        stats.losses, stats.notes_repaired_on, stats.notes_repaired_off);
   }
 }
 

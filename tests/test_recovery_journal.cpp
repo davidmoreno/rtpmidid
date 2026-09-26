@@ -247,6 +247,8 @@ void test_repair_lost_note_on() {
   ASSERT_EQUAL(out.joined(), "90 48 50 | ");
   ASSERT_EQUAL(journal.sounding_notes(), 1);
   ASSERT_EQUAL(journal.stats.notes_repaired_on, 1);
+  // The repair knew about a note we did not: that is what the warning reports.
+  ASSERT_EQUAL(journal.stats.notes_unknown, 1);
 }
 
 void test_repair_lost_note_on_skipped_by_y() {
@@ -267,6 +269,7 @@ void test_repair_lost_note_on_skipped_by_y() {
   ASSERT_EQUAL(out.events.size(), 0);
   ASSERT_EQUAL(journal.sounding_notes(), 1);
   ASSERT_EQUAL(journal.stats.notes_skipped, 1);
+  ASSERT_EQUAL(journal.stats.notes_unknown, 1);
 }
 
 /// The regression guard for the old behaviour: Apple sets J=1 on every packet,
@@ -396,6 +399,9 @@ void test_repair_lost_note_off_on_by_velocity() {
 
   ASSERT_EQUAL(out.joined(), "80 48 00 | 90 48 60 | ");
   ASSERT_EQUAL(journal.sounding_notes(), 1);
+  // The note was sounding: the lost sequence is a re-trigger, not a note we
+  // never knew about.
+  ASSERT_EQUAL(journal.stats.notes_unknown, 0u);
 }
 
 void test_repair_lost_note_off_on_by_checkpoint() {
@@ -475,6 +481,9 @@ void test_no_repair_for_unsounding_note_off_bit() {
 
   ASSERT_EQUAL(out.events.size(), 0);
   ASSERT_EQUAL(journal.sounding_notes(), 0);
+  // The NoteOff bit for a note we never saw on is not an artifact, but the
+  // journal knows about a NoteOn we do not, so it is counted.
+  ASSERT_EQUAL(journal.stats.notes_unknown, 1);
 }
 
 void test_channel_isolation() {

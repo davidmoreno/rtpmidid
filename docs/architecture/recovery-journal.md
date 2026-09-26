@@ -325,8 +325,8 @@ For each set OFFBITS bit (note `n`):
   stuck note.** A set bit for a note we do not believe is sounding is ignored,
   so an anchor-policy peer repeating its journal cannot silence anything twice.
   It is not silent though: the bit says the note was N-active at the
-  checkpoint, so there is a NoteOn we never received, and a rate-limited
-  WARNING says so.
+  checkpoint, so there is a NoteOn we never received, and it is counted in
+  `stats.notes_unknown`.
 
 For each note log (`n`, `velocity`, `Y`):
 
@@ -334,9 +334,9 @@ For each note log (`n`, `velocity`, `Y`):
   NoteOff it means, with a rate-limited warning.
 - state is not sounding → a NoteOn (or NoteOn→NoteOff→NoteOn) was lost. Play it
   if `Y == 1`, skip it if `Y == 0`; either way update state as if executed. This
-  is the journal telling us about a note we did not know was sounding, so it
-  gets a rate-limited WARNING: it is the normal single-loss repair, but it is
-  also how a peer whose state has diverged from ours shows up.
+  is also the journal telling us about a note we did not know was sounding, so it
+  counts as `stats.notes_unknown`: it is the normal single-loss repair, but it
+  is also how a peer whose state has diverged from ours shows up.
 - state is sounding → test for a lost NoteOff→NoteOn sequence:
   - `velocity != log.velocity` → lost sequence
   - recorded sequence is before the journal checkpoint → lost sequence
@@ -344,6 +344,12 @@ For each note log (`n`, `velocity`, `Y`):
     `note_on_recent_window` (250 ms) → lost sequence
   → emit `NoteOff n`, then play/skip the logged NoteOn per `Y`, and update state
   as if executed.
+
+Both `notes_unknown` cases are reported by one rate-limited WARNING per journal
+(at most every 30 s), carrying the counters as they stand after that journal: the
+NoteOn/NoteOff commands it had for unknown notes, the running `notes_unknown`,
+`journals_received`, `losses` and `notes_repaired_on`/`off`. The exact note is
+deliberately not logged: the counters are the interesting part.
 
 The 250 ms window is the only heuristic here; it is the tunable knob if real
 devices show either retriggered sustained notes or missing notes.
@@ -430,8 +436,8 @@ public:
   struct stats_t {
     // Receiver (Phase 2)
     uint32_t journals_received = 0, notes_repaired_on = 0,
-             notes_repaired_off = 0, notes_skipped = 0, losses = 0,
-             out_of_order = 0, malformed = 0;
+             notes_repaired_off = 0, notes_skipped = 0, notes_unknown = 0,
+             losses = 0, out_of_order = 0, malformed = 0;
     // Sender (Phase 3/4)
     uint32_t journals_sent = 0, guard_packets = 0, feedback_sent = 0,
              feedback_received = 0;
@@ -757,7 +763,8 @@ Each phase is a separate PR, with its doc update in the same PR.
      tick, so a target below the tick period is actually honoured (today the
      effective delay is 100-200 ms) and there are fewer wake-ups.
    - the counters to watch first: `out_of_order` (guards racing delayed packets)
-     and `notes_repaired_on` versus `notes_skipped` (whether `Y` is tuned right).
+     and `notes_repaired_on` versus `notes_skipped` (whether `Y` is tuned right),
+     plus `notes_unknown` (notes the peer knew and we never saw).
 6. **Timers are per peer.** `journal_timer_t` adds a timer per peer; with many
    peers that is many wake-ups. If it shows up in profiles, one shared timer could
    drive all peers. The one-shot guard timer above removes most of them.
