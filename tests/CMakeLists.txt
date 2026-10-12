@@ -41,6 +41,15 @@ target_link_libraries(test_lite rtpmidid-shared -pthread)
 target_link_libraries(test_lite ${FMT_LIBRARIES})
 add_test(NAME test_lite COMMAND test_lite)
 
+# Global operator new/delete are replaced in this test binary to prove the hot
+# paths do not allocate. See tests/malloc_counter.hpp.
+add_executable(test_malloc test_malloc.cpp malloc_counter.cpp
+                            ${CMAKE_SOURCE_DIR}/lite/sysex.cpp)
+target_include_directories(test_malloc PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(test_malloc rtpmidid-shared -pthread)
+target_link_libraries(test_malloc ${FMT_LIBRARIES})
+add_test(NAME test_malloc COMMAND test_malloc)
+
 # add_executable(test_rtpmidid
 #     test_rtpmidid.cpp test_utils.cpp
 #     ../src/aseq.cpp  ../src/config.cpp ../src/control_socket.cpp ../src/rtpmidid.cpp ../src/stringpp.cpp

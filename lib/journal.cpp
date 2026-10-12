@@ -238,6 +238,17 @@ void journal_codec_t::write_chapter_n(io_bytes_writer &writer,
 
 journal_chapter_n_t journal_codec_t::read_chapter_n(io_bytes_reader &reader) {
   journal_chapter_n_t chapter;
+  read_chapter_n(reader, chapter);
+  return chapter;
+}
+
+void journal_codec_t::read_chapter_n(io_bytes_reader &reader,
+                                     journal_chapter_n_t &chapter) {
+  // Overwrite whatever was decoded here before, keeping any capacity: this is
+  // the receive repair path, which must not allocate.
+  chapter.note_logs.clear();
+  chapter.note_off.fill(false);
+
   auto b0 = reader.read_uint8();
   auto b1 = reader.read_uint8();
   chapter.b = b0 & CHAPTER_N_B;
@@ -278,8 +289,6 @@ journal_chapter_n_t journal_codec_t::read_chapter_n(io_bytes_reader &reader) {
     // Only (LOW=15, HIGH=0) and (LOW=15, HIGH=1) may code an empty bitfield.
     throw bad_journal("Chapter N with LOW={} HIGH={}", low, high);
   }
-
-  return chapter;
 }
 
 void journal_codec_t::write_journal_n(io_bytes_writer &writer,
@@ -347,7 +356,16 @@ void journal_codec_t::write_journal_n(io_bytes_writer &writer,
 
 journal_message_t journal_codec_t::read_journal(io_bytes_reader &reader) {
   journal_message_t message;
+  read_journal(reader, message);
+  return message;
+}
+
+void journal_codec_t::read_journal(io_bytes_reader &reader,
+                                   journal_message_t &message) {
   message.header = read_header(reader);
+  message.has_system_journal = false;
+  message.has_other_chapters = false;
+  message.malformed = false;
 
   // A system journal (chapters D/V/Q/F/X) precedes the channel journals. We do
   // not decode it, but it has a LENGTH, so we can step over it: Apple sends one
@@ -371,10 +389,14 @@ journal_message_t journal_codec_t::read_journal(io_bytes_reader &reader) {
   }
 
   if (!message.header.a) {
-    // Empty journal: nothing to recover.
-    return message;
+    // Empty journal: nothing to recover. Shrinking to zero keeps the vector's
+    // capacity (journal_channel_t owns no memory of its own), so a later
+    // journal reuses the storage.
+    message.channels.resize(0);
+    return;
   }
 
+  size_t channel_count = 0;
   uint8_t last_channel = 0;
   for (uint8_t i = 0; i < message.header.channel_count(); i++) {
     if (reader.remaining() < channel_header_size) {
@@ -406,9 +428,16 @@ journal_message_t journal_codec_t::read_journal(io_bytes_reader &reader) {
     }
 
     if (channel_header.toc & JOURNAL_CHAPTER_N) {
-      journal_channel_t channel;
+      // Reuse the entry decoded for this position on a previous call, so the
+      // Chapter N storage inside it is reused too. It only grows (and only
+      // allocates) when a journal has more channel journals than any before.
+      if (channel_count == message.channels.size()) {
+        message.channels.emplace_back();
+      }
+      auto &channel = message.channels[channel_count];
       channel.channel = channel_header.channel;
       channel.s = channel_header.s;
+      channel.has_chapter_n = false;
       // Bounded reader: never read past this channel journal, so a malformed
       // Chapter N cannot eat the next channel journal.
       io_bytes_reader chapter_reader(reader.position, end_pos - reader.pos());
@@ -435,7 +464,7 @@ journal_message_t journal_codec_t::read_journal(io_bytes_reader &reader) {
         if (channel_header.toc & JOURNAL_CHAPTER_W) {
           chapter_reader.skip(2); // fixed size, RFC 6295 Appendix A.5
         }
-        channel.chapter_n = read_chapter_n(chapter_reader);
+        read_chapter_n(chapter_reader, channel.chapter_n);
         channel.has_chapter_n = true;
       } catch (const std::exception &e) {
         message.malformed = true;
@@ -444,13 +473,14 @@ journal_message_t journal_codec_t::read_journal(io_bytes_reader &reader) {
                 channel_header.channel, e.what());
       }
       // Chapters after N (E/T/A) and any padding are skipped by LENGTH.
-      message.channels.push_back(channel);
+      channel_count++;
     }
 
     reader.seek(end_pos);
   }
 
-  return message;
+  // Drop any channel journals left over from a previous, larger decode.
+  message.channels.resize(channel_count);
 }
 
 //
@@ -841,7 +871,11 @@ void recovery_journal_t::parse_journal(
     return;
   }
 
-  auto message = journal_codec_t::read_journal(journal);
+  // Decode into the per-peer buffer: this runs on every lost packet, and the
+  // buffer keeps the decoded channel journals (and their fixed-capacity note
+  // logs) so the repair path does not allocate in steady state.
+  auto &message = decode_buffer_;
+  journal_codec_t::read_journal(journal, message);
   stats.journals_received++;
   if (message.malformed) {
     stats.malformed++;

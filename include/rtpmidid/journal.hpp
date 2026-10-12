@@ -22,6 +22,8 @@
 #include "iobytes.hpp"
 #include "signal.hpp"
 #include <array>
+#include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -106,13 +108,58 @@ struct journal_note_log_t {
 };
 
 /**
+ * @short Fixed-capacity list of Chapter N note logs.
+ *
+ * The wire format bounds a Chapter N to 128 note logs (RFC 6295 Appendix
+ * A.6.1), so this replaces the std::vector that used to hold them with the
+ * same surface and no heap. Neither the sender's reused coded channels nor the
+ * receiver's decoded journal may allocate on the hot path.
+ */
+class journal_note_logs_t {
+public:
+  /// Wire maximum: a Chapter N codes at most 128 note logs.
+  static constexpr size_t max_size = 128;
+  /**
+   * Storage is one larger, so content beyond the wire maximum can still be
+   * built and rejected loudly by `journal_codec_t::validate_chapter_n()`
+   * instead of silently disappearing. The receiver never fills more than
+   * `max_size`.
+   */
+  static constexpr size_t capacity = max_size + 1;
+
+  bool empty() const { return count_ == 0; }
+  size_t size() const { return count_; }
+  void clear() { count_ = 0; }
+  /// Fixed capacity: kept so call sites need no special case.
+  void reserve(size_t) {}
+
+  void push_back(const journal_note_log_t &log) {
+    assert(count_ < capacity);
+    if (count_ < capacity)
+      logs_[count_++] = log;
+  }
+
+  const journal_note_log_t &operator[](size_t i) const { return logs_[i]; }
+  journal_note_log_t &operator[](size_t i) { return logs_[i]; }
+
+  const journal_note_log_t *begin() const { return logs_.data(); }
+  const journal_note_log_t *end() const { return logs_.data() + count_; }
+  journal_note_log_t *begin() { return logs_.data(); }
+  journal_note_log_t *end() { return logs_.data() + count_; }
+
+private:
+  std::array<journal_note_log_t, capacity> logs_{};
+  size_t count_ = 0;
+};
+
+/**
  * Chapter N content: the list of note logs (NoteOn side) and the NoteOff
  * bitfield (OFFBITS, NoteOff side) for one channel.
  */
 struct journal_chapter_n_t {
   bool b = true; // B bit: S-style bit for the OFFBITS structure
   // Note logs, oldest command first (RFC 6295 Appendix A.1 oldest-first rule).
-  std::vector<journal_note_log_t> note_logs;
+  journal_note_logs_t note_logs;
   // note_off[n] true means a set OFFBITS bit for note n: "there may be a
   // NoteOff you never saw".
   std::array<bool, 128> note_off{};
@@ -221,6 +268,16 @@ public:
   static journal_chapter_n_t read_chapter_n(io_bytes_reader &);
 
   /**
+   * In-place decoding into storage that is reused across calls.
+   *
+   * The receiver decodes one journal per lost packet on the hot path, so it
+   * keeps a journal_message_t around and reuses it: `out` is overwritten, and
+   * the vectors it already holds keep their capacity. Memory for a list that
+   * grows beyond its previous high water mark is the only allocation left.
+   */
+  static void read_chapter_n(io_bytes_reader &, journal_chapter_n_t &out);
+
+  /**
    * Decode a complete journal section, following the top-level header, the
    * (TOTCHAN + 1) channel journals and the Chapter N of each.
    *
@@ -229,6 +286,7 @@ public:
    * found. Chapters after N are skipped using the channel journal LENGTH.
    */
   static journal_message_t read_journal(io_bytes_reader &);
+  static void read_journal(io_bytes_reader &, journal_message_t &out);
 };
 
 /// How an incoming packet relates to the packets received before it.
@@ -465,10 +523,14 @@ private:
   uint32_t packet_extended_seq_ = 0;
   uint32_t confirmed_extended_seq_ = 0;
   bool has_feedback_ = false;
+  /// Journal decoded for the last lost packet, reused so the receive repair
+  /// path does not allocate in steady state (the channels vector keeps its
+  /// capacity; the note logs are fixed capacity).
+  journal_message_t decode_buffer_;
 
   std::array<sender_channel_state_t, 16> send_channels_{};
   /// Channels coded in the journal being written. Reused between packets so the
-  /// hot path does not allocate: the note log vectors keep their capacity.
+  /// hot path does not allocate.
   std::array<journal_channel_t, 16> coded_channels_{};
   size_t coded_channel_count_ = 0;
   std::array<bool, 16> last_packet_had_note_off_{};

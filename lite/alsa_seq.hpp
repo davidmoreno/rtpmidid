@@ -56,6 +56,7 @@ public:
 private:
   void read_ready();
   void handle_event(snd_seq_event_t *ev);
+  void decode_sysex(snd_seq_event_t *ev);
   void append_sysex(const uint8_t *data, size_t len);
   void emit_sysex(const uint8_t *data, size_t len);
 
@@ -67,6 +68,8 @@ private:
   std::vector<rtpmidid::poller_t::listener_t> listeners_;
   /// ALSA sends a long SysEx as several raw fragments; reassemble them.
   sysex_assembler_t sysex_assembler_;
+  /// Reused for the raw bytes of a SysEx fragment too long for the stack.
+  std::vector<uint8_t> sysex_buffer_;
 };
 
 } // namespace rtpmidid_lite

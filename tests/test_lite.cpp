@@ -106,10 +106,11 @@ void test_parse_args_errors(void) {
 std::vector<std::vector<uint8_t>> segments_of(const std::vector<uint8_t> &input,
                                               size_t segment_bytes) {
   std::vector<std::vector<uint8_t>> out;
-  rtpmidid_lite::split_sysex(input.data(), input.size(), segment_bytes,
-                             [&out](const uint8_t *data, size_t len) {
-                               out.emplace_back(data, data + len);
-                             });
+  rtpmidid_lite::split_sysex<rtpmidid_lite::SYSEX_SEGMENT_BYTES>(
+      input.data(), input.size(), segment_bytes,
+      [&out](const uint8_t *data, size_t len) {
+        out.emplace_back(data, data + len);
+      });
   return out;
 }
 

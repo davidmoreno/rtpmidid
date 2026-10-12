@@ -534,13 +534,19 @@ this being mostly benign. The journal adds more shared state, so:
   hot path; `io_bytes_writer_static` for packet building).
 - The journal state is `16 * 128 * 12 B ≈ 24 KB` (receiver) plus
   `16 * 128 * 16 B ≈ 32 KB` (sender) per peer, so about 56 KB, plus the reused
-  `coded_channels_` vector (allocated once, on the first packet that has a
-  journal to code). Worth a performance note.
-- The codec allocates a `std::vector` for the note logs of each decoded Chapter
-  N. That is an allocation on the receive path (a few per second at most, and
-  only for packets that carry a journal). If it shows up in profiles, keep one
-  reusable `journal_message_t` per peer instead of building a new one per
-  packet.
+  `coded_channels_` array and the reused `journal_message_t decode_buffer_`.
+  Both are fixed-size members that keep the decoded Chapter N storage between
+  packets, so neither allocates per packet.
+- The hot path does not allocate. `tests/test_malloc.cpp` replaces global
+  `operator new` (see `tests/malloc_counter.hpp`) and asserts zero allocations
+  for the send path, guard/feedback packets, in-order receive, running-status
+  receive and journal repair. Note logs are a fixed-capacity
+  `journal_note_logs_t` (the 128 wire maximum plus one, so content over the
+  limit is still built and rejected loudly by `validate_chapter_n()`), which is
+  what removes the last per-chapter vector. The only remaining allocations are
+  one-time warm-ups: the first lost packet that carries a channel journal grows
+  `decode_buffer_.channels`, and a SysEx longer than anything seen before grows
+  the reassembly/SysEx buffers.
 
 ## 7. Status of the current code
 

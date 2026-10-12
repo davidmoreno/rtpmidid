@@ -17,6 +17,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <algorithm>
+#include <array>
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
@@ -317,8 +319,8 @@ void rtppeer_t::parse_command_ck(io_bytes_reader &buffer, port_e port) {
     count = 2;
     latency = ck3 - ck1;
     waiting_ck = false;
-    INFO("Latency {}: {:.2f} ms (client / 2)", std::string_view(remote_name),
-         latency / 10.0);
+    DEBUG("Latency {}: {:.2f} ms (client / 2)", std::string_view(remote_name),
+          latency / 10.0);
     ck_event(float(latency) / 10.0f);
     stats.add_stat(std::chrono::nanoseconds((int)latency * 100));
   } break;
@@ -327,8 +329,8 @@ void rtppeer_t::parse_command_ck(io_bytes_reader &buffer, port_e port) {
     ck2 = buffer.read_uint64();
     // ck3 = buffer.read_uint64();
     latency = get_timestamp() - ck2;
-    INFO("Latency {}: {:.2f} ms (server / 3)", std::string_view(remote_name),
-         latency / 10.0);
+    DEBUG("Latency {}: {:.2f} ms (server / 3)", std::string_view(remote_name),
+          latency / 10.0);
     // No need to send message
     stats.add_stat(std::chrono::nanoseconds((int)latency * 100));
     ck_event(float(latency) / 10.0f);
@@ -574,11 +576,18 @@ void rtppeer_t::parse_midi(io_bytes_reader &buffer) {
     if (!sysex.empty() || *buffer.position == 0xF0) {
       parse_sysex(buffer, int16_t(length));
     } else if (*buffer.position < 0x80 && running_status) {
-      // Abbreviated midi message using running status
-      io_bytes_managed midi(length + 1);
-      io_bytes_writer midi_writer(midi);
-      midi_writer.write_uint8(running_status);
-      midi_writer.copy_from(buffer.position, length);
+      // Abbreviated midi message using running status: the status octet is
+      // implied, so the message is the status plus the data octets read (at
+      // most two, for a voice message). Build it on the stack; this used to be
+      // an io_bytes_managed, one heap allocation per abbreviated command.
+      std::array<uint8_t, 4> midi_bytes{};
+      if (length < 0 || size_t(length) + 1 > midi_bytes.size()) {
+        throw bad_midi_packet("Abbreviated MIDI command is too long");
+      }
+      midi_bytes[0] = running_status;
+      std::copy(buffer.position, buffer.position + length,
+                midi_bytes.begin() + 1);
+      io_bytes midi(midi_bytes.data(), size_t(length) + 1);
       emit_midi(midi);
     } else {
       // Normal flow, simple midi data

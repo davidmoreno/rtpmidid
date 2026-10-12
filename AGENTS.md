@@ -88,6 +88,18 @@ is a good place to see them move; `notes_unknown` counts how often it happens.
 - Proving a fix: temporarily re-introduce the old behaviour, watch the new test
   fail, then restore. Regression tests that never failed are not worth much.
 
+## Hot path must not allocate
+
+Once a session is connected, the per-packet paths (send, receive, recovery
+journal, guard/feedback) must not allocate. `tests/test_malloc.cpp` replaces
+global `operator new`/`delete` (`tests/malloc_counter.hpp`) and asserts zero
+allocations for each of them; a regression fails with the allocation count.
+Allocations at setup (peers, signals) and one-time warm-ups (first lost packet
+with a channel journal, first SysEx of a given size) are fine — per-packet and
+per-note ones are not. The tools: `io_bytes_writer_static` for packet building,
+fixed-capacity `journal_note_logs_t`, the reused `journal_message_t
+decode_buffer_`, and stack buffers for abbreviated commands and SysEx segments.
+
 ## rtpmidid-lite
 
 `lite/` is a second, minimal daemon: one ALSA sequencer port exported over

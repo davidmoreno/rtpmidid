@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -32,18 +34,59 @@ inline constexpr size_t SYSEX_SEGMENT_BYTES = 256;
 /// Sanity cap for a SysEx being reassembled from ALSA fragments.
 inline constexpr size_t MAX_SYSEX_BYTES = 1024 * 1024;
 
-/// Split a complete SysEx message (0xF0 ... 0xF7) into RFC 6295 segments and
-/// call `emit` once per segment.
-///
-/// Each emitted segment is a valid MIDI command field: the first is
-/// F0 <data> F0, the middle ones are F7 <data> F0 and the last is
-/// F7 <data> F7 (RFC 6295, Section 3.1). A message that fits in a single
-/// segment is emitted verbatim as F0 <data> F7.
-///
-/// Returns false, and emits nothing, when the buffer is not a well formed SysEx
-/// message or `segment_bytes` is zero.
+/**
+ * Split a complete SysEx message (0xF0 ... 0xF7) into RFC 6295 segments and
+ * call `emit` once per segment.
+ *
+ * Each emitted segment is a valid MIDI command field: the first is
+ * F0 <data> F0, the middle ones are F7 <data> F0 and the last is
+ * F7 <data> F7 (RFC 6295, Section 3.1). A message that fits in a single
+ * segment is emitted verbatim as F0 <data> F7.
+ *
+ * `MAX_SEGMENT_BYTES` is the largest segment this call may be asked for, and
+ * sizes the stack buffer the segment is built in: the daemon uses
+ * `SYSEX_SEGMENT_BYTES`, so the hot path does not allocate. Returns false, and
+ * emits nothing, when the buffer is not a well formed SysEx message, when
+ * `segment_bytes` is zero, or when it exceeds `MAX_SEGMENT_BYTES`.
+ */
+template <size_t MAX_SEGMENT_BYTES>
 bool split_sysex(const uint8_t *data, size_t len, size_t segment_bytes,
-                 const std::function<void(const uint8_t *, size_t)> &emit);
+                 const std::function<void(const uint8_t *, size_t)> &emit) {
+  if (data == nullptr || len < 2 || segment_bytes == 0 ||
+      segment_bytes > MAX_SEGMENT_BYTES)
+    return false;
+  if (data[0] != 0xF0 || data[len - 1] != 0xF7)
+    return false;
+
+  const uint8_t *payload = data + 1;
+  const size_t payload_len = len - 2;
+
+  if (payload_len <= segment_bytes) {
+    emit(data, len);
+    return true;
+  }
+
+  std::array<uint8_t, MAX_SEGMENT_BYTES + 2> segment;
+
+  size_t offset = 0;
+  bool first = true;
+  while (offset < payload_len) {
+    const size_t count = std::min(segment_bytes, payload_len - offset);
+    const bool last = offset + count == payload_len;
+    const size_t size = count + 2;
+
+    segment[0] = first ? 0xF0 : 0xF7;
+    std::copy(payload + offset, payload + offset + count, segment.begin() + 1);
+    segment[size - 1] = last ? 0xF7 : 0xF0;
+
+    emit(segment.data(), size);
+
+    offset += count;
+    first = false;
+  }
+
+  return true;
+}
 
 enum class sysex_feed_result_e {
   STORED,    ///< Fragment stored, the message is not complete yet.

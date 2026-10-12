@@ -18,48 +18,7 @@
 
 #include "sysex.hpp"
 
-#include <algorithm>
-#include <vector>
-
 namespace rtpmidid_lite {
-
-bool split_sysex(const uint8_t *data, size_t len, size_t segment_bytes,
-                 const std::function<void(const uint8_t *, size_t)> &emit) {
-  if (data == nullptr || len < 2 || segment_bytes == 0)
-    return false;
-  if (data[0] != 0xF0 || data[len - 1] != 0xF7)
-    return false;
-
-  const uint8_t *payload = data + 1;
-  const size_t payload_len = len - 2;
-
-  if (payload_len <= segment_bytes) {
-    emit(data, len);
-    return true;
-  }
-
-  std::vector<uint8_t> segment;
-  segment.reserve(segment_bytes + 2);
-
-  size_t offset = 0;
-  bool first = true;
-  while (offset < payload_len) {
-    const size_t count = std::min(segment_bytes, payload_len - offset);
-    const bool last = offset + count == payload_len;
-
-    segment.clear();
-    segment.push_back(first ? 0xF0 : 0xF7);
-    segment.insert(segment.end(), payload + offset, payload + offset + count);
-    segment.push_back(last ? 0xF7 : 0xF0);
-
-    emit(segment.data(), segment.size());
-
-    offset += count;
-    first = false;
-  }
-
-  return true;
-}
 
 sysex_feed_result_e sysex_assembler_t::feed(
     const uint8_t *data, size_t len,

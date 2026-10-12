@@ -33,6 +33,8 @@ namespace {
 constexpr long MIDI_EVENT_BUFFER_SIZE = 65536;
 /// Any decoded non-SysEx event fits comfortably here.
 constexpr size_t DECODE_BUFFER_SIZE = 64;
+/// SysEx fragments up to this size are decoded on the stack, no allocation.
+constexpr size_t SYSEX_DECODE_STACK_BYTES = 1024;
 
 void alsa_error_handler(const char *file, int line, const char *function,
                         int err, const char *fmt, ...) {
@@ -205,9 +207,26 @@ void alsa_seq_t::handle_event(snd_seq_event_t *ev) {
     return;
   }
   case SND_SEQ_EVENT_SYSEX: {
-    std::vector<uint8_t> buffer(ev->data.ext.len + 8);
+    decode_sysex(ev);
+    return;
+  }
+  default:
+    // Subscriptions, port start/exit, ticks and everything else is not MIDI.
+    return;
+  }
+}
+
+void alsa_seq_t::decode_sysex(snd_seq_event_t *ev) {
+  // ALSA reports its raw size in data.ext.len; snd_midi_event_decode expands it
+  // to the MIDI byte stream. Small messages (the common case) are decoded into
+  // a stack buffer, longer ones into a member buffer that keeps its capacity,
+  // so steady-state SysEx does not allocate once per fragment.
+  const size_t needed = ev->data.ext.len + 8;
+  if (needed <= SYSEX_DECODE_STACK_BYTES) {
+    std::array<uint8_t, SYSEX_DECODE_STACK_BYTES> buffer{};
     snd_midi_event_reset_decode(codec_);
-    auto len = snd_midi_event_decode(codec_, buffer.data(), buffer.size(), ev);
+    const auto len =
+        snd_midi_event_decode(codec_, buffer.data(), buffer.size(), ev);
     if (len < 0) {
       ERROR("Can not decode ALSA SysEx event: {}", snd_strerror(len));
       return;
@@ -215,10 +234,17 @@ void alsa_seq_t::handle_event(snd_seq_event_t *ev) {
     append_sysex(buffer.data(), static_cast<size_t>(len));
     return;
   }
-  default:
-    // Subscriptions, port start/exit, ticks and everything else is not MIDI.
+
+  if (sysex_buffer_.size() < needed)
+    sysex_buffer_.resize(needed);
+  snd_midi_event_reset_decode(codec_);
+  const auto len = snd_midi_event_decode(codec_, sysex_buffer_.data(),
+                                         sysex_buffer_.size(), ev);
+  if (len < 0) {
+    ERROR("Can not decode ALSA SysEx event: {}", snd_strerror(len));
     return;
   }
+  append_sysex(sysex_buffer_.data(), static_cast<size_t>(len));
 }
 
 void alsa_seq_t::append_sysex(const uint8_t *data, size_t len) {
@@ -232,13 +258,13 @@ void alsa_seq_t::append_sysex(const uint8_t *data, size_t len) {
 }
 
 void alsa_seq_t::emit_sysex(const uint8_t *data, size_t len) {
-  const bool ok =
-      split_sysex(data, len, SYSEX_SEGMENT_BYTES,
-                  [this](const uint8_t *segment, size_t size) {
-                    auto *mutable_segment = const_cast<uint8_t *>(segment);
-                    rtpmidid::io_bytes_reader reader(mutable_segment, size);
-                    midi_event(reader);
-                  });
+  const bool ok = split_sysex<SYSEX_SEGMENT_BYTES>(
+      data, len, SYSEX_SEGMENT_BYTES,
+      [this](const uint8_t *segment, size_t size) {
+        auto *mutable_segment = const_cast<uint8_t *>(segment);
+        rtpmidid::io_bytes_reader reader(mutable_segment, size);
+        midi_event(reader);
+      });
   if (!ok)
     WARNING("Ignoring malformed SysEx of {} bytes.", len);
 }
