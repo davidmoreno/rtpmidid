@@ -133,6 +133,7 @@ message(STATUS "Log level ${LOG_LEVEL} (1=debug, 2=info, 3=warning, 4=error)")
 add_subdirectory(lib)
 if(NOT LIBS_ONLY)
   add_subdirectory(src)
+  add_subdirectory(lite)
 endif(NOT LIBS_ONLY)
 
 if (ENABLE_TESTS STREQUAL "ON")

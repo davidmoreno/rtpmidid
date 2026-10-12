@@ -29,6 +29,7 @@ help:
 	@echo " build     -- Creates the build directory and builds the rtpmidid"
 	@echo " build-dev -- Creates the build directory and builds the rtpmidid for debugging"
 	@echo " run       -- builds and runs the daemon"
+	@echo " run-lite  -- builds and runs the minimal one-port daemon (rtpmidid-lite)"
 	@echo " setup     -- Creates the socket control file"
 	@echo " clean     -- Cleans project"
 	@echo " deb       -- Generate deb package"
@@ -50,7 +51,7 @@ help:
 .PHONY: build
 build: build/bin/rtpmidid
 
-build/bin/rtpmidid: src/* tests/* CMakeLists.txt
+build/bin/rtpmidid: src/* lite/* tests/* CMakeLists.txt
 	mkdir -p build
 	cd build &&	cmake .. -DCMAKE_BUILD_TYPE=Release -GNinja $(CMAKE_EXTRA_ARGS)
 	cd build && ninja
@@ -86,10 +87,14 @@ clean:
 
 VALGRINDFLAGS := --leak-check=full --error-exitcode=1 --num-callers=30 --track-origins=yes
 RTPMIDID_ARGS := --ini default.ini --port ${PORT} --name devel --control /tmp/rtpmidid.sock --log-level debug
+RTPMIDID_LITE_ARGS := --name devel --port ${PORT} --log-level debug
 
-.PHONY: run run-valgrind run-gdb
+.PHONY: run run-lite run-valgrind run-gdb
 run: build-dev
 	build/src/rtpmidid $(RTPMIDID_ARGS)
+
+run-lite: build-dev
+	build/lite/rtpmidid-lite $(RTPMIDID_LITE_ARGS)
 
 run-gdb: build-dev
 	gdb build/src/rtpmidid -ex=r --command=scripts/malloc.gdb --args build/src/rtpmidid  $(RTPMIDID_ARGS)

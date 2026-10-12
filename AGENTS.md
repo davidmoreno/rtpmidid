@@ -88,6 +88,15 @@ is a good place to see them move; `notes_unknown` counts how often it happens.
 - Proving a fix: temporarily re-introduce the old behaviour, watch the new test
   fail, then restore. Regression tests that never failed are not worth much.
 
+## rtpmidid-lite
+
+`lite/` is a second, minimal daemon: one ALSA sequencer port exported over
+RTP-MIDI (`--help`, `--list`, `--connect`). It must depend only on the **shared**
+library (`rtpmidid-shared`), never on the daemon sources in `src/`; its own
+ALSA glue lives in `lite/alsa_seq.cpp`. `tests/test_lite.cpp` covers argument
+parsing and SysEx segmentation and compiles `lite/config.cpp` +
+`lite/sysex.cpp` directly. See `lite/README.md`.
+
 ## Docs to keep in sync
 
 `docs/architecture/recovery-journal.md` is the living spec for the journal
