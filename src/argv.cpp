@@ -158,7 +158,8 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
                          "Set log level: debug, info, warning, error (or 0-3). "
                          "Default: info",
                          [settings](const std::string &value) {
-                           settings->log_level = rtpmidid::str_to_log_level(value);
+                           settings->log_level =
+                               rtpmidid::str_to_log_level(value);
                          });
   arguments.emplace_back( //
       "--rtpmidi-discover",
@@ -194,10 +195,12 @@ static std::vector<argument_t> setup_arguments(settings_t *settings) {
       });
   arguments.emplace_back( //
       "--version",        //
-      "Show version", [](const std::string &value) {
+      "Show version",
+      [](const std::string &value) {
         std::print("rtpmidid version {}/2\n", VERSION);
         exit(0);
-      });
+      },
+      false);
   arguments.emplace_back( //
       "--help",           //
       "Show this help",
