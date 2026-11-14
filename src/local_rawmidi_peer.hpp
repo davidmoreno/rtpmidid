@@ -22,7 +22,9 @@
 #include "midipeer.hpp"
 #include "rtpmidid/poller.hpp"
 #include "rtpmidid/utils.hpp"
+#include <chrono>
 #include <string>
+#include <vector>
 
 namespace rtpmididns {
 /**
@@ -39,6 +41,12 @@ public:
   midi_normalizer_t midi_normalizer;
   int connection_count = 0;
   std::array<uint8_t, 1024> buffer;
+  /// Octets the device did not take yet. A raw MIDI port drains at its own
+  /// speed (a DIN port sends 3125 octets per second) and the fd is
+  /// non-blocking, so a long SysEx needs several writes.
+  std::vector<uint8_t> write_buffer;
+  size_t write_position = 0;
+  rtpmidid::poller_t::timer_t write_timer;
 
   local_rawmidi_peer_t(const std::string &name, const std::string &device);
   ~local_rawmidi_peer_t() override;
@@ -49,6 +57,9 @@ public:
 
   json_t status() override;
   void send_midi(midipeer_id_t from, const mididata_t &) override;
+  /// Write as much of write_buffer as the device takes, and retry later for the
+  /// rest.
+  void write_pending();
   void event(midipeer_event_e event, midipeer_id_t from) override;
   void connected(midipeer_id_t peer_id);
   void disconnected(midipeer_id_t peer_id);

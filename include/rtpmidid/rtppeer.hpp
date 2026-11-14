@@ -161,8 +161,13 @@ public:
   /// journal section (J=1) when journaling is enabled.
   void send_midi_packet(const io_bytes_reader &events);
 
+  /// Send a MIDI list too long for one packet (a long SysEx), cut into RFC 6295
+  /// segments, one packet each. See send_midi().
+  void send_midi_segmented(const io_bytes_reader &events);
+
   void send_midi(const io_bytes_reader &buffer);
   void send_goodbye(port_e to_port);
+
   /// Send an 'RS' receiver feedback packet on the control port, with the
   /// extended sequence number of the highest packet received.
   void send_feedback();

@@ -278,3 +278,30 @@ Bigger than that there are two ways out, neither free:
   as a whole command would see fragments.
 * use a raw MIDI port (`[rawmidi]` in the ini file), which has a plain byte
   stream and no event pool at all.
+
+### Sending: one MIDI command per packet
+
+`rtppeer_t::send_midi_packet()` writes the MIDI list verbatim and never writes
+the delta times that RFC 6295 puts *between* commands of a list (only the first
+command may omit it), while `parse_packet()` reads one after every command
+(`read_delta_time()`). So **a packet must carry a single MIDI command**: with
+two, both our parser and Apple's read a command as a delta time. All the senders
+in the daemon already work that way (the ALSA port decodes one event at a time,
+the raw MIDI port normalizes one message at a time).
+
+`rtppeer_t::send_midi()` keeps that rule for long commands: a SysEx of more than
+`MAX_MIDI_IN_PACKET` (1024 octets, `lib/rtppeer.cpp`) is cut into segments of
+1022 data octets, one packet each (`send_midi_segmented()`), with the status
+octets of Figure 5. That leaves packets of ~1050 octets, below any Ethernet MTU
+even with the journal section (RFC 6295 Section 2.6 asks senders to stay under
+the MTU), and below the 4 kB packet buffer of `send_midi_packet()`, which used to
+throw `Try to access end of buffer` and drop the dump. Segments of 258 octets
+from the ALSA port fit in one packet and are sent untouched. A list that is not
+a well formed single SysEx is not cut (the `test_send_large_sysex` blob with
+nested `F0`/`F7` relies on that).
+
+Writing to a `[rawmidi]` device has the same "it does not fit" problem, in the
+other direction: the fd is non-blocking and a DIN port drains 3125 octets per
+second, so `local_rawmidi_peer_t` keeps the octets the device did not take and
+writes them from a 10 ms timer until the queue is empty. A single `write()` used
+to drop the tail of every long dump.

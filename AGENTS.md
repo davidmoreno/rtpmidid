@@ -66,6 +66,16 @@ Protocol) stay as URLs; quote the passage in the note that needs it.
   `tests/test_aseq_sysex.cpp` covers the chunkings. A single ALSA event is
   limited to ~55 kB by the 2000 cell client pool, so bigger dumps need
   `[rawmidi]`. Details: `docs/RFC6295_notes.md`, "ALSA sequencer SysEx".
+- **One MIDI command per packet.** `send_midi_packet()` writes the list verbatim
+  and no delta times, but RFC 6295 wants a delta between commands and
+  `parse_packet()` reads one, so two commands in a packet are misparsed (here and
+  by Apple's driver). `send_midi()` sends one command per packet and cuts a long
+  SysEx into segments of 1022 data octets, one packet each (`MAX_MIDI_IN_PACKET`
+  in `lib/rtppeer.cpp`), which keeps packets under the MTU and out of the 4 kB
+  packet buffer.
+- **`[rawmidi]` writes are queued**, because the fd is non-blocking and the
+  device drains at 3125 octets/s: `local_rawmidi_peer_t::write_pending()` retries
+  from a 10 ms timer. A single `write()` silently loses the tail of a dump.
 
 ## Log levels
 

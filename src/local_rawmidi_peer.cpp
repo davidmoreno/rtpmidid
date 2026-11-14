@@ -78,6 +78,9 @@ void local_rawmidi_peer_t::close() {
     ::close(fd);
     fd = -1;
   }
+  write_buffer.clear();
+  write_position = 0;
+  write_timer = {};
 }
 
 local_rawmidi_peer_t::~local_rawmidi_peer_t() { close(); }
@@ -93,14 +96,52 @@ json_t local_rawmidi_peer_t::status() {
 
 void local_rawmidi_peer_t::send_midi(midipeer_id_t from,
                                      const mididata_t &data) {
+  (void)from;
+  if (fd < 0 || data.size() == 0) {
+    return;
+  }
+  // The device may not take it all at once: keep the rest for later.
+  write_buffer.insert(write_buffer.end(), data.start, data.end);
+  write_pending();
+}
+
+void local_rawmidi_peer_t::write_pending() {
   if (fd < 0) {
     return;
   }
-  int ret = write(fd, data.start, data.size());
-  if (ret < 0) {
-    ERROR("Error writing to rawmidi {}: {}", device, strerror(errno));
-    WARNING("Will not try again.");
+  while (write_position < write_buffer.size()) {
+    auto ret = ::write(fd, write_buffer.data() + write_position,
+                       write_buffer.size() - write_position);
+    if (ret < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        break; // Device buffer full, retry from the timer.
+      }
+      ERROR("Error writing to rawmidi {}: {}", device, strerror(errno));
+      WARNING("Will not try again.");
+      write_buffer.clear();
+      write_position = 0;
+      write_timer = {};
+      return;
+    }
+    if (ret == 0) {
+      break;
+    }
+    write_position += size_t(ret);
   }
+
+  if (write_position >= write_buffer.size()) {
+    write_buffer.clear();
+    write_position = 0;
+    write_timer = {}; // Nothing pending, no need to keep waking up.
+    return;
+  }
+  // Retry later. This reassigns (and so cancels) any timer already armed,
+  // including the one whose callback we are in: the device now has room.
+  write_timer = rtpmidid::poller.add_timer_event(std::chrono::milliseconds(10),
+                                                 [this]() { write_pending(); });
 }
 
 void local_rawmidi_peer_t::read_midi() {

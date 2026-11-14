@@ -17,6 +17,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <algorithm>
 #include <rtpmidid/exceptions.hpp>
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/logger.hpp>
@@ -24,6 +25,35 @@
 #include <rtpmidid/utils.hpp>
 
 using namespace rtpmidid;
+
+namespace {
+/// Octets of MIDI commands in one packet. RTP-MIDI asks senders to stay under
+/// the path MTU (RFC 6295 Section 2.6), so this plus the RTP header, the MIDI
+/// list header and the journal section is well below an Ethernet MTU.
+constexpr size_t MAX_MIDI_IN_PACKET = 1024;
+
+/// Data octets in one SysEx segment: the two status octets must fit too.
+constexpr size_t MAX_SYSEX_SEGMENT_DATA = MAX_MIDI_IN_PACKET - 2;
+
+/// True when the whole list is a single SysEx command or segment: F0 or F7,
+/// then only 7 bit data, then F0 (continues) or F7 (ends). Any other list is
+/// made of several commands and must not be cut here.
+static bool is_sysex_command(const io_bytes_reader &events) {
+  const auto size = events.size();
+  if (size < 2) {
+    return false;
+  }
+  const auto *data = events.start;
+  if (data[0] != 0xF0 && data[0] != 0xF7) {
+    return false;
+  }
+  if (data[size - 1] != 0xF0 && data[size - 1] != 0xF7) {
+    return false;
+  }
+  return std::all_of(data + 1, data + size - 1,
+                     [](uint8_t octet) { return octet < 0x80; });
+}
+} // namespace
 
 /**
  * @short Generic peer constructor
@@ -687,8 +717,38 @@ void rtppeer_t::send_midi(const io_bytes_reader &events) {
         remote_name, (int)status);
     return;
   }
-  send_midi_packet(events);
+  // A long SysEx must not go in one packet: RFC 6295 Section 2.6 asks senders
+  // to stay under the path MTU, and the packet buffer would not hold it anyway.
+  // It goes as segments, one packet each (Section 3.3).
+  if (events.size() > MAX_MIDI_IN_PACKET && is_sysex_command(events)) {
+    send_midi_segmented(events);
+  } else {
+    send_midi_packet(events);
+  }
   midi_sent_event();
+}
+
+void rtppeer_t::send_midi_segmented(const io_bytes_reader &events) {
+  // `F0 data.. F0`, `F7 data.. F0`, ..., `F7 data.. F7`. Each segment is a MIDI
+  // command, so it is a valid MIDI list by itself and the receiver joins them.
+  const auto command_size = events.size();
+  const auto has_start = events.start[0] == 0xF0;
+  const auto has_end = events.start[command_size - 1] == 0xF7;
+  auto *payload = events.start + (has_start ? 1 : 0);
+  const auto payload_size =
+      command_size - (has_start ? 1 : 0) - (has_end ? 1 : 0);
+
+  size_t position = 0;
+  while (position < payload_size) {
+    const auto size = std::min(MAX_SYSEX_SEGMENT_DATA, payload_size - position);
+    const auto next = position + size;
+    io_bytes_writer_static<MAX_MIDI_IN_PACKET> segment;
+    segment.write_uint8((position == 0 && has_start) ? 0xF0 : 0xF7);
+    segment.copy_from(payload + position, size);
+    segment.write_uint8((has_end && next == payload_size) ? 0xF7 : 0xF0);
+    send_midi_packet(io_bytes_reader(segment.start, segment.pos()));
+    position = next;
+  }
 }
 
 bool rtppeer_t::send_journal_packet() {

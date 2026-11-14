@@ -450,7 +450,8 @@ void test_journal_send_and_repair_between_peers() {
 
   ASSERT_EQUAL(receiver.recovery_journal.stats.losses, 1);
   ASSERT_EQUAL(receiver.recovery_journal.stats.notes_repaired_off, 1);
-  ASSERT_EQUAL(receiver.recovery_journal.sounding_notes(), 1); // C4 ended, D4 on
+  ASSERT_EQUAL(receiver.recovery_journal.sounding_notes(),
+               1); // C4 ended, D4 on
 }
 
 /**
@@ -634,6 +635,125 @@ void test_segmented_sysex(void) {
   ASSERT_TRUE(got_data);
 }
 
+/// Builds a SysEx as a musician would: 0xF0, 7 bit data, 0xF7.
+static std::vector<uint8_t> make_sysex(size_t data_size) {
+  std::vector<uint8_t> ret;
+  ret.reserve(data_size + 2);
+  ret.push_back(0xF0);
+  for (size_t i = 0; i < data_size; i++) {
+    ret.push_back(uint8_t(i * 7) & 0x7F);
+  }
+  ret.push_back(0xF7);
+  return ret;
+}
+
+/// The MIDI command list of an RTP-MIDI packet, without the RTP header and the
+/// MIDI list length header.
+static std::vector<uint8_t> midi_list(const std::vector<uint8_t> &packet) {
+  size_t header_size = 13;
+  size_t size = packet[12] & 0x0F;
+  if (packet[12] & 0x80) {
+    size = (size << 8) | packet[13];
+    header_size = 14;
+  }
+  return std::vector<uint8_t>(packet.begin() + header_size,
+                              packet.begin() + header_size + size);
+}
+
+/// Sends `sysex` from a peer and returns the MIDI list of every packet it
+/// wrote.
+static std::vector<std::vector<uint8_t>>
+send_and_collect(rtpmidid::rtppeer_t &sender,
+                 const std::vector<uint8_t> &sysex) {
+  std::vector<std::vector<uint8_t>> packets;
+  auto send_event_c = sender.send_event.connect(
+      [&packets](const rtpmidid::io_bytes_reader &data,
+                 rtpmidid::rtppeer_t::port_e) {
+        packets.emplace_back(data.start, data.end);
+      });
+  sender.send_midi(rtpmidid::io_bytes_reader(
+      const_cast<uint8_t *>(sysex.data()), sysex.size()));
+  return packets;
+}
+
+/**
+ * A long SysEx must not go in a single packet: it is cut into RFC 6295
+ * segments, and the peer joins them back into the original command.
+ */
+void test_send_long_sysex_is_segmented() {
+  const auto sysex = make_sysex(5000);
+  rtpmidid::rtppeer_t sender("sender");
+  rtpmidid::rtppeer_t receiver("receiver");
+  receiver.data_ready(CONNECT_MSG, rtpmidid::rtppeer_t::MIDI_PORT);
+  // The receiver drops packets from an unknown SSRC.
+  sender.local_ssrc = receiver.remote_ssrc;
+  sender.status = rtpmidid::rtppeer_t::status_e::CONNECTED;
+
+  const auto packets = send_and_collect(sender, sysex);
+
+  // ceil(5000 / 1022) segments, one packet each.
+  ASSERT_EQUAL(packets.size(), 5);
+  for (size_t i = 0; i < packets.size(); i++) {
+    const auto &packet = packets[i];
+    // Below any Ethernet MTU, even with the journal section.
+    ASSERT_LT(packet.size(), 1472);
+    const auto midi = midi_list(packet);
+    // 1022 data octets plus the two status octets.
+    ASSERT_LTE(midi.size(), 1024);
+    ASSERT_EQUAL(int(midi.front()), i == 0 ? 0xF0 : 0xF7);
+    ASSERT_EQUAL(int(midi.back()), i + 1 == packets.size() ? 0xF7 : 0xF0);
+    for (size_t j = 1; j + 1 < midi.size(); j++) {
+      ASSERT_LT(int(midi[j]), 0x80); // Only data inside the segment
+    }
+  }
+
+  // And the peer rebuilds exactly the same command.
+  receiver.status = rtpmidid::rtppeer_t::status_e::CONNECTED;
+
+  std::vector<uint8_t> received;
+  auto midi_event_c = receiver.midi_event.connect(
+      [&received](const rtpmidid::io_bytes_reader &data) {
+        received.insert(received.end(), data.start, data.end);
+      });
+
+  for (auto &packet : packets) {
+    rtpmidid::io_bytes_reader data(const_cast<uint8_t *>(packet.data()),
+                                   packet.size());
+    receiver.data_ready(std::move(data), rtpmidid::rtppeer_t::MIDI_PORT);
+  }
+
+  INFO("Long SysEx: sent {} octets, received {}", sysex.size(),
+       received.size());
+  if (received.size()) {
+    INFO("Received from {:02X} to {:02X}", received.front(), received.back());
+  }
+  ASSERT_EQUAL(received.size(), sysex.size());
+  ASSERT_TRUE(std::equal(received.begin(), received.end(), sysex.begin()));
+}
+
+/**
+ * Everything that fits in one packet is sent untouched, segments included: the
+ * ALSA port already sends segments of 258 octets and must not be re-cut.
+ */
+void test_send_sysex_segment_boundary() {
+  for (const auto data_size :
+       {size_t(255), size_t(1020), size_t(1021), size_t(1022), size_t(1023)}) {
+    const auto sysex = make_sysex(data_size);
+    rtpmidid::rtppeer_t sender("sender");
+    sender.status = rtpmidid::rtppeer_t::status_e::CONNECTED;
+
+    const auto packets = send_and_collect(sender, sysex);
+    // 1024 octets of MIDI list is the maximum for a single packet.
+    const size_t expected = (sysex.size() + 1023) / 1024;
+    INFO("SysEx of {} octets: {} packets", sysex.size(), packets.size());
+    ASSERT_EQUAL(packets.size(), expected);
+    if (packets.size() == 1) {
+      const auto midi = midi_list(packets[0]);
+      ASSERT_TRUE(std::equal(midi.begin(), midi.end(), sysex.begin()));
+    }
+  }
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_connect_disconnect),
@@ -649,6 +769,8 @@ int main(int argc, char **argv) {
       TEST(test_journal_send_and_repair_between_peers),
       TEST(test_send_large_sysex),
       TEST(test_segmented_sysex),
+      TEST(test_send_long_sysex_is_segmented),
+      TEST(test_send_sysex_segment_boundary),
   };
 
   testcase.run(argc, argv);

@@ -140,6 +140,19 @@ endif (NOT LIBS_ONLY)
 
 
 if (NOT LIBS_ONLY)
+    add_executable(test_rawmidi
+        test_rawmidi.cpp test_utils.cpp
+    )
+    target_link_libraries(test_rawmidi -pthread rtpmidid-shared rtpmidid2-static)
+    add_test(NAME test_rawmidi COMMAND test_rawmidi)
+    target_link_libraries(test_rawmidi ${ALSA_LIBRARIES})
+    target_link_libraries(test_rawmidi ${FMT_LIBRARIES})
+    target_include_directories(test_rawmidi PUBLIC ${ALSA_INCLUDE_DIRS})
+    target_compile_options(test_rawmidi PUBLIC ${ALSA_CFLAGS_OTHER})
+endif (NOT LIBS_ONLY)
+
+
+if (NOT LIBS_ONLY)
     add_executable(test_midinormalizer
         test_midinormalizer.cpp test_utils.cpp
     )
