@@ -121,10 +121,17 @@ endif(NOT LIBS_ONLY)
 include_directories(${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/include)
 enable_testing()
 
-execute_process(
-  COMMAND bash -c "git describe --match \"v[0-9]*\" --tags --abbrev=5 HEAD | sed 's/^v//g' | sed 's/-/~/g' | tr -d '\n'"
-  OUTPUT_VARIABLE RTPMIDID_VERSION
-)
+# The version comes from git tags, but a package build passes it in the
+# environment (RTPMIDID_VERSION): inside a container the checkout may be a git
+# worktree whose .git points outside the mounted source, and git refuses it.
+if (DEFINED ENV{RTPMIDID_VERSION} AND NOT "$ENV{RTPMIDID_VERSION}" STREQUAL "")
+  set(RTPMIDID_VERSION "$ENV{RTPMIDID_VERSION}")
+else()
+  execute_process(
+    COMMAND bash -c "git describe --match \"v[0-9]*\" --tags --abbrev=5 HEAD | sed 's/^v//g' | sed 's/-/~/g' | tr -d '\n'"
+    OUTPUT_VARIABLE RTPMIDID_VERSION
+  )
+endif()
 add_definitions(-DRTPMIDID_VERSION=\"${RTPMIDID_VERSION}\")
 add_definitions(-DLOG_LEVEL=${LOG_LEVEL})
 message(STATUS "Version ${RTPMIDID_VERSION}")
