@@ -1,0 +1,31 @@
+[Unit]
+Description=rtpmidid (RTP-MIDI daemon, MPC package)
+Documentation=https://github.com/davidmoreno/rtpmidid
+# acvs is the MPC application. It enumerates ALSA sequencer clients when it
+# starts, so the daemon has to be up first for its ports to appear as MIDI
+# inputs. Restarting acvs after an install is what makes them show up.
+# The avahi unit is one of these two: the firmware's/leftover avahi-daemon
+# (used through a drop-in) or ours. Wants= on a unit that does not exist is
+# harmless, so both are listed and mDNS comes up with the daemon instead of
+# depending on something else to start it.
+Wants=network.target avahi-daemon.service avahi-mpc.service
+After=network.target dbus.service avahi-daemon.service avahi-mpc.service
+Before=acvs.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment=LD_LIBRARY_PATH=@PREFIX@/lib
+ExecStart=@PREFIX@/bin/rtpmidid --ini=@PREFIX@/etc/rtpmidid.ini
+Restart=always
+RestartSec=2
+RuntimeDirectory=rtpmidid
+RuntimeDirectoryMode=0755
+# Soft real time: the kernel is PREEMPT_RT and the MPC application itself runs
+# with a FIFO priority.
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=10
+
+[Install]
+WantedBy=multi-user.target

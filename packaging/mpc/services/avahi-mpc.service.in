@@ -1,0 +1,20 @@
+[Unit]
+Description=Avahi mDNS/DNS-SD stack (bundled with rtpmidid)
+# Installed when the device has no avahi-daemon unit at all (a stock MPC: the
+# firmware ships no avahi). If one exists but its binary does not, the package
+# overrides that unit instead (see avahi-daemon.service.d).
+After=dbus.service
+Wants=dbus.service
+Before=rtpmidid.service
+
+[Service]
+Type=simple
+# --no-drop-root/--no-chroot: there is no "avahi" user on the MPC and /etc is
+# read-only, so the daemon stays root and skips its chroot.
+ExecStart=@PREFIX@/bin/avahi-daemon --no-drop-root --no-chroot --no-rlimits -f @PREFIX@/etc/avahi-daemon.conf
+Environment=LD_LIBRARY_PATH=@PREFIX@/lib
+@AVAHI_USER_BIND@
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
