@@ -20,6 +20,7 @@
 #include <alsa/seq.h>
 #include <alsa/seq_event.h>
 #include <cctype>
+#include <cstring>
 #include <rtpmidid/logger.hpp>
 
 namespace rtpmididns {
@@ -674,9 +675,7 @@ void aseq_t::for_connections(const port_t &port,
 
 // TODO: these buffer sizes should probably be configurable or pinned to pool
 // size in bytes
-mididata_to_alsaevents_t::mididata_to_alsaevents_t()
-    : buffer(nullptr), decode_buffer_data(65536, 0),
-      decode_buffer(&decode_buffer_data[0], 65536) {
+mididata_to_alsaevents_t::mididata_to_alsaevents_t() : buffer(nullptr) {
   snd_midi_event_new(65536, &buffer);
 }
 mididata_to_alsaevents_t::~mididata_to_alsaevents_t() {
@@ -705,10 +704,47 @@ void mididata_to_alsaevents_t::mididata_to_evs_f(
   }
 }
 
+/// Maximum data octets in one RTP-MIDI SysEx segment. RFC 6295 Section 3.3
+/// allows any size, but keeping the MIDI commands small keeps the packets well
+/// below a network MTU and matches the size ALSA itself uses.
+constexpr size_t MAX_SYSEX_SEGMENT_DATA = 256;
+
+void mididata_to_alsaevents_t::emit_sysex_segment(
+    const uint8_t *segment_data, size_t segment_size, bool first, bool last,
+    const std::function<void(const mididata_t &)> &func) {
+  sysex_segment.resize(segment_size + 2);
+  sysex_segment[0] = first ? 0xF0 : 0xF7;
+  if (segment_size > 0) {
+    memcpy(&sysex_segment[1], segment_data, segment_size);
+  }
+  sysex_segment[segment_size + 1] = last ? 0xF7 : 0xF0;
+  // The buffer outlives the call, so the callee may keep the pointer while it
+  // sends it.
+  func(mididata_t(sysex_segment.data(), sysex_segment.size()));
+}
+
 void mididata_to_alsaevents_t::ev_to_mididata_f(
     snd_seq_event_t *ev, rtpmidid::io_bytes_writer &data,
     std::function<void(const mididata_t &)> func) {
+  const auto source = uint16_t((ev->source.client << 8) | ev->source.port);
+  auto state = sysex_states.find(source);
+
   if (ev->type != SND_SEQ_EVENT_SYSEX) {
+    if (state != sysex_states.end()) {
+      // This source sent another message without ending its SysEx: the command
+      // is over. Close it, so the peer does not keep waiting for the rest of a
+      // command that will never arrive. If only the 0xF0 was seen nothing was
+      // sent to the peer, and there is nothing to close.
+      WARNING_RATE_LIMIT(30,
+                         "SysEx interrupted by another MIDI message "
+                         "(source {}:{}). Closing it.",
+                         ev->source.client, ev->source.port);
+      if (state->second.segment_sent) {
+        emit_sysex_segment(nullptr, 0, false, true, func);
+      }
+      sysex_states.erase(state);
+    }
+
     snd_midi_event_reset_decode(buffer);
     auto ret = snd_midi_event_decode(buffer, data.position,
                                      data.end - data.position, ev);
@@ -720,42 +756,96 @@ void mididata_to_alsaevents_t::ev_to_mididata_f(
     data.position += ret;
     const auto mididata = mididata_t(data);
     func(mididata);
-  } else {
-    snd_midi_event_reset_decode(buffer);
-    auto total_bytes = snd_midi_event_decode(buffer, &decode_buffer_data[0],
-                                             ev->data.ext.len, ev);
-    if (total_bytes < 0) {
-      ERROR("Could not translate alsa seq event. Do nothing.");
-      return;
-    }
-    bool start = true;
+    return;
+  }
 
-    while (true) {
-      rtpmidid::io_bytes_writer_static<258> out_buffer;
-      if (start) {
-        decode_buffer.position += 1;
-        out_buffer.write_uint8(0xF0);
-        start = false;
-      } else {
-        out_buffer.write_uint8(0xF7);
-      }
-      auto bytes_left =
-          total_bytes - (decode_buffer.position - decode_buffer.start) - 1;
-      if (bytes_left <= 256) {
-        out_buffer.copy_from(decode_buffer, bytes_left);
-        out_buffer.write_uint8(0xF7);
-        const auto mididata = mididata_t(out_buffer);
-        func(mididata);
-        decode_buffer.position = decode_buffer.start;
-        return;
-      } else {
-        out_buffer.copy_from(decode_buffer, 256); // Don't copy 0xF7
-        out_buffer.write_uint8(0xF0);
-        const auto mididata = mididata_t(out_buffer);
-        func(mididata);
-        decode_buffer.position += 256;
-      }
+  // SysEx needs special care: ALSA splits long commands into several variable
+  // length events (the kernel bridge flushes its 256 octet parser buffer, see
+  // sound/core/seq/seq_midi.c MAX_MIDI_EVENT_BUF), and only the event that
+  // starts the command carries the 0xF0 octet, only the one that ends it
+  // carries the 0xF7. RTP-MIDI instead wants the command as segments with
+  // continuation status octets (RFC 6295 Section 3.3, Figure 5):
+  //
+  //   first: F0 data.. F0    middle: F7 data.. F0    last: F7 data.. F7
+  //
+  // So look at the real first and last octet of the event, and remember per
+  // source port if there is a command in progress.
+  if ((ev->flags & SND_SEQ_EVENT_LENGTH_MASK) !=
+      SND_SEQ_EVENT_LENGTH_VARIABLE) {
+    // A SysEx event must be variable length: its data is outside the event. A
+    // fixed length one has no valid data pointer, do not follow it.
+    ERROR("SysEx event is not variable length (flags {:08X}). Ignoring.",
+          ev->flags);
+    return;
+  }
+  const auto *bytes = static_cast<const uint8_t *>(ev->data.ext.ptr);
+  const size_t len = ev->data.ext.len;
+  if (len == 0) {
+    return;
+  }
+
+  sysex_state_t st =
+      state == sysex_states.end() ? sysex_state_t{} : state->second;
+  const bool has_start = bytes[0] == 0xF0;
+  const bool has_end = bytes[len - 1] == 0xF7;
+  const auto *payload = bytes + (has_start ? 1 : 0);
+  const size_t payload_size = len - (has_start ? 1 : 0) - (has_end ? 1 : 0);
+
+  if (has_start && st.in_sysex) {
+    // The previous command never got its 0xF7: the sender cancelled or
+    // restarted it. Close it with an empty "last" segment (0xF7 0xF7) so it
+    // does not swallow the new command. If nothing was sent to the peer there
+    // is nothing to close.
+    WARNING_RATE_LIMIT(30, "New SysEx before the previous one ended. Closing "
+                           "the unfinished one.");
+    if (st.segment_sent) {
+      emit_sysex_segment(nullptr, 0, false, true, func);
     }
+    st.in_sysex = false;
+  }
+  if (!has_start && !st.in_sysex) {
+    // We missed the beginning of this command: an event was lost, or we
+    // connected in the middle of a dump. Those data octets mean nothing on
+    // their own, so drop them until the next 0xF0.
+    WARNING_RATE_LIMIT(30,
+                       "SysEx continuation without a start ({} octets). "
+                       "Dropping it until the next 0xF0.",
+                       len);
+    if (state != sysex_states.end()) {
+      sysex_states.erase(state);
+    }
+    return;
+  }
+  if (has_start) {
+    st.in_sysex = true;
+    st.segment_sent = false;
+  }
+
+  size_t offset = 0;
+  while (offset < payload_size) {
+    const auto size = std::min(MAX_SYSEX_SEGMENT_DATA, payload_size - offset);
+    const auto next = offset + size;
+    emit_sysex_segment(payload + offset, size, !st.segment_sent,
+                       has_end && next == payload_size, func);
+    st.segment_sent = true;
+    offset = next;
+  }
+  if (payload_size == 0 && has_end) {
+    // No data octets at all: a complete "F0 F7", or a last segment without
+    // data for a command whose data went in previous events.
+    emit_sysex_segment(nullptr, 0, !st.segment_sent, true, func);
+    st.segment_sent = true;
+  }
+  if (has_end) {
+    st.in_sysex = false;
+    st.segment_sent = false;
+  }
+
+  if (st.in_sysex) {
+    sysex_states[source] = st;
+  } else if (state != sysex_states.end()) {
+    // The command is closed: no need to remember anything about this source.
+    sysex_states.erase(state);
   }
 }
 

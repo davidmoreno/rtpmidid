@@ -24,6 +24,7 @@
 #include <rtpmidid/iobytes.hpp>
 #include <rtpmidid/poller.hpp>
 #include <rtpmidid/signal.hpp>
+#include <unordered_map>
 
 namespace rtpmididns {
 class aseq_t : public std::enable_shared_from_this<aseq_t> {
@@ -165,8 +166,29 @@ public:
                         std::function<void(const mididata_t &)> func);
 
 private:
-  std::vector<uint8_t> decode_buffer_data;
-  rtpmidid::io_bytes decode_buffer;
+  /// SysEx segmentation state of one ALSA source port.
+  struct sysex_state_t {
+    /// True while a SysEx command is being received in several ALSA events:
+    /// ALSA only puts the 0xF0 / 0xF7 octets in the first and last event.
+    bool in_sysex = false;
+    /// True once a segment of the command has been sent, so the next one is a
+    /// continuation. An event carrying only the 0xF0 must not produce an empty
+    /// "first" segment (RFC 6295 Section 3.3 only allows an empty last
+    /// sublist).
+    bool segment_sent = false;
+  };
+
+  /// One state per ALSA source port: a command arrives in several events, and
+  /// several ports (the exported port can have many subscribers) may be
+  /// sending at the same time. Key is `client << 8 | port`.
+  std::unordered_map<uint16_t, sysex_state_t> sysex_states;
+  /// Holds the RTP-MIDI segment handed to the callback, so the caller does not
+  /// need a buffer big enough for the whole SysEx command.
+  std::vector<uint8_t> sysex_segment;
+
+  void emit_sysex_segment(const uint8_t *segment_data, size_t segment_size,
+                          bool first, bool last,
+                          const std::function<void(const mididata_t &)> &func);
 };
 
 class alsa_connect_exception : public rtpmidid::exception {

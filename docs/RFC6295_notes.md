@@ -219,3 +219,62 @@ https://datatracker.ietf.org/doc/html/rfc6295 - pg 17
 |          | list have to have some data          | F7 ... F0 |
 |          | last may be empty                    | F7 .x. F7 |
 |          | Cancel must be empty                 | F7 F4     |
+
+Segments are just MIDI commands, so they travel in the MIDI list of any packet:
+rtpmidid puts one segment per packet (`MAX_SYSEX_SEGMENT_DATA` 256 data octets
+in `src/aseq.cpp`) and reassembles them in `rtppeer_t::parse_sysex`.
+
+## ALSA sequencer SysEx is not one event per command
+
+ALSA has no "start of SysEx" concept. `SND_SEQ_EVENT_SYSEX` events carry
+whichever octets fit, and the `0xF0` / `0xF7` are only present if they happen to
+be in that event:
+
+* The kernel bridge from a raw MIDI port (`sound/core/seq/seq_midi.c`) creates
+  its byte parser with `snd_midi_event_new(MAX_MIDI_EVENT_BUF, ...)`, and
+  `MAX_MIDI_EVENT_BUF` is 256 (`include/sound/seq_midi_event.h`).
+  `snd_midi_event_encode_byte()` returns an event every time `dev->read >=
+  dev->bufsize`, so **a long dump from hardware arrives as 256 octet events**:
+  `F0` + 255 data octets, then more data octets, then data octets + `F7`.
+  Only the first event starts with `0xF0` and only the last ends with `0xF7`.
+  The `snd_seq_midi` module parameters `input_buffer_size` /
+  `output_buffer_size` are raw MIDI ring buffers, they do not change this.
+* Clients that use `snd_midi_event_encode()` get the same behaviour with
+  whatever buffer they created the parser with (aseqsend: the whole file, so a
+  single big event).
+
+So `mididata_to_alsaevents_t::ev_to_mididata_f()` must not assume an event is a
+whole command: it looks at the real first and last octet, keeps the state of the
+command in progress **per source port** (`sysex_states`, as two devices may be
+dumping at once into the same exported port), and emits the RFC segments. A
+command left open that is followed by another message, or by a new `0xF0`, is
+closed with an empty last segment (`F7 F7`) so the peer does not keep it
+forever. The other direction, `mididata_to_evs_f()`, does not need to know:
+`snd_midi_event_encode()` splits on its own buffer size.
+
+`tests/test_aseq_sysex.cpp` covers complete events, 256 octet kernel chunks, one
+octet events, orphan continuations, two sources at once and the round trip to a
+peer.
+
+### Size limits of the ALSA sequencer
+
+A variable length event is stored in the client event pool, `ncells =
+DIV_ROUND_UP(len, sizeof(struct snd_seq_event))` cells with
+`sizeof(struct snd_seq_event) == 28`, and the kernel refuses `ncells >=
+pool->total_elements` (`sound/core/seq/seq_memory.c`).
+`SNDRV_SEQ_MAX_CLIENT_EVENTS` is 2000, so with the pool the daemon asks for
+(`snd_seq_client_pool_set_output_pool(pool, 2000)` in `src/aseq.cpp`, the kernel
+maximum) **a single event can carry about 55 kB**:
+
+    (2000 - 1) * 28 = 55972 octets
+
+That is the limit mentioned in issue #113: it is not a bug, it is the pool.
+Bigger than that there are two ways out, neither free:
+
+* split the command in several `SND_SEQ_EVENT_SYSEX` events, as the kernel
+  bridge does. `snd_midi_event_encode()` will do it by itself if the parser
+  buffer is small, and consumers using `snd_midi_event_decode()` (aseqdump,
+  the raw MIDI bridge) reassemble, but a consumer that treats every SYSEX event
+  as a whole command would see fragments.
+* use a raw MIDI port (`[rawmidi]` in the ini file), which has a plain byte
+  stream and no event pool at all.

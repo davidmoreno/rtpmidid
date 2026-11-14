@@ -127,6 +127,19 @@ endif (NOT LIBS_ONLY)
 
 
 if (NOT LIBS_ONLY)
+    add_executable(test_aseq_sysex
+        test_aseq_sysex.cpp test_utils.cpp
+    )
+    target_link_libraries(test_aseq_sysex -pthread rtpmidid-shared rtpmidid2-static)
+    add_test(NAME test_aseq_sysex COMMAND test_aseq_sysex)
+    target_link_libraries(test_aseq_sysex ${ALSA_LIBRARIES})
+    target_link_libraries(test_aseq_sysex ${FMT_LIBRARIES})
+    target_include_directories(test_aseq_sysex PUBLIC ${ALSA_INCLUDE_DIRS})
+    target_compile_options(test_aseq_sysex PUBLIC ${ALSA_CFLAGS_OTHER})
+endif (NOT LIBS_ONLY)
+
+
+if (NOT LIBS_ONLY)
     add_executable(test_midinormalizer
         test_midinormalizer.cpp test_utils.cpp
     )

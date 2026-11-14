@@ -59,6 +59,13 @@ Protocol) stay as URLs; quote the passage in the note that needs it.
 - A peer that reports only packets that carry MIDI (ignoring guards) can never be
   confirmed as caught up; the anchor rule cannot help there and retransmitting at
   guardtime is the safe behaviour.
+- **ALSA splits long SysEx in 256 octet events**: hardware ports deliver
+  `SND_SEQ_EVENT_SYSEX` events of `MAX_MIDI_EVENT_BUF` (256) octets, and only the
+  first carries `0xF0`, only the last `0xF7`. Never treat one event as a whole
+  command (`mididata_to_alsaevents_t::ev_to_mididata_f()`, issue #113);
+  `tests/test_aseq_sysex.cpp` covers the chunkings. A single ALSA event is
+  limited to ~55 kB by the 2000 cell client pool, so bigger dumps need
+  `[rawmidi]`. Details: `docs/RFC6295_notes.md`, "ALSA sequencer SysEx".
 
 ## Log levels
 
