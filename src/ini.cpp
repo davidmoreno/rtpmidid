@@ -150,6 +150,8 @@ void IniReader::parse_line(const std::string &origline) {
       settings->rtpmidi_discover.name_positive_regex = std::regex(value);
     } else if (key == "name_negative_regex") {
       settings->rtpmidi_discover.name_negative_regex = std::regex(value);
+    } else if (key == "address_from_mdns") {
+      settings->rtpmidi_discover.address_from_mdns = value == "true";
     } else {
       throw rtpmidid::ini_exception(filename, lineno, "Invalid key: {}", key);
     }

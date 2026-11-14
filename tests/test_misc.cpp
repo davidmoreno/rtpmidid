@@ -17,7 +17,10 @@
  */
 
 #include "./test_case.hpp"
+#include <avahi-common/address.h>
+#include <avahi-common/defs.h>
 #include <rtpmidid/logger.hpp>
+#include <rtpmidid/mdns_rtpmidi.hpp>
 #include <unistd.h>
 
 void test_warning_once(void) {
@@ -66,9 +69,29 @@ void test_warning_once(void) {
   ASSERT_EQUAL(nbr, 2);
 }
 
+void test_remote_address(void) {
+  AvahiAddress address{};
+  ASSERT_TRUE(avahi_address_parse("192.168.1.42", AVAHI_PROTO_INET, &address) !=
+              nullptr);
+
+  // Default: the announced host name, as every platform did before this option
+  // existed, even when avahi already gave us the address.
+  ASSERT_EQUAL(rtpmidid::remote_address("rasppi32.local", &address, false),
+               "rasppi32.local");
+  // Opt-in: the address avahi resolved, which is what works where
+  // "<host>.local" does not resolve (no nss-mdns, as on the MPC).
+  ASSERT_EQUAL(rtpmidid::remote_address("rasppi32.local", &address, true),
+               "192.168.1.42");
+  // No address from avahi: fall back to the name.
+  ASSERT_EQUAL(rtpmidid::remote_address("rasppi32.local", nullptr, true),
+               "rasppi32.local");
+  ASSERT_EQUAL(rtpmidid::remote_address(nullptr, nullptr, true), "");
+}
+
 int main(int argc, char **argv) {
   test_case_t testcase{
       TEST(test_warning_once),
+      TEST(test_remote_address),
   };
 
   testcase.run(argc, argv);

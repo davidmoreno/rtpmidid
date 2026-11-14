@@ -129,6 +129,13 @@ Any port announced on the network will be available at the ALSA port always.
 For mDNS discovered endpoints, the connection is delayed until the alsa seq
 connection.
 
+By default a discovered peer is reached through its announced host name
+(`somehost.local`), which means the name has to resolve with `getaddrinfo()`;
+that needs NSS mDNS support (`nss-mdns`) on the machine. Where that is not
+available — the MPC, for example — set `address_from_mdns=true` in the
+`[rtpmidi_discover]` section and the address that mDNS already resolved is used
+instead, so no name resolution is involved.
+
 ### Direct connection
 
 Also it can connect to other endpoints by ip and port. It's possible to create

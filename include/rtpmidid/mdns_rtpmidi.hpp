@@ -32,6 +32,7 @@ typedef struct AvahiClient AvahiClient;
 typedef struct AvahiPoll AvahiPoll;
 typedef struct AvahiEntryGroup AvahiEntryGroup;
 typedef struct AvahiServiceBrowser AvahiServiceBrowser;
+typedef struct AvahiAddress AvahiAddress;
 
 namespace rtpmidid {
 struct resolve_callback_s;
@@ -43,6 +44,14 @@ struct announcement_t {
   std::string name;
   int port;
 };
+
+/// Which address to connect to for a resolved service: the announced host name,
+/// or the address avahi already resolved for it. The second is what works where
+/// "<host>.local" cannot be resolved by getaddrinfo() (no nss-mdns, as on the
+/// MPC); the first is what every other platform has been doing. Falls back to
+/// the host name when avahi gave no address.
+std::string remote_address(const char *host_name, const AvahiAddress *address,
+                           bool address_from_mdns);
 struct remote_announcement_t {
   std::string name;
   std::string address;
@@ -52,6 +61,9 @@ struct remote_announcement_t {
 class mdns_rtpmidi_t {
   NON_COPYABLE_NOR_MOVABLE(mdns_rtpmidi_t)
 public:
+  // See settings_t::rtpmidi_discover_t::address_from_mdns. Read when a service
+  // is resolved, so it can be set right after construction.
+  bool address_from_mdns = false;
   std::unique_ptr<AvahiPoll> poller_adapter;
   AvahiClient *client = nullptr;
   AvahiEntryGroup *group = nullptr;

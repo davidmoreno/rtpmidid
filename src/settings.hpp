@@ -40,6 +40,11 @@ struct settings_t {
     bool enabled = true;
     std::regex name_positive_regex = std::regex(".*");
     std::regex name_negative_regex = std::regex("^$");
+    // Connect to discovered peers through the address avahi resolved, instead
+    // of their announced host name. Needed where the announced
+    // "<host>.local" cannot be resolved with getaddrinfo(), which is the case
+    // without NSS mDNS support (nss-mdns); the MPC has none.
+    bool address_from_mdns = false;
   };
 
   struct alsa_announce_t {

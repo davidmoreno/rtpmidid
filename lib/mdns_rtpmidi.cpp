@@ -257,6 +257,19 @@ static void client_callback(AvahiClient *c, AvahiClientState state,
   mr->client_callback((rtpmidid::avahi_client_state_e)state);
 }
 
+std::string rtpmidid::remote_address(const char *host_name,
+                                     const AvahiAddress *address,
+                                     bool address_from_mdns) {
+  if (address_from_mdns && address != nullptr) {
+    std::array<char, AVAHI_ADDRESS_STR_MAX> buffer{};
+    avahi_address_snprint(buffer.data(), buffer.size(), address);
+    if (buffer[0] != 0) {
+      return buffer.data();
+    }
+  }
+  return host_name == nullptr ? "" : host_name;
+}
+
 // Just to give it proper names.. please come'on avahi, use a struct if that
 // many parameters
 struct rtpmidid::resolve_callback_s {
@@ -456,7 +469,7 @@ void rtpmidid::mdns_rtpmidi_t::resolve_callback(
   switch (data.event) {
   case AVAHI_RESOLVER_FAILURE: {
     [[maybe_unused]] auto avahi_errno = avahi_client_errno(client);
-    [[maybe_unused]]const char *errmsg = avahi_strerror(avahi_errno);
+    [[maybe_unused]] const char *errmsg = avahi_strerror(avahi_errno);
     ERROR("AVAHI_RESOLVER_FAILURE Failed to resolve service=\"{}\" of type={}"
           "in domain={} host_name={} port={} with error_n={} error=\"{}\" ",
           data.name, data.type, data.domain,
@@ -464,8 +477,11 @@ void rtpmidid::mdns_rtpmidi_t::resolve_callback(
           avahi_errno, errmsg);
 
     // We remove if it existed before. A resolver failure may be a timeout.
-    remove_event(data.name, std::to_string(data.host_name || ""),
-                 std::to_string(data.port));
+    // Same address the FOUND branch would have used, or it will not match.
+    remove_event(
+        data.name,
+        remote_address(data.host_name, data.address, address_from_mdns),
+        std::to_string(data.port));
   } break;
   case AVAHI_RESOLVER_FOUND: {
     if (!!(data.flags & AVAHI_LOOKUP_RESULT_OUR_OWN)) {
@@ -475,16 +491,22 @@ void rtpmidid::mdns_rtpmidi_t::resolve_callback(
     std::array<char, AVAHI_ADDRESS_STR_MAX> avahi_address_str{};
     avahi_address_snprint(avahi_address_str.data(), avahi_address_str.size(),
                           data.address);
-    DEBUG("Discovered service=\"{}\" in host={}:{} ip={} flags={:04X}",
-          data.name, data.host_name, data.port, avahi_address_str.data(),
-          (int)data.flags);
+    const std::string connect_to = rtpmidid::remote_address(
+        data.host_name, data.address, address_from_mdns);
+    DEBUG("Discovered service=\"{}\" host={} ip={} connecting_to={} "
+          "port={} flags={:04X}",
+          data.name, data.host_name == nullptr ? "(null)" : data.host_name,
+          avahi_address_str.data(), connect_to, data.port, (int)data.flags);
 
+    // By default we connect to the announced host name, which is what every
+    // platform did until now. address_from_mdns uses the address avahi just
+    // resolved instead, for hosts where "<host>.local" does not resolve
+    // (no nss-mdns).
     // FIXME: address is not correct for interface (!), so is not unique, how to
     // make unique? or filter on interface?
     discovered_remote(rtpmidid::remote_announcement_t{
         data.name,
-        data.host_name,
-        // avahi_address_str.data(),
+        connect_to,
         data.port,
     });
   }

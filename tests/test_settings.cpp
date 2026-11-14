@@ -73,6 +73,14 @@ void test_parse_ini(void) {
   ASSERT_EQUAL(settings.rtpmidi_announces[1].port, "port2");
 
   ASSERT_EQUAL(settings.rtpmidi_discover.enabled, true);
+  // Defaults to the behaviour every platform had: connect to the announced
+  // host name, not to the address avahi resolved.
+  ASSERT_EQUAL(settings.rtpmidi_discover.address_from_mdns, false);
+  reader.parse_line("[rtpmidi_discover]");
+  reader.parse_line("address_from_mdns=true");
+  ASSERT_EQUAL(settings.rtpmidi_discover.address_from_mdns, true);
+  reader.parse_line("address_from_mdns=false");
+  ASSERT_EQUAL(settings.rtpmidi_discover.address_from_mdns, false);
   bool matches = std::regex_search(
       "anything", settings.rtpmidi_discover.name_positive_regex);
   ASSERT_TRUE(matches);

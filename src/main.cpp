@@ -72,8 +72,11 @@ public:
     if (aseq.get() == nullptr)
       aseq =
           std::make_shared<rtpmididns::aseq_t>(rtpmididns::settings.alsa_name);
-    if (rtpmididns::mdns.get() == nullptr)
+    if (rtpmididns::mdns.get() == nullptr) {
       rtpmididns::mdns = std::make_unique<rtpmidid::mdns_rtpmidi_t>();
+      rtpmididns::mdns->address_from_mdns =
+          rtpmididns::settings.rtpmidi_discover.address_from_mdns;
+    }
     router = std::make_shared<rtpmididns::midirouter_t>();
     control.router = router;
     control.aseq = aseq;
