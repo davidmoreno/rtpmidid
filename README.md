@@ -218,6 +218,14 @@ make docker-rpm DISTRO=fedora-43
 
 Packages are output to `packaging/dist/<distro>/<arch>/`. See `packaging/README.md` for supported distributions and architectures.
 
+Build the Akai MPC standalone package (a zip with an `install.sh`, because MPC
+firmware has no package manager):
+
+```bash
+make docker-mpc                 # armv7, MPC Gen1 hardware
+make docker-mpc ARCH=aarch64    # MPC Gen2 hardware
+```
+
 ## Testing and bug reporting
 
 If you find any bug, please report it to https://github.com/davidmoreno/rtpmidid/issues/

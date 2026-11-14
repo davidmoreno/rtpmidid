@@ -32,7 +32,7 @@ help:
 	@echo " setup     -- Creates the socket control file"
 	@echo " clean     -- Cleans project"
 	@echo " deb       -- Generate deb package"
-	@echo " packages  -- Build all packages (DEB and RPM) in Docker containers"
+	@echo " packages  -- Build all packages (DEB, RPM and MPC) in Docker containers"
 	@echo " test      -- Runs all test"
 	@echo " install   -- Installs to PREFIX or DESTDIR (default /usr/local/)"
 	@echo " man       -- Generate man pages"
@@ -139,9 +139,14 @@ deb:
 	fi
 	dpkg-buildpackage --no-sign
 
-.PHONY: packages
+.PHONY: packages docker-mpc
 packages:
 	make -C packaging all
+
+# Akai MPC standalone package: not a deb/rpm, a tarball with an install.sh
+# inside it. ARCH is armv7 (Gen1) or aarch64 (Gen2). See packaging/README.md.
+docker-mpc:
+	make -C packaging mpc ARCH=$(ARCH)
 
 
 docker-push:

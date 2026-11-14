@@ -1,0 +1,44 @@
+# Builder for the Akai MPC standalone package.
+#
+# MPC firmware (Yocto "az0x", systemd, no dpkg/opkg/rpm) has no package manager,
+# so this does not produce a .deb/.rpm: build-mpc.sh assembles a tarball with an
+# install.sh inside it, the same shape the MPC plugin packages use.
+#
+# What decides the base image is the C library the binary will ask for. MPC OS 3
+# ships glibc 2.39 and GLIBCXX 3.4.32, so Debian 12 "bookworm" (glibc 2.36,
+# GLIBCXX 3.4.30) is the newest base that still loads on the device; Debian 13
+# and Ubuntu 24.10+ produce binaries the MPC cannot run.
+#
+# The architecture comes from --platform: linux/arm/v7 -> armhf (MPC Gen1,
+# armv7), linux/arm64 -> arm64 (MPC Gen2, aarch64). apt then installs the
+# matching binaries and avahi-daemon.
+FROM debian:bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential \
+      binutils \
+      ca-certificates \
+      cmake \
+      file \
+      git \
+      libasound2-dev \
+      libavahi-client-dev \
+      libfmt-dev \
+      ninja-build \
+      patchelf \
+      pkg-config \
+      rsync \
+      unzip \
+      zip \
+      alsa-utils \
+      avahi-daemon \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -s /bin/bash builder
+COPY build-mpc.sh /usr/local/bin/rtpmidid-build-mpc.sh
+RUN chmod +x /usr/local/bin/rtpmidid-build-mpc.sh
+
+WORKDIR /build
+CMD ["/usr/local/bin/rtpmidid-build-mpc.sh"]

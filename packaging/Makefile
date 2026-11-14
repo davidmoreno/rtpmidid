@@ -30,6 +30,12 @@ DEB_ARCHES := amd64 arm64 armhf riscv64
 # Available architectures for Fedora (RPM uses different names)
 RPM_ARCHES := x86_64 aarch64
 
+# Available architectures for the Akai MPC package. Not deb/rpm arch names: the
+# two MPC hardware generations are known as armv7 (Gen1) and aarch64 (Gen2), and
+# the artifact is named after them because MPC firmware has no package manager.
+MPC_ARCHES := armv7 aarch64
+MPC_DEFAULT_ARCH ?= armv7
+
 # All architectures (for compatibility)
 ARCHES := amd64 arm64 armhf riscv64 x86_64 aarch64
 
@@ -52,6 +58,7 @@ DOCKER_PLATFORM_armhf := linux/arm/v7
 DOCKER_PLATFORM_riscv64 := linux/riscv64
 DOCKER_PLATFORM_x86_64 := linux/amd64
 DOCKER_PLATFORM_aarch64 := linux/arm64
+DOCKER_PLATFORM_armv7 := linux/arm/v7
 
 # Get Docker platform for architecture
 get_platform = $(DOCKER_PLATFORM_$(ARCH))
@@ -75,7 +82,7 @@ DOCKER_BUILD_ARGS = $(if $(filter fedora-%,$(DISTRO)),--build-arg FEDORA_VERSION
 SOURCE_DIR = $(shell dirname $(shell pwd))
 PACKAGING_DIR = $(shell pwd)
 
-.PHONY: help deb deb-all deb-% rpm rpm-all rpm-% all _collect-publish
+.PHONY: help deb deb-all deb-% rpm rpm-all rpm-% mpc mpc-all mpc-% all _collect-publish
 
 help:
 	@echo "Docker Package Builder (Debian/Ubuntu and Fedora)"
@@ -86,12 +93,15 @@ help:
 	@echo "         (no args: the host Fedora release and architecture)"
 	@echo "  make deb-all  # Build all Debian packages"
 	@echo "  make rpm-all   # Build all RPM packages"
+	@echo "  make mpc [ARCH=<arch>]  # Build the Akai MPC zip (reuses the cached daemon)"
+	@echo "  make mpc-all   # Build both MPC hardware generations"
 	@echo "  make all       # Build all packages"
 	@echo ""
 	@echo "Debian/Ubuntu distributions: $(DEB_DISTROS)"
 	@echo "Fedora distributions: $(RPM_DISTROS)"
 	@echo "Debian architectures: $(DEB_ARCHES)"
 	@echo "Fedora architectures: $(RPM_ARCHES)"
+	@echo "MPC architectures: $(MPC_ARCHES) (armv7 = Gen1, aarch64 = Gen2)"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make deb"
@@ -331,8 +341,86 @@ _rpm-internal:
 		exit 1; \
 	fi
 
-# Build all packages (both DEB and RPM)
-all: deb-all rpm-all _collect-publish
+# MPC (Akai standalone) packages
+#
+# MPC firmware is a Yocto image with no dpkg/opkg/rpm, so there is no package to
+# build: the artifact is a tarball with an install.sh inside (see mpc/), and the
+# only thing the container decides is which C library and libraries the daemon
+# links against. Arch names follow the two hardware generations (armv7 = Gen1,
+# aarch64 = Gen2) instead of a distribution, because there is no distribution.
+_mpc-internal: DISTRO = mpc
+_mpc-internal: DOCKERFILE = docker/Dockerfile.mpc
+_mpc-internal: BUILD_SCRIPT = /usr/local/bin/rtpmidid-build-mpc.sh
+
+mpc:
+	@$(MAKE) mpc-$(if $(ARCH),$(ARCH),$(MPC_DEFAULT_ARCH))
+
+mpc-all:
+	@for arch in $(MPC_ARCHES); do \
+		echo "Building for mpc-$$arch..."; \
+		$(MAKE) mpc-$$arch || true; \
+	done
+
+mpc-%:
+	@$(MAKE) -f $(PACKAGING_DIR)/Makefile _mpc-internal ARCH=$*
+
+_mpc-internal:
+	@echo "Building MPC package for $(ARCH)..."
+	@if [ ! -f $(PACKAGING_DIR)/$(DOCKERFILE) ]; then \
+		echo "ERROR: no Dockerfile $(PACKAGING_DIR)/$(DOCKERFILE)"; \
+		exit 1; \
+	fi
+	@platform=$(call get_platform); \
+	if [ -z "$$platform" ]; then \
+		echo "ERROR: unknown MPC architecture $(ARCH) (expected: $(MPC_ARCHES))"; \
+		exit 1; \
+	fi; \
+	echo "Using Docker platform: $$platform"; \
+	mkdir -p $(RELEASES_DIR)/mpc-$(ARCH); \
+	builder=$$(docker buildx ls 2>/dev/null | grep -q "multiarch" && echo "multiarch" || echo "default"); \
+	docker buildx build \
+		--builder $$builder \
+		--platform $$platform \
+		--tag $(IMAGE_NAME) \
+		--file $(PACKAGING_DIR)/$(DOCKERFILE) $(DOCKER_BUILD_ARGS) \
+		--load \
+		$(PACKAGING_DIR)/ 2>&1 | grep -v "^#.*DONE\|^#.*CACHED" | tail -20 || \
+	docker build \
+		--platform $$platform \
+		--tag $(IMAGE_NAME) \
+		--file $(PACKAGING_DIR)/$(DOCKERFILE) $(DOCKER_BUILD_ARGS) \
+		$(PACKAGING_DIR)/; \
+	mkdir -p /tmp/rtpmidid-output-mpc-$(ARCH) $(RELEASES_DIR)/.cache; \
+	chmod 777 $(RELEASES_DIR)/.cache 2>/dev/null || true; \
+	docker run --rm \
+		--platform $$platform \
+		-v $(SOURCE_DIR):/source:z \
+		-v /tmp/rtpmidid-output-mpc-$(ARCH):/output:z \
+		-v $(RELEASES_DIR)/.cache:/cache:z \
+		-e RTPMIDID_VERSION=$(RTPMIDID_VERSION) \
+		-e MPC_CACHE=/cache/$(ARCH) \
+		-u builder \
+		$(IMAGE_NAME) $(BUILD_SCRIPT) || \
+	docker run --rm \
+		--platform $$platform \
+		-v $(SOURCE_DIR):/source:z \
+		-v /tmp/rtpmidid-output-mpc-$(ARCH):/output:z \
+		-v $(RELEASES_DIR)/.cache:/cache:z \
+		-e RTPMIDID_VERSION=$(RTPMIDID_VERSION) \
+		-e MPC_CACHE=/cache/$(ARCH) \
+		$(IMAGE_NAME) $(BUILD_SCRIPT); \
+	if ls /tmp/rtpmidid-output-mpc-$(ARCH)/*.zip >/dev/null 2>&1; then \
+		cp -v /tmp/rtpmidid-output-mpc-$(ARCH)/*.zip $(RELEASES_DIR)/mpc-$(ARCH)/; \
+		rm -rf /tmp/rtpmidid-output-mpc-$(ARCH); \
+		echo "Package built successfully: $(RELEASES_DIR)/mpc-$(ARCH)/"; \
+	else \
+		rm -rf /tmp/rtpmidid-output-mpc-$(ARCH); \
+		echo "ERROR: no .zip was produced, see the output above"; \
+		exit 1; \
+	fi
+
+# Build all packages (DEB, RPM and MPC)
+all: deb-all rpm-all mpc-all _collect-publish
 
 # Collect main rtpmidid packages for publishing
 # Only collects the main package (rtpmidid), not librtpmidid0 or dev packages
@@ -393,6 +481,16 @@ _collect-publish:
 					echo "  Collected: $$distro/$$arch -> $$new_name"; \
 				fi; \
 			fi; \
+		done; \
+	done; \
+	\
+	# Process MPC zips: already named rtpmidid-<version>-mpc-<arch>.zip \
+	for arch in $(MPC_ARCHES); do \
+		dist_dir=$(RELEASES_DIR)/mpc-$$arch; \
+		for archive in $$dist_dir/rtpmidid-*-mpc-$$arch.zip; do \
+			[ -f "$$archive" ] || continue; \
+			cp -v "$$archive" $$PUBLISH_DIR/; \
+			echo "  Collected: mpc/$$arch -> $$(basename $$archive)"; \
 		done; \
 	done; \
 	\
